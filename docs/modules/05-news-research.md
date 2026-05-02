@@ -13,7 +13,7 @@
 @dataclass(frozen=True, slots=True)
 class NewsItem:
     id: str                     # source_id @ source，全局唯一
-    source: NewsSource          # tushare | akshare | custom
+    source: NewsSource          # akshare | custom (后续接入)
     title: str
     summary: str | None         # 来源给的摘要；可能为 None
     body: str | None            # 正文（可能很长，按 source 决定）
@@ -26,7 +26,7 @@ class NewsItem:
 @dataclass(frozen=True, slots=True)
 class ResearchReport:
     id: str
-    source: ReportSource        # tushare | broker_a | ...
+    source: ReportSource        # akshare | broker_a | ... (后续接入)
     broker: str                 # 券商名
     title: str
     target_code: str            # 主标的
@@ -61,9 +61,11 @@ class NewsRepo(Protocol):
 
 v1 适配器：
 
-- `TushareNewsSource`、`AKShareNewsSource`（兜底）
-- `TushareReportSource`
+- `AKShareNewsSource`（v1 主路也是兜底；新闻接口稳定性观察 1~2 周后再决定要不要加二源）
+- `AKShareReportSource`（研报标题 + 摘要 + URL；PDF 抓取放 `FilesystemPdfStore`）
 - `ParquetNewsRepo`、`ParquetReportRepo` + `FilesystemPdfStore`（PDF 落本地 `data/reports/pdf/`）
+
+> 项目目前只接入 AKShare 一家；待选二源（`docs/todo-enhancement.md` 维护）：东方财富爬虫、同花顺爬虫。
 
 **与通用缓存端口的关系**：`NewsRepo` / `ReportRepo` 是业务接口，默认实现内部委托给通用 `TimeSeriesStore` / `RecordRepo`（见 `docs/integrations/cache-abstraction.md` §10）。换底层存储只改 adapter，不动业务接口。
 
@@ -165,7 +167,7 @@ class ReportService:
 
 ## 9. 风险与备注
 
-- **来源不稳定**：tushare news 接口偶尔 schema 变化、字段缺失——所有字段都允许 `None`，但 `id`/`title`/`published_at`/`source` 必须存在，否则丢弃 + 死信
+- **来源不稳定**：AKShare 新闻接口来自爬虫，schema 偶尔变化、字段缺失——所有字段都允许 `None`，但 `id`/`title`/`published_at`/`source` 必须存在，否则丢弃 + 死信
 - **关联股票打标质量**：来源给的 `related_codes` 不一定准。v1 信任来源；v2 可加自定义 NER 二次标注
 - **PDF 解析**：v1 不解析正文。v2 用 `unstructured` 或类似库
 - **舆论合规**：避免存储/转发明显违规内容；本项目仅取公开信息源，不爬非公开页面

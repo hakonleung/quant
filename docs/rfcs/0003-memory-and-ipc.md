@@ -50,7 +50,7 @@
 
 ```python
 table = pq.read_table(
-    "data/kline/daily/600519.SH.parquet",
+    "data/kline/daily/600519.parquet",
     columns=["trade_date", "close_qfq", "ma20"],
     filters=[("trade_date", ">=", date(2026, 1, 1))],
     memory_map=True,

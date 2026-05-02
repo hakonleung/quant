@@ -85,7 +85,7 @@ service QuantCompute {
 descriptor = flight.FlightDescriptor.for_command(
     json.dumps({
         "op": "get_kline_universe",
-        "codes": ["600519.SH", ...],
+        "codes": ["600519", ...],   # 裸 6 位 code
         "start": "2026-01-01",
         "end": "2026-05-01",
         "columns": ["close_qfq", "ma20"],

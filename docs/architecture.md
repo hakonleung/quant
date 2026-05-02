@@ -3,44 +3,53 @@
 ## 1. 顶层视图
 
 ```
-┌─────────────────────┐         HTTP/JSON + SSE          ┌─────────────────────┐
-│   Next.js (web)     │ ───────────────────────────────> │   NestJS (api)      │
-│   App Router        │ <─── token / SSE 进度流 ────────  │   gateway/orchestr. │
-│   RSC + Client      │                                  │                     │
-└─────────────────────┘                                  └──────────┬──────────┘
-                                                                    │
-                                                       Arrow Flight │ (gRPC)
-                                                                    ▼
-                                                         ┌─────────────────────┐
-                                                         │  Python svc (rpc)   │
-                                                         │  ┌───────────────┐  │
-                                                         │  │ LangGraph     │  │
-                                                         │  │ workflow      │  │
-                                                         │  └──────┬────────┘  │
-                                                         │         │           │
-                                                         │  ┌──────┴────────┐  │
-                                                         │  │ services/     │  │
-                                                         │  │ compute/      │  │
-                                                         │  │ io/ adapters/ │  │
-                                                         │  └──────┬────────┘  │
-                                                         └─────────┼───────────┘
-                                                                   │
-                                       ┌───────────────┬───────────┼─────────────┐
-                                       ▼               ▼           ▼             ▼
-                                  ┌────────┐     ┌────────┐  ┌──────────┐  ┌──────────┐
-                                  │ tushare│     │akshare │  │ LLM API  │  │  Cache   │
-                                  │  API   │     │  API   │  │(deepseek/│  │ (Parquet │
-                                  │        │     │        │  │  kimi)   │  │ +DuckDB) │
-                                  └────────┘     └────────┘  └──────────┘  └──────────┘
+┌─────────────────────┐         HTTP/JSON + SSE          ┌─────────────────────────────┐
+│   Next.js (web)     │ ───────────────────────────────> │   NestJS (api)              │
+│   App Router        │ <─── token / SSE 进度流 ────────  │   gateway / orchestrator    │
+│   RSC + Client      │                                  │   ┌───────────────────┐     │
+└─────────────────────┘                                  │   │ Cron + BullMQ     │     │
+                                                         │   │ (meta / kline 队列)│     │
+                                                         │   └─────────┬─────────┘     │
+                                                         │             │ enqueue + dispatch
+                                                         └─────────────┼───────────────┘
+                                                                       │
+                                                          Arrow Flight │ (gRPC)
+                                                                       ▼
+                                                            ┌─────────────────────┐
+                                                            │  Python svc (rpc)   │
+                                                            │  ┌───────────────┐  │
+                                                            │  │ LangGraph     │  │
+                                                            │  │ workflow      │  │
+                                                            │  └──────┬────────┘  │
+                                                            │         │           │
+                                                            │  ┌──────┴────────┐  │
+                                                            │  │ services/     │  │
+                                                            │  │ compute/      │  │
+                                                            │  │ io/ adapters/ │  │
+                                                            │  └──────┬────────┘  │
+                                                            └─────────┼───────────┘
+                                                                      │
+                                          ┌─────────────┬─────────────┼─────────────┐
+                                          ▼             ▼             ▼             ▼
+                                     ┌────────┐   ┌──────────┐  ┌──────────┐  ┌──────────┐
+                                     │akshare │   │ LLM API  │  │  Slack   │  │  Cache   │
+                                     │（含 XQ）│   │(deepseek/│  │ webhook  │  │ (Parquet │
+                                     │  数据  │   │  kimi)   │  │（通知）  │  │ +DuckDB) │
+                                     └────────┘   └──────────┘  └──────────┘  └──────────┘
+
+         ┌──────────┐
+         │  Redis   │ ← BullMQ 队列 / 去重 KV（NestJS 边）
+         └──────────┘
 ```
 
 ## 2. 进程职责
 
-| 进程                       | 主要职责                                                         | **不做**                             |
-| -------------------------- | ---------------------------------------------------------------- | ------------------------------------ |
-| Next.js (`apps/web`)       | UI 渲染、用户交互、SSE 接收进度                                  | 调外部 API、跑计算、调 LLM           |
-| NestJS (`apps/api`)        | HTTP 路由、参数校验、调度 Python、缓存元数据查询                 | 重计算、调外部数据源、调 LLM         |
-| Python svc (`services/py`) | 数据拉取与缓存写入、筛选/形态/舆情计算、LangGraph 编排、LLM 调用 | 直接处理 HTTP（一律走 Arrow Flight） |
+| 进程                       | 主要职责                                                                                                                              | **不做**                             |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------ |
+| Next.js (`apps/web`)       | UI 渲染、用户交互、SSE 接收进度                                                                                                       | 调外部 API、跑计算、调 LLM           |
+| NestJS (`apps/api`)        | HTTP 路由、参数校验、**编排（cron + 消息队列：meta / kline）**、调度 Python、缓存元数据查询、**通知投递**                              | 重计算、调外部数据源、调 LLM         |
+| Python svc (`services/py`) | 数据拉取与缓存写入、筛选/形态/舆情计算、LangGraph 编排、LLM 调用                                                                       | 直接处理 HTTP（一律走 Arrow Flight） |
+| Redis（边车，仅 NestJS 用）| BullMQ 队列后端（meta / kline）、限流令牌桶、通知去重 KV                                                                              | 业务数据 / 主缓存（那是 Parquet）    |
 
 ## 3. 仓库结构
 
@@ -157,14 +166,17 @@
 - **同步小调用**（< 1MB 结果）：HTTP/JSON
 - **大数据集**（K 线、新闻列表、筛选结果 > 1MB）：Arrow Flight Stream
 - **长任务**（> 2s 计算、LangGraph 工作流）：返回 `task_id`，前端 SSE 订阅 `/api/tasks/:id/stream`
-- **错误**：统一错误码（见 `proto/errors.proto`）+ `trace_id`
+- **缓存补齐**（meta industries 缺失、kline 未到最新交易日）：NestJS 内部用 BullMQ 异步入队，由 cron 与读时双触发；用户当次 HTTP 请求**不阻塞等待补齐**（详见 `docs/modules/09-update-orchestration.md`）
+- **通知**：`NotificationService` 内部投递（默认 Slack webhook，详见 `docs/modules/08-notifications.md`）
+- **错误**：统一错误码（见 `proto/errors.json` 的生成产物）+ `trace_id`
 
 ## 6. 部署拓扑（v1 单机本地）
 
-- 三个进程通过 supervisord / pm2 管理
+- 四个进程通过 supervisord / pm2 管理
   - `next start` :3000
   - `nest start` :3001
   - `python -m quant_rpc.server` :8815（Arrow Flight 默认端口）
+  - `redis-server` :6379（BullMQ 队列 + 通知去重 KV；本机配置，无需密码）
 - 数据目录 `./data/` 本地存储，备份策略：每日 rsync 到外置硬盘 + 周度上云（用户自配）
 - 配置通过 `.env`（gitignore），加载时 zod / pydantic 校验
 
@@ -193,5 +205,7 @@
 | LangGraph    |            | 0.2+     |
 | pydantic     |            | 2.x      |
 | Arrow Flight | grpc       | 1.6+     |
+| BullMQ       |            | 5+       |
+| Redis        |            | 7+       |
 
 版本升级走 RFC，禁止悄悄升大版本。

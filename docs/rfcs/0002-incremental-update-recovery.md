@@ -78,7 +78,7 @@ schema：
 
 ```
 job          STRING
-entity_key   STRING        -- "600519.SH"
+entity_key   STRING        -- "600519"
 payload      STRING (JSON) -- 重跑参数：start, end, source, ...
 error_code   STRING
 error_message STRING
@@ -108,7 +108,7 @@ trace_id     STRING
 {
   "kline.daily": {
     "by_code": {
-      "600519.SH": {
+      "600519": {
         "last_date": "2026-04-30",
         "last_adj_factor": "1.0000",
         "schema_version": 3,
@@ -123,7 +123,7 @@ trace_id     STRING
 
 ```json
 {
-  "news.tushare": { "last_published_at": "2026-05-01T03:00:00Z" }
+  "news.akshare": { "last_published_at": "2026-05-01T03:00:00Z" }
 }
 ```
 
@@ -174,7 +174,7 @@ data/_audit/discrepancy.jsonl
 
 ## 9. 锁与并发
 
-- 同一 entity 的多个写入互斥：`filelock`，文件名 `data/kline/daily/.lock-600519.SH`
+- 同一 entity 的多个写入互斥：`filelock`，文件名 `data/kline/daily/.lock-600519`
 - 不同 entity 完全并发；并发上限 = `min(8, source_rate_limit / 调用频率)`
 - 读路径不加锁（读 parquet 是原子的，rename 也是原子的）
 

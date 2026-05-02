@@ -2,7 +2,23 @@
 
 ## 1. 职责
 
-维护本地全市场 A 股日线数据。**入库时预计算前复权价与均线**，所有下游模块（筛选、形态、可视化）默认使用前复权列。
+维护本地全市场 A 股日线数据。**入库时预计算前复权价与均线**，所有下游模块（筛选、形态、可视化）默认使用前复权列。同步触发由编排层（`docs/modules/09-update-orchestration.md`）统一调度 —— 本模块只暴露纯计算 + 仓储能力。
+
+## 1.1 数据起点（硬约束）
+
+**全市场日线最早起点固定为北京时间 `2024-09-20`**（含当日）。理由：
+
+- 2024-09-24 起 A 股进入新一轮政策驱动行情，前期数据对当前形态匹配/筛选噪声大于信号
+- 数据量从全部历史压缩到 ~ 1.5 年，单股 ~ 350 行，全市场 ~ 200 万行，本机 Parquet 完全可承载
+- 起点固定后 `compute_qfq_prices` 的复权基准更稳定 —— 复权因子表只覆盖该窗口，不必再回溯 N 年股权变动
+
+实现位置：`quant_core/domain/types/kline.py` 的模块级常量
+
+```python
+KLINE_FLOOR_DATE: Final[date] = date(2024, 9, 20)   # Asia/Shanghai
+```
+
+所有 `fetch_range` / `compute_qfq_prices` / 同步策略一律以 `max(KLINE_FLOOR_DATE, list_date)` 为下界。修改这个常量需要走 RFC（影响 5.x 全量回算与所有缓存文件）。
 
 ## 2. 核心实体
 
@@ -70,8 +86,8 @@ class KlineRepo(Protocol):
 ```
 data/kline/
 ├── daily/
-│   ├── 600519.SH.parquet
-│   ├── 000001.SZ.parquet
+│   ├── 600519.parquet            # 文件名 = 裸 6 位 code，无交易所后缀
+│   ├── 000001.parquet
 │   └── ...
 ├── _state/
 │   ├── kline.json                # { last_full_sync, by_code: { code: { last_date, last_adj_factor }}}
@@ -79,6 +95,8 @@ data/kline/
 └── _index/
     └── duckdb.db                 # DuckDB 索引：(code, date) -> file path，加速 get_universe_slice
 ```
+
+> 与 `docs/modules/01-stock-meta.md` 一致，文件名采用裸 6 位 code（`600519.parquet` 而非 `600519.SH.parquet`）。SH/SZ/BJ 三地代码不重叠，无需后缀消歧。
 
 **为什么按 code 分区**：
 
@@ -126,29 +144,33 @@ def compute_ma(close_qfq: Sequence[Decimal], window: int) -> Sequence[Decimal | 
 
 ## 6. 更新策略
 
-### 6.1 全量回填（新股票首次入库）
+**调度入口在 NestJS（`docs/modules/09-update-orchestration.md`）**：cron 触发 + API 读时按需触发。本节描述每个更新单元（per-code）的 Python 侧语义。
 
-- 拉取从 `list_date` 到今天的全部 raw bars + adj_factors
+### 6.1 全量回填（新股票首次入库 / 状态空）
+
+- 拉取 `[max(KLINE_FLOOR_DATE, list_date), today]` 的 raw bars + adj_factors
 - 一次性 compute_qfq + compute_ma
-- 写入
+- 写入；`_state.by_code[code].last_date = bars[-1].date`
 
-### 6.2 增量更新（每日收盘后）
+### 6.2 增量更新（最新交易日补齐）
 
-1. 读 `_state.by_code[code].last_date`
-2. 拉取 `(last_date, today]` 的 raw bars
+1. 读 `_state.by_code[code].last_date`（缺失视为 `KLINE_FLOOR_DATE - 1`）
+2. 拉取 `(last_date, today]` 的 raw bars（区间下界永远裁到 `KLINE_FLOOR_DATE`）
 3. 拉取同区间的 adj_factor
 4. **检查 adj_factor 是否变化**：
-   - 变化 → 该股票走 5.1 全量回算
+   - 变化 → 该股票走 6.1 全量回算
    - 未变化 → 仅 append 新行；新增行的 MA 用既有最后 60 行 close_qfq + 新行计算
-5. upsert + 更新 `_state`
+5. upsert + 更新 `_state.by_code[code].last_date`
+
+`last_date` < 最新交易日（按 `domain/rules/calendar.py` 派生）即视为"陈旧"，编排层据此把 code 加入 kline 更新队列。
 
 ### 6.3 错误恢复
 
 详见 `rfcs/0002-incremental-update-recovery.md`。要点：
 
 - 每只股票一个独立任务，单只失败不阻塞其它
-- 失败任务进 `dead_letter.parquet`，下次启动重跑
-- 死信连续失败 ≥ 3 次 → 告警，等人工介入
+- 失败任务进 `dead_letter.parquet`，下次调度重跑
+- 死信连续失败 ≥ 3 次 → 触发 `docs/modules/08-notifications.md` 告警，等人工介入
 
 ## 7. 查询接口
 

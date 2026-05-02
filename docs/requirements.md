@@ -42,8 +42,8 @@
 
 ### F1. 股票基础信息（`docs/modules/01-stock-meta.md`）
 
-- **F1.1**：维护本地全市场股票元信息：`code, name, exchange, board, industry_sw_l1/l2/l3, list_date, total_share, float_share, status`
-- **F1.2**：每日更新一次（增量），失败时不影响其它模块
+- **F1.1**：维护本地全市场股票元信息（裸 6 位 code 为主键）：`code, name, name_pinyin, industries, list_date, float_pct`（具体字段定义见 `docs/modules/01-stock-meta.md` §2）
+- **F1.2**：增量更新由 NestJS 编排（cron + 读时按需补，详见 `docs/modules/09-update-orchestration.md`），失败时不影响其它模块
 - **F1.3**：提供按代码、名称（含拼音首字母）、行业的查询
 
 ### F2. 股票日线数据（`docs/modules/02-stock-kline.md`）
@@ -52,7 +52,7 @@
 - **F2.2**：**入库时预计算并落库**：
   - 前复权价：`open_qfq, high_qfq, low_qfq, close_qfq`
   - 基于前复权 close 的均线：`ma5, ma10, ma20, ma60`
-- **F2.3**：每日收盘后增量更新；除权除息日全量回算前复权与均线（仅该股票）
+- **F2.3**：每日收盘后增量更新（由 NestJS 编排，详见 `docs/modules/09-update-orchestration.md`）；除权除息日全量回算前复权与均线（仅该股票）；全市场起点固定为北京时间 2024-09-20
 - **F2.4**：提供按 (code, date_range) 拉取的列存接口（Arrow Flight）
 
 ### F3. 股票筛选（`docs/modules/03-screening.md` + `rfcs/0001-screening-dsl.md`）
@@ -99,6 +99,19 @@
 - **F7.4**：分析页：股票集合输入 + 时间窗口 + 三层洞察展示 + 进度流
 - **F7.5**：股票详情页：基础信息 + K 线图（叠加 MA） + 时段新闻/研报列表
 
+### F8. 通知（`docs/modules/08-notifications.md`）
+
+- **F8.1**：项目内事件（数据更新失败、LLM quota、用户订阅命中）异步推送至 IM；v1 渠道 = Slack
+- **F8.2**：路由可配置（按 source + severity）；自带去重（按 `(source, dedupe_key, window)`）与限流（每渠道令牌桶）
+- **F8.3**：所有投递写 audit jsonl，失败投递有兜底 channel
+
+### F9. 更新编排（`docs/modules/09-update-orchestration.md`）
+
+- **F9.1**：NestJS 启动后**立即**触发一次缓存扫描，之后每 **60 分钟** 一次
+- **F9.2**：双触发模式 — cron 周期扫描 + HTTP 读时按需入队
+- **F9.3**：meta / kline 各自独立 BullMQ 队列；kline worker 受令牌桶 + 指数退避 + 熔断保护，遇 rate limit 自动延迟
+- **F9.4**：HTTP 读路径**不阻塞**等待补齐 — 用户当次拿到当前缓存内容（含 stale 行），后台异步补
+
 ## 5. 非功能性需求
 
 ### N1. 性能
@@ -128,7 +141,7 @@
 ### N5. 可移植性
 
 - 缓存抽象支持 ≥ 2 种后端实现（v1：本地 Parquet；v2：可切换 PostgreSQL/Redis）
-- 数据源抽象支持 ≥ 2 个供应商（v1：tushare 主 + akshare 兜底）
+- 数据源抽象支持 ≥ 2 个供应商（v1：仅接入 AKShare 一家，端口形态保留 N≥2；二源接入计划见 `docs/todo-enhancement.md`）
 - LLM 抽象支持 ≥ 2 个供应商（v1：deepseek + kimi，主路 / 兜底由 env 配置；先 PK 再钦定）
 
 ## 6. 验收标准（DoD）
@@ -148,7 +161,8 @@
 ## 8. 已决策事项
 
 - ✅ **LLM**：v1 引入 deepseek + kimi 两家，主路 / 兜底由 `.env` 配置（`LLM_PRIMARY_PROVIDER` / `LLM_FALLBACK_PROVIDER`）；上线后 PK 一段时间再决定主路
-- ✅ **新闻源**：v1 仅 tushare news；之后看效果再加东方财富 / 同花顺爬虫
+- ✅ **新闻源**：v1 仅 AKShare（含其后端聚合 sina / eastmoney）；之后看效果再加东方财富 / 同花顺爬虫
+- ✅ **通知**：v1 推送到 Slack（incoming webhook 起步，必要时切 bot token）；微信 / 飞书等其它 IM 留 v2
 - ✅ **研报 PDF**：v1 仅取标题 + 摘要 + URL，不解析正文；之后看效果再加
 - ✅ **鉴权**：v1 不做；NestJS 监听 127.0.0.1
 - ✅ **市场范围**：A 股全部三所（沪深北）

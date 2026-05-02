@@ -11,7 +11,7 @@
 ```python
 # ports/data_source.py
 class DataSource(Protocol):
-    name: str                          # "tushare" / "akshare" / ...
+    name: str                          # "akshare" / 后续接入的源
     priority: int                      # 越小越优先
     def healthcheck(self) -> SourceHealth: ...
 ```
@@ -43,9 +43,11 @@ class SourceChain(Generic[T_Source]):
 调用方：
 
 ```python
-chain = SourceChain([TushareKlineSource(), AKShareKlineSource()], retry=RetryPolicy(...))
-bars = chain.call(lambda s: s.fetch_range("600519.SH", start, end))
+chain = SourceChain([AKShareKlineSource()], retry=RetryPolicy(...))
+bars = chain.call(lambda s: s.fetch_range("600519", start, end))   # 裸 6 位 code
 ```
+
+> v1 `kline` / `meta` chain 都只配置了 AKShare 一个源；保留 N≥2 的端口形态是为了后续接入二源（候选见 `docs/todo-enhancement.md`）。
 
 业务代码不需要处理"哪个源"——chain 透明降级。日志会记录每次切换。
 
@@ -73,7 +75,7 @@ data/<group>/_state/watermarks.json
 {
   "kline.daily": {
     "by_code": {
-      "600519.SH": { "last_date": "2026-04-30", "last_adj_factor": "1.0", "updated_at": "..." },
+      "600519": { "last_date": "2026-04-30", "last_adj_factor": "1.0", "updated_at": "..." },
       ...
     }
   },
@@ -83,28 +85,23 @@ data/<group>/_state/watermarks.json
 }
 ```
 
+> 注意：`code` 用裸 6 位字符串（与 `docs/modules/01-stock-meta.md` 一致）。
+
 - 写水位**必须晚于**写数据：先 `repo.append(...)`，再 `state.put(...)`
 - 写数据 + 写水位**必须原子**：用 staging file + rename，或事务
 - 失败：水位不前进，下次自然重跑
 
 ## 6. 增量调度
 
-```python
-# services/scheduler.py
-class Scheduler:
-    def __init__(self, jobs: list[ScheduledJob], clock: Clock) -> None: ...
-    def run_due(self, now: datetime) -> list[JobResult]: ...
+**v1 调度由 NestJS 端的 BullMQ + 内置 Cron 承担**（详见 `docs/modules/09-update-orchestration.md`）。Python 侧的 source / repo 只暴露纯 fetch / persist 能力，由 NestJS 编排：
 
-@dataclass(frozen=True, slots=True)
-class ScheduledJob:
-    name: str
-    cron: str                       # "0 18 * * *"
-    runner: Callable[[], JobResult]
-    timeout_sec: int
-    on_failure: Literal["dead_letter", "alert", "ignore"]
-```
+- Cron 表达式 `0 0 */1 * * *`（每 60 分钟）+ 启动后立即跑一次
+- 触发面有两条：cron 周期扫描 + HTTP 读时按需补
+- 每条 source 类（meta / kline）独立 BullMQ 队列、独立并发与限流
 
-v1 单进程内 schedule（用 `apscheduler`），v2 分布式（celery / arq）。
+> 早期的方案曾设想在 Python 端用 `apscheduler` 跑调度。现在的拓扑下 NestJS 已经是流量与编排入口，再在 Python 起一个调度器会带来双源 / 状态同步问题，故收敛到 NestJS 一处。
+
+Python 侧的 service 只需提供形如 `run_full_sync()` / `enrich_one(code)` / `sync_one(code)` 的幂等入口，调度由调用方决定。
 
 ## 7. 死信队列（DLQ）
 
@@ -123,7 +120,7 @@ data/_dead_letter/
 @dataclass(frozen=True, slots=True)
 class DeadLetterEntry:
     job: str                        # "kline.daily.fetch"
-    entity_key: str                 # "600519.SH"
+    entity_key: str                 # "600519"   （裸 6 位 code）
     payload: dict[str, Any]         # 重跑所需参数
     error_code: str
     error_message: str
@@ -154,31 +151,36 @@ UI `/admin/data` 读最近 N 天审计，展示成功率趋势。
 `config/data_sources.yaml`：
 
 ```yaml
-kline:
+meta:
   sources:
-    - name: tushare
-      priority: 0
-      kind: TushareKlineSource
-      token_env: TUSHARE_TOKEN
-      rate_limit_per_min: 200
     - name: akshare
       priority: 1
-      kind: AKShareKlineSource
+      kind: AKShareStockMetaSource
   retry:
     max_attempts: 3
     backoff_base_ms: 200
 
+kline:
+  sources:
+    - name: akshare
+      priority: 1
+      kind: AKShareKlineSource
+      rate_limit_per_sec: 4         # 与 NestJS KlineWorker 令牌桶一致
+  retry:
+    max_attempts: 3
+    backoff_base_ms: 5000
+
 news:
   sources:
-    - name: tushare_news
-      priority: 0
-      kind: TushareNewsSource
+    - name: akshare_news
+      priority: 1
+      kind: AKShareNewsSource
   retry: { max_attempts: 2 }
 
-# ...
+# 其它源（待接入，候选见 docs/todo-enhancement.md）：保留位以便 priority 顺序可扩展
 ```
 
-启动时 pydantic 校验；token 缺失 = 启动失败。
+启动时 pydantic 校验；密钥（如未来接入需 token 的源时）缺失 = 启动失败。
 
 ## 10. 安全
 
@@ -217,5 +219,6 @@ v1 仅写 jsonl 审计 + 文件 marker；v2 接 Prometheus。
 ## 13. 风险与备注
 
 - 同一只股票某一天**两个源给的不同数据**：以主源为准，兜底源仅在主源失败时用；切换后下一次主源恢复时**强制对账一次**——发现差异写 `_audit/discrepancy.jsonl`
-- tushare 限流敏感：rate_limit 配置必须保守，宁可慢不要被封
-- akshare 来自爬虫，schema 不稳定：所有字段视为 optional，pydantic 校验出错降级到主源（如果主源在线）
+- v1 主路 = AKShare（爬虫底，schema 不稳定）：所有字段视为 optional，pydantic 校验出错时降级（如有兜底源，否则跳过该 entity 进死信）；新增字段忽略（前向兼容），关键字段缺失即丢弃
+- AKShare 限流：单端点 ~ 5 req/s 是观测下限，KlineWorker 的令牌桶配置（`per_sec: 4`）必须保守 —— 宁可慢不要被封段
+- 兜底源待接入（候选与触发条件见 `docs/todo-enhancement.md` 的 stock-meta §2）；接入后才能验证 SourceChain 的 fallback 链路

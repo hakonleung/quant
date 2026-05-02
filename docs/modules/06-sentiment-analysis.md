@@ -84,6 +84,10 @@ class FundamentalThesis:
               └────────────┬───────────┘
                            ▼
               ┌────────────────────────┐
+              │ N1.5: web_research     │  Kimi web_search 工具补全实时盲区
+              └────────────┬───────────┘    （并购 / 热点 / 主要产品 / 供需）
+                           ▼
+              ┌────────────────────────┐
               │ N2: per_stock_drivers  │  对每只股票 LLM 抽取 3~5 条 PriceDriver
               └────────────┬───────────┘
                            ▼
@@ -122,9 +126,59 @@ class FundamentalThesis:
 - 调 `NewsService.for_codes(codes, days)` + `ReportService.for_stock` × N
 - 全部走本地缓存；缓存缺失时**不**实时拉取（保证响应时间），返回 stale flag
 
+### 4.1.5 N1.5: web_research（Kimi 内置 web_search）
+
+定位：**补齐本地缓存的盲区** —— 公告/研报覆盖不到的并购传闻、近期热点轮动、产品涨价信号、中长期供需关系。本节点**只在 LLM 主路 = Kimi 时启用**（DeepSeek 当前未提供等价的 search tool），由 graph 入口根据 `LLM_PRIMARY_PROVIDER` 决定是否跳过。
+
+调用方式（OpenAI 兼容工具调用 + Kimi `$web_search` 内置工具）：
+
+```python
+response = kimi.chat(
+    messages=[
+        {"role": "system", "content": SYS_PROMPT},
+        {"role": "user", "content": user_prompt(stock_meta, recent_news_titles)},
+    ],
+    tools=[{"type": "builtin_function", "function": {"name": "$web_search"}}],
+    schema=WebResearchOutput,   # 强约束输出结构
+)
+```
+
+- LLM 自主决定是否触发 search（典型 1~3 次 `$web_search` 调用）；中间步骤的 `tool_calls` 由 `LLMChain` 自动 echo 回模型直至模型返回 `finish_reason="stop"`
+- 结果落地为结构化对象：
+
+  ```python
+  @dataclass(frozen=True, slots=True)
+  class WebResearchSnippet:
+      stock_code: str
+      topic: Literal["m_and_a", "hot_theme", "main_product", "supply_demand"]
+      summary: str                     # 一句话
+      published_at: date | None
+      source_url: str
+      raw_query: str                   # LLM 实际下发的 search query，留 audit
+  ```
+
+- Snippets 与 N1 的本地证据合并后送入 N2/N5；UI 上以"实时检索"标记区分 evidence 来源
+
+#### N1.5 prompt 模板要点
+
+主 prompt 围绕**四个聚焦点**展开（用户在 6.0 决议后强约束，prompt 不再泛搜）：
+
+1. **并购情况** — 触发关键词：`{name} OR {code} 并购|收购|定增|资产重组|借壳`，时间窗 `[asof - 90d, asof]`
+2. **所属热点** — 关键词：`{industries.split(',')[-1]} 热点 | 题材 | 概念`，时间窗 `[asof - 30d, asof]`，意图是判断该行业当前是否在风口
+3. **主要产品 + 供需关系趋势** — 关键词：`{main_product} 涨价|缺货|去库存|价格`（`main_product` 来自 stock_meta + LLM 从 news 中提炼的产品标签），时间窗 `[asof - 60d, asof]`
+4. **行业政策催化** — 关键词：`{industries} 政策|补贴|限制|规范`，时间窗 `[asof - 30d, asof]`
+
+每个聚焦点最多产出 3 条 `WebResearchSnippet`，去重后写入 graph state。
+
+#### 配额与降级
+
+- 每只股票最多 **5 次** `$web_search` 调用（kimi 计费按次），任务级总配额硬上限 200 次
+- 任一聚焦点 search 失败（429 / 网络）→ 跳过，不让单点失败拖死整个任务
+- Kimi quota 耗尽 → graph 回落到无 web_research 模式，结果中 `caveats` 加注 "实时检索不可用"
+
 ### 4.2 N2: per_stock_drivers
 
-- Prompt：股票元信息 + 该股票时段全部新闻摘要（用 token 预算限制为 4k） + 近 30 日价格走势数字摘要
+- Prompt：股票元信息 + 该股票时段全部新闻摘要（用 token 预算限制为 4k） + 近 30 日价格走势数字摘要 + **N1.5 产出的 web_research snippets**
 - LLM 输出结构化 `list[PriceDriver]`，走 zod 校验
 - 每只股票一次 LLM 调用；并发上限 = 8（避免限流）
 

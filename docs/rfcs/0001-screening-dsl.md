@@ -151,7 +151,7 @@ class ScreenMatch:
 
 ```json
 {
-  "code": "600519.SH",
+  "code": "600519",
   "evidence": {
     "matched_op": "for_all",
     "window": ["2026-04-25", "2026-04-29"],

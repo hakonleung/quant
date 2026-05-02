@@ -49,8 +49,16 @@ class EmbeddingPort(Protocol):
 | 适配器            | 文件                                    | 备注                                                          |
 | ----------------- | --------------------------------------- | ------------------------------------------------------------- |
 | `DeepSeekAdapter` | `quant_io/adapters/llm/deepseek.py`     | OpenAI 兼容协议；结构化输出走 `response_format = json_schema` |
-| `KimiAdapter`     | `quant_io/adapters/llm/kimi.py`         | OpenAI 兼容协议；同上                                         |
+| `KimiAdapter`     | `quant_io/adapters/llm/kimi.py`         | OpenAI 兼容协议；额外支持内置 `$web_search` 工具（见下）      |
 | `BgeM3Adapter`    | `quant_io/adapters/embedding/bge_m3.py` | 本地或外部 endpoint 二选一                                    |
+
+### 3.1 Kimi 内置 web_search
+
+Kimi 对 OpenAI 工具调用协议做了扩展，支持 `tools=[{"type": "builtin_function", "function": {"name": "$web_search"}}]`。LLM 自主在多步 reasoning 中调用，平台自动执行联网搜索并把结果回填给模型。
+
+- `KimiAdapter.chat` 在 `tools` 列表里允许传入这个 builtin function；`LLMChain` 检测到 `tool_calls` 后自动 echo 回模型，直到 `finish_reason="stop"`（与普通 function-call 流程一致）
+- 计费：每次 `$web_search` 触发按 Kimi 价目表计入 `TokenUsage.cost_usd`（adapter 内部读 response 的 `usage.search_count` 字段）
+- 仅 Kimi 提供；DeepSeek 当前没有等价工具 → 调用方必须容忍降级路径（见 `docs/modules/06-sentiment-analysis.md` §4.1.5）
 
 **主路与兜底由 env 配置决定**（见 §10），不在 adapter 中写死。两家供应商上线 PK 一段时间后，根据成本/质量/限流再决定主路；底层抽象保证切换零代码改动。
 
