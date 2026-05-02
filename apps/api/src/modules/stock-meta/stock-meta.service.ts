@@ -34,4 +34,8 @@ export class StockMetaService {
     }
     return this.port.listByIndustry(swL2, traceId);
   }
+
+  async listAll(traceId: string): Promise<readonly StockMetaDto[]> {
+    return this.port.listAll(traceId);
+  }
 }

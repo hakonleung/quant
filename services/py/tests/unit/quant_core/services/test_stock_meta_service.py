@@ -40,6 +40,13 @@ class _FakeRepo:
             key=lambda m: m.code,
         )
 
+    def list_all(self) -> list[StockMeta]:
+        return sorted(self._by_code.values(), key=lambda m: m.code)
+
+
+# Re-export for the rpc-ops test that uses this same fake.
+__all__ = ["_FakeRepo"]
+
 
 @pytest.fixture
 def service() -> StockMetaService:
@@ -95,3 +102,15 @@ class TestStockMetaServiceListByIndustry:
         service._repo.upsert_many([new])
         got = service.list_by_industry("白酒")
         assert "600809.SH" in {m.code for m in got}
+
+
+@pytest.mark.unit
+class TestStockMetaServiceListAll:
+    def test_returns_all_sorted_by_code(self, service: StockMetaService) -> None:
+        codes = [m.code for m in service.list_all()]
+        assert codes == sorted(codes)
+        assert set(codes) == {m.code for m in SEED}
+
+    def test_empty_repo_returns_empty(self) -> None:
+        empty = StockMetaService(_FakeRepo([]))
+        assert empty.list_all() == []

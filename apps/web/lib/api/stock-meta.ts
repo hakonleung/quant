@@ -69,6 +69,13 @@ export async function fetchStockMetaBatch(
   return StockMetaListSchema.parse(body);
 }
 
+export async function fetchAllStockMeta(
+  options: StockMetaFetchOptions = {},
+): Promise<readonly StockMetaDto[]> {
+  const body: unknown = await callApi('/api/stocks', options);
+  return StockMetaListSchema.parse(body);
+}
+
 export async function fetchStockMetaByIndustry(
   swL2: string,
   options: StockMetaFetchOptions = {},

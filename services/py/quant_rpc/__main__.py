@@ -23,7 +23,11 @@ from quant_core.domain.types.stock import StockMeta
 from quant_core.services.stock_meta_service import StockMetaService
 
 from quant_rpc.handlers import HandlerRegistry
-from quant_rpc.ops.stock_meta import GetStockMetaBatchHandler, ListByIndustryHandler
+from quant_rpc.ops.stock_meta import (
+    GetStockMetaBatchHandler,
+    ListAllHandler,
+    ListByIndustryHandler,
+)
 from quant_rpc.server import QuantFlightServer
 
 if TYPE_CHECKING:
@@ -93,6 +97,9 @@ class _InMemoryRepo:
             key=lambda m: m.code,
         )
 
+    def list_all(self) -> list[StockMeta]:
+        return sorted(self._by_code.values(), key=lambda m: m.code)
+
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Quant Flight server (test fixture)")
@@ -106,6 +113,7 @@ def main() -> int:
     registry = HandlerRegistry()
     registry.register(GetStockMetaBatchHandler(service))
     registry.register(ListByIndustryHandler(service))
+    registry.register(ListAllHandler(service))
 
     server = QuantFlightServer(registry, location=f"grpc://{args.host}:{args.port}")
     print(f"READY {server.port}", flush=True)

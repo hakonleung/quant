@@ -25,7 +25,12 @@ const listByIndustryPipe = new ZodValidationPipe(ListByIndustryQuerySchema);
 export class StockMetaController {
   constructor(private readonly service: StockMetaService) {}
 
-  /** Order matters: `/batch` and `/by-industry` must be declared before `/:code`. */
+  /** Order matters: literal sub-paths must be declared before the `/:code` capture. */
+  @Get()
+  async listAll(@Req() req: Request): Promise<readonly StockMetaDto[]> {
+    return this.service.listAll(traceId(req));
+  }
+
   @Get('batch')
   async getBatch(
     @Req() req: Request,

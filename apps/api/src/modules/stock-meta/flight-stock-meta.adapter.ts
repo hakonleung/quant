@@ -44,4 +44,9 @@ export class FlightStockMetaAdapter implements StockMetaPort {
     );
     return arrowTableToStockMetaDtos(result.value);
   }
+
+  async listAll(traceId: string): Promise<readonly StockMetaDto[]> {
+    const result = await this.flight.doGet('list_stock_meta_all', {}, { traceId });
+    return arrowTableToStockMetaDtos(result.value);
+  }
 }

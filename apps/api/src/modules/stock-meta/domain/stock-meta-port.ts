@@ -26,4 +26,10 @@ export interface StockMetaPort {
    * All stocks in the given Shenwan L2 industry, sorted by code.
    */
   listByIndustry(swL2: string, traceId: string): Promise<readonly StockMetaDto[]>;
+
+  /**
+   * Every stock in the cache, sorted by code. Bounded dataset (~5k for
+   * A-share); the controller serves the whole list in one response.
+   */
+  listAll(traceId: string): Promise<readonly StockMetaDto[]>;
 }

@@ -30,6 +30,7 @@ if TYPE_CHECKING:
 
 _GET_BATCH_OP: Final[str] = "get_stock_meta_batch"
 _LIST_BY_INDUSTRY_OP: Final[str] = "list_stock_meta_by_industry"
+_LIST_ALL_OP: Final[str] = "list_stock_meta_all"
 
 
 def _items_to_table(items: list[StockMeta]) -> pa.Table:
@@ -101,3 +102,23 @@ class ListByIndustryHandler:
     def execute(self, args: Mapping[str, object]) -> pa.Table:
         sw_l2 = _require_str(args, "sw_l2")
         return _items_to_table(self._service.list_by_industry(sw_l2))
+
+
+class ListAllHandler:
+    """``list_stock_meta_all`` — fetch every stock currently in the cache.
+
+    Bounded dataset (~5k rows for A-share); the call is cheap enough that
+    we serve it as one Flight stream rather than paginate.
+    """
+
+    op = _LIST_ALL_OP
+    schema = STOCK_META_SCHEMA
+
+    __slots__ = ("_service",)
+
+    def __init__(self, service: StockMetaService) -> None:
+        self._service = service
+
+    def execute(self, args: Mapping[str, object]) -> pa.Table:
+        del args  # this op takes none
+        return _items_to_table(self._service.list_all())

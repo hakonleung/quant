@@ -42,3 +42,12 @@ class StockMetaRepo(Protocol):
     def list_by_industry(self, sw_l2: str) -> list[StockMeta]:
         """Return all stocks in the given Shenwan L2 industry, sorted by code."""
         ...
+
+    def list_all(self) -> list[StockMeta]:
+        """Return every stored stock, sorted by code.
+
+        Bounded dataset (~5k rows for A-share); callers can iterate without
+        pagination. Used by the front-end's universe pickers and by the
+        admin sync workflow's "diff against current" step.
+        """
+        ...

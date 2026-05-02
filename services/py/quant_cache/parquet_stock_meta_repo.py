@@ -64,3 +64,7 @@ class ParquetStockMetaRepo:
             order_by=(("code", "asc"),),
         )
         return list(self._repo.query(spec))
+
+    def list_all(self) -> list[StockMeta]:
+        spec = QuerySpec(order_by=(("code", "asc"),))
+        return list(self._repo.query(spec))

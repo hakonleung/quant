@@ -43,6 +43,11 @@ class FakePort implements StockMetaPort {
         .sort((a, b) => a.code.localeCompare(b.code)),
     );
   }
+
+  async listAll(traceId: string): Promise<readonly StockMetaDto[]> {
+    this.traceIds.push(traceId);
+    return Promise.resolve(Object.values(this.byCode).sort((a, b) => a.code.localeCompare(b.code)));
+  }
 }
 
 describe('StockMetaService', () => {
@@ -84,5 +89,14 @@ describe('StockMetaService', () => {
 
   it('forwards a non-empty industry string to the port', async () => {
     await expect(service.listByIndustry('白酒', 'tid')).resolves.toEqual([SAMPLE]);
+  });
+
+  it('listAll forwards trace_id and returns sorted rows', async () => {
+    const second: StockMetaDto = { ...SAMPLE, code: '000858.SZ', exchange: 'SZ' };
+    port = new FakePort({ '600519.SH': SAMPLE, '000858.SZ': second });
+    service = new StockMetaService(port);
+    const all = await service.listAll('tid');
+    expect(all.map((m) => m.code)).toEqual(['000858.SZ', '600519.SH']);
+    expect(port.traceIds).toEqual(['tid']);
   });
 });

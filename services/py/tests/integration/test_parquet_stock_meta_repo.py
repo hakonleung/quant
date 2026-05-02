@@ -53,6 +53,15 @@ class TestParquetStockMetaRepo:
     def test_list_by_industry_unknown_returns_empty(self, repo: ParquetStockMetaRepo) -> None:
         assert repo.list_by_industry("not-an-industry") == []
 
+    def test_list_all_returns_every_stock_sorted_by_code(self, repo: ParquetStockMetaRepo) -> None:
+        codes = [m.code for m in repo.list_all()]
+        assert codes == sorted(codes)
+        assert set(codes) == {m.code for m in SEED}
+
+    def test_list_all_returns_empty_for_fresh_repo(self, tmp_path: Path) -> None:
+        empty = ParquetStockMetaRepo(tmp_path / "empty.parquet")
+        assert empty.list_all() == []
+
     def test_upsert_overwrites_by_code(self, repo: ParquetStockMetaRepo) -> None:
         updated = make_meta("600519.SH", name="MOUTAI v2", industry_sw_l2="白酒")
         repo.upsert_many([updated])

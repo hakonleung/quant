@@ -13,7 +13,11 @@ import pytest
 from quant_cache.stock_meta_schema import STOCK_META_SCHEMA
 from quant_core.errors import QuantError
 from quant_core.services.stock_meta_service import StockMetaService
-from quant_rpc.ops.stock_meta import GetStockMetaBatchHandler, ListByIndustryHandler
+from quant_rpc.ops.stock_meta import (
+    GetStockMetaBatchHandler,
+    ListAllHandler,
+    ListByIndustryHandler,
+)
 
 from tests._util.stock_meta_fixtures import SEED
 
@@ -42,6 +46,9 @@ class _FakeRepo:
             (m for m in self._by_code.values() if m.industry_sw_l2 == sw_l2),
             key=lambda m: m.code,
         )
+
+    def list_all(self) -> list[StockMeta]:
+        return sorted(self._by_code.values(), key=lambda m: m.code)
 
 
 @pytest.fixture
@@ -122,3 +129,24 @@ class TestListByIndustryHandler:
         with pytest.raises(QuantError) as excinfo:
             h.execute({"sw_l2": ""})
         assert excinfo.value.code == "INVALID_ARGUMENT"
+
+
+@pytest.mark.unit
+class TestListAllHandler:
+    def test_op_and_schema(self, service: StockMetaService) -> None:
+        h = ListAllHandler(service)
+        assert h.op == "list_stock_meta_all"
+        assert h.schema == STOCK_META_SCHEMA
+
+    def test_returns_every_stock_sorted(self, service: StockMetaService) -> None:
+        h = ListAllHandler(service)
+        table = h.execute({})
+        codes = table.column("code").to_pylist()
+        assert codes == sorted(codes)
+        assert set(codes) == {m.code for m in SEED}
+
+    def test_ignores_unexpected_args(self, service: StockMetaService) -> None:
+        h = ListAllHandler(service)
+        # Defensive: extra args must not cause failure (this op takes none).
+        table = h.execute({"unexpected": True})
+        assert table.num_rows == len(SEED)

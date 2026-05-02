@@ -65,3 +65,7 @@ class StockMetaService:
                 "sw_l2 must be non-empty",
             )
         return self._repo.list_by_industry(sw_l2)
+
+    def list_all(self) -> list[StockMeta]:
+        """Every stored stock, sorted by code. See repo docstring."""
+        return self._repo.list_all()

@@ -1,6 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { QuantError, TRACE_HEADER } from '@quant/shared';
-import { fetchStockMeta, fetchStockMetaBatch, fetchStockMetaByIndustry } from './stock-meta.js';
+import {
+  fetchAllStockMeta,
+  fetchStockMeta,
+  fetchStockMetaBatch,
+  fetchStockMetaByIndustry,
+} from './stock-meta.js';
 
 const SAMPLE = {
   code: '600519.SH',
@@ -129,6 +134,13 @@ describe('fetchStockMeta helpers', () => {
     expect(fetchMock.mock.calls[0]![0]).toBe(
       `http://api/api/stocks/by-industry?sw_l2=${encodeURIComponent('白酒')}`,
     );
+  });
+
+  it('fetchAllStockMeta GETs /api/stocks and parses each row', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse([SAMPLE]));
+    const all = await fetchAllStockMeta(opts);
+    expect(all).toHaveLength(1);
+    expect(fetchMock.mock.calls[0]![0]).toBe('http://api/api/stocks');
   });
 
   it('forwards revalidateSeconds as Next.js fetch hint', async () => {

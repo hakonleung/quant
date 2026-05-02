@@ -90,6 +90,16 @@ describe('GET /api/stocks/* (HTTP contract)', () => {
     expect(res.body).toEqual([]);
   });
 
+  it('GET /api/stocks lists every stock sorted by code', async () => {
+    const res = await request(app.getHttpServer()).get('/api/stocks').expect(200);
+    expect(res.body.length).toBeGreaterThan(0);
+    const codes = res.body.map((r: { code: string }) => r.code);
+    expect(codes).toEqual([...codes].sort());
+    for (const row of res.body) {
+      expect(() => StockMetaDtoSchema.parse(row)).not.toThrow();
+    }
+  });
+
   it('propagates client x-trace-id header end-to-end', async () => {
     const res = await request(app.getHttpServer())
       .get('/api/stocks/600519.SH')
