@@ -91,6 +91,18 @@
       "description": "Local Parquet/DuckDB cache file failed integrity check."
     },
     {
+      "name": "CACHE_KEY_NOT_FOUND",
+      "number": 601,
+      "http": 404,
+      "description": "Requested key/record absent from the cache layer."
+    },
+    {
+      "name": "CACHE_BACKEND_UNAVAILABLE",
+      "number": 602,
+      "http": 503,
+      "description": "Cache backend (filesystem, db) unreachable / locked / out of disk."
+    },
+    {
       "name": "INTERNAL",
       "number": 999,
       "http": 500,

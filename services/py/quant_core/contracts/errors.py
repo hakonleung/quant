@@ -25,6 +25,8 @@ ErrorCode = Literal[
     "RATE_LIMITED",
     "LLM_FAILED",
     "CACHE_CORRUPTED",
+    "CACHE_KEY_NOT_FOUND",
+    "CACHE_BACKEND_UNAVAILABLE",
     "INTERNAL",
 ]
 """Closed set of cross-process error codes (proto/errors.json)."""
@@ -46,6 +48,8 @@ ERROR_CODES: Final[frozenset[ErrorCode]] = frozenset(
         "RATE_LIMITED",
         "LLM_FAILED",
         "CACHE_CORRUPTED",
+        "CACHE_KEY_NOT_FOUND",
+        "CACHE_BACKEND_UNAVAILABLE",
         "INTERNAL",
     )
 )
@@ -66,6 +70,8 @@ ERROR_NUMBERS: Final[MappingProxyType[ErrorCode, int]] = MappingProxyType({
     "RATE_LIMITED": 401,
     "LLM_FAILED": 500,
     "CACHE_CORRUPTED": 600,
+    "CACHE_KEY_NOT_FOUND": 601,
+    "CACHE_BACKEND_UNAVAILABLE": 602,
     "INTERNAL": 999,
 })
 
@@ -85,5 +91,7 @@ ERROR_HTTP_STATUS: Final[MappingProxyType[ErrorCode, int]] = MappingProxyType({
     "RATE_LIMITED": 503,
     "LLM_FAILED": 502,
     "CACHE_CORRUPTED": 500,
+    "CACHE_KEY_NOT_FOUND": 404,
+    "CACHE_BACKEND_UNAVAILABLE": 503,
     "INTERNAL": 500,
 })

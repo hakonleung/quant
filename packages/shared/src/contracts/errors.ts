@@ -18,6 +18,8 @@ export const ERROR_CODES = [
   'RATE_LIMITED',
   'LLM_FAILED',
   'CACHE_CORRUPTED',
+  'CACHE_KEY_NOT_FOUND',
+  'CACHE_BACKEND_UNAVAILABLE',
   'INTERNAL',
 ] as const;
 
@@ -42,6 +44,8 @@ export const ERROR_NUMBERS: Readonly<Record<ErrorCode, number>> = Object.freeze(
   RATE_LIMITED: 401,
   LLM_FAILED: 500,
   CACHE_CORRUPTED: 600,
+  CACHE_KEY_NOT_FOUND: 601,
+  CACHE_BACKEND_UNAVAILABLE: 602,
   INTERNAL: 999,
 });
 
@@ -61,6 +65,8 @@ export const ERROR_HTTP_STATUS: Readonly<Record<ErrorCode, number>> = Object.fre
   RATE_LIMITED: 503,
   LLM_FAILED: 502,
   CACHE_CORRUPTED: 500,
+  CACHE_KEY_NOT_FOUND: 404,
+  CACHE_BACKEND_UNAVAILABLE: 503,
   INTERNAL: 500,
 });
 
