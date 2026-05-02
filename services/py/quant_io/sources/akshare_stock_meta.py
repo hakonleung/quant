@@ -41,7 +41,15 @@ _PARTIAL_LIST_DATE: Final[date] = date(1990, 1, 1)
 
 @runtime_checkable
 class _AkshareGateway(Protocol):
-    def stock_info_a_code_name(self) -> Iterable[Mapping[str, object]]: ...
+    """Duck-typed view of the akshare module.
+
+    The real ``akshare.stock_info_a_code_name()`` returns a ``pandas.DataFrame``
+    whose columns are ``code`` and ``name``. We accept the loose ``object``
+    return type and normalise via :func:`_iter_rows` so tests can pass either
+    a DataFrame or a plain ``list[dict]`` without a pandas dependency.
+    """
+
+    def stock_info_a_code_name(self) -> object: ...
 
 
 class AKShareStockMetaSource:
@@ -81,7 +89,7 @@ class AKShareStockMetaSource:
                 {"source": _NAME},
             )
         try:
-            rows = gw.stock_info_a_code_name()
+            raw = gw.stock_info_a_code_name()
         except Exception as exc:
             raise QuantError(
                 "SOURCE_UNAVAILABLE",
@@ -89,7 +97,7 @@ class AKShareStockMetaSource:
                 {"source": _NAME, "exc_type": type(exc).__name__},
             ) from exc
         now = datetime.now(tz=UTC)
-        for row in rows:
+        for row in _iter_rows(raw):
             meta = _row_to_meta(row, now)
             if meta is not None:
                 yield meta
@@ -112,6 +120,26 @@ class AKShareStockMetaSource:
             return None, "akshare module missing stock_info_a_code_name"
         self._gateway = ak
         return ak, None
+
+
+def _iter_rows(raw: object) -> Iterable[Mapping[str, object]]:
+    """Normalise the various row containers a gateway might return.
+
+    AKShare hands back a ``pandas.DataFrame``; tests pass plain
+    ``list[dict]``. We use ``to_dict("records")`` when available
+    (DataFrames quack that way) and fall back to direct iteration for
+    list-of-dict gateways. We **never** import pandas — keeping the
+    adapter free of pandas types in its public surface keeps the type
+    layer thin.
+    """
+    to_dict = getattr(raw, "to_dict", None)
+    if callable(to_dict):
+        records = to_dict("records")
+        if isinstance(records, list):
+            return records
+    if isinstance(raw, list):
+        return raw
+    raise TypeError(f"akshare returned unsupported container: {type(raw).__name__}")
 
 
 def _row_to_meta(row: Mapping[str, object], now: datetime) -> StockMeta | None:
@@ -149,10 +177,23 @@ def _str(value: object) -> str:
 
 
 def _suffix_exchange(code: str) -> str | None:
-    """AKShare returns bare 6-digit codes; tag with exchange suffix."""
+    """AKShare returns bare 6-digit codes; tag with exchange suffix.
+
+    Prefix → exchange map (current as of 2026):
+
+    - SH main board: ``60`` (incl. ``600``/``601``/``603``/``605``)
+    - SH STAR (科创板): ``688``, ``689``
+    - SZ main: ``000``, ``001``, ``002``, ``003``
+    - SZ ChiNext (创业板): ``300``, ``301``
+    - BJ (北交所): ``43``, ``83``, ``87``, ``88``, ``920`` — note that
+      ``920`` was added in 2024 and is what trips the naive "9 → SH" rule.
+    - SH B-share: ``900`` (rare; we still tag as SH)
+    """
     if not code.isdigit() or len(code) != 6:
         return None
-    if code.startswith(("60", "68", "9")):
+    if code.startswith("920"):
+        return f"{code}.BJ"
+    if code.startswith(("60", "68", "900")):
         return f"{code}.SH"
     if code.startswith(("00", "30", "20")):
         return f"{code}.SZ"

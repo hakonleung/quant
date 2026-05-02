@@ -21,6 +21,7 @@ dev = [
     # Pull workspace member into the root env so `uv run` from root has
     # quant_core / quant_cache available without `--all-packages`.
     "quant-py",
+    "akshare>=1.18.60",
 ]
 
 [tool.uv.sources]

@@ -29,6 +29,9 @@ export default [
       '**/coverage/**',
       '**/generated/**',
       'data/**',
+      // Python virtualenvs occasionally bundle .js assets (e.g. akshare's
+      // `outcrypto.js`); keep ESLint out of them entirely.
+      '**/.venv/**',
     ],
   },
   // ---- 1. Source TS/TSX: full type-checked strict rules ----
