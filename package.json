@@ -16,14 +16,16 @@
     "typecheck": "pnpm -r --parallel run typecheck",
     "test": "pnpm -r --parallel run test",
     "test:cov": "pnpm -r --parallel run test:cov",
-    "py:format:check": "uv run ruff format --check services/py",
-    "py:format": "uv run ruff format services/py",
-    "py:lint": "uv run ruff check services/py",
-    "py:lint:fix": "uv run ruff check --fix services/py",
-    "py:typecheck": "uv run mypy --strict services/py",
+    "py:format:check": "uv run ruff format --check services/py proto",
+    "py:format": "uv run ruff format services/py proto",
+    "py:lint": "uv run ruff check services/py proto",
+    "py:lint:fix": "uv run ruff check --fix services/py proto",
+    "py:typecheck": "uv run mypy --strict services/py proto",
     "py:test": "uv run pytest services/py/tests -q",
     "py:test:cov": "uv run pytest services/py/tests -q --cov=services/py --cov-branch --cov-report=term-missing --cov-fail-under=90",
-    "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test:cov && pnpm py:format:check && pnpm py:lint && pnpm py:typecheck && pnpm py:test:cov"
+    "gen:proto": "uv run python -m proto.codegen",
+    "gen:proto:check": "uv run python -m proto.codegen --check",
+    "check": "pnpm gen:proto:check && pnpm format:check && pnpm lint && pnpm typecheck && pnpm test:cov && pnpm py:format:check && pnpm py:lint && pnpm py:typecheck && pnpm py:test:cov"
   },
   "devDependencies": {
     "@eslint/js": "^9.18.0",

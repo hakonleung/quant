@@ -17,14 +17,14 @@ describe('QuantError', () => {
   });
 
   it('should be an instance of Error (invariant: subclass contract)', () => {
-    const err = new QuantError('X', 'x');
+    const err = new QuantError('INTERNAL', 'x');
     expect(err).toBeInstanceOf(Error);
     expect(err.name).toBe('QuantError');
   });
 
   it('should not allow mutating details after construction (regression: shared mutability)', () => {
     const input = { a: 1 };
-    const err = new QuantError('X', 'x', input);
+    const err = new QuantError('INTERNAL', 'x', input);
     input.a = 999;
     expect(err.details).toEqual({ a: 1 });
   });

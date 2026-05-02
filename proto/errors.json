@@ -1,0 +1,100 @@
+{
+  "$schema_version": 1,
+  "description": "Cross-process error codes. Numbers are stable forever; never renumber, never reuse.",
+  "http_default": 500,
+  "ranges": [
+    { "from": 100, "to": 199, "category": "data/resource", "http_default": 404 },
+    { "from": 200, "to": 299, "category": "dsl/argument", "http_default": 400 },
+    { "from": 400, "to": 499, "category": "external_source", "http_default": 502 },
+    { "from": 500, "to": 599, "category": "llm", "http_default": 502 },
+    { "from": 600, "to": 998, "category": "internal_cache", "http_default": 500 }
+  ],
+  "codes": [
+    { "name": "OK", "number": 0, "http": 200, "description": "Success sentinel; never raised." },
+    {
+      "name": "INVALID_ARGUMENT",
+      "number": 1,
+      "http": 400,
+      "description": "Caller-supplied argument failed validation at a system boundary."
+    },
+    { "name": "NOT_FOUND", "number": 2, "http": 404, "description": "Generic resource-not-found." },
+    {
+      "name": "STOCK_NOT_FOUND",
+      "number": 100,
+      "http": 404,
+      "description": "Stock code unknown to the meta repository."
+    },
+    {
+      "name": "META_STALE",
+      "number": 101,
+      "http": 503,
+      "description": "Stock metadata snapshot too old to serve."
+    },
+    {
+      "name": "KLINE_DATA_MISSING",
+      "number": 102,
+      "http": 503,
+      "description": "K-line cache missing for the requested symbol/range."
+    },
+    {
+      "name": "DSL_INVALID",
+      "number": 200,
+      "http": 400,
+      "description": "Screening DSL failed AST validation."
+    },
+    {
+      "name": "NL_TRANSLATION_FAILED",
+      "number": 201,
+      "http": 502,
+      "description": "LLM failed to translate natural language → DSL."
+    },
+    {
+      "name": "EVALUATION_FAILED",
+      "number": 202,
+      "http": 500,
+      "description": "DSL evaluation produced an error."
+    },
+    {
+      "name": "UNIVERSE_TOO_LARGE",
+      "number": 203,
+      "http": 400,
+      "description": "Requested universe exceeds the configured cap."
+    },
+    {
+      "name": "PATTERN_REFERENCE_LOOKAHEAD",
+      "number": 300,
+      "http": 400,
+      "description": "Pattern matcher would require future bars (look-ahead) — refused."
+    },
+    {
+      "name": "SOURCE_UNAVAILABLE",
+      "number": 400,
+      "http": 503,
+      "description": "External data source unreachable / all fallbacks exhausted."
+    },
+    {
+      "name": "RATE_LIMITED",
+      "number": 401,
+      "http": 503,
+      "description": "External data source returned rate-limit error."
+    },
+    {
+      "name": "LLM_FAILED",
+      "number": 500,
+      "http": 502,
+      "description": "LLM call failed (timeout / non-2xx / malformed response)."
+    },
+    {
+      "name": "CACHE_CORRUPTED",
+      "number": 600,
+      "http": 500,
+      "description": "Local Parquet/DuckDB cache file failed integrity check."
+    },
+    {
+      "name": "INTERNAL",
+      "number": 999,
+      "http": 500,
+      "description": "Catch-all for unexpected internal failures."
+    }
+  ]
+}

@@ -19,16 +19,16 @@ class TestQuantError:
         assert dict(err.details) == {}
 
     def test_details_are_immutable(self) -> None:
-        err = QuantError("X", "x", {"a": 1})
+        err = QuantError("INTERNAL", "x", {"a": 1})
         with pytest.raises(TypeError):
             err.details["a"] = 999  # type: ignore[index]  # MappingProxyType rejects assignment at runtime; Mapping[str, object] does not encode this in the type system
 
     def test_caller_mutation_does_not_leak_into_error(self) -> None:
         payload = {"a": 1}
-        err = QuantError("X", "x", payload)
+        err = QuantError("INTERNAL", "x", payload)
         payload["a"] = 999
         assert dict(err.details) == {"a": 1}
 
     def test_is_subclass_of_exception(self) -> None:
-        err = QuantError("X", "x")
+        err = QuantError("INTERNAL", "x")
         assert isinstance(err, Exception)

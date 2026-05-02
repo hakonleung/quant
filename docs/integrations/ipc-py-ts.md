@@ -18,27 +18,48 @@
 
 ## 3. 服务定义（proto 单一源）
 
+> **M2 实现进度**：v1 选择 **手写 codegen + JSON 源**（无 protoc/buf 依赖）。
+> 当前已落地的契约只有 `ErrorCode`；`messages/`、`schemas/arrow/` 在 M3 / M4
+> 引入对应业务时再加。完整规划见 `proto/README.md`。
+>
+> 已落地：
+>
+> ```
+> proto/
+> ├── errors.json                  # ErrorCode 单一源
+> ├── codegen/                     # python -m proto.codegen [--check]
+> │   ├── _schema.py               # JSON → typed dataclass
+> │   ├── _emit.py                 # 写入 / drift 检查
+> │   ├── gen_py_errors.py         # → services/py/quant_core/contracts/errors.py
+> │   └── gen_ts_errors.py         # → packages/shared/src/contracts/errors.ts
+> └── README.md
+> ```
+>
+> 工作流：编辑 `proto/*.json` → `pnpm gen:proto` → 提交。`pnpm check` 在第一步就跑
+> `pnpm gen:proto:check`，发现漂移立即失败。
+>
+> 终极规划（M3+ 扩展）：
+
 ```
 proto/
 ├── messages/
-│   ├── common.proto                 # TraceContext, Pagination, etc.
-│   ├── stock_meta.proto
-│   ├── kline.proto
-│   ├── screen.proto
-│   ├── pattern.proto
-│   ├── news.proto
-│   └── sentiment.proto
+│   ├── common.json                 # TraceContext, Pagination, etc.
+│   ├── stock_meta.json
+│   ├── kline.json
+│   └── ...
 ├── schemas/
-│   └── arrow/                       # pyarrow.Schema 的 Python 定义文件
-│       ├── kline.py
-│       ├── news.py
+│   └── arrow/                      # pyarrow.Schema 定义（JSON 形式）
+│       ├── kline.json
 │       └── ...
 ├── services/
-│   └── quant.proto                  # 所有 RPC 入口
-├── errors.proto
+│   └── quant.json                  # 所有 RPC 入口
+├── errors.json                     # 已落地
 └── codegen/
-    ├── ts_zod.py                    # 从 .proto + arrow schema 生成 TS zod + 类型
-    └── py_pydantic.py               # 生成 pydantic 模型
+    ├── gen_py_errors.py            # 已落地
+    ├── gen_ts_errors.py            # 已落地
+    ├── gen_py_messages.py          # M3
+    ├── gen_ts_messages.py          # M3
+    └── gen_arrow_schemas.py        # M4
 ```
 
 `quant.proto` 例：
@@ -75,7 +96,7 @@ table: pa.Table = client.do_get(client.get_flight_info(descriptor).endpoints[0].
 
 ## 4. 错误码表
 
-`proto/errors.proto`：
+`proto/errors.json`（v1 实际形式；下方 protobuf 块是规范引用，便于后续迁回 protoc 时对照）：
 
 ```proto
 enum ErrorCode {
