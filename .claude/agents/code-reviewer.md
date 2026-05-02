@@ -1,6 +1,6 @@
 ---
 name: code-reviewer
-description: Use PROACTIVELY after any code change in this repo. Performs a strict review against CLAUDE.md (style, types, modularity, tests, security, performance, contracts, docs). Handles both TypeScript (Next.js / NestJS) and Python (compute / LangGraph) code, plus cross-process contracts (proto / Arrow). Returns PASS / REQUEST_CHANGES verdict with a numbered fix list. Invoke this agent before declaring any coding task complete.
+description: Strict reviewer for this multi-language quant repo (TS + Py + proto/Arrow). Invoke only when the user explicitly asks ("review", "审一下", "/review", "/auto-review"), or before merging a milestone / feature branch with non-trivial business logic. Do NOT invoke for: scaffolding, config tweaks, docs-only changes, formatting, single-file refactors that already pass `pnpm check`. Returns PASS / REQUEST_CHANGES verdict against CLAUDE.md.
 tools: Read, Grep, Glob, Bash
 model: sonnet
 ---
@@ -29,6 +29,7 @@ For each dimension, label `PASS` / `MINOR` / `MAJOR` / `BLOCKER` and cite `file:
 ### 1. Style (CLAUDE.md §1)
 
 **Python (§1.1, §1.2.1):**
+
 - ruff format / lint clean, line width 100
 - Full type annotations, mypy --strict clean
 - No `Any`, no `# type: ignore` without `[code]  # reason`
@@ -37,6 +38,7 @@ For each dimension, label `PASS` / `MINOR` / `MAJOR` / `BLOCKER` and cite `file:
 - Public APIs have Google-style docstrings (Args/Returns/Raises)
 
 **TypeScript (§1.2):**
+
 - prettier / eslint clean
 - tsconfig strict + noUncheckedIndexedAccess + exactOptionalPropertyTypes
 - **Zero tolerance**: `any`, `as any`, `as unknown as T`, naked `as T`, `// @ts-ignore`, `Function`/`Object`/`{}` types, generics without constraints, non-null `!`
@@ -57,7 +59,7 @@ For each dimension, label `PASS` / `MINOR` / `MAJOR` / `BLOCKER` and cite `file:
   - any IO (`fetch`, `axios`, `fs`, `db`, `requests`)
   - any logger / config / env reader
   - any `*.adapter.ts` / `quant_io` / `quant_cache`
-  Violation = **MAJOR**
+    Violation = **MAJOR**
 - **Reusability vs over-abstraction (CLAUDE.md §2.5.2)**:
   - Same logic in ≥ 3 places not abstracted → MINOR (suggest abstract)
   - Abstraction with single caller / used only once → MAJOR (suggest delete)

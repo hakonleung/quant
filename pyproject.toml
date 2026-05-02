@@ -1,0 +1,126 @@
+[project]
+name = "quant"
+version = "0.0.0"
+requires-python = ">=3.11"
+description = "Quant stock-screening project (Python services workspace)"
+
+# uv workspace root: each service/* package becomes a workspace member.
+[tool.uv.workspace]
+members = ["services/py"]
+
+[tool.uv]
+managed = true
+
+[dependency-groups]
+dev = [
+    "ruff>=0.8.0",
+    "mypy>=1.13",
+    "pytest>=8.3",
+    "pytest-cov>=6.0",
+    "hypothesis>=6.122",
+]
+
+# ---- ruff ----
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+extend-exclude = ["**/generated/**", ".venv", "data"]
+
+[tool.ruff.lint]
+# Hard rules from CLAUDE.md §1.1
+select = [
+    "E",   # pycodestyle errors
+    "F",   # pyflakes
+    "W",   # pycodestyle warnings
+    "I",   # isort
+    "B",   # bugbear (no mutable defaults, ...)
+    "UP",  # pyupgrade
+    "SIM", # simplify
+    "RUF", # ruff-specific
+    "ANN", # annotations
+    "TID", # tidy imports
+    "TCH", # type-checking-only imports
+    "C90", # mccabe complexity
+    "N",   # pep8-naming
+    "PT",  # pytest style
+    "T20", # flake8-print (no print)
+    "RET", # flake8-return
+    "ERA", # eradicate (no commented-out code)
+    "BLE", # blind-except
+]
+ignore = [
+    # ANN401 bans `Any` in annotations; mypy --strict with disallow_any_explicit
+    # already enforces this more strictly. ANN401 also fires on *args/**kwargs
+    # where Any is unavoidable.
+    "ANN401",
+    # Line length is enforced by the formatter, not the linter.
+    "E501",
+]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 10
+
+[tool.ruff.lint.per-file-ignores]
+"**/tests/**" = ["ANN", "S101", "PLR2004"]
+"**/conftest.py" = ["ANN"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+# ---- mypy ----
+[tool.mypy]
+python_version = "3.11"
+strict = true
+warn_unused_configs = true
+warn_unreachable = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+disallow_any_unimported = true
+disallow_any_explicit = true
+disallow_any_generics = true
+disallow_subclassing_any = true
+disallow_untyped_calls = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+disallow_untyped_decorators = true
+no_implicit_optional = true
+strict_equality = true
+extra_checks = true
+exclude = ["generated/", "data/", ".venv/"]
+
+[[tool.mypy.overrides]]
+module = ["tests.*"]
+disallow_any_explicit = false
+
+# ---- pytest ----
+[tool.pytest.ini_options]
+minversion = "8.3"
+testpaths = ["services/py/tests"]
+markers = [
+    "unit: fast pure tests (default in CI)",
+    "integration: cross-module tests with real adapters on tmp paths",
+    "contract: cross-process / cross-language contract tests",
+    "property: hypothesis property-based tests",
+    "e2e: end-to-end (run on demand)",
+    "slow: long-running benchmarks",
+]
+addopts = ["-ra", "--strict-markers", "--strict-config"]
+filterwarnings = ["error"]
+
+[tool.coverage.run]
+branch = true
+source = ["services/py"]
+omit = ["**/tests/**", "**/generated/**", "**/__main__.py"]
+
+[tool.coverage.report]
+fail_under = 90
+show_missing = true
+skip_covered = false
+exclude_lines = [
+    "pragma: no cover",
+    "raise NotImplementedError",
+    "if TYPE_CHECKING:",
+    "@(abc\\.)?abstractmethod",
+]

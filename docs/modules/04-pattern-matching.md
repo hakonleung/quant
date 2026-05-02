@@ -47,19 +47,21 @@ def dtw_distance(a: Sequence[float], b: Sequence[float], *, window: int | None =
 
 ## 4. 性能策略
 
-| 优化 | 估算 |
-|---|---|
-| 候选池来自筛选结果（典型几十~几百只） | 已大幅缩小 |
-| 每只股票滑窗数：lookback / 1 = 50~250 个 | |
-| 单次 DTW O(n²)，n=30 时 ~900 次比较 | |
-| 总比较数：~5000 万次（v1 全市场场景） | DTW 单次 ~50μs → 总 ~25min（**不可接受**） |
+| 优化                                     | 估算                                       |
+| ---------------------------------------- | ------------------------------------------ |
+| 候选池来自筛选结果（典型几十~几百只）    | 已大幅缩小                                 |
+| 每只股票滑窗数：lookback / 1 = 50~250 个 |                                            |
+| 单次 DTW O(n²)，n=30 时 ~900 次比较      |                                            |
+| 总比较数：~5000 万次（v1 全市场场景）    | DTW 单次 ~50μs → 总 ~25min（**不可接受**） |
 
 **v1 优化**：
+
 - 对候选池外预过滤：先用快速指标（如序列首尾比值、最大涨幅）剪枝，把候选窗口缩小到 ~100 万
 - DTW 加 Sakoe-Chiba 带宽限制（band = 5），单次降到 ~10μs
 - 总耗时目标：< 30s（候选池 ≤ 500 只时）
 
 **v2 升级**（不在 v1 范围）：
+
 - 离线预计算每只股票每个窗口的 shapelet embedding
 - HNSW 索引（faiss-cpu）做 ANN 召回，再精排 DTW
 - 全市场扫描 < 5s
@@ -76,10 +78,10 @@ v1 实现：`DTWPatternEngine`（`quant_compute/pattern/dtw_engine.py`）
 
 ## 6. NestJS HTTP API
 
-| Method | Path | Body | Response |
-|---|---|---|---|
-| POST | `/api/pattern/find` | `PatternQueryDto` | 长任务 → `{ task_id }`；进度 SSE |
-| GET | `/api/pattern/reference/from-stock` | `?code=...&start=...&end=...` | `PatternSeries` |
+| Method | Path                                | Body                          | Response                         |
+| ------ | ----------------------------------- | ----------------------------- | -------------------------------- |
+| POST   | `/api/pattern/find`                 | `PatternQueryDto`             | 长任务 → `{ task_id }`；进度 SSE |
+| GET    | `/api/pattern/reference/from-stock` | `?code=...&start=...&end=...` | `PatternSeries`                  |
 
 ## 7. 前端交互
 
@@ -90,14 +92,17 @@ v1 实现：`DTWPatternEngine`（`quant_compute/pattern/dtw_engine.py`）
 ## 8. 测试要求
 
 ### 8.1 unit（pure 函数）
+
 - `z_score`：常数序列（std=0 应特判）、单点、负值、Decimal 精度
 - `dtw_distance`：相同序列 = 0；常数序列对常数序列 = 0；已知小例（论文样例）
 
 ### 8.2 integration
+
 - 端到端：人工构造 5 只股票 30 日数据，参考形态 = 其中一只 → 命中第一名应是该股票
 - 性能基准（不进 CI 默认）：500 只 × 250 窗口 < 30s
 
 ### 8.3 property
+
 - 平移不变性：参考序列 + 常数 → 距离不变（z-score 后等价）
 - 缩放不变性：参考序列 × k → 距离不变
 

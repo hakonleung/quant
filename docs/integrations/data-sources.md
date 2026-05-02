@@ -132,6 +132,7 @@ class DeadLetterEntry:
 ```
 
 启动时 / 调度时扫死信：
+
 - `attempt_count < 3`：重排到下次调度，attempt_count++
 - `attempt_count >= 3`：写告警，等人工介入
 
@@ -189,16 +190,19 @@ news:
 ## 11. 测试要求
 
 ### 11.1 unit
+
 - `RetryPolicy`：哪些错误重试、哪些不重试、退避计算
 - `SourceChain`：主源失败切换、全部失败抛 `SourceChainExhausted`、健康检查跳过坏源
 - 水位计算：增量起点选择
 
 ### 11.2 integration
+
 - 用 fake source（注入可控失败）跑 chain
 - 增量任务：跑两次，第二次只取增量
 - DLQ：注入持续失败 → 进 DLQ → 修好后重跑成功
 
 ### 11.3 contract
+
 - 每个真实 source 有 vcr-fixture：录制一次正常响应 + 一次失败响应；CI 回放，不依赖外网
 
 ## 12. 监控指标（v2）

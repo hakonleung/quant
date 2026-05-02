@@ -1,0 +1,14 @@
+node_modules
+.next
+out
+dist
+build
+coverage
+.venv
+__pycache__
+.pnpm-store
+data
+packages/shared/generated
+services/py/quant_core/generated
+pnpm-lock.yaml
+uv.lock

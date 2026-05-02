@@ -31,16 +31,15 @@
                                   │ tushare│     │akshare │  │ LLM API  │  │  Cache   │
                                   │  API   │     │  API   │  │(deepseek/│  │ (Parquet │
                                   │        │     │        │  │  kimi)   │  │ +DuckDB) │
-                                  └────────┘     └────────┘  └──────────┘  │ +DuckDB) │
-                                                                            └──────────┘
+                                  └────────┘     └────────┘  └──────────┘  └──────────┘
 ```
 
 ## 2. 进程职责
 
-| 进程 | 主要职责 | **不做** |
-|---|---|---|
-| Next.js (`apps/web`) | UI 渲染、用户交互、SSE 接收进度 | 调外部 API、跑计算、调 LLM |
-| NestJS (`apps/api`) | HTTP 路由、参数校验、调度 Python、缓存元数据查询 | 重计算、调外部数据源、调 LLM |
+| 进程                       | 主要职责                                                         | **不做**                             |
+| -------------------------- | ---------------------------------------------------------------- | ------------------------------------ |
+| Next.js (`apps/web`)       | UI 渲染、用户交互、SSE 接收进度                                  | 调外部 API、跑计算、调 LLM           |
+| NestJS (`apps/api`)        | HTTP 路由、参数校验、调度 Python、缓存元数据查询                 | 重计算、调外部数据源、调 LLM         |
 | Python svc (`services/py`) | 数据拉取与缓存写入、筛选/形态/舆情计算、LangGraph 编排、LLM 调用 | 直接处理 HTTP（一律走 Arrow Flight） |
 
 ## 3. 仓库结构
@@ -178,21 +177,21 @@
 
 ## 8. 技术栈版本约定
 
-| 组件 | 选型 | 版本下限 |
-|---|---|---|
-| Node | LTS | 20.11+ |
-| pnpm | | 9+ |
-| Next.js | App Router | 14+ |
-| NestJS | | 10+ |
-| TypeScript | | 5.4+ |
-| zod | | 3.23+ |
-| Python | | 3.11+ |
-| uv | | 0.4+ |
-| Polars | | 1.x |
-| DuckDB | | 1.x |
-| pyarrow | | 17+ |
-| LangGraph | | 0.2+ |
-| pydantic | | 2.x |
-| Arrow Flight | grpc | 1.6+ |
+| 组件         | 选型       | 版本下限 |
+| ------------ | ---------- | -------- |
+| Node         | LTS        | 20.11+   |
+| pnpm         |            | 9+       |
+| Next.js      | App Router | 14+      |
+| NestJS       |            | 10+      |
+| TypeScript   |            | 5.4+     |
+| zod          |            | 3.23+    |
+| Python       |            | 3.11+    |
+| uv           |            | 0.4+     |
+| Polars       |            | 1.x      |
+| DuckDB       |            | 1.x      |
+| pyarrow      |            | 17+      |
+| LangGraph    |            | 0.2+     |
+| pydantic     |            | 2.x      |
+| Arrow Flight | grpc       | 1.6+     |
 
 版本升级走 RFC，禁止悄悄升大版本。

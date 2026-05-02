@@ -110,6 +110,7 @@ class FundamentalThesis:
 ```
 
 每个节点：
+
 - 失败可重试（最多 2 次，指数退避）
 - 状态可持久化（LangGraph checkpoint），断点续跑
 - 进度通过 SSE 推回前端：`{ node, status, progress, partial_result }`
@@ -117,30 +118,36 @@ class FundamentalThesis:
 ## 4. 各节点细节
 
 ### 4.1 N1: gather_evidence
+
 - 调 `NewsService.for_codes(codes, days)` + `ReportService.for_stock` × N
 - 全部走本地缓存；缓存缺失时**不**实时拉取（保证响应时间），返回 stale flag
 
 ### 4.2 N2: per_stock_drivers
+
 - Prompt：股票元信息 + 该股票时段全部新闻摘要（用 token 预算限制为 4k） + 近 30 日价格走势数字摘要
 - LLM 输出结构化 `list[PriceDriver]`，走 zod 校验
 - 每只股票一次 LLM 调用；并发上限 = 8（避免限流）
 
 ### 4.3 N3: embed_corpus
+
 - 嵌入器：bge-m3（中英双语，1024 维）；本地或外部 API 可切换（`EmbeddingPort`）
 - 嵌入对象：每条新闻的 (title + summary)；每条 PriceDriver 的 summary
 - 结果存内存（任务级），不持久化（v1 决策——下次任务重算）
 
 ### 4.4 N4: cluster_themes
+
 - 算法：HDBSCAN（`min_cluster_size = 3`，`min_samples = 2`）
 - 输入：N3 全部 embedding
 - 输出：簇 ID → 成员索引；噪声点单独处理（v1 丢弃，v2 二次聚类）
 
 ### 4.5 N5: name_themes
+
 - 对每个簇，LLM 输入：簇内全部新闻摘要的 top-K → 输出 `theme_label + summary + trend`
 - `heat_score` = `sum(新闻数 * exp(-days_ago/7)) * mean(成员股票近 5 日涨幅)`
 - 涉及成员股票的行业分布 → `related_industries`
 
 ### 4.6 N6: market_synth
+
 - 输入：全部 ThemeCluster（按 heat_score 排序的 Top 10）+ 每只股票的 PriceDriver 聚合 + 大盘指数近 30 日表现
 - LLM 输出：
   - `style`：当前市场风格信号
@@ -162,35 +169,39 @@ class LLMPort(Protocol):
 
 ## 6. NestJS HTTP API
 
-| Method | Path | Body | Response |
-|---|---|---|---|
-| POST | `/api/sentiment/analyze` | `{ codes: string[], days: number }` | `{ task_id }` |
-| GET | `/api/sentiment/tasks/:id` | — | `{ status, progress, result?: MarketView }` |
-| GET | `/api/sentiment/tasks/:id/stream` | — | SSE：节点级进度 + 部分结果 |
+| Method | Path                              | Body                                | Response                                    |
+| ------ | --------------------------------- | ----------------------------------- | ------------------------------------------- |
+| POST   | `/api/sentiment/analyze`          | `{ codes: string[], days: number }` | `{ task_id }`                               |
+| GET    | `/api/sentiment/tasks/:id`        | —                                   | `{ status, progress, result?: MarketView }` |
+| GET    | `/api/sentiment/tasks/:id/stream` | —                                   | SSE：节点级进度 + 部分结果                  |
 
 ## 7. 性能预算
 
-| 输入规模 | 预算 |
-|---|---|
-| 50 只股票 / 30 天 | 完整分析 < 3 min（瓶颈在 LLM） |
-| LLM 调用次数 | 50（per-stock）+ K（per-theme）+ 1（market）= ~60 次 |
-| 总 token | < 200k input + < 30k output |
+| 输入规模          | 预算                                                 |
+| ----------------- | ---------------------------------------------------- |
+| 50 只股票 / 30 天 | 完整分析 < 3 min（瓶颈在 LLM）                       |
+| LLM 调用次数      | 50（per-stock）+ K（per-theme）+ 1（market）= ~60 次 |
+| 总 token          | < 200k input + < 30k output                          |
 
 成本控制：
+
 - 主路 LLM 用 sonnet 等中档模型；market_synth 用 opus
 - 同一 (codes, days, asof) 命中结果缓存 30 分钟
 
 ## 8. 测试要求
 
 ### 8.1 unit（pure 部分）
+
 - `heat_score` 计算
 - LangGraph state reducer
 - 结构化输出的 schema 校验
 
 ### 8.2 integration
+
 - 录制 LLM 输出（vcr 风格 fixture），跑完整 graph，断言三层输出 schema 合法 + 引用链路完整
 
 ### 8.3 LLM 行为测试（独立标记，不进默认 CI）
+
 - 用真实 LLM 跑一组 golden 输入 → 人工评估
 - 看主观指标：主题命名贴切度、风格判断与同期市场观点一致度
 

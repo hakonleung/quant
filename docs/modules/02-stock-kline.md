@@ -36,6 +36,7 @@ class DailyBar:
 ```
 
 不变量（contract test 强制）：
+
 - 任意 `bar`：`low <= open <= high`、`low <= close <= high`、对应 qfq 字段同样成立
 - 同一 `code` 的 `adj_factor` 单调（从最早日 = 某基准到最新日 = 1.0）
 - `ma5` 在 `code` 的前 4 个交易日为 `None`，第 5 个交易日开始有值；`ma10/20/60` 类推
@@ -80,6 +81,7 @@ data/kline/
 ```
 
 **为什么按 code 分区**：
+
 - A 股股票数 ~5500，文件数可控
 - 增量更新只追加最新行，避免重写大文件
 - 除权日只重算单只股票
@@ -125,11 +127,13 @@ def compute_ma(close_qfq: Sequence[Decimal], window: int) -> Sequence[Decimal | 
 ## 6. 更新策略
 
 ### 6.1 全量回填（新股票首次入库）
+
 - 拉取从 `list_date` 到今天的全部 raw bars + adj_factors
 - 一次性 compute_qfq + compute_ma
 - 写入
 
 ### 6.2 增量更新（每日收盘后）
+
 1. 读 `_state.by_code[code].last_date`
 2. 拉取 `(last_date, today]` 的 raw bars
 3. 拉取同区间的 adj_factor
@@ -139,7 +143,9 @@ def compute_ma(close_qfq: Sequence[Decimal], window: int) -> Sequence[Decimal | 
 5. upsert + 更新 `_state`
 
 ### 6.3 错误恢复
+
 详见 `rfcs/0002-incremental-update-recovery.md`。要点：
+
 - 每只股票一个独立任务，单只失败不阻塞其它
 - 失败任务进 `dead_letter.parquet`，下次启动重跑
 - 死信连续失败 ≥ 3 次 → 告警，等人工介入
@@ -163,39 +169,43 @@ class KlineService:
 
 ### 7.2 NestJS HTTP API
 
-| Method | Path | Query | Response |
-|---|---|---|---|
-| GET | `/api/kline/:code` | `?start=...&end=...&columns=close_qfq,ma20` | JSON 数组（< 5000 行）或 Arrow Stream（> 5000 行） |
+| Method | Path               | Query                                       | Response                                           |
+| ------ | ------------------ | ------------------------------------------- | -------------------------------------------------- |
+| GET    | `/api/kline/:code` | `?start=...&end=...&columns=close_qfq,ma20` | JSON 数组（< 5000 行）或 Arrow Stream（> 5000 行） |
 
 ### 7.3 Arrow Flight RPC
 
 筛选/形态等批量场景必走：
+
 ```
 GetKlineUniverse(codes: string[], start: date, end: date, columns: string[]) -> Arrow Stream
 ```
 
 ## 8. 性能预算
 
-| 操作 | 预算 |
-|---|---|
-| `get_range` 单只 1 年 | < 20ms |
-| `get_universe_slice` 全市场 30 日，仅 close_qfq + ma20 列 | < 500ms |
-| 单只全量回算（10 年数据） | < 200ms |
-| 单只增量（1 天） | < 5ms |
-| 全市场增量同步 | < 5min（含 IO） |
+| 操作                                                      | 预算            |
+| --------------------------------------------------------- | --------------- |
+| `get_range` 单只 1 年                                     | < 20ms          |
+| `get_universe_slice` 全市场 30 日，仅 close_qfq + ma20 列 | < 500ms         |
+| 单只全量回算（10 年数据）                                 | < 200ms         |
+| 单只增量（1 天）                                          | < 5ms           |
+| 全市场增量同步                                            | < 5min（含 IO） |
 
 ## 9. 测试要求
 
 ### 9.1 unit（核心资产，零 mock）
+
 - `compute_qfq_prices`：金价区间、单除权日、多除权日、首日、空数据、负价格（应 raise）
 - `compute_ma`：window > len、window = 1、空、含 None、Decimal 精度
 - 不变量（property）：复权后任意两点比值 = 复权前同两点比值（数学性质）
 
 ### 9.2 integration
+
 - `ParquetKlineRepo` 全流程：上市 → 增量 → 除权回算 → 查询
 - DuckDB 索引：`get_universe_slice` 的 SQL 计划走索引（用 `EXPLAIN`）
 
 ### 9.3 contract
+
 - Arrow Schema 双向：写 Arrow Table → 读出，类型与值不变（含 Decimal 精度）
 
 ## 10. 风险与备注

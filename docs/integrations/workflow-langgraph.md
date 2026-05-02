@@ -6,13 +6,13 @@
 
 ## 2. 适用场景
 
-| 场景 | 是否用 LangGraph |
-|---|---|
-| 消息面分析（多 LLM + 聚类） | ✅ |
-| 复合任务："筛选 → 形态 → 分析" | ✅（v1.5） |
-| 单次筛选 | ❌（直接同步执行） |
-| 数据增量更新调度 | ❌（用 apscheduler） |
-| 单次形态匹配 | ❌（直接执行） |
+| 场景                           | 是否用 LangGraph     |
+| ------------------------------ | -------------------- |
+| 消息面分析（多 LLM + 聚类）    | ✅                   |
+| 复合任务："筛选 → 形态 → 分析" | ✅（v1.5）           |
+| 单次筛选                       | ❌（直接同步执行）   |
+| 数据增量更新调度               | ❌（用 apscheduler） |
+| 单次形态匹配                   | ❌（直接执行）       |
 
 判断标准：**有 ≥ 2 步、需要持久化进度、可能耗时 > 30s**。
 
@@ -186,6 +186,7 @@ v1 适配器：`FileCheckpointer`（`data/_checkpoints/<thread_id>.json`）。
 每个节点函数签名：`(state: TState) -> TState`（部分更新，靠 reducer 合并）。
 
 约束：
+
 - **幂等**：同一 state 多次执行结果一致（因为可能从 checkpoint 重跑）
 - **纯化外层**：节点内部副作用必须通过 `deps`；不允许直接调 `requests.get` / `time.sleep`
 - **失败抛领域异常**：节点不 catch、不日志吞掉；让 graph runner 决定重试或 fail-fast
@@ -244,15 +245,18 @@ class WorkflowService:
 ## 11. 测试要求
 
 ### 11.1 unit
+
 - 节点函数：用 fake deps + 构造 state，断言输出 state 增量
 - 路由函数（条件分支）：纯函数，常规 unit
 
 ### 11.2 integration
+
 - 全图跑：fake deps（内存 repo + 录制 LLM）→ 完整 state → 断言 final.market_view 结构合法
 - 故障恢复：在 N3 注入失败 → 检查 checkpoint → restart → 续跑成功
 - 路由：embed 样本 < 10 时走 `skip_to_market`
 
 ### 11.3 contract
+
 - progress 事件序列稳定：相同输入输出相同事件流（用 snapshot 测试）
 
 ## 12. 风险与备注

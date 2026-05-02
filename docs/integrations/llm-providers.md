@@ -3,6 +3,7 @@
 ## 1. 目标
 
 LLM 调用和向量嵌入是消息面分析与 NL→DSL 的核心依赖。必须做到：
+
 - 多供应商可切换（deepseek / kimi / openai-compat），主路通过 env 配置
 - 强制结构化输出（schema 校验）
 - 失败重试 + 降级
@@ -45,19 +46,17 @@ class EmbeddingPort(Protocol):
 
 ## 3. v1 适配器
 
-| 适配器 | 文件 | 备注 |
-|---|---|---|
-| `DeepSeekAdapter` | `quant_io/adapters/llm/deepseek.py` | OpenAI 兼容协议；结构化输出走 `response_format = json_schema` |
-| `KimiAdapter` | `quant_io/adapters/llm/kimi.py` | OpenAI 兼容协议；同上 |
-| `BgeM3Adapter` | `quant_io/adapters/embedding/bge_m3.py` | 本地或外部 endpoint 二选一 |
+| 适配器            | 文件                                    | 备注                                                          |
+| ----------------- | --------------------------------------- | ------------------------------------------------------------- |
+| `DeepSeekAdapter` | `quant_io/adapters/llm/deepseek.py`     | OpenAI 兼容协议；结构化输出走 `response_format = json_schema` |
+| `KimiAdapter`     | `quant_io/adapters/llm/kimi.py`         | OpenAI 兼容协议；同上                                         |
+| `BgeM3Adapter`    | `quant_io/adapters/embedding/bge_m3.py` | 本地或外部 endpoint 二选一                                    |
 
 **主路与兜底由 env 配置决定**（见 §10），不在 adapter 中写死。两家供应商上线 PK 一段时间后，根据成本/质量/限流再决定主路；底层抽象保证切换零代码改动。
 
 ## 4. 结构化输出
 
 强制 schema：
-
-
 
 ```python
 class DSLOutput(BaseModel):
@@ -68,6 +67,7 @@ plan: ScreenPlan = response.content.plan   # 已是合法对象
 ```
 
 实现策略（按供应商）：
+
 - DeepSeek / Kimi（OpenAI 兼容）：用 `response_format = { type: "json_schema", json_schema: { name, schema, strict: true }}`
 - 不支持 strict json_schema 的 provider：fallback 到 prompt-engineering（提示词中嵌 schema + few-shot），输出后用 pydantic 校验
 - 校验失败 → 自动重试一次，prompt 中携带 schema 错误反馈
@@ -82,6 +82,7 @@ class LLMChain:
 ```
 
 重试规则：
+
 - `LLMTransientError`（429 / 5xx / timeout） → 退避重试
 - `LLMSchemaError` → 重试一次，把错误反馈塞进 messages
 - `LLMQuotaExhausted` → 立即降级到下一个 provider
@@ -104,6 +105,7 @@ class CachingLLM(LLMPort):
 ```
 
 缓存策略：
+
 - `temperature=0` 时启用（默认 on）
 - `temperature>0` 不缓存
 - 默认 TTL 24h；用户可在 UI 强制 bypass
@@ -120,6 +122,7 @@ class TokenUsage:
 ```
 
 每次调用追加到：
+
 ```
 data/_audit/llm/<date>.jsonl
 { "trace_id": "...", "provider": "deepseek", "model": "...", "node": "per_stock_drivers", "usage": {...}, "duration_ms": ... }
@@ -161,6 +164,7 @@ CI 默认用 `ReplayLLM`，fixture 由开发者用 `RecordingLLM` 包装真 LLM 
 主路 / 兜底通过 `.env` 决定，`config/llm.yaml` 给每个 provider 配静态参数：
 
 `.env`：
+
 ```bash
 LLM_PRIMARY_PROVIDER=deepseek      # 主路
 LLM_FALLBACK_PROVIDER=kimi         # 兜底
@@ -169,6 +173,7 @@ KIMI_API_KEY=sk-...
 ```
 
 `config/llm.yaml`：
+
 ```yaml
 chat:
   cache:
@@ -197,6 +202,7 @@ embedding:
 ```
 
 启动时 pydantic 校验：
+
 - `LLM_PRIMARY_PROVIDER` 必须在 `providers` 列表中
 - 主路与兜底对应的 `api_key_env` 必须有值（否则启动失败）
 - 未启用的 provider（`enabled: false`）不校验 key
@@ -210,14 +216,17 @@ embedding:
 ## 12. 测试要求
 
 ### 12.1 unit
+
 - `LLMChain`：失败切换、schema 校验失败重试、quota 立即降级
 - `CachingLLM`：相同 prompt 命中缓存、不同 schema 不命中
 - token 计费：边界（缓存命中、长输出）
 
 ### 12.2 integration
+
 - `ReplayLLM` + 真实 graph：完整 sentiment 流程不调外网
 
 ### 12.3 contract
+
 - `provider.chat(schema=X)` 必须返回符合 X 的对象，违反 = MAJOR
 - 录制 fixture 升级时（model 升级），主动重录 + diff 验证
 

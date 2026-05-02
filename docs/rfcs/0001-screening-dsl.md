@@ -1,10 +1,10 @@
 # RFC 0001 — 股票筛选 DSL
 
-| Status | Draft |
-|---|---|
-| Author | (待补) |
-| Date | 2026-05-01 |
-| Supersedes | — |
+| Status     | Draft      |
+| ---------- | ---------- |
+| Author     | (待补)     |
+| Date       | 2026-05-01 |
+| Supersedes | —          |
 
 ## 1. 动机
 
@@ -48,38 +48,47 @@ Window        := { "days": int }   // v1 只按交易日；v2 加 "calendar_days
 ## 4. 语义
 
 ### 4.1 Asof
+
 - `asof = D` 表示"截至 D 收盘后"
 - 所有 `Window {days: N}` 指 `[D-N+1, D]`，含 N 个**交易日**（停牌日不计）
 
 ### 4.2 Field
+
 - 引用预计算列，零计算成本
 
 ### 4.3 Indicator (v1 仅 `ma`)
+
 - `{indicator: "ma", field: "close_qfq", period: 5}` 等价于直接引用 `Field("ma5")`，但允许任意 period（非 5/10/20/60 时运行时计算）
 - v1 优先识别"标准周期"映射到预计算列，命中率 ~95%
 - 非标准周期走运行时计算，速度变慢一档（仍可接受，因为已列裁剪）
 
 ### 4.4 Aggregate
+
 - `{agg: "mean", field: "turnover_rate", window: {days: 10}}` = 最近 10 个交易日 `turnover_rate` 的算术平均
 - `count` 在 `field` 上等价 = 该字段非 null 的数量
 
 ### 4.5 PeriodReturn
+
 - `{period_return: {days: 20}}` = `(close_qfq[asof] - close_qfq[asof - 20]) / close_qfq[asof - 20]`
 - 起点不存在（停牌、新股） → 整体返回 false（不抛错）
 
 ### 4.6 Compare
+
 - 双侧 Scalar；类型不匹配 → 校验期错（不在执行期）
 
 ### 4.7 ForAll / Exists
+
 - `for_all`：window 内**全部**交易日的 predicate 为 true
 - `exists`：window 内**至少一日** predicate 为 true
 - window 内交易日不足 N 时 → 整体 false
 
 ### 4.8 Consecutive
+
 - 找最长一段连续真值；`min_len` = 要求最短长度
 - 例：`consecutive(min_len=5, predicate=pct_chg_qfq > 0.02)` = "存在连续 5+ 个交易日每日涨幅 > 2%"
 
 ### 4.9 Logical
+
 - `not` 只接 1 个 arg
 - 短路求值实现细节由编译器决定，不影响语义
 - 命名约定：DSL 中所有 `op` 字段值统一**全小写**（包括 `and / or / not / intersect / union / except / for_all / gt / mean / ...`）
@@ -114,12 +123,14 @@ def compile_predicate(pred: Predicate, ctx: CompileCtx) -> pl.Expr: ...
 ```
 
 编译期收集：
+
 - `required_columns: set[str]`（用于列裁剪）
 - `required_window_days: int`（最大 window）
 - `required_lookback: int`（period_return / consecutive 的回看深度）
 - `nonstandard_indicators: list[Indicator]`（需要运行时算）
 
 执行期：
+
 1. `KlineRepo.get_universe_slice(codes, asof - window, asof, columns=required_columns)`
 2. 转 LazyFrame，按 `code` group_by
 3. 对每只股票 apply 编译后的表达式
@@ -137,6 +148,7 @@ class ScreenMatch:
 ```
 
 示例（"最近5天每天 close_qfq > ma5"）：
+
 ```json
 {
   "code": "600519.SH",
@@ -201,11 +213,11 @@ def explain(node: Predicate) -> str: ...
 
 ## 11. 性能
 
-| 表达式 | 列裁剪后 | 全市场预算 |
-|---|---|---|
-| 单 ForAll(window=5, close_qfq > ma5) | 2 列 | < 1s |
-| 4 个条件 intersect | 4~6 列 | < 5s |
-| 含 nonstandard indicator | +运行时算 1~2 列 | < 3s |
+| 表达式                               | 列裁剪后         | 全市场预算 |
+| ------------------------------------ | ---------------- | ---------- |
+| 单 ForAll(window=5, close_qfq > ma5) | 2 列             | < 1s       |
+| 4 个条件 intersect                   | 4~6 列           | < 5s       |
+| 含 nonstandard indicator             | +运行时算 1~2 列 | < 3s       |
 
 ## 12. 缓存键
 

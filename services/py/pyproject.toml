@@ -1,0 +1,16 @@
+[project]
+name = "quant-py"
+version = "0.0.0"
+requires-python = ">=3.11"
+description = "Quant compute, IO, cache, workflow, and RPC services"
+dependencies = [
+    "pydantic>=2.10",
+    "pydantic-settings>=2.7",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["quant_core"]

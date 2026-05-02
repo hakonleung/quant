@@ -9,21 +9,22 @@
 
 ## 0. 工作流（强制）
 
-每次执行编码任务必须按以下顺序：
+每次执行编码任务按以下顺序：
 
 1. **理解 → 设计**：先读相关文件与 `docs/` 中相关模块文档，明确边界与依赖；非平凡任务先列计划再动手。
 2. **实现**：按本文档"代码风格"与"模块化"规则写代码。涉及跨进程时同步检查/更新 `docs/integrations/ipc-py-ts.md` 中的契约。
-3. **测试**：调用 `test-generator` 子代理生成测试，运行 `run-tests` skill；失败必须修到全绿。
-4. **自审**：调用 `code-reviewer` 子代理对本次改动做审查；高/中级问题必须修复后再交付。
-5. **交付**：终末汇报必须包含：变更文件清单、新增测试清单、测试结果、review 结论。
+3. **测试**：对**新增/修改的业务逻辑**调用 `test-generator` 生成测试并跑 `run-tests`；失败必须修到全绿。脚手架/配置/纯文档变更可豁免。
+4. **自审**：满足以下任一条件才调用 `code-reviewer`：① 用户显式要求 review；② milestone / feature 收尾且包含非平凡业务逻辑；③ 跨进程契约（`proto/` / Arrow schema）变更。**单纯脚手架、配置调整、格式化、文档改动不要触发 reviewer。** 其它情况依赖 `pnpm check` 作为常驻门禁即可。
+5. **交付**：终末汇报包含变更文件清单、测试结果；如跑了 review 则附结论。
 
-任一步骤未完成或被跳过，必须主动告知用户并说明原因。
+跳过步骤 3 / 4 时主动说明原因（例："本次仅改 README，无需测试与 reviewer"）。
 
 ---
 
 ## 1. 代码风格（硬性，不可妥协）
 
 ### 1.1 Python 通用
+
 - **格式化**：`ruff format` 与 `ruff check --fix`，行宽 100。
 - **类型注解**：所有函数签名、公有属性、模块级常量必须有完整类型注解；`mypy --strict` 必须通过。
 - **命名**：
@@ -47,6 +48,7 @@
   - I/O、网络、磁盘等副作用集中在边界层（adapters / io / repository）
 
 ### 1.2 TypeScript 通用（Next.js + NestJS 共用）
+
 - **格式化**：`prettier`（行宽 100，单引号，trailing comma all），`eslint --fix`。
 - **tsconfig 强约束**（违反一律拒收）：
   ```json
@@ -95,6 +97,7 @@
   - DTO 与领域类型分离：`*.dto.ts`（边界）/ `*.entity.ts` 或 `*.model.ts`（域）
 
 ### 1.2.1 Python 类型安全补强
+
 - 禁 `Any`（确需用 `object` 或受约束的 `TypeVar`）
 - 禁 `# type: ignore` 不带原因；必须 `# type: ignore[error-code]  # reason`
 - 禁 `cast(T, x)` 当 `x` 来自外部输入；走 `pydantic` 校验
@@ -102,12 +105,14 @@
 - `mypy --strict` 必须零警告通过
 
 ### 1.3 错误处理（两语言共用）
+
 - 内部纯函数互相调用：信任契约，不做防御性校验。
 - 系统边界（用户输入、外部 API、文件、网络、跨进程）：必须显式校验并抛出领域异常。
 - Python 异常基类 `QuantError`（`packages/py/quant_core/errors.py`）；TS 异常基类 `QuantError`（`packages/shared/errors.ts`）。两边异常**类型字符串**必须一致（`code: "DATA_SOURCE_TIMEOUT"` 等），跨进程序列化通过 RPC 错误码表（见 `docs/integrations/ipc-py-ts.md`）。
 - 不允许 `except Exception` / `catch (e)` 后吞掉错误；至少要日志 + 重抛或转换为领域异常。
 
 ### 1.4 日志
+
 - Python：`logging.getLogger(__name__)`；禁止 `print`。
 - TS：NestJS `Logger`（后端）/ `pino`（前端 server-side）；禁止 `console.log`。
 - 等级语义：`DEBUG` 开发期细节 / `INFO` 业务里程碑 / `WARN` 可恢复 / `ERROR` 业务失败 / `FATAL/CRITICAL` 进程级故障。
@@ -115,6 +120,7 @@
 - 跨进程调用必须带 `trace_id`，由入口生成、向下游透传。
 
 ### 1.5 注释
+
 - 默认不写注释。只在"为什么"非显而易见时写一行：隐藏约束、特定 bug 的 workaround、与文档冲突的取舍。
 - 禁止：复述代码做了什么；无负责人/日期的 TODO；引用当前任务/PR/issue。
 
@@ -194,6 +200,7 @@ config/                         # @nestjs/config + zod 校验
 `domain/` 子目录纯函数 + 不可变类型，不依赖 NestJS 装饰器，便于复用与测试。
 
 ### 2.5 Next.js 约束
+
 - 路由用 App Router（`app/`）。
 - **服务端组件优先**；仅交互必要的叶子组件用 `"use client"`。
 - 数据获取：服务端组件直接 `fetch`（带缓存策略）调 NestJS；客户端用 `@tanstack/react-query`。
@@ -206,12 +213,14 @@ config/                         # @nestjs/config + zod 校验
 **类型定义和纯函数是项目的核心资产，必须独立维护、与框架解耦、随时可被其它模块/服务复用。**
 
 每个进程内必须有专门目录承载这两类资产，且这些目录：
+
 - 不依赖任何框架（NestJS 装饰器、Next.js 钩子、pydantic 之外的运行时基类等）
 - 不做 IO（不 import adapters、io、http 客户端、数据库驱动）
 - 不依赖配置（不读 env / 不用全局 settings）
 - 可以被任何其它目录 import；它们 **不能** import 同进程的非核心目录
 
 **Python 侧**（`services/py/quant_core/`）：
+
 ```
 domain/
   types/        # 纯类型定义（@dataclass(frozen=True, slots=True) / TypedDict / Protocol）
@@ -220,6 +229,7 @@ domain/
 ```
 
 **TypeScript 侧**：
+
 ```
 packages/shared/
   types/        # 跨 app 共享类型（zod schema + z.infer 类型）
@@ -234,6 +244,7 @@ apps/web/lib/
 ```
 
 **强制约束**：
+
 - `domain/`、`packages/shared/`、`lib/fp/`、`lib/types/` 中**禁止**出现：`fetch`、`axios`、`fs`、`db`、`Logger`、`@Injectable()`、`useEffect`、`useState`、任何 `*.adapter.ts` 的 import。
 - 任何"看似纯但偷偷读了全局"的函数（如 `Date.now()`、`Math.random()`、`process.env`）必须把依赖作为参数传入。
 - 这些目录的测试**只用** unit 测试，零 mock，零 fixture（除了输入数据）。如果要 mock 才能测，说明它不纯，应当移出。
@@ -248,6 +259,7 @@ apps/web/lib/
 - **禁止"先抽象再使用"**：不允许写一个工具函数但当前没有调用者；除非是被生成代码占位。
 
 ### 2.6 函数与类（共用）
+
 - **单一职责**：函数只做一件事；类只有一个变化原因。
 - **纯函数优先**：能写成纯函数就不要写成方法；能不持有状态就不持有状态。
 - **依赖注入**：外部依赖（client、session、clock、随机源）必须通过参数/构造函数传入；禁止函数体内直接 import 全局单例。
@@ -255,12 +267,14 @@ apps/web/lib/
 - **禁止隐式时间/随机**：用 `Clock` / `Rng` 端口注入；测试必须可复现。
 
 ### 2.7 数据流与类型
+
 - Python 边界用 `pydantic.BaseModel`，域内部用 `@dataclass(frozen=True, slots=True)`。
 - TS 边界用 `zod` schema + `z.infer<typeof S>`；域内部 `readonly` 类型 + `Object.freeze`（或用 `immer`）。
 - 优先不可变；更新返回新对象（Python `model_copy(update=...)` / `dataclasses.replace`；TS 展开运算符或 `immer`）。
 - 不在多个层之间传裸 `dict` / `Record<string, unknown>`；传强类型对象。
 
 ### 2.8 量化领域专项
+
 - 价格、数量、金额：Python 用 `Decimal`；TS 用 `decimal.js` 或 `bignumber.js`，**禁止用 `number` 表示金额**。
 - 时间统一 `datetime` 带 tz（UTC），存储 ISO8601；禁止 naive datetime。前端展示再转 `Asia/Shanghai`。
 - 回测 / 实盘共享同一 `Strategy` 接口，区别只在 adapter（`BacktestBroker` vs `LiveBroker`）。
@@ -272,6 +286,7 @@ apps/web/lib/
 ## 3. 测试（硬性）
 
 ### 3.1 覆盖率与结构
+
 - **新增/修改的代码行覆盖率 ≥ 90%**，分支覆盖率 ≥ 80%。
 - 测试目录镜像源码目录：
   - Python：`services/py/quant_core/foo.py` ↔ `services/py/tests/quant_core/test_foo.py`
@@ -280,17 +295,20 @@ apps/web/lib/
 - 命名：`test_<函数>_<场景>_<期望>` / `it("<scenario> should <expected>")`。
 
 ### 3.2 测试分类
-| 类型 | Python 标记 | TS 标记 | 范围 | 速度 |
-|---|---|---|---|---|
-| unit | `@pytest.mark.unit` | `*.test.ts` | 单函数/类，纯逻辑 | < 50ms |
-| integration | `@pytest.mark.integration` | `*.spec.ts` | 跨模块，含真实 adapter | < 1s |
-| e2e | `@pytest.mark.e2e` | `*.e2e-spec.ts` / `playwright` | 完整入口 | 不限 |
-| property | `@pytest.mark.property` | `fast-check` | 性质测试 | < 1s |
+
+| 类型        | Python 标记                | TS 标记                        | 范围                   | 速度   |
+| ----------- | -------------------------- | ------------------------------ | ---------------------- | ------ |
+| unit        | `@pytest.mark.unit`        | `*.test.ts`                    | 单函数/类，纯逻辑      | < 50ms |
+| integration | `@pytest.mark.integration` | `*.spec.ts`                    | 跨模块，含真实 adapter | < 1s   |
+| e2e         | `@pytest.mark.e2e`         | `*.e2e-spec.ts` / `playwright` | 完整入口               | 不限   |
+| property    | `@pytest.mark.property`    | `fast-check`                   | 性质测试               | < 1s   |
 
 CI 默认跑 unit + integration；e2e 单独触发。
 
 ### 3.3 必备测试场景
+
 对每个新增/修改的公共函数，必须覆盖：
+
 1. **golden path**：典型输入 → 预期输出
 2. **边界**：空、零、最大、最小、单元素、负数（如适用）
 3. **异常路径**：每个 `raises` / `throws` 都要触发
@@ -298,6 +316,7 @@ CI 默认跑 unit + integration；e2e 单独触发。
 5. **回归**：每修一个 bug 必须先写复现该 bug 的失败测试
 
 ### 3.4 测试质量规则
+
 - 一个测试只断言一件事；用参数化 / `it.each` 覆盖多组数据，不要 if/else 分支。
 - **禁止 mock 数据库**——用真实 sqlite / 内存 / testcontainer；mock 仅用于外部网络与不可控时间/随机。
 - **跨进程契约测试**：Python 与 TS 共享 `proto/` 下的 schema；契约变更必须同时更新两侧测试。
@@ -307,6 +326,7 @@ CI 默认跑 unit + integration；e2e 单独触发。
 - 禁止测试间共享可变状态。
 
 ### 3.5 命令
+
 - Python 全部：`pytest -q`
 - Python 覆盖率：`pytest --cov=services/py --cov-branch --cov-report=term-missing --cov-fail-under=90`
 - NestJS：`pnpm --filter api test` / `... test:cov`
@@ -318,12 +338,17 @@ CI 默认跑 unit + integration；e2e 单独触发。
 ## 4. 自动 Review 机制（硬性）
 
 ### 4.1 触发时机
-- 每次完成一组逻辑相关的编辑后（典型为一个功能/修复），**必须**调用 `code-reviewer` 子代理。
-- 用户主动 `/review` 立即触发。
-- `Stop` hook 在 Claude 即将结束响应前提醒：若本轮做过 Edit/Write 但未调用 reviewer，必须补上。
+
+按 §0 步骤 4 的策略触发，不要无差别介入。摘要：
+
+- **必须触发**：用户显式要求（`/review` / "审一下"）；milestone / feature 收尾且含非平凡业务逻辑；跨进程契约（`proto/` / Arrow schema）变更。
+- **不要触发**：脚手架、配置调整、格式化、文档/注释改动、单文件且 `pnpm check` 已绿的小重构。
+- 常驻门禁是 `pnpm check`，reviewer 是抽样而非每次。
 
 ### 4.2 Review 维度
+
 reviewer 必须按以下维度逐项检查并打分（pass / minor / major / blocker）：
+
 1. 是否违反第 1 章代码风格（含语言专属）
 2. 是否违反第 2 章模块化分层（含进程拓扑、跨语言契约）
 3. 测试是否齐全（第 3 章）
@@ -333,6 +358,7 @@ reviewer 必须按以下维度逐项检查并打分（pass / minor / major / blo
 7. 文档与日志是否同步更新（特别是 `docs/integrations/*` 和 `docs/modules/*`）
 
 ### 4.3 Verdict 格式
+
 ```
 Review of <files>:
 - Style: PASS | MINOR(...) | MAJOR(...) | BLOCKER(...)
@@ -355,28 +381,32 @@ Required fixes (if any):
 ## 5. 工具与命令
 
 ### Python
-| 任务 | 命令 |
-|---|---|
-| 格式化 | `ruff format . && ruff check --fix .` |
-| 类型检查 | `mypy --strict services/py` |
-| 单测 | `pytest -q -m "unit or integration"` |
-| 覆盖率 | `pytest --cov=services/py --cov-branch --cov-fail-under=90` |
+
+| 任务     | 命令                                                        |
+| -------- | ----------------------------------------------------------- |
+| 格式化   | `ruff format . && ruff check --fix .`                       |
+| 类型检查 | `mypy --strict services/py`                                 |
+| 单测     | `pytest -q -m "unit or integration"`                        |
+| 覆盖率   | `pytest --cov=services/py --cov-branch --cov-fail-under=90` |
 
 ### TypeScript
-| 任务 | 命令 |
-|---|---|
-| 格式化 | `pnpm prettier --write . && pnpm eslint --fix .` |
-| 类型检查 | `pnpm -r tsc --noEmit` |
-| 单测（API） | `pnpm --filter api test` |
-| 单测（Web） | `pnpm --filter web test` |
-| E2E | `pnpm --filter web test:e2e`（playwright） |
+
+| 任务        | 命令                                             |
+| ----------- | ------------------------------------------------ |
+| 格式化      | `pnpm prettier --write . && pnpm eslint --fix .` |
+| 类型检查    | `pnpm -r tsc --noEmit`                           |
+| 单测（API） | `pnpm --filter api test`                         |
+| 单测（Web） | `pnpm --filter web test`                         |
+| E2E         | `pnpm --filter web test:e2e`（playwright）       |
 
 ### 全量门禁
+
 - `pnpm check`：根 `package.json` 中聚合脚本，依次跑 TS 栈（prettier check + eslint + tsc + jest + vitest）和 Py 栈（`uv run` 包装的 ruff format check + ruff check + mypy --strict + pytest --cov`），任一失败即非 0 退出。
 
 ---
 
 ## 6. Git 与提交
+
 - 一次提交只做一件事；标题 ≤ 72 字符，祈使句。约定式 prefix：`feat:` / `fix:` / `refactor:` / `test:` / `docs:` / `chore:`。
 - 不允许 `git commit --no-verify`（除非用户显式要求）。
 - 不允许 `git push --force` 到 `main` / `master`。
@@ -386,6 +416,7 @@ Required fixes (if any):
 ---
 
 ## 7. 当本规约与请求冲突时
+
 - 用户的具体指令 > 本规约通用条款；但**安全/正确性条款不可让步**（密钥硬编码、测试为空、跳过类型检查等永远要拒绝并说明）。
 - 不确定时先问，不要默默偏离。
 
@@ -394,20 +425,24 @@ Required fixes (if any):
 ## 8. 跨进程契约（强制）
 
 ### 8.1 Schema 单一源
+
 - 所有 Python ↔ NestJS 数据结构定义在 `proto/` 目录下：
   - Arrow schema（`.fbs` 或 `pyarrow.Schema` 生成的 JSON）用于批量列存（K线、新闻列表等大对象）
   - 控制平面消息（请求、参数、错误）用 protobuf `.proto`
 - 由代码生成器同时产出 Python（pydantic 类）和 TS（zod schema + 类型）。两侧手写 schema 一律拒收。
 
 ### 8.2 错误码表
+
 - 所有跨进程错误码集中在 `proto/errors.proto`（或同等 JSON），双侧通过生成器引入。
 - 错误必须带 `code`（机读，UPPER_SNAKE_CASE）、`message`（人读）、`details`（结构化字段，可选）、`trace_id`。
 
 ### 8.3 版本与兼容
+
 - Schema 变更遵守语义版本：新增字段（向后兼容）走 minor；删除/重命名字段走 major，必须配迁移说明 + 双写期。
 - 每次 schema 变更必须新增契约测试：用旧 client 调新 server / 反向，断言行为符合兼容性声明。
 
 ### 8.4 调用规范
+
 - 长任务（>2s）必须返回 `task_id`，用 SSE / 轮询查进度，不要长 hold HTTP 连接。
 - 大数据集（>1MB）必须走 Arrow Flight 列存通道，不要塞进 JSON。
 - 频繁小调用必须批量化（一次传一组 symbol，不要 N 次循环调）。

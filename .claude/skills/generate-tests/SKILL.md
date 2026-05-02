@@ -10,6 +10,7 @@ Creates rigorous tests for the current change set, mirroring source paths under 
 ## Steps
 
 ### 1. Find changed source files
+
 ```bash
 git diff --name-only HEAD -- \
   'services/py/**/*.py' \
@@ -30,6 +31,7 @@ Invoke the `test-generator` subagent with:
 >
 > Required scenarios per public symbol: golden path, boundaries, every `raises` / `throws`, invariants, regression.
 > Use mirrored paths. Use the right runner per layer:
+>
 > - Python → pytest with the right marker (unit / integration / contract / property)
 > - NestJS → Jest in `apps/api/test/`
 > - Next.js → vitest in `apps/web/__tests__/`
@@ -61,9 +63,11 @@ pytest -q -m contract
 Pass through the agent's report. If a coverage gate fails, send the agent back with the missing-line list per file.
 
 ## When to use
+
 - Any time `services/py/**`, `apps/api/src/**`, `apps/web/**`, `packages/**`, or `proto/**` was edited and the matching test root was not updated in lockstep.
 - On user prompts: "写测试", "加 test", "test it", "/test".
 
 ## When not to use
+
 - For trivial doc/comment-only edits.
 - For test-only changes (run `/run-tests` instead).

@@ -60,6 +60,7 @@ class NewsRepo(Protocol):
 ```
 
 v1 适配器：
+
 - `TushareNewsSource`、`AKShareNewsSource`（兜底）
 - `TushareReportSource`
 - `ParquetNewsRepo`、`ParquetReportRepo` + `FilesystemPdfStore`（PDF 落本地 `data/reports/pdf/`）
@@ -98,12 +99,14 @@ data/reports/
 ## 5. 更新策略
 
 ### 5.1 增量拉取
+
 - 调度：每天 4 次（盘前 8:30、午盘 12:00、盘后 16:00、夜间 20:00）
 - 流程：从 `_state.last_published_at` 起拉取增量 → upsert → 更新 state
 - 去重：以 `id` 为主键，重复 upsert 安全
 - 失败：进死信队列；详见 `rfcs/0002-incremental-update-recovery.md`
 
 ### 5.2 PDF 下载（研报）
+
 - v1 默认**不**自动下载 PDF（占空间且很多源限速），仅存 `pdf_url`
 - 用户在 UI 触发"下载"时按需取，存 `data/reports/pdf/<id>.pdf` + 更新 `pdf_local_path`
 - 下载有限流（每分钟 ≤ 30 个 PDF），并发 ≤ 3
@@ -125,12 +128,12 @@ class ReportService:
 
 ### 6.2 NestJS HTTP API
 
-| Method | Path | Query | Response |
-|---|---|---|---|
-| GET | `/api/news/:code` | `?days=30` | `NewsItemDto[]` |
-| GET | `/api/news/industry/:sw_code` | `?days=30` | `NewsItemDto[]` |
-| GET | `/api/reports/:code` | `?days=90` | `ResearchReportDto[]` |
-| POST | `/api/reports/:id/download` | — | `{ local_path }` |
+| Method | Path                          | Query      | Response              |
+| ------ | ----------------------------- | ---------- | --------------------- |
+| GET    | `/api/news/:code`             | `?days=30` | `NewsItemDto[]`       |
+| GET    | `/api/news/industry/:sw_code` | `?days=30` | `NewsItemDto[]`       |
+| GET    | `/api/reports/:code`          | `?days=90` | `ResearchReportDto[]` |
+| POST   | `/api/reports/:id/download`   | —          | `{ local_path }`      |
 
 ### 6.3 Arrow Flight RPC
 
@@ -138,23 +141,26 @@ class ReportService:
 
 ## 7. 性能预算
 
-| 操作 | 预算 |
-|---|---|
-| `for_stock(code, 30d)` | < 50ms |
+| 操作                        | 预算                         |
+| --------------------------- | ---------------------------- |
+| `for_stock(code, 30d)`      | < 50ms                       |
 | `for_codes(50 stocks, 30d)` | < 300ms（DuckDB SQL 一次性） |
-| 增量拉取（一次） | < 60s |
+| 增量拉取（一次）            | < 60s                        |
 
 ## 8. 测试要求
 
 ### 8.1 unit
+
 - 去重逻辑：相同 id 上传两次，只存一次
 - 时间窗口边界：`since < t < until`（左开右开 / 左闭右开 由约定决定，必须在测试中明确并固化）
 
 ### 8.2 integration
+
 - 拉取 → 入库 → 查询完整链路（用真实 ParquetNewsRepo + tmp 路径）
 - DuckDB 索引：upsert 后 query 命中索引（EXPLAIN 验证）
 
 ### 8.3 contract
+
 - 来源 schema 变化检测：每次调 source 后验证 zod / pydantic 通过；schema 变化在 CI 中显式标红
 
 ## 9. 风险与备注

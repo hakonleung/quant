@@ -6,13 +6,13 @@
 
 ## 2. 通信通道矩阵
 
-| 场景 | 通道 | 编码 |
-|---|---|---|
-| 短控制调用（< 1MB 结果） | gRPC unary | protobuf |
-| 大数据集查询（K 线、新闻列表、筛选结果） | Arrow Flight DoGet | Arrow IPC（列存零拷贝） |
-| 客户端推数据（少见） | Arrow Flight DoPut | Arrow IPC |
-| 长任务进度流 | gRPC server-streaming | protobuf（小消息，不传数据） |
-| NestJS → Web | HTTP/JSON / SSE | JSON |
+| 场景                                     | 通道                  | 编码                         |
+| ---------------------------------------- | --------------------- | ---------------------------- |
+| 短控制调用（< 1MB 结果）                 | gRPC unary            | protobuf                     |
+| 大数据集查询（K 线、新闻列表、筛选结果） | Arrow Flight DoGet    | Arrow IPC（列存零拷贝）      |
+| 客户端推数据（少见）                     | Arrow Flight DoPut    | Arrow IPC                    |
+| 长任务进度流                             | gRPC server-streaming | protobuf（小消息，不传数据） |
+| NestJS → Web                             | HTTP/JSON / SSE       | JSON                         |
 
 > **不用** WebSocket / 共享内存 / Plasma：复杂度高、调试困难，Arrow Flight 已能解决主要问题。共享内存是 v3 的优化项（详见 `rfcs/0003-memory-and-ipc.md`）。
 
@@ -109,13 +109,13 @@ message Error {
 
 NestJS 全局异常过滤器：把 gRPC 错误的 `code` → HTTP status：
 
-| ErrorCode 区间 | HTTP |
-|---|---|
+| ErrorCode 区间       | HTTP      |
+| -------------------- | --------- |
 | 100~199（资源/数据） | 404 / 503 |
-| 200~299（DSL/参数） | 400 |
-| 400~499（外部源） | 502 / 503 |
-| 500~599（LLM） | 502 |
-| 600~（内部） | 500 |
+| 200~299（DSL/参数）  | 400       |
+| 400~499（外部源）    | 502 / 503 |
+| 500~599（LLM）       | 502       |
+| 600~（内部）         | 500       |
 
 ## 5. trace_id 透传
 
@@ -168,7 +168,7 @@ export class QuantComputeAdapter implements QuantComputePort {
 
 ```ts
 function arrowTableToJson(table: arrow.Table): unknown[] {
-  return table.toArray().map(row => row.toJSON());
+  return table.toArray().map((row) => row.toJSON());
 }
 ```
 
@@ -186,27 +186,30 @@ function arrowTableToJson(table: arrow.Table): unknown[] {
 
 ## 10. 性能预算
 
-| 操作 | 预算 |
-|---|---|
-| gRPC unary RTT（同机） | < 5ms |
-| Arrow Flight 1MB 列存 | < 30ms（含序列化） |
-| Arrow Flight 100MB | < 800ms |
-| Stream event RTT | < 50ms |
+| 操作                   | 预算               |
+| ---------------------- | ------------------ |
+| gRPC unary RTT（同机） | < 5ms              |
+| Arrow Flight 1MB 列存  | < 30ms（含序列化） |
+| Arrow Flight 100MB     | < 800ms            |
+| Stream event RTT       | < 50ms             |
 
 对比 JSON：100MB Arrow ≈ 800ms，同等 JSON ≈ 6s + 大量 GC。
 
 ## 11. 测试要求
 
 ### 11.1 unit
+
 - TS 侧：mock gRPC client，断言 service 正确调端口
 - Python 侧：fake repository → server handler 断言响应正确
 
 ### 11.2 contract（关键）
+
 - 启动 Python server + NestJS（test container）
 - 跑 ~30 个端到端用例，覆盖每个 RPC、每种错误码
 - proto schema 变更时此测试必须通过
 
 ### 11.3 性能基准（不进默认 CI）
+
 - 1MB / 10MB / 100MB Arrow 传输延迟
 - 1000 次 gRPC unary 的吞吐
 - 跑前后比较，回归则失败

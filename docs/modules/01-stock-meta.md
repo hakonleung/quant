@@ -47,6 +47,7 @@ class StockMetaRepo(Protocol):
 ```
 
 **v1 适配器**：
+
 - `TushareStockMetaSource`（`quant_io/adapters/tushare/`）
 - `AKShareStockMetaSource`（兜底，同上）
 - `ParquetStockMetaRepo`（`quant_cache/adapters/parquet/`）：单文件 `data/meta/stocks.parquet`，按 `code` 排序便于二分查找
@@ -67,16 +68,19 @@ Parquet schema 用 `proto/schemas/stock_meta.py` 定义（pyarrow.Schema），TS
 ## 5. 更新策略
 
 ### 5.1 全量同步
+
 - 触发：首次启动 / `_state/meta.json.last_full_sync` 距今 > 7 天 / 手动 `/admin/meta/full-sync`
 - 流程：`Source.fetch_all()` → 写新 parquet → 原子替换旧文件 → 更新 `_state`
 - 失败：保留旧文件，写 `_state.last_error`，记录至死信队列
 
 ### 5.2 增量同步
+
 - 触发：每日 18:00（A 股收盘后）
 - 流程：拉取当日变更（新上市/退市/股本变更/ST 变更），与本地 diff，仅 upsert 变化项
 - 失败处理：详见 `rfcs/0002-incremental-update-recovery.md`
 
 ### 5.3 数据源 fallback
+
 - 主源（tushare）失败 → 自动切兜底（akshare）
 - 两源都失败 → 不更新本地缓存，告警 + 标记 stale
 
@@ -95,30 +99,31 @@ class StockMetaService:
 
 ### 6.2 NestJS HTTP API
 
-| Method | Path | Body / Query | 200 Response |
-|---|---|---|---|
-| GET | `/api/stocks/:code` | — | `StockMetaDto` |
-| GET | `/api/stocks/search` | `?q=...&limit=20` | `StockMetaDto[]` |
-| GET | `/api/stocks/by-industry` | `?sw_l2=...` | `StockMetaDto[]` |
-| POST | `/api/admin/meta/full-sync` | — | `{ task_id }` |
+| Method | Path                        | Body / Query      | 200 Response     |
+| ------ | --------------------------- | ----------------- | ---------------- |
+| GET    | `/api/stocks/:code`         | —                 | `StockMetaDto`   |
+| GET    | `/api/stocks/search`        | `?q=...&limit=20` | `StockMetaDto[]` |
+| GET    | `/api/stocks/by-industry`   | `?sw_l2=...`      | `StockMetaDto[]` |
+| POST   | `/api/admin/meta/full-sync` | —                 | `{ task_id }`    |
 
 错误：`STOCK_NOT_FOUND` (404) / `META_STALE` (503，仅当 source 全失败 + 缓存 > 7 天) / `INTERNAL` (500)。
 
 ### 6.3 Arrow Flight RPC
 
 仅当批量获取（>500 条）时使用：
+
 ```
 GetStockMetaBatch(codes: string[]) -> Arrow Stream of StockMeta
 ```
 
 ## 7. 性能预算
 
-| 操作 | 预算 |
-|---|---|
-| `get(code)` | < 5ms（Parquet 二分 + filter） |
-| `search(name)` | < 50ms |
-| 全量同步 | < 60s（5500 股票） |
-| 增量同步 | < 10s |
+| 操作           | 预算                           |
+| -------------- | ------------------------------ |
+| `get(code)`    | < 5ms（Parquet 二分 + filter） |
+| `search(name)` | < 50ms                         |
+| 全量同步       | < 60s（5500 股票）             |
+| 增量同步       | < 10s                          |
 
 如全量 parquet 加载慢，改用 DuckDB attach + 索引列。
 

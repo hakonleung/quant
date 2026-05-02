@@ -28,15 +28,13 @@
       "Bash(head:*)",
       "Bash(tail:*)",
       "Bash(printf:*)",
+      "Bash(mkdir:*)",
+      "Bash(chmod:*)",
       "Read",
       "Glob",
       "Grep"
     ],
-    "ask": [
-      "Bash(git push:*)",
-      "Bash(git reset --hard:*)",
-      "Bash(rm:*)"
-    ],
+    "ask": ["Bash(git push:*)", "Bash(git reset --hard:*)", "Bash(rm:*)"],
     "deny": [
       "Bash(git push --force:*)",
       "Bash(git push -f:*)",

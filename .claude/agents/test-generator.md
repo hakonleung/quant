@@ -22,17 +22,17 @@ You are the **test author** for this multi-language quant project (TS + Python).
 
 ## Test stacks
 
-| Layer | Runner | Marker |
-|---|---|---|
-| Python pure / domain | pytest | `@pytest.mark.unit` |
-| Python service / adapter | pytest | `@pytest.mark.integration` |
-| NestJS service / port | Jest (`*.spec.ts`) | — |
-| NestJS HTTP | Jest + supertest (`*.spec.ts`) | — |
-| Next.js lib / fp | vitest (`*.test.ts`) | — |
-| Next.js component | vitest + RTL | — |
-| Next.js e2e | Playwright (`*.e2e.spec.ts`) | — |
-| Cross-process contract | pytest (`tests/contract/*`) | `@pytest.mark.contract` |
-| Property | pytest + hypothesis / vitest + fast-check | `@pytest.mark.property` |
+| Layer                    | Runner                                    | Marker                     |
+| ------------------------ | ----------------------------------------- | -------------------------- |
+| Python pure / domain     | pytest                                    | `@pytest.mark.unit`        |
+| Python service / adapter | pytest                                    | `@pytest.mark.integration` |
+| NestJS service / port    | Jest (`*.spec.ts`)                        | —                          |
+| NestJS HTTP              | Jest + supertest (`*.spec.ts`)            | —                          |
+| Next.js lib / fp         | vitest (`*.test.ts`)                      | —                          |
+| Next.js component        | vitest + RTL                              | —                          |
+| Next.js e2e              | Playwright (`*.e2e.spec.ts`)              | —                          |
+| Cross-process contract   | pytest (`tests/contract/*`)               | `@pytest.mark.contract`    |
+| Property                 | pytest + hypothesis / vitest + fast-check | `@pytest.mark.property`    |
 
 ## What to produce
 
@@ -56,6 +56,7 @@ For each new or modified **public** function/class/module:
 ## Special rules per layer
 
 ### Core-asset modules (CLAUDE.md §2.5.1)
+
 Files under: `services/py/quant_core/domain/`, `apps/api/src/modules/*/domain/`, `apps/web/lib/{fp,types}/`, `packages/shared/`.
 
 - Tests use **zero mocks**. If a mock is needed, the unit isn't pure — flag it back to the parent so they refactor (do NOT silently add a mock).
@@ -63,23 +64,28 @@ Files under: `services/py/quant_core/domain/`, `apps/api/src/modules/*/domain/`,
 - Add at least one **property test** for any function with a clear invariant (e.g., normalization is idempotent; qfq factor preserves price ratios).
 
 ### Adapter modules (`quant_io/`, `quant_cache/`, `apps/api/src/adapters/`)
+
 - Use real backend (Parquet on tmp_path, in-memory sqlite, real DuckDB).
 - Network adapters: use `vcr.py` style fixtures (recorded responses) — do **not** hit real network in CI.
 - LLM adapters: use `ReplayLLM` from `tests/_fakes/`.
 
 ### Cross-process contract tests
+
 When `proto/` or `services/py/quant_rpc/` or `apps/api/src/adapters/quant-compute*` changes:
+
 - Update or add a test under `services/py/tests/contract/` that spins up the Python Flight server (in-process) and invokes via the NestJS-style client (Python test using the same gRPC proto).
 - Verify each RPC: success path + at least one error code.
 - Snapshot the proto field set; fail if it diverges from previous version without a version bump.
 
 ### NestJS tests
+
 - Use `Test.createTestingModule` with the real module under test.
 - Inject **fake ports** (hand-written, no `jest.mock` of port files).
 - Validate zod parsing at the controller layer is exercised.
 - For HTTP, use supertest for request/response shape (typed via shared zod).
 
 ### Next.js tests
+
 - `lib/fp/`: pure vitest, no setup.
 - Components: RTL with `QueryClientProvider`. Don't use MSW; pass promises directly to react-query for control.
 - E2E with Playwright: smoke only (≤ 5 in CI), full set on demand.

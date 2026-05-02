@@ -11,13 +11,13 @@ description: Run the project's test suite with coverage and report results. Hand
 
 Check `git diff --name-only HEAD` to scope the run:
 
-| Changed paths | Runner |
-|---|---|
-| `services/py/**` | pytest |
-| `apps/api/src/**` | jest (`pnpm --filter api test`) |
-| `apps/web/**` | vitest (`pnpm --filter web test`) |
+| Changed paths        | Runner                                     |
+| -------------------- | ------------------------------------------ |
+| `services/py/**`     | pytest                                     |
+| `apps/api/src/**`    | jest (`pnpm --filter api test`)            |
+| `apps/web/**`        | vitest (`pnpm --filter web test`)          |
 | `packages/shared/**` | both jest & vitest (suites that import it) |
-| `proto/**` | pytest contract suite |
+| `proto/**`           | pytest contract suite                      |
 
 If user named a file or directory, scope to it.
 
@@ -26,27 +26,32 @@ If nothing changed → run everything: `pnpm check` (root aggregate script that 
 ### 2. Commands
 
 **Python**:
+
 ```bash
 pytest -q -m "unit or integration" \
   --cov=services/py --cov-branch --cov-report=term-missing --cov-fail-under=90
 ```
 
 **NestJS**:
+
 ```bash
 pnpm --filter api test:cov
 ```
 
 **Next.js**:
+
 ```bash
 pnpm --filter web test:cov
 ```
 
 **Cross-process contract**:
+
 ```bash
 pytest -q -m contract
 ```
 
 **E2E (Playwright)** — only on explicit request or `--e2e`:
+
 ```bash
 pnpm --filter web test:e2e
 ```
@@ -86,6 +91,7 @@ pnpm --filter web test:e2e
 ```
 
 ## Hard rules
+
 - Never use `pytest -x` / `--bail` to hide failures; show them all.
 - Never delete or skip a failing test to make a run green.
 - If a runner is missing, tell the user how to install rather than silently switching.

@@ -1,0 +1,38 @@
+{
+  "name": "quant",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20.11.0",
+    "pnpm": ">=10"
+  },
+  "packageManager": "pnpm@10.29.1",
+  "scripts": {
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "typecheck": "pnpm -r --parallel run typecheck",
+    "test": "pnpm -r --parallel run test",
+    "test:cov": "pnpm -r --parallel run test:cov",
+    "py:format:check": "uv run ruff format --check services/py",
+    "py:format": "uv run ruff format services/py",
+    "py:lint": "uv run ruff check services/py",
+    "py:lint:fix": "uv run ruff check --fix services/py",
+    "py:typecheck": "uv run mypy --strict services/py",
+    "py:test": "uv run pytest services/py/tests -q",
+    "py:test:cov": "uv run pytest services/py/tests -q --cov=services/py --cov-branch --cov-report=term-missing --cov-fail-under=90",
+    "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test:cov && pnpm py:format:check && pnpm py:lint && pnpm py:typecheck && pnpm py:test:cov"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.18.0",
+    "eslint": "^9.18.0",
+    "eslint-plugin-import": "^2.31.0",
+    "eslint-plugin-unicorn": "^56.0.1",
+    "globals": "^17.6.0",
+    "prettier": "^3.4.2",
+    "typescript": "^5.7.3",
+    "typescript-eslint": "^8.20.0"
+  }
+}

@@ -21,9 +21,11 @@ You are the **architecture planner** for this multi-process quant project. You p
 A design document with these sections in this exact order:
 
 ### 1. Goal (1 sentence)
+
 What is being built and why.
 
 ### 2. Process placement
+
 Which process(es) will host the new code: Next.js / NestJS / Python svc. Justify in one line each. If it's cross-process, name the boundary (HTTP / gRPC unary / Arrow Flight / SSE).
 
 ### 3. Layer placement (per process)
@@ -31,6 +33,7 @@ Which process(es) will host the new code: Next.js / NestJS / Python svc. Justify
 For each new component, name the layer and justify in one line:
 
 **Python (`services/py/`)**:
+
 - `quant_core/domain/{types,pure,rules}/` — pure types & rules (core asset)
 - `quant_core/services/` — orchestration
 - `quant_core/ports/` — abstract interfaces
@@ -41,6 +44,7 @@ For each new component, name the layer and justify in one line:
 - `quant_rpc/` — Arrow Flight server
 
 **NestJS (`apps/api/src/`)**:
+
 - `modules/<feature>/{controller,service,module}` — feature
 - `modules/<feature>/dto/` — zod schema + types
 - `modules/<feature>/domain/{types,pure}` — feature-local core asset
@@ -50,6 +54,7 @@ For each new component, name the layer and justify in one line:
 - `config/` — env + zod
 
 **Next.js (`apps/web/`)**:
+
 - `app/` — App Router (default RSC, `"use client"` only when interactive)
 - `components/` — shared components
 - `lib/types/` — view-model types (core asset)
@@ -57,6 +62,7 @@ For each new component, name the layer and justify in one line:
 - `api-client/` — typed client (generated)
 
 **Shared (`packages/`)**:
+
 - `packages/shared/types/` — cross-app types + zod (core asset)
 - `packages/shared/fp/` — cross-app pure functions (core asset)
 - `packages/shared/errors/` — error classes (core asset)
@@ -65,6 +71,7 @@ For each new component, name the layer and justify in one line:
 ### 4. Public interfaces
 
 For every new module, list:
+
 - Module path
 - Exposed symbols: function/class signatures with **full** types (Python type hints / TS types — no `any`, no `Any`)
 - For ports, give the `Protocol` (Py) / `interface` (TS) definition
@@ -73,6 +80,7 @@ For every new module, list:
 ### 5. Cross-process contract impact
 
 If the design touches Python ↔ NestJS:
+
 - Which `proto/messages/*.proto` files change?
 - Which `proto/schemas/arrow/*.py` schemas change?
 - Which `proto/errors.proto` codes added?
@@ -82,6 +90,7 @@ If the design touches Python ↔ NestJS:
 ### 6. Dependency graph
 
 ASCII diagram showing imports. Verify:
+
 - `domain/` and `lib/{fp,types}` and `packages/shared` import nothing outside stdlib + core-asset peers
 - `services` imports only `domain` + `ports` (Python) / its own `domain` + `ports` (NestJS)
 - `adapters` implements `ports`, may import vendor SDKs
@@ -91,6 +100,7 @@ ASCII diagram showing imports. Verify:
 ### 7. Data flow
 
 Walk one representative request/operation end to end. Be specific:
+
 - Which HTTP route → which controller → which service → which port → which adapter
 - Where each validation happens (zod / pydantic at boundaries)
 - Where each error is caught and what code it becomes
@@ -100,6 +110,7 @@ Walk one representative request/operation end to end. Be specific:
 ### 8. Test strategy
 
 For each new module, list which tests are needed:
+
 - unit (core asset, zero mock)
 - integration (real backend on tmp paths)
 - contract (cross-process)
@@ -111,6 +122,7 @@ Name fixtures that will be reused or introduced. Estimate coverage per module.
 ### 9. Reusability check (CLAUDE.md §2.5.2)
 
 Before finalizing:
+
 - Is any new function a reimplementation of something in `packages/shared/fp` or `quant_core/domain/pure`? If yes → use existing.
 - Is any new logic likely to be needed in 2+ places? If yes & ≥ 3 expected sites → put in core asset directory now. If only 1~2 sites → keep local with `// REUSE-CANDIDATE` marker.
 - Is any cross-language logic (e.g., DSL evaluation) duplicated? Cross-language duplication is forbidden — pick one language as source of truth.

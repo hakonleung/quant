@@ -9,6 +9,7 @@
 不存在"通用 KV cache"——量化数据天然结构化。我们按**数据形态**抽象出 3 类端口：
 
 ### 2.1 `KeyValueStore`（控制面元数据）
+
 适用：增量水位、配置、任务状态等小对象。
 
 ```python
@@ -21,10 +22,12 @@ class KeyValueStore(Protocol):
 ```
 
 适配器：
+
 - `FileKeyValueStore`（v1 默认）：JSON 文件夹下每 key 一个文件
 - `RedisKeyValueStore`（v2）
 
 ### 2.2 `RecordRepo[T]`（域对象 CRUD）
+
 适用：StockMeta 这类**有限规模、按主键访问**的数据。
 
 ```python
@@ -39,10 +42,12 @@ class RecordRepo(Protocol, Generic[T_co]):
 `QuerySpec` 是项目内的小型查询 DSL（不暴露 SQL），覆盖 `eq / in / range / like` 即可，避免泄漏底层。
 
 适配器：
+
 - `ParquetRecordRepo[T]`（v1）
 - `SQLiteRecordRepo[T]`（v2）
 
 ### 2.3 `TimeSeriesStore`（大规模时序，列存优先）
+
 适用：KLine、新闻这类**按 (entity, time) 切片的列存数据**。
 
 ```python
@@ -64,6 +69,7 @@ class TimeSeriesStore(Protocol):
 返回 / 接收一律 `pyarrow.Table`，零拷贝传给上层（Polars / Arrow Flight）。
 
 适配器：
+
 - `ParquetTimeSeriesStore`（v1）
 - `DuckDBTimeSeriesStore`（v1.5，将索引外置）
 - `PostgresTimeSeriesStore`（v2）
@@ -114,6 +120,7 @@ CREATE INDEX IF NOT EXISTS kline_code_date ON kline(code, trade_date);
 ```
 
 读路径：
+
 ```python
 con.execute(
     "SELECT close_qfq, ma20 FROM kline WHERE code IN ($codes) AND trade_date BETWEEN $start AND $end"
@@ -189,6 +196,7 @@ class TestParquet(TimeSeriesStoreContract):
 **重要：本文件定义的是"通用缓存端口"（基础设施层），不是业务直接消费的接口。**
 
 业务代码消费的是**领域 Repo**（在各模块文档中定义）：
+
 - `StockMetaRepo`（见 `modules/01-stock-meta.md`）
 - `KlineRepo`（见 `modules/02-stock-kline.md`）
 - `NewsRepo` / `ReportRepo`（见 `modules/05-news-research.md`）
@@ -219,28 +227,29 @@ class TestParquet(TimeSeriesStoreContract):
 ```
 
 **为什么两层端口**：
+
 - 领域 Repo 让业务代码读起来像业务（"读这只股票这段时间的 K 线"），且在 mock 时可以零代价替换
 - 通用缓存端口让我们换底层存储（Parquet → Postgres）只改 adapter，不动领域 Repo 接口
 
-| 模块领域 Repo | 默认 adapter | 内部使用的通用端口 |
-|---|---|---|
-| `StockMetaRepo` | `ParquetStockMetaRepo` | `RecordRepo[StockMeta]` + `KeyValueStore`（state） |
-| `KlineRepo` | `ParquetKlineRepo` | `TimeSeriesStore`（kline） + `KeyValueStore`（watermark） |
-| `NewsRepo` | `ParquetNewsRepo` | `TimeSeriesStore`（按月分实体） + `KeyValueStore` |
-| `ReportRepo` | `ParquetReportRepo` + `FilesystemPdfStore` | `RecordRepo[ResearchReport]` + 文件系统 |
-| `ScreenCacheRepo` | `KvScreenCacheRepo` | `KeyValueStore` |
-| `TaskRepo`（sentiment） | `KvTaskRepo` | `KeyValueStore` |
+| 模块领域 Repo           | 默认 adapter                               | 内部使用的通用端口                                        |
+| ----------------------- | ------------------------------------------ | --------------------------------------------------------- |
+| `StockMetaRepo`         | `ParquetStockMetaRepo`                     | `RecordRepo[StockMeta]` + `KeyValueStore`（state）        |
+| `KlineRepo`             | `ParquetKlineRepo`                         | `TimeSeriesStore`（kline） + `KeyValueStore`（watermark） |
+| `NewsRepo`              | `ParquetNewsRepo`                          | `TimeSeriesStore`（按月分实体） + `KeyValueStore`         |
+| `ReportRepo`            | `ParquetReportRepo` + `FilesystemPdfStore` | `RecordRepo[ResearchReport]` + 文件系统                   |
+| `ScreenCacheRepo`       | `KvScreenCacheRepo`                        | `KeyValueStore`                                           |
+| `TaskRepo`（sentiment） | `KvTaskRepo`                               | `KeyValueStore`                                           |
 
 **测试约定**：领域 Repo 的契约测试在对应模块（`tests/<module>/test_*_repo_contract.py`）；通用端口的契约测试在本文件 §9。两层独立。
 
 ## 11. 性能参考
 
-| 操作 | Parquet | DuckDB-on-Parquet | Postgres（预测） |
-|---|---|---|---|
-| 单 entity 读 1 年 | 5ms | 8ms | 10ms |
-| 100 entity × 30 天，2 列 | 200ms | 80ms | 50ms |
-| 单 entity 追加 1 行 | 8ms（重写） | 8ms（重写） | 1ms |
-| 全市场扫描 | 不适用 | 800ms | 500ms |
+| 操作                     | Parquet     | DuckDB-on-Parquet | Postgres（预测） |
+| ------------------------ | ----------- | ----------------- | ---------------- |
+| 单 entity 读 1 年        | 5ms         | 8ms               | 10ms             |
+| 100 entity × 30 天，2 列 | 200ms       | 80ms              | 50ms             |
+| 单 entity 追加 1 行      | 8ms（重写） | 8ms（重写）       | 1ms              |
+| 全市场扫描               | 不适用      | 800ms             | 500ms            |
 
 Parquet 的弱点是"小写多"，但日线场景大多是"日终批量追加"，匹配良好。
 

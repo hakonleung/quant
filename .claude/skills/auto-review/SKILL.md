@@ -10,12 +10,14 @@ You enforce `CLAUDE.md` end-to-end on the current change set. Run all gates. Do 
 ## Steps
 
 ### 1. Identify what changed
+
 ```bash
 git status -s
 git diff --name-only HEAD
 ```
 
 Classify changed files into:
+
 - Python (`services/py/**/*.py`)
 - NestJS (`apps/api/**/*.ts`)
 - Next.js (`apps/web/**/*.{ts,tsx}`)
@@ -28,6 +30,7 @@ If only docs changed → skip Static + Tests gates, jump to step 4 (reviewer).
 ### 2. Static gates (run in parallel where possible)
 
 **Python (only if Py files changed)**:
+
 ```bash
 ruff format --check .
 ruff check .
@@ -35,6 +38,7 @@ mypy --strict services/py
 ```
 
 **TypeScript (only if TS files changed)**:
+
 ```bash
 pnpm prettier --check .
 pnpm eslint .
@@ -42,6 +46,7 @@ pnpm -r tsc --noEmit
 ```
 
 **Cross-process (only if proto/ changed)**:
+
 - Verify codegen ran: check that generated TS / Py files in `proto/` have matching mtime ≥ `.proto` files
 - If not: FAIL with instruction `pnpm proto:gen` (or whatever the project script is)
 
@@ -50,22 +55,26 @@ Capture exit code per gate. Show the first 20 lines of failing output.
 ### 3. Tests + coverage
 
 **Python**:
+
 ```bash
 pytest -q -m "unit or integration" \
   --cov=services/py --cov-branch --cov-report=term-missing --cov-fail-under=90
 ```
 
 **NestJS**:
+
 ```bash
 pnpm --filter api test:cov
 ```
 
 **Next.js**:
+
 ```bash
 pnpm --filter web test:cov
 ```
 
 **Cross-process contract** (only if proto/ or rpc/adapters changed):
+
 ```bash
 pytest -q -m contract
 ```
@@ -116,10 +125,12 @@ Capture its output verbatim.
 `APPROVE` only when **every** gate passes AND reviewer says `APPROVE`. Otherwise `REQUEST_CHANGES`.
 
 ## When to use
+
 - After every coding task, before declaring it done.
 - On `/review`, `/check`, "审一下", "review 这次改动", "跑下检查".
 - Before any commit if the user asks you to commit.
 
 ## When not to use
+
 - Pure documentation-only changes can skip Static + Tests but still run reviewer for the doc dimensions.
 - Discovery / read-only sessions (no edits).

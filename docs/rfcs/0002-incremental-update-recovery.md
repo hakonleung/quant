@@ -1,12 +1,13 @@
 # RFC 0002 — 增量更新与错误恢复
 
-| Status | Draft |
-|---|---|
-| Date | 2026-05-01 |
+| Status | Draft      |
+| ------ | ---------- |
+| Date   | 2026-05-01 |
 
 ## 1. 背景
 
 数据更新是项目最容易"看似简单实则致命"的部分。常见失败模式：
+
 - 网络抖动 → 部分股票拉取失败
 - 数据源 schema 变化 → pydantic 校验大面积失败
 - 程序崩溃 → 写到一半的状态
@@ -62,6 +63,7 @@ EntityTask 状态：
 ```
 
 转移规则：
+
 - `TimeoutError` / `RateLimited` / `5xx` → `FAILED_TRANSIENT`
 - `pydantic.ValidationError` / `4xx`（业务错误） → `FAILED_PERMANENT`
 - 拉到 `trade_date > today` → `FAILED_LOOKAHEAD`（不入死信，记 audit）
@@ -73,6 +75,7 @@ data/_dead_letter/<job_name>.parquet
 ```
 
 schema：
+
 ```
 job          STRING
 entity_key   STRING        -- "600519.SH"
@@ -86,18 +89,21 @@ trace_id     STRING
 ```
 
 ### 5.1 重跑流程
+
 - 启动时 + 每次调度时扫死信
 - `attempt_count < max_retries` → 重排到下次调度，attempt_count++
 - `attempt_count >= max_retries` → 标 `WAITING_HUMAN`，发告警
 - 人工修复后 CLI / UI 触发"重跑"，成功后 delete row
 
 ### 5.2 死信查看
+
 - UI `/admin/dead-letter` 列表 + 详情 + 一键重跑
 - CLI：`python -m quant_io.dlq list/retry/clear`
 
 ## 6. 水位粒度
 
 ### 6.1 KLine（按 entity）
+
 ```json
 {
   "kline.daily": {
@@ -114,6 +120,7 @@ trace_id     STRING
 ```
 
 ### 6.2 News（全局，按时间）
+
 ```json
 {
   "news.tushare": { "last_published_at": "2026-05-01T03:00:00Z" }
@@ -125,11 +132,13 @@ trace_id     STRING
 ## 7. 对账（Reconciliation）
 
 ### 7.1 何时对账
+
 - 主源恢复后第一次成功跑完时
 - 切换主源时
 - 用户主动触发"全量校验"
 
 ### 7.2 对账方式
+
 - 抽样：随机选 100 只股票 × 最近 30 天
 - 调主源 + 兜底源各取一遍 → 对比 OHLCV + adj_factor
 - 差异写：
@@ -142,21 +151,25 @@ data/_audit/discrepancy.jsonl
 - 阈值告警：单股票超过 5 个字段差异 > 0.1% → 醒目告警
 
 ### 7.3 自动修复
+
 - 默认**不**自动改数据；人工 review 后决定
 - 仅记录，避免覆盖错的把"对的也覆盖了"
 
 ## 8. Schema 演进
 
 ### 8.1 数据 schema_version
+
 - 每个 parquet 文件元数据里记 `schema_version: int`
 - 读取时若版本低于代码 → 走自动迁移函数（`quant_cache/migrations/<from>_to_<to>.py`）
 - 写入时一律新版本
 
 ### 8.2 来源 schema 漂移
+
 - 来源新增字段 → adapter 默认忽略；没影响
 - 来源删除/重命名字段 → pydantic 校验失败 → 整批进死信 → 告警 → 人工更新 adapter
 
 ### 8.3 双写期（v2 切后端时）
+
 - 切后端步骤：先双写一周，期间每日跑对账（新旧后端读相同数据应一致），全量通过后切读路径，再隔一周下线旧
 
 ## 9. 锁与并发
@@ -167,30 +180,32 @@ data/_audit/discrepancy.jsonl
 
 ## 10. 一致性保证
 
-| 项 | 保证 |
-|---|---|
-| 数据存在但水位未更新 | 下次重跑会再次写相同数据（幂等） |
-| 水位更新但数据未存 | 不可能（顺序保证） |
-| 进程崩溃在写文件中途 | `.tmp` 留下，无损坏；下次启动检测并清理 |
+| 项                                | 保证                                                        |
+| --------------------------------- | ----------------------------------------------------------- |
+| 数据存在但水位未更新              | 下次重跑会再次写相同数据（幂等）                            |
+| 水位更新但数据未存                | 不可能（顺序保证）                                          |
+| 进程崩溃在写文件中途              | `.tmp` 留下，无损坏；下次启动检测并清理                     |
 | 进程崩溃在 rename 后 watermark 前 | 数据已存，下次重跑增量起点重叠几行（upsert 覆盖，无副作用） |
 
 ## 11. 性能预算（增量）
 
-| 任务 | 预算 |
-|---|---|
-| 单只股票增量（1 天，2 表） | < 100ms 含网络 |
-| 全市场 kline 增量（5500 只） | < 5min（并发 8） |
-| 全市场 news 增量 | < 60s |
-| Reconciliation（100 只 × 30 天） | < 3min |
+| 任务                             | 预算             |
+| -------------------------------- | ---------------- |
+| 单只股票增量（1 天，2 表）       | < 100ms 含网络   |
+| 全市场 kline 增量（5500 只）     | < 5min（并发 8） |
+| 全市场 news 增量                 | < 60s            |
+| Reconciliation（100 只 × 30 天） | < 3min           |
 
 ## 12. 监控与告警
 
 ### v1（轻量）
+
 - 每次 ScheduledJob 末写 `data/_audit/<date>.jsonl` 一行 summary
 - 死信表 row count > 50 时，下次启动在 stderr 醒目打印
 - UI 顶部有"数据健康"指示灯（绿/黄/红）
 
 ### v2（生产）
+
 - Prometheus metrics（详见 `data-sources.md` §12）
 - Webhook 告警（飞书 / 邮件）
 

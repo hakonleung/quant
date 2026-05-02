@@ -1,8 +1,8 @@
 # RFC 0003 — 内存管理与跨进程通信优化
 
-| Status | Draft |
-|---|---|
-| Date | 2026-05-01 |
+| Status | Draft      |
+| ------ | ---------- |
+| Date   | 2026-05-01 |
 
 ## 1. 背景
 
@@ -15,13 +15,13 @@
 
 ## 2. 目标
 
-| 指标 | 目标 |
-|---|---|
-| Python 服务常驻内存 | < 1.5GB（不含正在执行的任务工作集） |
-| 单次筛选峰值内存 | < 4GB |
-| 单次形态匹配峰值 | < 6GB |
-| NestJS 常驻内存 | < 500MB |
-| 100MB 列存数据 NestJS↔Python 传输 | < 800ms |
+| 指标                              | 目标                                |
+| --------------------------------- | ----------------------------------- |
+| Python 服务常驻内存               | < 1.5GB（不含正在执行的任务工作集） |
+| 单次筛选峰值内存                  | < 4GB                               |
+| 单次形态匹配峰值                  | < 6GB                               |
+| NestJS 常驻内存                   | < 500MB                             |
+| 100MB 列存数据 NestJS↔Python 传输 | < 800ms                             |
 
 ## 3. 内存层级与策略
 
@@ -44,6 +44,7 @@
 ### 3.2 列裁剪 + 谓词下推（强制）
 
 每次读取：
+
 - 必须传 `columns=[...]`（仅需要的列）
 - 必须传 `filters=[...]`（按 code / date 范围下推到 parquet 元数据）
 
@@ -149,6 +150,7 @@ async getKlineUniverse(req): Promise<arrow.Table> {
 ## 5. NestJS ↔ Python 内存共享（v3，先不做）
 
 完整零拷贝（同机）：
+
 - Plasma store / shared memory / Arrow IPC over UNIX domain socket
 - 复杂度高，同机部署才有意义
 
@@ -188,14 +190,17 @@ class MemorySettings(BaseSettings):
 ## 10. 测试
 
 ### 10.1 内存预算测试
+
 - 跑单次筛选 + 形态匹配 → 断言峰值 RSS < 阈值
 - 跑 2 个并发 → 断言不超 max_concurrent_tasks 限制
 
 ### 10.2 Arrow 传输测试
+
 - 1MB / 10MB / 100MB Arrow 通过 Flight → NestJS → 解析后数据等同
 - 性能基准：100MB < 800ms（不进 CI 默认）
 
 ### 10.3 内存泄漏测试
+
 - 连续跑 50 次相同筛选 → 断言 RSS 不单调上升
 
 ## 11. 反模式（禁止）
@@ -219,12 +224,12 @@ return JSONResponse(records)   # 序列化爆炸 + 双倍内存
 
 ```ts
 // ❌ 禁止：把整张表塞 Zustand
-useStore.setState({ klineTable: rows })   // GC 不掉
+useStore.setState({ klineTable: rows }); // GC 不掉
 
 // ❌ 禁止：fetch 后 JSON.parse 再立刻 stringify
-const text = await res.text()
-const obj = JSON.parse(text)
-this.setState({ raw: text, parsed: obj })   // 内存翻倍
+const text = await res.text();
+const obj = JSON.parse(text);
+this.setState({ raw: text, parsed: obj }); // 内存翻倍
 ```
 
 ## 12. Open Questions
