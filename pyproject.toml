@@ -81,6 +81,9 @@ max-complexity = 10
 "**/quant_cache/errors.py" = ["N818"]
 # Codegen is a CLI build tool; stdout/stderr is its primary interface, not "business log".
 "proto/codegen/**" = ["T201"]
+# Test-fixture entrypoint — uses `print` for the READY handshake the
+# NestJS contract test waits on. Not a long-lived CLI.
+"services/py/quant_rpc/__main__.py" = ["T201"]
 
 [tool.ruff.format]
 quote-style = "double"

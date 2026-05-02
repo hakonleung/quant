@@ -1,0 +1,62 @@
+// Minimal subset of the Apache Arrow Flight protocol — only the messages
+// and RPCs the NestJS gateway actually uses (cache-abstraction.md §2,
+// ipc-py-ts.md §3). The full protocol lives in apache/arrow under
+// format/Flight.proto; we copy the wire-compatible subset here so the
+// build does not depend on Arrow's source tree.
+//
+// Wire compatibility is what matters: field numbers must match upstream.
+
+syntax = "proto3";
+
+package arrow.flight.protocol;
+
+service FlightService {
+  rpc GetFlightInfo(FlightDescriptor) returns (FlightInfo);
+  rpc DoGet(Ticket) returns (stream FlightData);
+}
+
+message FlightDescriptor {
+  enum DescriptorType {
+    UNKNOWN = 0;
+    PATH = 1;
+    CMD = 2;
+  }
+  DescriptorType type = 1;
+  bytes cmd = 2;
+  repeated string path = 3;
+}
+
+message Ticket {
+  bytes ticket = 1;
+}
+
+message Location {
+  string uri = 1;
+}
+
+message FlightEndpoint {
+  Ticket ticket = 1;
+  repeated Location location = 2;
+}
+
+message FlightInfo {
+  // Arrow IPC schema message (with continuation marker + length prefix).
+  bytes schema = 1;
+  FlightDescriptor flight_descriptor = 2;
+  repeated FlightEndpoint endpoint = 3;
+  int64 total_records = 4;
+  int64 total_bytes = 5;
+}
+
+message FlightData {
+  FlightDescriptor flight_descriptor = 1;
+  // Arrow IPC Message header (FlatBuffer); paired with `data_body` to
+  // reconstitute one Arrow IPC stream message.
+  bytes data_header = 2;
+  bytes app_metadata = 3;
+  // NOTE: upstream uses tag 1000 (not 4) for `data_body` so the bulk
+  // payload sorts after small metadata fields on the wire — matters for
+  // streaming decoders that want to peek at headers cheaply. Field
+  // numbers MUST match upstream verbatim.
+  bytes data_body = 1000;
+}

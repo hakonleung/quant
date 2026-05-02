@@ -122,6 +122,18 @@ export default [
     rules: {
       'max-lines-per-function': 'off',
       '@typescript-eslint/no-non-null-assertion': 'off',
+      // Tests build fake Express/Nest objects whose runtime shape is narrower
+      // than the framework's public type; structural casts are how we stub
+      // them without dragging in heavy mocking libraries.
+      '@typescript-eslint/consistent-type-assertions': 'off',
+      '@typescript-eslint/no-empty-function': 'off',
+    },
+  },
+  // ---- 2.1. Test helpers (non-spec files under tests/_util) ----
+  {
+    files: ['**/test/_util/**/*.{ts,tsx}'],
+    rules: {
+      '@typescript-eslint/consistent-type-assertions': 'off',
     },
   },
   // ---- 3. Next.js framework-required default exports ----
@@ -144,6 +156,23 @@ export default [
     files: ['apps/api/src/**/*.module.ts'],
     rules: {
       '@typescript-eslint/no-extraneous-class': 'off',
+    },
+  },
+  // ---- 4.1. Dynamic-library bridges (proto-loader, express monkey-patch) ----
+  // These files are the only place where the static type system meets a
+  // dynamically-typed runtime surface (`@grpc/proto-loader` builds the
+  // FlightService client from a .proto at runtime; Express stores arbitrary
+  // properties on `Request`). The casts here are documented narrow bridges,
+  // not loopholes — they belong in adapters and nowhere else.
+  {
+    files: [
+      'apps/api/src/adapters/flight/flight-client.ts',
+      'apps/api/src/adapters/flight/proto-loader.ts',
+      'apps/api/src/common/trace.middleware.ts',
+      'apps/api/src/common/quant-error.filter.ts',
+    ],
+    rules: {
+      '@typescript-eslint/consistent-type-assertions': 'off',
     },
   },
   // ---- 4.5. Core asset boundary (CLAUDE.md §2.5.1) ----

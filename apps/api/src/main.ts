@@ -2,9 +2,11 @@ import 'reflect-metadata';
 import { NestFactory } from '@nestjs/core';
 import { Logger } from '@nestjs/common';
 import { AppModule } from './app.module.js';
+import { QuantErrorFilter } from './common/quant-error.filter.js';
 
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create(AppModule, { logger: ['log', 'warn', 'error'] });
+  app.useGlobalFilters(new QuantErrorFilter());
   const host = process.env['API_HOST'] ?? '127.0.0.1';
   const portRaw = process.env['API_PORT'] ?? '3001';
   const port = Number.parseInt(portRaw, 10);

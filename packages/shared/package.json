@@ -9,7 +9,8 @@
     ".": "./src/index.ts",
     "./types": "./src/types/index.ts",
     "./fp": "./src/fp/index.ts",
-    "./errors": "./src/errors/index.ts"
+    "./errors": "./src/errors/index.ts",
+    "./rpc": "./src/rpc/index.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
