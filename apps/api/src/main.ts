@@ -6,6 +6,7 @@ import { QuantErrorFilter } from './common/quant-error.filter.js';
 
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create(AppModule, { logger: ['log', 'warn', 'error'] });
+  app.setGlobalPrefix('api');
   app.useGlobalFilters(new QuantErrorFilter());
   const host = process.env['API_HOST'] ?? '127.0.0.1';
   const portRaw = process.env['API_PORT'] ?? '3001';

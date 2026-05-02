@@ -136,6 +136,22 @@ export default [
       '@typescript-eslint/consistent-type-assertions': 'off',
     },
   },
+  // ---- 2.2. Cross-process contract tests ----
+  // These spawn an external server (Python Flight, NestJS via supertest)
+  // and inspect the wire — supertest's `Response.body` is typed `any`,
+  // and `app.getHttpServer()` returns `any` from the Nest API. Both are
+  // intentional library decisions; chasing them with casts would make
+  // the tests harder to read, not safer.
+  {
+    files: ['**/test/contract/**/*.{ts,tsx}'],
+    rules: {
+      '@typescript-eslint/no-unsafe-argument': 'off',
+      '@typescript-eslint/no-unsafe-assignment': 'off',
+      '@typescript-eslint/no-unsafe-call': 'off',
+      '@typescript-eslint/no-unsafe-member-access': 'off',
+      '@typescript-eslint/no-unsafe-return': 'off',
+    },
+  },
   // ---- 3. Next.js framework-required default exports ----
   {
     files: [
@@ -170,9 +186,20 @@ export default [
       'apps/api/src/adapters/flight/proto-loader.ts',
       'apps/api/src/common/trace.middleware.ts',
       'apps/api/src/common/quant-error.filter.ts',
+      // Zod's `safeParse` returns `data: any` for ZodTypeAny generics;
+      // the pipe re-asserts the validated shape at the boundary.
+      'apps/api/src/common/zod-pipe.ts',
+      // Controllers that read `req.traceId` written by the middleware go
+      // through the same Express monkey-patch bridge.
+      'apps/api/src/modules/*/*.controller.ts',
+      // Arrow → DTO mapper crosses a dynamic-runtime/static-type boundary;
+      // and it decodes `Date`-typed columns from storage (not "now()"), so
+      // the no-Date rule does not apply here either.
+      'apps/api/src/modules/*/domain/arrow-mapper.ts',
     ],
     rules: {
       '@typescript-eslint/consistent-type-assertions': 'off',
+      'no-restricted-globals': 'off',
     },
   },
   // ---- 4.5. Core asset boundary (CLAUDE.md §2.5.1) ----
