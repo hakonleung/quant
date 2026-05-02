@@ -1,0 +1,36 @@
+{
+  "//": "Pylance / Pyright config. mypy --strict is the source of truth for type checking; this file makes the IDE agree with it. Do not duplicate strictness here that mypy doesn't enforce.",
+
+  "venvPath": ".",
+  "venv": ".venv",
+  "pythonVersion": "3.11",
+  "pythonPlatform": "All",
+
+  "include": ["services/py", "proto"],
+  "exclude": [
+    "**/node_modules",
+    "**/__pycache__",
+    "**/.venv",
+    "**/dist",
+    "**/build",
+    "data",
+    "services/py/quant_core/contracts/**"
+  ],
+
+  "executionEnvironments": [
+    {
+      "//": "Mirrors `pythonpath = ['.', 'services/py']` from pyproject.toml so absolute imports like `from proto.codegen import ...` and `from tests._util import ...` resolve in the IDE the same way pytest sees them.",
+      "root": ".",
+      "extraPaths": [".", "services/py"]
+    }
+  ],
+
+  "//useLibraryCodeForTypes": "Many of our deps (pyarrow, filelock, @grpc/...) ship partial or no stubs. Reading their source for inferred types beats showing a wall of red in the editor.",
+  "useLibraryCodeForTypes": true,
+
+  "//reportMissingTypeStubs": "mypy --strict already enforces type discipline at our boundaries; the IDE warning here is pure noise for third-party libs that ship partial / missing stubs.",
+  "reportMissingTypeStubs": "none",
+
+  "//reportMissingImports": "Stays on — a missing import is almost always a real bug.",
+  "reportMissingImports": "error"
+}
