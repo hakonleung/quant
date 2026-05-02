@@ -114,12 +114,19 @@ exclude = ["generated/", "data/", ".venv/"]
 [[tool.mypy.overrides]]
 module = ["tests.*"]
 disallow_any_explicit = false
+disallow_untyped_calls = false
 
-# pyarrow ships partial / incomplete stubs; relax `disallow_any_unimported`
-# only for the modules that intentionally use pa.Table in their signatures.
+# pyarrow ships partial / incomplete stubs (no `pyarrow.compute.Expression`,
+# untyped `pq.read_table` / `pq.write_table`, missing `pc.equal` / `pc.is_in`
+# attrs, etc.). Relax the strict-mode checks that are unsatisfiable until
+# upstream stubs improve. Scope is kept narrow to the cache adapter modules
+# that actually consume pyarrow at the type level.
 [[tool.mypy.overrides]]
 module = ["quant_core.ports.cache", "quant_cache.*"]
 disallow_any_unimported = false
+disallow_untyped_calls = false
+disallow_any_explicit = false
+disable_error_code = ["attr-defined", "name-defined"]
 
 # ---- pytest ----
 [tool.pytest.ini_options]
