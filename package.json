@@ -22,7 +22,7 @@
     "py:lint:fix": "uv run ruff check --fix services/py proto",
     "py:typecheck": "uv run mypy --strict services/py proto",
     "py:test": "uv run pytest services/py/tests -q",
-    "py:test:cov": "uv run pytest services/py/tests -q --cov=services/py --cov-branch --cov-report=term-missing --cov-fail-under=90",
+    "py:test:cov": "uv run pytest services/py/tests -q --cov=services/py --cov=proto --cov-branch --cov-report=term-missing --cov-fail-under=90",
     "gen:proto": "uv run python -m proto.codegen",
     "gen:proto:check": "uv run python -m proto.codegen --check",
     "check": "pnpm gen:proto:check && pnpm format:check && pnpm lint && pnpm typecheck && pnpm test:cov && pnpm py:format:check && pnpm py:lint && pnpm py:typecheck && pnpm py:test:cov"

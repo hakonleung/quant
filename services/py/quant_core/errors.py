@@ -1,8 +1,11 @@
-"""Domain error base class. Mirrors TS `QuantError` in packages/shared/errors.
+"""Domain error base class.
 
 Error ``code`` values are the closed ``ErrorCode`` literal defined in
 ``quant_core.contracts.errors`` (generated from ``proto/errors.json``).
 Both languages import the same generated enum so codes cannot drift.
+
+Subclasses for specific layers (cache, IO, workflow) live with their owning
+module — e.g. :mod:`quant_cache.errors`.
 """
 
 from __future__ import annotations

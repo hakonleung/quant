@@ -18,7 +18,13 @@ dev = [
     "pytest>=8.3",
     "pytest-cov>=6.0",
     "hypothesis>=6.122",
+    # Pull workspace member into the root env so `uv run` from root has
+    # quant_core / quant_cache available without `--all-packages`.
+    "quant-py",
 ]
+
+[tool.uv.sources]
+quant-py = { workspace = true }
 
 # ---- ruff ----
 [tool.ruff]
@@ -69,6 +75,10 @@ max-complexity = 10
 [tool.ruff.lint.per-file-ignores]
 "**/tests/**" = ["ANN", "S101", "PLR2004"]
 "**/conftest.py" = ["ANN"]
+# Cache exception class names mirror the doc-specified hierarchy
+# (cache-abstraction.md §7: CacheKeyNotFound / CacheCorrupted / ...).
+# We accept the "no Error suffix" naming there for readability.
+"**/quant_cache/errors.py" = ["N818"]
 # Codegen is a CLI build tool; stdout/stderr is its primary interface, not "business log".
 "proto/codegen/**" = ["T201"]
 
@@ -105,10 +115,20 @@ exclude = ["generated/", "data/", ".venv/"]
 module = ["tests.*"]
 disallow_any_explicit = false
 
+# pyarrow ships partial / incomplete stubs; relax `disallow_any_unimported`
+# only for the modules that intentionally use pa.Table in their signatures.
+[[tool.mypy.overrides]]
+module = ["quant_core.ports.cache", "quant_cache.*"]
+disallow_any_unimported = false
+
 # ---- pytest ----
 [tool.pytest.ini_options]
 minversion = "8.3"
 testpaths = ["services/py/tests"]
+# Make the repo root importable so tests can `from proto.codegen import ...`.
+# `services/py` is added so `from tests._util.clock import FrozenClock` works
+# without the package needing to be on the wheel install path.
+pythonpath = [".", "services/py"]
 markers = [
     "unit: fast pure tests (default in CI)",
     "integration: cross-module tests with real adapters on tmp paths",
@@ -134,4 +154,6 @@ exclude_lines = [
     "raise NotImplementedError",
     "if TYPE_CHECKING:",
     "@(abc\\.)?abstractmethod",
+    # Protocol / abstract method bodies are `...` placeholders — never executed.
+    "^\\s*\\.\\.\\.\\s*$",
 ]
