@@ -115,6 +115,10 @@ exclude = ["generated/", "data/", ".venv/"]
 module = ["tests.*"]
 disallow_any_explicit = false
 disallow_untyped_calls = false
+# pyarrow stubs miss most of `pyarrow.flight` / `pyarrow.compute` exports;
+# tests touch these directly, but the runtime symbols exist.
+disable_error_code = ["attr-defined", "name-defined"]
+disallow_any_unimported = false
 
 # pyarrow ships partial / incomplete stubs (no `pyarrow.compute.Expression`,
 # untyped `pq.read_table` / `pq.write_table`, missing `pc.equal` / `pc.is_in`
@@ -122,10 +126,11 @@ disallow_untyped_calls = false
 # upstream stubs improve. Scope is kept narrow to the cache adapter modules
 # that actually consume pyarrow at the type level.
 [[tool.mypy.overrides]]
-module = ["quant_core.ports.cache", "quant_cache.*"]
+module = ["quant_core.ports.cache", "quant_cache.*", "quant_rpc.*"]
 disallow_any_unimported = false
 disallow_untyped_calls = false
 disallow_any_explicit = false
+disallow_subclassing_any = false
 disable_error_code = ["attr-defined", "name-defined"]
 
 # ---- pytest ----
@@ -151,6 +156,9 @@ filterwarnings = ["error"]
 branch = true
 source = ["services/py"]
 omit = ["**/tests/**", "**/generated/**", "**/__main__.py"]
+# The Flight server runs in a daemon thread under tests; without thread
+# concurrency tracking, coverage.py would miss every line executed there.
+concurrency = ["thread"]
 
 [tool.coverage.report]
 fail_under = 90
