@@ -79,6 +79,9 @@ max-complexity = 10
 # (cache-abstraction.md §7: CacheKeyNotFound / CacheCorrupted / ...).
 # We accept the "no Error suffix" naming there for readability.
 "**/quant_cache/errors.py" = ["N818"]
+# `SourceChainExhausted` follows the doc-specified naming
+# (data-sources.md §3) — we accept the no-Error suffix here too.
+"**/quant_core/services/source_chain.py" = ["N818"]
 # Codegen is a CLI build tool; stdout/stderr is its primary interface, not "business log".
 "proto/codegen/**" = ["T201"]
 # Test-fixture entrypoint — uses `print` for the READY handshake the
