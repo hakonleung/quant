@@ -3,19 +3,12 @@ import { StockMetaService } from '../../../src/modules/stock-meta/stock-meta.ser
 import type { StockMetaPort } from '../../../src/modules/stock-meta/domain/stock-meta-port.js';
 
 const SAMPLE: StockMetaDto = {
-  code: '600519.SH',
+  code: '600519',
   name: '贵州茅台',
   name_pinyin: 'GZMT',
-  exchange: 'SH',
-  board: 'MAIN',
-  industry_sw_l1: '食品饮料',
-  industry_sw_l2: '白酒',
-  industry_sw_l3: '高端白酒',
+  industries: '食品饮料,白酒',
   list_date: '2001-08-27',
-  delist_date: null,
-  total_share: '1256197800',
-  float_share: '1256197800',
-  status: 'NORMAL',
+  float_pct: '1',
   updated_at: '2026-05-01T00:00:00+00:00',
 };
 
@@ -39,7 +32,7 @@ class FakePort implements StockMetaPort {
     this.traceIds.push(traceId);
     return Promise.resolve(
       Object.values(this.byCode)
-        .filter((m) => m.industry_sw_l2 === swL2)
+        .filter((m) => m.industries.includes(swL2))
         .sort((a, b) => a.code.localeCompare(b.code)),
     );
   }
@@ -55,17 +48,17 @@ describe('StockMetaService', () => {
   let service: StockMetaService;
 
   beforeEach(() => {
-    port = new FakePort({ '600519.SH': SAMPLE });
+    port = new FakePort({ '600519': SAMPLE });
     service = new StockMetaService(port);
   });
 
   it('returns the dto when the code exists', async () => {
-    await expect(service.get('600519.SH', 'tid')).resolves.toEqual(SAMPLE);
+    await expect(service.get('600519', 'tid')).resolves.toEqual(SAMPLE);
     expect(port.traceIds).toEqual(['tid']);
   });
 
   it('throws QuantError(STOCK_NOT_FOUND) when the code is missing', async () => {
-    await expect(service.get('999999.SH', 'tid')).rejects.toMatchObject({
+    await expect(service.get('999999', 'tid')).rejects.toMatchObject({
       code: 'STOCK_NOT_FOUND',
     });
   });
@@ -76,7 +69,7 @@ describe('StockMetaService', () => {
   });
 
   it('forwards a non-empty batch to the port', async () => {
-    await expect(service.getBatch(['600519.SH'], 'tid')).resolves.toEqual([SAMPLE]);
+    await expect(service.getBatch(['600519'], 'tid')).resolves.toEqual([SAMPLE]);
     expect(port.traceIds).toEqual(['tid']);
   });
 
@@ -92,11 +85,11 @@ describe('StockMetaService', () => {
   });
 
   it('listAll forwards trace_id and returns sorted rows', async () => {
-    const second: StockMetaDto = { ...SAMPLE, code: '000858.SZ', exchange: 'SZ' };
-    port = new FakePort({ '600519.SH': SAMPLE, '000858.SZ': second });
+    const second: StockMetaDto = { ...SAMPLE, code: '000858' };
+    port = new FakePort({ '600519': SAMPLE, '000858': second });
     service = new StockMetaService(port);
     const all = await service.listAll('tid');
-    expect(all.map((m) => m.code)).toEqual(['000858.SZ', '600519.SH']);
+    expect(all.map((m) => m.code)).toEqual(['000858', '600519']);
     expect(port.traceIds).toEqual(['tid']);
   });
 });

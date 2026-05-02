@@ -38,35 +38,21 @@ def _seed() -> tuple[StockMeta, ...]:
     updated = datetime(2026, 5, 1, 0, 0, 0, tzinfo=UTC)
     return (
         StockMeta(
-            code="600519.SH",
-            name="贵州茅台",  # 贵州茅台
+            code="600519",
+            name="贵州茅台",
             name_pinyin="GZMT",
-            exchange="SH",
-            board="MAIN",
-            industry_sw_l1="食品饮料",  # 食品饮料
-            industry_sw_l2="白酒",  # 白酒
-            industry_sw_l3="高端白酒",
+            industries="食品饮料,白酒",
             list_date=date(2001, 8, 27),
-            delist_date=None,
-            total_share=Decimal("1256197800"),
-            float_share=Decimal("1256197800"),
-            status="NORMAL",
+            float_pct=Decimal(1),
             updated_at=updated,
         ),
         StockMeta(
-            code="000858.SZ",
-            name="五粮液",  # 五粮液
+            code="000858",
+            name="五粮液",
             name_pinyin="WLY",
-            exchange="SZ",
-            board="MAIN",
-            industry_sw_l1="食品饮料",
-            industry_sw_l2="白酒",
-            industry_sw_l3="高端白酒",
+            industries="食品饮料,白酒",
             list_date=date(1998, 4, 27),
-            delist_date=None,
-            total_share=Decimal("3881608700"),
-            float_share=Decimal("3881608700"),
-            status="NORMAL",
+            float_pct=Decimal(1),
             updated_at=updated,
         ),
     )
@@ -93,7 +79,7 @@ class _InMemoryRepo:
 
     def list_by_industry(self, sw_l2: str) -> list[StockMeta]:
         return sorted(
-            (m for m in self._by_code.values() if m.industry_sw_l2 == sw_l2),
+            (m for m in self._by_code.values() if sw_l2 in m.industries),
             key=lambda m: m.code,
         )
 

@@ -1,26 +1,31 @@
 """AKShare-backed :class:`StockMetaSource`.
 
-Fallback source per ``modules/01-stock-meta.md §3``. Like the Tushare
-adapter, ``akshare`` is imported lazily so this file is harmless to
-import even on machines without the SDK.
+**Default primary** stock-meta source (priority=1) — no token required.
 
-AKShare's `stock_info_a_code_name()` returns a DataFrame with two
-columns (``code``, ``name``); board / industry / share counts are
-filled from sibling endpoints in a future enrichment pass. For the
-current sync the partial record is intentional — it is enough to seed
-the universe and let the next full sync (with Tushare back online)
-overwrite with richer data.
+Two upstream endpoints are used together:
+
+* ``ak.stock_info_a_code_name()`` — bulk listing of every A-share code +
+  name. Fast (~5500 rows in ~10s); the only call ``fetch_all()`` makes.
+  Industry / share counts are not exposed by this endpoint.
+* ``ak.stock_individual_basic_info_xq(symbol)`` — per-code "company
+  basic info" snapshot from xueqiu, including ``affiliate_industry``,
+  ``listed_date``, and the company-name fields. Slow (one HTTP RTT per
+  code), so it powers ``fetch_one()`` for enrichment but is **not**
+  invoked from ``fetch_all()``. The sync workflow calls ``fetch_one()``
+  on demand (e.g. in an ``--enrich`` pass) for the codes that need it.
 """
 
 from __future__ import annotations
 
 from datetime import UTC, date, datetime
 from decimal import Decimal
-from typing import TYPE_CHECKING, Final, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Final, Literal, Protocol, runtime_checkable
+from zoneinfo import ZoneInfo
 
-from quant_core.domain.types.stock import Board, Exchange, StockMeta, StockStatus
+from quant_core.domain.types.stock import StockMeta
 from quant_core.errors import QuantError
 
+from quant_io.pinyin import name_to_pinyin_initials
 from quant_io.sources._common import (
     health_ok,
     health_unavailable,
@@ -34,8 +39,16 @@ if TYPE_CHECKING:
 
 
 _NAME: Final[str] = "akshare"
-_DEFAULT_PRIORITY: Final[int] = 2
-# Stand-in list_date for partial records; sync will overwrite later.
+# A-share trading days are in Beijing time; XQ encodes ``listed_date``
+# as the epoch-ms of midnight Beijing time, so decoding via UTC would
+# slip the date by one for many listings.
+_BEIJING_TZ: Final[ZoneInfo] = ZoneInfo("Asia/Shanghai")
+# Sole source for now (Tushare adapter was removed). Kept configurable
+# so future sources can slot in front or behind without touching this
+# file.
+_DEFAULT_PRIORITY: Final[int] = 1
+# Stand-in list_date for partial records (fetch_all only); fetch_one
+# overlays the real listed_date when XQ is reachable.
 _PARTIAL_LIST_DATE: Final[date] = date(1990, 1, 1)
 
 
@@ -43,17 +56,20 @@ _PARTIAL_LIST_DATE: Final[date] = date(1990, 1, 1)
 class _AkshareGateway(Protocol):
     """Duck-typed view of the akshare module.
 
-    The real ``akshare.stock_info_a_code_name()`` returns a ``pandas.DataFrame``
-    whose columns are ``code`` and ``name``. We accept the loose ``object``
-    return type and normalise via :func:`_iter_rows` so tests can pass either
-    a DataFrame or a plain ``list[dict]`` without a pandas dependency.
+    Real `ak.stock_info_a_code_name()` returns a ``pandas.DataFrame``;
+    real `ak.stock_individual_basic_info_xq(symbol=...)` returns a
+    DataFrame with one ``item``/``value`` row per field. Both are
+    normalised to plain mappings via :func:`_iter_rows` so this module
+    has no pandas import in its public surface.
     """
 
     def stock_info_a_code_name(self) -> object: ...
 
+    def stock_individual_basic_info_xq(self, symbol: str) -> object: ...
+
 
 class AKShareStockMetaSource:
-    """Best-effort fallback source for stock metadata."""
+    """Default-primary stock-meta source backed by AKShare."""
 
     __slots__ = ("_gateway", "_priority")
 
@@ -98,15 +114,39 @@ class AKShareStockMetaSource:
             ) from exc
         now = datetime.now(tz=UTC)
         for row in _iter_rows(raw):
-            meta = _row_to_meta(row, now)
+            meta = _basic_row_to_meta(row, now)
             if meta is not None:
                 yield meta
 
     def fetch_one(self, code: str) -> StockMeta | None:
-        for item in self.fetch_all():
-            if item.code == code:
-                return item
-        return None
+        gw, reason = self._resolve_gateway()
+        if gw is None:
+            raise QuantError(
+                "SOURCE_UNAVAILABLE",
+                f"{_NAME}: {reason or 'unavailable'}",
+                {"source": _NAME},
+            )
+        if not _is_valid_code(code):
+            return None
+        # XQ wants the exchange-prefixed symbol form (e.g. "SH600519"); the
+        # exchange is derived from the code prefix purely as transport
+        # plumbing — the resulting `StockMeta` does not carry it.
+        exchange = _exchange_for_code(code)
+        if exchange is None:
+            return None
+        symbol = f"{exchange}{code}"
+        try:
+            raw = gw.stock_individual_basic_info_xq(symbol=symbol)
+        except Exception as exc:
+            raise QuantError(
+                "SOURCE_UNAVAILABLE",
+                f"{_NAME}: stock_individual_basic_info_xq({symbol}) failed: {exc}",
+                {"source": _NAME, "symbol": symbol, "exc_type": type(exc).__name__},
+            ) from exc
+        fields = _xq_rows_to_fields(_iter_rows(raw))
+        if not fields:
+            return None
+        return _xq_fields_to_meta(code, fields, datetime.now(tz=UTC))
 
     # -- internals ------------------------------------------------------
 
@@ -117,20 +157,20 @@ class AKShareStockMetaSource:
         if ak is None:
             return None, "akshare package not installed"
         if not isinstance(ak, _AkshareGateway):
-            return None, "akshare module missing stock_info_a_code_name"
+            return None, "akshare module missing required endpoints"
         self._gateway = ak
         return ak, None
 
 
-def _iter_rows(raw: object) -> Iterable[Mapping[str, object]]:
-    """Normalise the various row containers a gateway might return.
+# -- helpers ------------------------------------------------------------
 
-    AKShare hands back a ``pandas.DataFrame``; tests pass plain
-    ``list[dict]``. We use ``to_dict("records")`` when available
-    (DataFrames quack that way) and fall back to direct iteration for
-    list-of-dict gateways. We **never** import pandas — keeping the
-    adapter free of pandas types in its public surface keeps the type
-    layer thin.
+
+def _iter_rows(raw: object) -> Iterable[Mapping[str, object]]:
+    """Normalise pandas-DataFrame and list-of-dict gateways into a row stream.
+
+    AKShare endpoints hand back ``pandas.DataFrame`` at runtime; tests
+    pass plain ``list[dict]``. Duck-type via ``to_dict("records")``
+    without importing pandas.
     """
     to_dict = getattr(raw, "to_dict", None)
     if callable(to_dict):
@@ -142,70 +182,145 @@ def _iter_rows(raw: object) -> Iterable[Mapping[str, object]]:
     raise TypeError(f"akshare returned unsupported container: {type(raw).__name__}")
 
 
-def _row_to_meta(row: Mapping[str, object], now: datetime) -> StockMeta | None:
-    raw_code = _str(row.get("code"))
+def _basic_row_to_meta(row: Mapping[str, object], now: datetime) -> StockMeta | None:
+    """Map a `stock_info_a_code_name` row into a partial :class:`StockMeta`.
+
+    ``code`` is the bare 6-digit string. We still validate the prefix via
+    :func:`_exchange_for_code` to drop rows that look like A-share codes
+    but aren't (e.g. preference shares, indices). ``industries`` is empty;
+    ``list_date`` is the partial sentinel; share counts are 0. The sync
+    workflow can overlay these with `fetch_one()` when enrichment is
+    desired.
+    """
+    code = _str(row.get("code"))
     name = _str(row.get("name"))
-    if not raw_code or not name:
+    if not code or not name or not _is_valid_code(code):
         return None
-    code = _suffix_exchange(raw_code)
-    if code is None:
+    if _exchange_for_code(code) is None:
         return None
-    board: Board = "MAIN"
-    status: StockStatus = "NORMAL"
     return StockMeta(
         code=code,
         name=name,
-        name_pinyin="",
-        exchange=_exchange_for(code),
-        board=board,
-        industry_sw_l1="",
-        industry_sw_l2="",
-        industry_sw_l3="",
+        name_pinyin=name_to_pinyin_initials(name),
+        industries="",
         list_date=_PARTIAL_LIST_DATE,
-        delist_date=None,
-        total_share=Decimal(0),
-        float_share=Decimal(0),
-        status=status,
+        # Bulk endpoint does not expose share-count breakdown; assume the
+        # full equity is tradable until enrichment refines it.
+        float_pct=Decimal(1),
         updated_at=now,
     )
+
+
+def _xq_rows_to_fields(rows: Iterable[Mapping[str, object]]) -> dict[str, object]:
+    """Pivot the XQ ``[{item, value}, ...]`` shape into a single dict."""
+    out: dict[str, object] = {}
+    for row in rows:
+        key = row.get("item")
+        if isinstance(key, str):
+            out[key] = row.get("value")
+    return out
+
+
+def _xq_fields_to_meta(code: str, fields: Mapping[str, object], now: datetime) -> StockMeta | None:
+    """Build a :class:`StockMeta` from the XQ field dict."""
+    name = _str(fields.get("org_short_name_cn")) or _str(fields.get("org_name_cn"))
+    if not name:
+        return None
+    industry_name = _xq_industry_name(fields.get("affiliate_industry"))
+    list_date = _epoch_ms_to_date(fields.get("listed_date")) or _PARTIAL_LIST_DATE
+    return StockMeta(
+        code=code,
+        name=name,
+        name_pinyin=name_to_pinyin_initials(name),
+        industries=industry_name,
+        list_date=list_date,
+        # XQ does not expose a separate restricted-share count; the
+        # ``actual_issue_vol`` it reports is the IPO float, not a current
+        # ratio. Default to 1 (fully tradable) and let a future
+        # share-structure enricher refine it.
+        float_pct=Decimal(1),
+        updated_at=now,
+    )
+
+
+def _xq_industry_name(value: object) -> str:
+    """Pull the industry display name out of XQ's ``affiliate_industry`` cell.
+
+    Real shape: ``{'ind_code': 'BK0088', 'ind_name': '白酒'}``. AKShare
+    sometimes hands the whole dict as a value; sometimes (when no
+    industry is recorded) it's ``None`` or ``"nan"``.
+    """
+    if isinstance(value, dict):
+        name = value.get("ind_name")
+        return _str(name)
+    return ""
+
+
+def _is_valid_code(code: str) -> bool:
+    """Bare 6-digit A-share code (no exchange suffix)."""
+    return code.isdigit() and len(code) == 6
+
+
+_ExchangePrefix = Literal["SH", "SZ", "BJ"]
+
+
+def _exchange_for_code(code: str) -> _ExchangePrefix | None:
+    """Internal helper — derive the XQ symbol prefix from a bare code.
+
+    Used **only** for two purposes inside this adapter:
+
+    - Validating that a bare 6-digit string is a real A-share code
+      (returns ``None`` for codes that don't fit a known prefix range,
+      e.g. preference shares, indices).
+    - Building the XQ symbol form ``{prefix}{code}`` (e.g. ``"SH600519"``)
+      that ``ak.stock_individual_basic_info_xq`` requires as input.
+
+    The exchange is **not** persisted on :class:`StockMeta`. Downstream
+    consumers that need it can re-derive it from the code prefix.
+
+    Prefix → exchange map (current as of 2026):
+
+    - SH main board: ``60``
+    - SH STAR (科创板): ``688``, ``689``
+    - SH B-share: ``900``
+    - SZ main: ``000``, ``001``, ``002``, ``003``
+    - SZ ChiNext (创业板): ``300``, ``301``
+    - BJ (北交所): ``43``, ``83``, ``87``, ``88``, ``920`` (added 2024)
+    """
+    if not _is_valid_code(code):
+        return None
+    if code.startswith("920"):
+        return "BJ"
+    if code.startswith(("60", "68", "900")):
+        return "SH"
+    if code.startswith(("00", "30", "20")):
+        return "SZ"
+    if code.startswith(("4", "8")):
+        return "BJ"
+    return None
 
 
 def _str(value: object) -> str:
     if value is None:
         return ""
-    return str(value).strip()
+    s = str(value).strip()
+    # akshare/pandas serialise NaN cells as the literal string "nan"
+    return "" if s.lower() == "nan" else s
 
 
-def _suffix_exchange(code: str) -> str | None:
-    """AKShare returns bare 6-digit codes; tag with exchange suffix.
-
-    Prefix → exchange map (current as of 2026):
-
-    - SH main board: ``60`` (incl. ``600``/``601``/``603``/``605``)
-    - SH STAR (科创板): ``688``, ``689``
-    - SZ main: ``000``, ``001``, ``002``, ``003``
-    - SZ ChiNext (创业板): ``300``, ``301``
-    - BJ (北交所): ``43``, ``83``, ``87``, ``88``, ``920`` — note that
-      ``920`` was added in 2024 and is what trips the naive "9 → SH" rule.
-    - SH B-share: ``900`` (rare; we still tag as SH)
-    """
-    if not code.isdigit() or len(code) != 6:
+def _epoch_ms_to_date(value: object) -> date | None:
+    """XQ encodes timestamps as epoch-ms ints; tolerate floats and strings."""
+    if value is None:
         return None
-    if code.startswith("920"):
-        return f"{code}.BJ"
-    if code.startswith(("60", "68", "900")):
-        return f"{code}.SH"
-    if code.startswith(("00", "30", "20")):
-        return f"{code}.SZ"
-    if code.startswith(("4", "8")):
-        return f"{code}.BJ"
-    return None
-
-
-def _exchange_for(code: str) -> Exchange:
-    suffix = code.split(".")[1] if "." in code else "SH"
-    if suffix == "SH":
-        return "SH"
-    if suffix == "SZ":
-        return "SZ"
-    return "BJ"
+    if not isinstance(value, (int, float, str)):
+        return None
+    try:
+        ms = int(float(value))
+    except (TypeError, ValueError):
+        return None
+    if ms <= 0:
+        return None
+    try:
+        return datetime.fromtimestamp(ms / 1000.0, tz=_BEIJING_TZ).date()
+    except (OverflowError, ValueError, OSError):
+        return None

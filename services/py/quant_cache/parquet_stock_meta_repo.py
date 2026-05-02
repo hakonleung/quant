@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from quant_core.domain.types.query import Eq, QuerySpec
+from quant_core.domain.types.query import Like, QuerySpec
 
 from quant_cache.parquet_record_repo import ParquetRecordRepo
 from quant_cache.stock_meta_schema import (
@@ -59,8 +59,12 @@ class ParquetStockMetaRepo:
         return out
 
     def list_by_industry(self, sw_l2: str) -> list[StockMeta]:
+        # `industries` is a comma-joined list ("食品饮料,白酒"); a substring
+        # match is the closest equivalent to the old `industry_sw_l2 = ?`.
+        # Industry names from real sources are Chinese — no `%` / `_`
+        # wildcards to escape — so we forward the value verbatim.
         spec = QuerySpec(
-            where=Eq("industry_sw_l2", sw_l2),
+            where=Like("industries", f"%{sw_l2}%"),
             order_by=(("code", "asc"),),
         )
         return list(self._repo.query(spec))

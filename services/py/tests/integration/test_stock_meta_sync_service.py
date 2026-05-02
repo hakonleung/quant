@@ -106,14 +106,14 @@ class TestFullSyncReport:
         first = FakeStockMetaSource(items=SEED)
         _make_service([first], repo, kv, clock).run_full_sync()
         # New version of one stock with a different name → changed
-        modified = make_meta("600519.SH", name="MOUTAI v2", industry_sw_l2="白酒")
-        rest = tuple(m for m in SEED if m.code != "600519.SH")
+        modified = make_meta("600519", name="MOUTAI v2", industries="白酒")
+        rest = tuple(m for m in SEED if m.code != "600519")
         second = FakeStockMetaSource(items=(*rest, modified))
         report = _make_service([second], repo, kv, clock).run_full_sync()
         assert report.changed == 1
         assert report.added == 0
         assert report.unchanged == len(SEED) - 1
-        assert repo.get("600519.SH") == modified
+        assert repo.get("600519") == modified
 
 
 @pytest.mark.integration

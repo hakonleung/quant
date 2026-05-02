@@ -36,7 +36,7 @@ class _FakeRepo:
 
     def list_by_industry(self, sw_l2: str) -> list[StockMeta]:
         return sorted(
-            (m for m in self._by_code.values() if m.industry_sw_l2 == sw_l2),
+            (m for m in self._by_code.values() if sw_l2 in m.industries),
             key=lambda m: m.code,
         )
 
@@ -56,7 +56,7 @@ def service() -> StockMetaService:
 @pytest.mark.unit
 class TestStockMetaServiceGet:
     def test_get_known_code(self, service: StockMetaService) -> None:
-        assert service.get("600519.SH") == SEED[0]
+        assert service.get("600519") == SEED[0]
 
     def test_get_unknown_code_raises_typed_error(self, service: StockMetaService) -> None:
         with pytest.raises(QuantError) as excinfo:
@@ -68,16 +68,16 @@ class TestStockMetaServiceGet:
 @pytest.mark.unit
 class TestStockMetaServiceGetBatch:
     def test_preserves_input_order(self, service: StockMetaService) -> None:
-        got = service.get_batch(["000858.SZ", "600519.SH"])
-        assert [m.code for m in got] == ["000858.SZ", "600519.SH"]
+        got = service.get_batch(["000858", "600519"])
+        assert [m.code for m in got] == ["000858", "600519"]
 
     def test_skips_missing_codes(self, service: StockMetaService) -> None:
-        got = service.get_batch(["600519.SH", "missing", "000858.SZ"])
-        assert [m.code for m in got] == ["600519.SH", "000858.SZ"]
+        got = service.get_batch(["600519", "missing", "000858"])
+        assert [m.code for m in got] == ["600519", "000858"]
 
     def test_deduplicates_codes_first_occurrence_wins(self, service: StockMetaService) -> None:
-        got = service.get_batch(["600519.SH", "000858.SZ", "600519.SH"])
-        assert [m.code for m in got] == ["600519.SH", "000858.SZ"]
+        got = service.get_batch(["600519", "000858", "600519"])
+        assert [m.code for m in got] == ["600519", "000858"]
 
     def test_empty_input_returns_empty(self, service: StockMetaService) -> None:
         assert service.get_batch([]) == []
@@ -87,7 +87,7 @@ class TestStockMetaServiceGetBatch:
 class TestStockMetaServiceListByIndustry:
     def test_returns_sorted_by_code(self, service: StockMetaService) -> None:
         got = service.list_by_industry("白酒")
-        assert [m.code for m in got] == ["000858.SZ", "600519.SH"]
+        assert [m.code for m in got] == ["000858", "600519"]
 
     def test_unknown_industry_returns_empty(self, service: StockMetaService) -> None:
         assert service.list_by_industry("not-an-industry") == []
@@ -98,10 +98,10 @@ class TestStockMetaServiceListByIndustry:
         assert excinfo.value.code == "INVALID_ARGUMENT"
 
     def test_added_stock_visible_in_listing(self, service: StockMetaService) -> None:
-        new = make_meta("600809.SH", name="山西汾酒", industry_sw_l2="白酒")
+        new = make_meta("600809", name="山西汾酒", industries="白酒")
         service._repo.upsert_many([new])
         got = service.list_by_industry("白酒")
-        assert "600809.SH" in {m.code for m in got}
+        assert "600809" in {m.code for m in got}
 
 
 @pytest.mark.unit

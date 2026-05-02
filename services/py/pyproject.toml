@@ -10,6 +10,9 @@ dependencies = [
     # at this milestone; filelock guards per-key concurrent writes for FileKeyValueStore.
     "pyarrow>=18.0",
     "filelock>=3.16",
+    # Used by IO source adapters to derive `name_pinyin` from a Chinese
+    # company name. Pure-Python, no native deps.
+    "pypinyin>=0.55",
 ]
 
 [build-system]

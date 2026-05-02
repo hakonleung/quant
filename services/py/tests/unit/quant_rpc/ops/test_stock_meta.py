@@ -43,7 +43,7 @@ class _FakeRepo:
 
     def list_by_industry(self, sw_l2: str) -> list[StockMeta]:
         return sorted(
-            (m for m in self._by_code.values() if m.industry_sw_l2 == sw_l2),
+            (m for m in self._by_code.values() if sw_l2 in m.industries),
             key=lambda m: m.code,
         )
 
@@ -65,15 +65,15 @@ class TestGetStockMetaBatchHandler:
 
     def test_returns_one_row_per_resolved_code(self, service: StockMetaService) -> None:
         h = GetStockMetaBatchHandler(service)
-        table = h.execute({"codes": ["600519.SH", "000858.SZ"]})
+        table = h.execute({"codes": ["600519", "000858"]})
         assert table.num_rows == 2
-        assert table.column("code").to_pylist() == ["600519.SH", "000858.SZ"]
+        assert table.column("code").to_pylist() == ["600519", "000858"]
         assert table.schema == STOCK_META_SCHEMA
 
     def test_missing_codes_dropped(self, service: StockMetaService) -> None:
         h = GetStockMetaBatchHandler(service)
-        table = h.execute({"codes": ["600519.SH", "missing"]})
-        assert table.column("code").to_pylist() == ["600519.SH"]
+        table = h.execute({"codes": ["600519", "missing"]})
+        assert table.column("code").to_pylist() == ["600519"]
 
     def test_empty_codes_returns_empty_table_with_schema(self, service: StockMetaService) -> None:
         h = GetStockMetaBatchHandler(service)
@@ -90,13 +90,13 @@ class TestGetStockMetaBatchHandler:
     def test_codes_not_a_list_raises(self, service: StockMetaService) -> None:
         h = GetStockMetaBatchHandler(service)
         with pytest.raises(QuantError) as excinfo:
-            h.execute({"codes": "600519.SH"})
+            h.execute({"codes": "600519"})
         assert excinfo.value.code == "INVALID_ARGUMENT"
 
     def test_codes_contains_non_string_raises(self, service: StockMetaService) -> None:
         h = GetStockMetaBatchHandler(service)
         with pytest.raises(QuantError) as excinfo:
-            h.execute({"codes": ["600519.SH", 42]})
+            h.execute({"codes": ["600519", 42]})
         assert excinfo.value.code == "INVALID_ARGUMENT"
         assert excinfo.value.details["index"] == 1
 
@@ -111,7 +111,7 @@ class TestListByIndustryHandler:
     def test_returns_industry_members_sorted(self, service: StockMetaService) -> None:
         h = ListByIndustryHandler(service)
         table = h.execute({"sw_l2": "白酒"})
-        assert table.column("code").to_pylist() == ["000858.SZ", "600519.SH"]
+        assert table.column("code").to_pylist() == ["000858", "600519"]
 
     def test_unknown_industry_returns_empty(self, service: StockMetaService) -> None:
         h = ListByIndustryHandler(service)

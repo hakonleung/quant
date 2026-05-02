@@ -25,12 +25,13 @@ class TestStockMetaCodec:
             assert again == item
 
     def test_key_of_returns_code(self) -> None:
-        assert stock_meta_key(SEED[0]) == "600519.SH"
+        assert stock_meta_key(SEED[0]) == "600519"
 
-    def test_to_row_emits_decimals_as_strings(self) -> None:
+    def test_to_row_emits_float_pct_as_decimal_string(self) -> None:
         row = stock_meta_to_row(SEED[0])
-        assert isinstance(row["total_share"], str)
-        assert isinstance(row["float_share"], str)
+        assert isinstance(row["float_pct"], str)
+        # Decimal(1) round-trips as "1" (no trailing ".0").
+        assert row["float_pct"] == "1"
 
     def test_schema_key_field_constant_matches_schema(self) -> None:
         assert STOCK_META_KEY_FIELD in STOCK_META_SCHEMA.names
@@ -47,22 +48,16 @@ class TestStockMetaCodec:
         with pytest.raises(ValueError, match="list_date"):
             stock_meta_from_row(row)
 
-    def test_from_row_rejects_non_date_delist_date(self) -> None:
-        row = dict(stock_meta_to_row(SEED[0]))
-        row["delist_date"] = 12345  # neither None nor date
-        with pytest.raises(ValueError, match="delist_date"):
-            stock_meta_from_row(row)
-
     def test_from_row_rejects_non_datetime_updated_at(self) -> None:
         row = dict(stock_meta_to_row(SEED[0]))
         row["updated_at"] = date(2026, 1, 1)  # date, not datetime
         with pytest.raises(ValueError, match="updated_at must be a datetime"):
             stock_meta_from_row(row)
 
-    def test_from_row_accepts_none_delist_date(self) -> None:
-        row = dict(stock_meta_to_row(SEED[0]))
-        row["delist_date"] = None
-        assert stock_meta_from_row(row).delist_date is None
+    def test_industries_round_trips_as_string(self) -> None:
+        row = stock_meta_to_row(SEED[0])
+        assert isinstance(row["industries"], str)
+        assert row["industries"] == "食品饮料,白酒"
 
     def test_round_trip_with_tz_aware_updated_at_in_utc(self) -> None:
         row = dict(stock_meta_to_row(SEED[0]))

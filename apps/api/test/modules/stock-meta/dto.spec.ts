@@ -3,13 +3,13 @@ import { ListByIndustryQuerySchema } from '../../../src/modules/stock-meta/dto/l
 
 describe('GetBatchQuerySchema', () => {
   it('splits a comma-separated string into an array', () => {
-    const r = GetBatchQuerySchema.parse({ codes: '600519.SH,000858.SZ' });
-    expect(r.codes).toEqual(['600519.SH', '000858.SZ']);
+    const r = GetBatchQuerySchema.parse({ codes: '600519,000858' });
+    expect(r.codes).toEqual(['600519', '000858']);
   });
 
   it('trims whitespace and drops empty fragments', () => {
-    const r = GetBatchQuerySchema.parse({ codes: '600519.SH, ,000858.SZ , ' });
-    expect(r.codes).toEqual(['600519.SH', '000858.SZ']);
+    const r = GetBatchQuerySchema.parse({ codes: '600519, ,000858 , ' });
+    expect(r.codes).toEqual(['600519', '000858']);
   });
 
   it('rejects an empty input', () => {
@@ -26,7 +26,7 @@ describe('GetBatchQuerySchema', () => {
   });
 
   it('rejects unknown query keys (strict)', () => {
-    expect(() => GetBatchQuerySchema.parse({ codes: '600519.SH', extra: 1 })).toThrow();
+    expect(() => GetBatchQuerySchema.parse({ codes: '600519', extra: 1 })).toThrow();
   });
 });
 

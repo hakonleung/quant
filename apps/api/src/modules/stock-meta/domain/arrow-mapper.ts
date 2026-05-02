@@ -16,16 +16,9 @@ interface RowAccess {
   readonly code: unknown;
   readonly name: unknown;
   readonly name_pinyin: unknown;
-  readonly exchange: unknown;
-  readonly board: unknown;
-  readonly industry_sw_l1: unknown;
-  readonly industry_sw_l2: unknown;
-  readonly industry_sw_l3: unknown;
+  readonly industries: unknown;
   readonly list_date: unknown;
-  readonly delist_date: unknown;
-  readonly total_share: unknown;
-  readonly float_share: unknown;
-  readonly status: unknown;
+  readonly float_pct: unknown;
   readonly updated_at: unknown;
 }
 
@@ -39,16 +32,9 @@ export function arrowTableToStockMetaDtos(table: Table): StockMetaDto[] {
       code: requireString(row.code, 'code'),
       name: requireString(row.name, 'name'),
       name_pinyin: requireString(row.name_pinyin, 'name_pinyin'),
-      exchange: requireString(row.exchange, 'exchange'),
-      board: requireString(row.board, 'board'),
-      industry_sw_l1: requireString(row.industry_sw_l1, 'industry_sw_l1'),
-      industry_sw_l2: requireString(row.industry_sw_l2, 'industry_sw_l2'),
-      industry_sw_l3: requireString(row.industry_sw_l3, 'industry_sw_l3'),
+      industries: requireString(row.industries, 'industries'),
       list_date: dateToIsoDate(row.list_date, 'list_date'),
-      delist_date: row.delist_date === null ? null : dateToIsoDate(row.delist_date, 'delist_date'),
-      total_share: requireString(row.total_share, 'total_share'),
-      float_share: requireString(row.float_share, 'float_share'),
-      status: requireString(row.status, 'status'),
+      float_pct: requireString(row.float_pct, 'float_pct'),
       updated_at: dateToIsoUtc(row.updated_at, 'updated_at'),
     };
     out.push(StockMetaDtoSchema.parse(candidate));

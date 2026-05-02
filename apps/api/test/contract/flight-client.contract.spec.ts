@@ -31,13 +31,13 @@ describe('FlightClient ↔ Python QuantFlightServer (contract)', () => {
   it('round-trips get_stock_meta_batch into an Arrow Table', async () => {
     const result = await client.doGet(
       'get_stock_meta_batch',
-      { codes: ['600519.SH', '000858.SZ'] },
+      { codes: ['600519', '000858'] },
       { traceId: 'contract-batch-1' },
     );
     const table = result.value;
     expect(table.numRows).toBe(2);
     const codes = table.getChild('code')!.toArray() as unknown as readonly string[];
-    expect(Array.from(codes)).toEqual(['600519.SH', '000858.SZ']);
+    expect(Array.from(codes)).toEqual(['600519', '000858']);
     const names = table.getChild('name')!.toArray() as unknown as readonly string[];
     expect(names[0]).toContain('茅台');
   });
@@ -51,7 +51,7 @@ describe('FlightClient ↔ Python QuantFlightServer (contract)', () => {
   it('list_stock_meta_by_industry returns sorted rows', async () => {
     const result = await client.doGet('list_stock_meta_by_industry', { sw_l2: '白酒' });
     const codes = result.value.getChild('code')!.toArray() as unknown as readonly string[];
-    expect(Array.from(codes)).toEqual(['000858.SZ', '600519.SH']);
+    expect(Array.from(codes)).toEqual(['000858', '600519']);
   });
 
   it('translates a server-side STOCK_NOT_FOUND-style failure to QuantError', async () => {

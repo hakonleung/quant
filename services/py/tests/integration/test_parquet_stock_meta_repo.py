@@ -28,7 +28,7 @@ def repo(tmp_path: Path) -> ParquetStockMetaRepo:
 @pytest.mark.integration
 class TestParquetStockMetaRepo:
     def test_get_round_trip(self, repo: ParquetStockMetaRepo) -> None:
-        got = repo.get("600519.SH")
+        got = repo.get("600519")
         assert got is not None
         assert got == SEED[0]
 
@@ -36,19 +36,19 @@ class TestParquetStockMetaRepo:
         assert repo.get("999999.SH") is None
 
     def test_get_many_preserves_input_order(self, repo: ParquetStockMetaRepo) -> None:
-        got = repo.get_many(["000858.SZ", "600519.SH"])
-        assert [m.code for m in got] == ["000858.SZ", "600519.SH"]
+        got = repo.get_many(["000858", "600519"])
+        assert [m.code for m in got] == ["000858", "600519"]
 
     def test_get_many_skips_missing_codes(self, repo: ParquetStockMetaRepo) -> None:
-        got = repo.get_many(["600519.SH", "missing", "000858.SZ"])
-        assert [m.code for m in got] == ["600519.SH", "000858.SZ"]
+        got = repo.get_many(["600519", "missing", "000858"])
+        assert [m.code for m in got] == ["600519", "000858"]
 
     def test_get_many_empty_input_returns_empty(self, repo: ParquetStockMetaRepo) -> None:
         assert repo.get_many([]) == []
 
     def test_list_by_industry_filters_and_sorts(self, repo: ParquetStockMetaRepo) -> None:
         got = repo.list_by_industry("白酒")
-        assert [m.code for m in got] == ["000858.SZ", "600519.SH"]
+        assert [m.code for m in got] == ["000858", "600519"]
 
     def test_list_by_industry_unknown_returns_empty(self, repo: ParquetStockMetaRepo) -> None:
         assert repo.list_by_industry("not-an-industry") == []
@@ -63,12 +63,12 @@ class TestParquetStockMetaRepo:
         assert empty.list_all() == []
 
     def test_upsert_overwrites_by_code(self, repo: ParquetStockMetaRepo) -> None:
-        updated = make_meta("600519.SH", name="MOUTAI v2", industry_sw_l2="白酒")
+        updated = make_meta("600519", name="MOUTAI v2", industries="白酒")
         repo.upsert_many([updated])
-        assert repo.get("600519.SH") == updated
+        assert repo.get("600519") == updated
 
     def test_persists_across_repo_instances(self, tmp_path: Path) -> None:
         path = tmp_path / "stocks.parquet"
         ParquetStockMetaRepo(path).upsert_many(SEED)
         again = ParquetStockMetaRepo(path)
-        assert again.get("600519.SH") == SEED[0]
+        assert again.get("600519") == SEED[0]

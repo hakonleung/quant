@@ -3,6 +3,7 @@ name = "quant"
 version = "0.0.0"
 requires-python = ">=3.11"
 description = "Quant stock-screening project (Python services workspace)"
+dependencies = []
 
 # uv workspace root: each service/* package becomes a workspace member.
 [tool.uv.workspace]

@@ -2,19 +2,12 @@ import { describe, expect, it } from 'vitest';
 import { StockMetaDtoSchema } from './stock-meta.js';
 
 const SAMPLE = {
-  code: '600519.SH',
+  code: '600519',
   name: '贵州茅台',
   name_pinyin: 'GZMT',
-  exchange: 'SH',
-  board: 'MAIN',
-  industry_sw_l1: '食品饮料',
-  industry_sw_l2: '白酒',
-  industry_sw_l3: '高端白酒',
+  industries: '食品饮料,白酒',
   list_date: '2001-08-27',
-  delist_date: null,
-  total_share: '1256197800',
-  float_share: '1256197800',
-  status: 'NORMAL',
+  float_pct: '1',
   updated_at: '2026-05-01T00:00:00+00:00',
 };
 
@@ -27,21 +20,30 @@ describe('StockMetaDtoSchema', () => {
     expect(() => StockMetaDtoSchema.parse({ ...SAMPLE, surprise: true })).toThrow();
   });
 
-  it('rejects an enum value outside the closed set', () => {
-    expect(() => StockMetaDtoSchema.parse({ ...SAMPLE, exchange: 'NYSE' })).toThrow();
+  it('rejects a code with an exchange suffix', () => {
+    expect(() => StockMetaDtoSchema.parse({ ...SAMPLE, code: '600519.SH' })).toThrow();
+  });
+
+  it('rejects a code that is not 6 digits', () => {
+    expect(() => StockMetaDtoSchema.parse({ ...SAMPLE, code: '12345' })).toThrow();
   });
 
   it('rejects a malformed list_date', () => {
     expect(() => StockMetaDtoSchema.parse({ ...SAMPLE, list_date: '2001/08/27' })).toThrow();
   });
 
-  it('accepts null delist_date', () => {
-    const parsed = StockMetaDtoSchema.parse(SAMPLE);
-    expect(parsed.delist_date).toBeNull();
+  it('accepts an empty industries string', () => {
+    const parsed = StockMetaDtoSchema.parse({ ...SAMPLE, industries: '' });
+    expect(parsed.industries).toBe('');
   });
 
-  it('rejects floats in share counts', () => {
-    expect(() => StockMetaDtoSchema.parse({ ...SAMPLE, total_share: 1256197800 })).toThrow();
+  it('accepts a fractional float_pct as a decimal string', () => {
+    const parsed = StockMetaDtoSchema.parse({ ...SAMPLE, float_pct: '0.85' });
+    expect(parsed.float_pct).toBe('0.85');
+  });
+
+  it('rejects float_pct as a JS number', () => {
+    expect(() => StockMetaDtoSchema.parse({ ...SAMPLE, float_pct: 1 })).toThrow();
   });
 
   it('rejects updated_at without a timezone offset', () => {

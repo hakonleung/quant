@@ -8,19 +8,12 @@ import {
 } from './stock-meta.js';
 
 const SAMPLE = {
-  code: '600519.SH',
+  code: '600519',
   name: '贵州茅台',
   name_pinyin: 'GZMT',
-  exchange: 'SH',
-  board: 'MAIN',
-  industry_sw_l1: '食品饮料',
-  industry_sw_l2: '白酒',
-  industry_sw_l3: '高端白酒',
+  industries: '食品饮料,白酒',
   list_date: '2001-08-27',
-  delist_date: null,
-  total_share: '1256197800',
-  float_share: '1256197800',
-  status: 'NORMAL',
+  float_pct: '1',
   updated_at: '2026-05-01T00:00:00+00:00',
 };
 
@@ -46,10 +39,10 @@ describe('fetchStockMeta helpers', () => {
 
   it('GETs /api/stocks/:code with the trace_id header and parses the body', async () => {
     fetchMock.mockResolvedValueOnce(jsonResponse(SAMPLE));
-    const dto = await fetchStockMeta('600519.SH', opts);
-    expect(dto.code).toBe('600519.SH');
+    const dto = await fetchStockMeta('600519', opts);
+    expect(dto.code).toBe('600519');
     const [url, init] = fetchMock.mock.calls[0]!;
-    expect(url).toBe('http://api/api/stocks/600519.SH');
+    expect(url).toBe('http://api/api/stocks/600519');
     expect((init?.headers as Record<string, string>)[TRACE_HEADER]).toBe('tid');
   });
 
@@ -122,10 +115,8 @@ describe('fetchStockMeta helpers', () => {
 
   it('fetchStockMetaBatch issues GET /api/stocks/batch with comma-joined codes', async () => {
     fetchMock.mockResolvedValueOnce(jsonResponse([SAMPLE]));
-    await fetchStockMetaBatch(['600519.SH', '000858.SZ'], opts);
-    expect(fetchMock.mock.calls[0]![0]).toBe(
-      'http://api/api/stocks/batch?codes=600519.SH,000858.SZ',
-    );
+    await fetchStockMetaBatch(['600519', '000858'], opts);
+    expect(fetchMock.mock.calls[0]![0]).toBe('http://api/api/stocks/batch?codes=600519,000858');
   });
 
   it('fetchStockMetaByIndustry issues GET /api/stocks/by-industry?sw_l2=...', async () => {
@@ -145,7 +136,7 @@ describe('fetchStockMeta helpers', () => {
 
   it('forwards revalidateSeconds as Next.js fetch hint', async () => {
     fetchMock.mockResolvedValueOnce(jsonResponse(SAMPLE));
-    await fetchStockMeta('600519.SH', { ...opts, revalidateSeconds: 60 });
+    await fetchStockMeta('600519', { ...opts, revalidateSeconds: 60 });
     const init = fetchMock.mock.calls[0]![1] as { next?: { revalidate: number } };
     expect(init.next).toEqual({ revalidate: 60 });
   });
