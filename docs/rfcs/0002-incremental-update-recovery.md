@@ -119,15 +119,9 @@ trace_id     STRING
 }
 ```
 
-### 6.2 News（全局，按时间）
+### 6.2 News（已废弃）
 
-```json
-{
-  "news.akshare": { "last_published_at": "2026-05-01T03:00:00Z" }
-}
-```
-
-为什么差异？KLine 按股票切分文件；新闻按月切分，单条新闻无法独立"重跑"，按时间游标更自然。
+v2 改版后项目**不再维护本地新闻 / 研报库**，消息面分析改为 Kimi `$web_search` 实时检索 + 结果缓存（见 `docs/modules/06-sentiment-analysis.md` §5）。本节原描述的 `news.akshare` 水位状态已不存在。
 
 ## 7. 对账（Reconciliation）
 
@@ -193,7 +187,6 @@ data/_audit/discrepancy.jsonl
 | -------------------------------- | ---------------- |
 | 单只股票增量（1 天，2 表）       | < 100ms 含网络   |
 | 全市场 kline 增量（5500 只）     | < 5min（并发 8） |
-| 全市场 news 增量                 | < 60s            |
 | Reconciliation（100 只 × 30 天） | < 3min           |
 
 ## 12. 监控与告警

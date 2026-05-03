@@ -43,6 +43,8 @@ services/py/quant_core/generated/
 # Runtime-only data dirs (audit logs, scratch caches). Underscore-prefixed
 # subdirs of data/ are operator-owned, not source.
 data/_*/
+# Sentiment cache is rebuilt on demand via NewsSentimentService — never source-tracked.
+data/sentiment/
 
 # Test output
 coverage/

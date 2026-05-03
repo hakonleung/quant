@@ -1,15 +1,17 @@
 # 集成 — LangGraph 工作流（workflow-langgraph）
 
+> **状态变更（v2 改版）**：消息面分析模块已经合并并简化为单个 `NewsSentimentService`（见 `docs/modules/06-sentiment-analysis.md`），改用线性 `asyncio.gather` + `LLMChain` 实现，**不再依赖 LangGraph**。本文件保留作为未来多步组合工作流（如"筛选 → 形态 → 分析"，v1.5）的参考；下文 §3~§11 中以 `SentimentState` / 节点 / Checkpointer 为例的内容是预留模板，不对应当前任何已上线模块。
+
 ## 1. 目标
 
-用 LangGraph 编排消息面分析（v1 主用例）和未来其它多步任务（如"筛选 → 形态 → 分析"组合流）。强调：状态可见、节点可重试、进度可流式上报、断点可续跑。
+为未来需要"多步、可持久化进度、断点续跑、节点级重试"的复合工作流（典型场景：跨筛选 + 形态 + 消息面的组合任务）建立统一的 LangGraph 编排约定。
 
 ## 2. 适用场景
 
 | 场景                           | 是否用 LangGraph     |
 | ------------------------------ | -------------------- |
-| 消息面分析（多 LLM + 聚类）    | ✅                   |
 | 复合任务："筛选 → 形态 → 分析" | ✅（v1.5）           |
+| 消息面分析（单股 / 多股）       | ❌ 改为线性服务（见 §0 状态变更） |
 | 单次筛选                       | ❌（直接同步执行）   |
 | 数据增量更新调度               | ❌（用 apscheduler） |
 | 单次形态匹配                   | ❌（直接执行）       |
@@ -107,7 +109,7 @@ class NodeError:
     occurred_at: datetime
 ```
 
-`StyleSignal` 与 `FundamentalThesis` 等顶层结果类型定义在 `06-sentiment-analysis.md` §2，避免重复。
+下文示例中的 `StyleSignal` 等结果类型仅作为模板演示；实际的消息面分析输出契约由 `06-sentiment-analysis.md` §4 定义，不再经过 LangGraph 节点产出。
 
 ## 4. Graph 定义
 
@@ -147,8 +149,9 @@ def build_sentiment_graph(deps: SentimentDeps) -> CompiledGraph:
 ```python
 @dataclass(frozen=True, slots=True)
 class SentimentDeps:
-    news_repo: NewsRepo
-    report_repo: ReportRepo
+    # 占位：依赖按 graph 实际需要注入；下面两行仅为模板示意
+    screen_repo: ScreenCacheRepo
+    sentiment_service: NewsSentimentService
     llm: LLMPort
     embedder: EmbeddingPort
     checkpointer: Checkpointer
@@ -166,7 +169,7 @@ def make_gather_evidence(deps: SentimentDeps) -> Callable[[SentimentState], Sent
     return node
 ```
 
-测试时注入 fake：内存 NewsRepo + 录制 LLM。
+测试时注入 fake：内存 repo + 录制 LLM。
 
 ## 6. Checkpointer（状态持久化）
 

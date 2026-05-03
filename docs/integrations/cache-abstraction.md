@@ -2,7 +2,7 @@
 
 ## 1. 目标
 
-让所有数据消费方（meta、kline、news、reports 等）通过**统一端口**访问本地数据，底层实现可插拔。v1 默认 Parquet 文件 + DuckDB 索引；未来可切换 SQLite / PostgreSQL / Redis / S3。
+让所有数据消费方（meta、kline、消息面分析结果缓存 等）通过**统一端口**访问本地数据，底层实现可插拔。v1 默认 Parquet 文件 + DuckDB 索引；未来可切换 SQLite / PostgreSQL / Redis / S3。
 
 ## 2. 端口设计
 
@@ -105,7 +105,7 @@ data/<group>/_index/duckdb.db             # 跨实体索引（可选，懒构建
   - 单 entity：直接 `pyarrow.parquet.read_table(filters=[...], columns=[...])`
   - 多 entity：用 DuckDB 一次 SQL（自动并发读多个 parquet）
 
-**为什么单实体一文件不分块**：A 股 10 年日线 ~ 2500 行 × 20 列 < 100KB，单文件操作友好；新闻按月分（实体 = 月），见 `05-news-research.md`。
+**为什么单实体一文件不分块**：A 股 10 年日线 ~ 2500 行 × 20 列 < 100KB，单文件操作友好。
 
 ## 5. v1 实现细节：DuckDB 作为索引层
 
@@ -199,7 +199,7 @@ class TestParquet(TimeSeriesStoreContract):
 
 - `StockMetaRepo`（见 `modules/01-stock-meta.md`）
 - `KlineRepo`（见 `modules/02-stock-kline.md`）
-- `NewsRepo` / `ReportRepo`（见 `modules/05-news-research.md`）
+- `SentimentCache`（见 `modules/06-sentiment-analysis.md` §5）
 
 领域 Repo 暴露**业务语义**的方法（`get_range / get_universe_slice / for_stock / ...`），其默认实现委托给本文件的通用端口：
 
@@ -209,13 +209,13 @@ class TestParquet(TimeSeriesStoreContract):
                           ▼ depends on
               ┌───────────────────────────────┐
               │  domain Repo (业务接口)        │
-              │  KlineRepo / NewsRepo / ...   │
+              │  KlineRepo / SentimentCache / ...│
               └───────────────┬───────────────┘
                               │ implemented by
                               ▼
               ┌───────────────────────────────┐
               │  ParquetKlineRepoAdapter      │  ← 这一层做"业务方法 → 通用端口调用"的翻译
-              │  ParquetNewsRepoAdapter       │
+              │  ParquetSentimentCache        │
               └───────────────┬───────────────┘
                               │ uses
                               ▼
@@ -235,8 +235,7 @@ class TestParquet(TimeSeriesStoreContract):
 | ----------------------- | ------------------------------------------ | --------------------------------------------------------- |
 | `StockMetaRepo`         | `ParquetStockMetaRepo`                     | `RecordRepo[StockMeta]` + `KeyValueStore`（state）        |
 | `KlineRepo`             | `ParquetKlineRepo`                         | `TimeSeriesStore`（kline） + `KeyValueStore`（watermark） |
-| `NewsRepo`              | `ParquetNewsRepo`                          | `TimeSeriesStore`（按月分实体） + `KeyValueStore`         |
-| `ReportRepo`            | `ParquetReportRepo` + `FilesystemPdfStore` | `RecordRepo[ResearchReport]` + 文件系统                   |
+| `SentimentCache`        | `ParquetSentimentCache`                    | 直接落 Parquet（每股一文件 / 每 codes_hash 一文件）；`expires_at` 列编码 `asof + 2d` TTL，与 kline 同模式 |
 | `ScreenCacheRepo`       | `KvScreenCacheRepo`                        | `KeyValueStore`                                           |
 | `TaskRepo`（sentiment） | `KvTaskRepo`                               | `KeyValueStore`                                           |
 

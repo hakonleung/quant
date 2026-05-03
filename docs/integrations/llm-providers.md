@@ -58,7 +58,7 @@ Kimi 对 OpenAI 工具调用协议做了扩展，支持 `tools=[{"type": "builti
 
 - `KimiAdapter.chat` 在 `tools` 列表里允许传入这个 builtin function；`LLMChain` 检测到 `tool_calls` 后自动 echo 回模型，直到 `finish_reason="stop"`（与普通 function-call 流程一致）
 - 计费：每次 `$web_search` 触发按 Kimi 价目表计入 `TokenUsage.cost_usd`（adapter 内部读 response 的 `usage.search_count` 字段）
-- 仅 Kimi 提供；DeepSeek 当前没有等价工具 → 调用方必须容忍降级路径（见 `docs/modules/06-sentiment-analysis.md` §4.1.5）
+- 仅 Kimi 提供；DeepSeek 当前没有等价工具。消息面分析模块（`docs/modules/06-sentiment-analysis.md`）将其作为硬依赖，Kimi quota 耗尽时直接抛 `SentimentUnavailable`，不做盲降级
 
 **主路与兜底由 env 配置决定**（见 §10），不在 adapter 中写死。两家供应商上线 PK 一段时间后，根据成本/质量/限流再决定主路；底层抽象保证切换零代码改动。
 

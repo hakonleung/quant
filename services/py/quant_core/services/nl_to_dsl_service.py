@@ -36,6 +36,7 @@ from quant_core.domain.types.screen import (
     RankSpec,
 )
 from quant_core.errors import QuantError
+from quant_core.prompts import build_nl_to_dsl_system_prompt
 
 if TYPE_CHECKING:
     from datetime import date
@@ -92,7 +93,7 @@ class NlToDslService:
                 "empty natural-language query",
                 {"nl_query": nl_query},
             )
-        system = _build_system_prompt(asof)
+        system = build_nl_to_dsl_system_prompt(asof)
         user = f"User query (Chinese):\n{nl_query.strip()}"
         first_error: str | None = None
         last_raw: str | None = None
@@ -211,171 +212,3 @@ def _parse_rank_metric(raw: dict[str, object]) -> Field | Const | Aggregate | Pe
 
     return parse_scalar(raw, "/rank/metric")
 
-
-# -- prompt -------------------------------------------------------------
-
-
-_SCREEN_FIELDS: Final[str] = (
-    "open, high, low, close, open_qfq, high_qfq, low_qfq, close_qfq, "
-    "volume, amount, turnover_rate, ma5, ma10, ma20, ma60, pct_chg_qfq"
-)
-_UNIVERSE_FIELDS: Final[str] = (
-    "code, name, industries, list_date, float_pct, is_st, exchange, listed_days"
-)
-
-
-def _build_system_prompt(asof: date) -> str:
-    return _SYSTEM_PROMPT_TEMPLATE.format(
-        asof=asof.isoformat(),
-        screen_fields=_SCREEN_FIELDS,
-        universe_fields=_UNIVERSE_FIELDS,
-    )
-
-
-# Few-shot examples cover the four canonical cases in modules/03 §3 plus a
-# universe pre-filter (ST + 北交所) and a top-N rank, so the LLM sees one
-# example of every output channel.
-_SYSTEM_PROMPT_TEMPLATE: Final[str] = """\
-You translate Chinese stock-screening queries into a strict JSON DSL.
-
-Always respond with ONE JSON object with these top-level keys:
-
-  - "screen_plan"     (required) — the K-line predicate AST
-  - "universe_plan"   (optional) — pre-filter on stock metadata
-  - "rank"            (optional) — post-processing rank + top-N
-  - "warnings"        (optional) — short Chinese strings explaining ambiguity
-
-Hard rules:
-  1. Use absolute date {asof} for "asof". NEVER write "today" / "今天".
-  2. CRITICAL — every "days" parameter is in **TRADING DAYS** (交易日),
-     never calendar days. A股 has roughly 5 trading days per calendar
-     week, ~20 per calendar month, ~240 per calendar year. When the user
-     mentions a calendar interval ("一年 / 一个月 / 三个月 / N 天 / N 周"),
-     you MUST estimate the trading-day count yourself and emit that
-     integer. Do NOT pass calendar-day counts.
-     Use this conversion table:
-       * 一日 / 1 天      → 1
-       * 一周 / 5 个交易日 → 5
-       * 半个月           → 10
-       * 一个月           → 20
-       * 三个月 / 一季度  → 60
-       * 半年             → 120
-       * 一年 / 近一年    → 240
-       * 两年             → 480
-     If the user gives an explicit "X 个交易日", pass X verbatim.
-  3. Prefer the precomputed `ma5/ma10/ma20/ma60` columns over generic indicators.
-  4. Use `close_qfq` (前复权) by default; only use `close` if the user explicitly says "不复权".
-  5. Conditions about ST / 北交所 / 上市天数 / 行业 belong in `universe_plan`, NOT `screen_plan`.
-  6. Top-N / ranking ("前 N", "排序") goes in `rank`, NOT inside the predicate.
-  7. NEVER invent ops or fields. The schema is closed. Examples of
-     things you must NOT emit: `mul` / `div` / `add` / `sub` (no scalar
-     arithmetic), `between` (use `and(gte, lte)`), `rank` inside expr
-     (use the top-level `rank` slot), `pe`, `market_cap`, `circ_mv`,
-     `listing_age` (use `listed_days`), `last_n` (use a windowed agg).
-  8. Map every condition you CAN to the closed schema, even if the
-     wording is loose. Examples that LOOK unsupported but ARE expressible:
-       * "介于 a 到 b 之间"         → and(gte a, lte b)
-       * "近 N 天内某天 X"           → exists window N predicate X
-       * "连续 N 天 X"               → consecutive min_len=N predicate X
-       * "全部 / 每天 / 都 X"        → for_all window predicate X
-       * "X 高于 Y 的 N%" 当 N=100   → gt(X, Y) (the 100% is the identity)
-       * "突破 N 日新高"             → gt(close_qfq, max-agg over N)
-     Drop a condition ONLY when no valid DSL form exists. Unconditional
-     drops + warnings are required for these specific cases (and only
-     these — anything else, try harder before dropping):
-       * "股价高于 N 月最高价的 K%" with K != 100  — needs scalar multiplication
-       * "流通市值 / 总市值 / 市值"   — no market-cap field
-       * "市盈率 / PE / PB / ROE"     — no fundamental fields
-       * "RSI / MACD / KDJ / BOLL"    — only ma5/ma10/ma20/ma60 exist
-     A correctly-translated condition is always better than dropping it.
-  9. "实际换手率" is the same column as `turnover_rate`; do not invent
-     a separate field for it.
- 9a. Standard A-share term mapping for `universe_plan` (use these exact
-     thresholds unless the user states their own number):
-       * "ST" / "*ST" / "st"       → `is_st = false`
-       * "北交所" / "北交"          → `code` not_starts_with one of "8"/"4"/"920"
-       * "新股" / "次新股"          → `listed_days >= 90`
-       * "上市超过 N 个月"          → `listed_days >= N*30`
-       * "上市超过一年"             → `listed_days >= 365`
- 10. Inclusive range like "介于 a 到 b 之间" → emit `and` of `gte` + `lte`,
-     not a `between` op (which does not exist).
-
-K-line fields (screen_plan): {screen_fields}
-Universe fields (universe_plan): {universe_fields}
-
-K-line ops:
-  Logical: and / or / not
-  Compare: gt / lt / gte / lte / eq / neq
-  Window assertions: for_all / exists / consecutive
-  Scalars: {{field: ...}}, {{const: <number>}},
-           {{agg: mean|sum|min|max|count, field: ..., window: {{days: N}}}},
-           {{period_return: {{days: N}}}},
-           {{indicator: "ma", field: ..., period: 5|10|20|60}}
-
-Universe ops:
-  Logical: and / or / not
-  Compare: gt / lt / gte / lte / eq / neq / contains / starts_with / not_starts_with
-  Constants: strings, ISO dates (YYYY-MM-DD), numbers, booleans (only for is_st)
-
-Rank shape:
-  {{ "metric": <Scalar>, "order": "asc" | "desc", "top_n": int|null }}
-
-Examples:
-
-[Q] 最近5天每天股价都高于ma5
-[A] {{
-  "screen_plan": {{
-    "asof": "{asof}",
-    "expr": {{
-      "op": "for_all",
-      "window": {{"days": 5}},
-      "predicate": {{
-        "op": "gt",
-        "left":  {{"field": "close_qfq"}},
-        "right": {{"field": "ma5"}}
-      }}
-    }}
-  }}
-}}
-
-[Q] 最近10天平均换手率小于10%
-[A] {{
-  "screen_plan": {{
-    "asof": "{asof}",
-    "expr": {{
-      "op": "lt",
-      "left":  {{"agg": "mean", "field": "turnover_rate", "window": {{"days": 10}}}},
-      "right": {{"const": 0.10}}
-    }}
-  }}
-}}
-
-[Q] 最近20天涨幅大于30%, 剔除ST和北交所, 按近10日涨幅取前20
-[A] {{
-  "screen_plan": {{
-    "asof": "{asof}",
-    "expr": {{
-      "op": "gt",
-      "left":  {{"period_return": {{"days": 20}}}},
-      "right": {{"const": 0.30}}
-    }}
-  }},
-  "universe_plan": {{
-    "asof": "{asof}",
-    "expr": {{
-      "op": "and",
-      "args": [
-        {{"op": "eq",              "left": {{"field": "is_st"}},    "right": {{"const": false}}}},
-        {{"op": "not_starts_with", "left": {{"field": "code"}},     "right": {{"const": "8"}}}},
-        {{"op": "not_starts_with", "left": {{"field": "code"}},     "right": {{"const": "4"}}}},
-        {{"op": "not_starts_with", "left": {{"field": "code"}},     "right": {{"const": "920"}}}}
-      ]
-    }}
-  }},
-  "rank": {{
-    "metric": {{"period_return": {{"days": 10}}}},
-    "order": "desc",
-    "top_n": 20
-  }}
-}}
-"""
