@@ -4,16 +4,38 @@
     "module": "ESNext",
     "moduleResolution": "Bundler",
     "target": "ES2022",
-    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "lib": [
+      "ES2022",
+      "DOM",
+      "DOM.Iterable"
+    ],
     "jsx": "preserve",
     "noEmit": true,
     "incremental": true,
-    "plugins": [{ "name": "next" }],
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ],
     "verbatimModuleSyntax": false,
     "paths": {
-      "@quant/shared": ["../../packages/shared/src/index.ts"]
-    }
+      "@quant/shared": [
+        "../../packages/shared/src/index.ts"
+      ]
+    },
+    "allowJs": true
   },
-  "include": ["app/**/*", "lib/**/*", "components/**/*", "__tests__/**/*", "next-env.d.ts"],
-  "exclude": ["node_modules", ".next", "dist"]
+  "include": [
+    "app/**/*",
+    "lib/**/*",
+    "components/**/*",
+    "__tests__/**/*",
+    "next-env.d.ts",
+    ".next/types/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    ".next",
+    "dist"
+  ]
 }

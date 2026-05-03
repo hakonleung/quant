@@ -18,11 +18,13 @@ import { InMemoryQueue } from './domain/in-memory-queue.js';
 import { KLINE_QUEUE, META_QUEUE, ORCH_FLIGHT_CLIENT } from './flight.token.js';
 import { KlineWorker } from './kline-worker.js';
 import { MetaWorker } from './meta-worker.js';
+import { QueueStatusController } from './queue-status.controller.js';
 import type { KlineJob, MetaJob } from './domain/types.js';
 
 const DEFAULT_FLIGHT_TARGET = '127.0.0.1:8815';
 
 @Module({
+  controllers: [QueueStatusController],
   providers: [
     {
       provide: ORCH_FLIGHT_CLIENT,

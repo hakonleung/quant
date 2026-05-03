@@ -21,18 +21,33 @@ from pathlib import Path
 
 from quant_cache.file_kv_store import FileKeyValueStore
 from quant_cache.parquet_kline_repo import ParquetKlineRepo
+from quant_cache.parquet_sentiment_cache import ParquetSentimentCache
 from quant_cache.parquet_stock_meta_repo import ParquetStockMetaRepo
 from quant_core.adapters.clock import SystemClock
+from quant_core.errors import QuantError
 from quant_core.ports.stock_meta_source import StockMetaSource
 from quant_core.services.kline_service import KlineService
+from quant_core.services.news_sentiment_service import NewsSentimentService
+from quant_core.services.nl_to_dsl_service import NlToDslService
+from quant_core.services.screen_service import ScreenService
 from quant_core.services.source_chain import SourceChain
 from quant_core.services.stock_meta_service import StockMetaService
 from quant_core.services.stock_meta_sync_service import StockMetaSyncService
+from quant_core.services.universe_screen_service import UniverseScreenService
+from quant_io.llm.providers import build_llm_client
 from quant_io.sources.akshare_kline import AKShareKlineSource
 from quant_io.sources.akshare_stock_meta import AKShareStockMetaSource
 
 from quant_rpc.handlers import HandlerRegistry
 from quant_rpc.ops.kline import ListKlineWatermarksHandler, SyncKlineForCodeHandler
+from quant_rpc.ops.kline_read import ListKlineForCodeHandler
+from quant_rpc.ops.nl_screen import NlScreenHandler
+from quant_rpc.ops.sentiment import (
+    AnalyzeManyStockSentimentHandler,
+    AnalyzeOneStockSentimentHandler,
+    GetCachedMarketSentimentHandler,
+    GetCachedStockSentimentHandler,
+)
 from quant_rpc.ops.stock_meta import (
     GetStockMetaBatchHandler,
     ListAllHandler,
@@ -83,6 +98,38 @@ def main() -> int:
 
     kline_source = AKShareKlineSource()
     kline_service = KlineService(kline_source, kline_repo, clock)
+    screen_service = ScreenService(kline_repo)
+    universe_service = UniverseScreenService(meta_repo)
+
+    # NL→DSL translator shares the aggregator LLM (cheap tier when
+    # available). Without API keys we degrade the same way sentiment
+    # does — only `nl_screen` calls fail with a clear error.
+    nl_translator: NlToDslService | None
+    try:
+        nl_translator = NlToDslService(build_llm_client(use_flash=True))
+        log.info("nl translator ready")
+    except QuantError as exc:
+        nl_translator = None
+        log.warning("nl translator disabled — LLM not configured: %s", exc)
+
+    sentiment_root = root / "sentiment"
+    sentiment_cache = ParquetSentimentCache(sentiment_root, clock)
+    # Construct LLM clients lazily — without provider keys the server
+    # still serves cached reads (GET); only the analyze ops fail with a
+    # clear ``LLM_NOT_CONFIGURED`` error code.
+    sentiment_service: NewsSentimentService | None
+    try:
+        sentiment_service = NewsSentimentService(
+            search_llm=build_llm_client(need_web_search=True),
+            aggregator_llm=build_llm_client(use_flash=True),
+            cache=sentiment_cache,
+            meta_repo=meta_repo,
+            clock=clock,
+        )
+        log.info("sentiment service ready")
+    except QuantError as exc:
+        sentiment_service = None
+        log.warning("sentiment LLM not configured — analyze ops disabled: %s", exc)
 
     registry = HandlerRegistry()
     registry.register(GetStockMetaBatchHandler(meta_service))
@@ -93,6 +140,20 @@ def main() -> int:
     registry.register(EnrichOneHandler(sync_service))
     registry.register(SyncKlineForCodeHandler(kline_service))
     registry.register(ListKlineWatermarksHandler(meta_repo, kline_repo))
+    registry.register(ListKlineForCodeHandler(kline_service))
+    registry.register(GetCachedStockSentimentHandler(sentiment_cache, clock))
+    registry.register(AnalyzeOneStockSentimentHandler(sentiment_service))
+    registry.register(GetCachedMarketSentimentHandler(sentiment_cache, clock))
+    registry.register(AnalyzeManyStockSentimentHandler(sentiment_service))
+    registry.register(
+        NlScreenHandler(
+            translator=nl_translator,
+            screen_service=screen_service,
+            universe_service=universe_service,
+            meta_repo=meta_repo,
+            clock=clock,
+        )
+    )
 
     server = QuantFlightServer(registry, location=f"grpc://{args.host}:{args.port}")
     log.info("flight server listening on grpc://%s:%d", args.host, server.port)

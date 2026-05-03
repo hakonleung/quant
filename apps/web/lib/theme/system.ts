@@ -1,0 +1,110 @@
+/**
+ * Chakra UI v3 system: design tokens + semantic tokens for the
+ * pro-geek workbench. Everything else in the app must consume tokens
+ * from here, never raw hex (CLAUDE.md §1.2).
+ */
+
+import { createSystem, defaultConfig, defineConfig } from '@chakra-ui/react';
+
+import { fonts, palette } from './tokens.js';
+
+const { light, term } = palette;
+
+const config = defineConfig({
+  globalCss: {
+    'html, body': {
+      margin: 0,
+      bg: '{colors.bg}',
+      color: '{colors.ink}',
+      fontFamily: '{fonts.body}',
+      fontSize: '12px',
+      lineHeight: '1.45',
+    },
+    '*': { boxSizing: 'border-box' },
+    '.num, .mono': {
+      fontFamily: '{fonts.mono}',
+      fontFeatureSettings: '"tnum" 1',
+      fontVariantNumeric: 'tabular-nums',
+    },
+    '.blink': { animation: 'blink 1s steps(2) infinite' },
+  },
+  theme: {
+    tokens: {
+      fonts: {
+        body: { value: fonts.sans },
+        heading: { value: fonts.sans },
+        mono: { value: fonts.mono },
+      },
+      colors: {
+        // light palette
+        light: {
+          bg: { value: light.bg },
+          panel: { value: light.panel },
+          panel2: { value: light.panel2 },
+          panel3: { value: light.panel3 },
+          line: { value: light.line },
+          line2: { value: light.line2 },
+          hover: { value: light.hover },
+          ink: { value: light.ink },
+          ink2: { value: light.ink2 },
+          ink3: { value: light.ink3 },
+          amber: { value: light.amber },
+          amberDark: { value: light.amberDark },
+          amberBg: { value: light.amberBg },
+          up: { value: light.up },
+          down: { value: light.down },
+          blue: { value: light.blue },
+          violet: { value: light.violet },
+          green: { value: light.green },
+          greenBg: { value: light.greenBg },
+          badgeBg: { value: light.badgeBg },
+        },
+        // cyber terminal palette
+        term: {
+          bg: { value: term.bg },
+          panel: { value: term.panel },
+          panel2: { value: term.panel2 },
+          line: { value: term.line },
+          line2: { value: term.line2 },
+          ink: { value: term.ink },
+          ink2: { value: term.ink2 },
+          ink3: { value: term.ink3 },
+          green: { value: term.green },
+          greenDark: { value: term.greenDark },
+          cyan: { value: term.cyan },
+          magenta: { value: term.magenta },
+          amber: { value: term.amber },
+          red: { value: term.red },
+          inputBg: { value: term.inputBg },
+        },
+      },
+    },
+    semanticTokens: {
+      colors: {
+        // workbench surface — used everywhere except the cyber slot
+        bg: { value: '{colors.light.bg}' },
+        panel: { value: '{colors.light.panel}' },
+        panel2: { value: '{colors.light.panel2}' },
+        panel3: { value: '{colors.light.panel3}' },
+        line: { value: '{colors.light.line}' },
+        line2: { value: '{colors.light.line2}' },
+        hover: { value: '{colors.light.hover}' },
+        ink: { value: '{colors.light.ink}' },
+        ink2: { value: '{colors.light.ink2}' },
+        ink3: { value: '{colors.light.ink3}' },
+        accent: { value: '{colors.light.amber}' },
+        accentDark: { value: '{colors.light.amberDark}' },
+        accentBg: { value: '{colors.light.amberBg}' },
+        up: { value: '{colors.light.up}' },
+        down: { value: '{colors.light.down}' },
+        link: { value: '{colors.light.blue}' },
+        violet: { value: '{colors.light.violet}' },
+        prompt: { value: '{colors.light.green}' },
+        promptBg: { value: '{colors.light.greenBg}' },
+        badgeBg: { value: '{colors.light.badgeBg}' },
+      },
+    },
+  },
+});
+
+export const system = createSystem(defaultConfig, config);

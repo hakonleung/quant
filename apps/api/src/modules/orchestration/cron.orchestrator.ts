@@ -21,6 +21,20 @@ import type { KlineJob, MetaJob } from './domain/types.js';
 
 const SCAN_INTERVAL_MS = 60 * 60_000; // 60 minutes
 
+/**
+ * gRPC ECONNREFUSED on the Flight port surfaces with status `14` and
+ * a message containing `connect ECONNREFUSED`. We match on substrings
+ * to stay decoupled from `@grpc/grpc-js` internals.
+ */
+function isPyFlightDown(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err);
+  return (
+    msg.includes('ECONNREFUSED') ||
+    msg.includes('UNAVAILABLE') ||
+    msg.includes('No connection established')
+  );
+}
+
 @Injectable()
 export class CronOrchestrator implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(CronOrchestrator.name);
@@ -35,18 +49,23 @@ export class CronOrchestrator implements OnModuleInit, OnModuleDestroy {
   onModuleInit(): void {
     setImmediate(() => {
       void this.scan().catch((err: unknown) => {
-        this.logger.error(
-          `initial cron scan failed: ${err instanceof Error ? err.message : String(err)}`,
-        );
+        this.logScanFailure('initial', err);
       });
     });
     this.timer = setInterval(() => {
       void this.scan().catch((err: unknown) => {
-        this.logger.error(
-          `cron scan failed: ${err instanceof Error ? err.message : String(err)}`,
-        );
+        this.logScanFailure('periodic', err);
       });
     }, SCAN_INTERVAL_MS);
+  }
+
+  private logScanFailure(phase: 'initial' | 'periodic', err: unknown): void {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (isPyFlightDown(err)) {
+      this.logger.warn(`${phase} cron scan skipped — py flight unreachable`);
+    } else {
+      this.logger.error(`${phase} cron scan failed: ${msg}`);
+    }
   }
 
   onModuleDestroy(): void {
@@ -77,9 +96,18 @@ export class CronOrchestrator implements OnModuleInit, OnModuleDestroy {
         })),
       );
     } catch (err) {
-      this.logger.error(
-        `inspector failed traceId=${traceId} err=${err instanceof Error ? err.message : String(err)}`,
-      );
+      const msg = err instanceof Error ? err.message : String(err);
+      // ECONNREFUSED on the Flight port is a benign dev-time signal —
+      // it means the Python service isn't up yet (or has been stopped
+      // for maintenance). Log at WARN with an explicit hint, not ERROR,
+      // so the gateway log stays readable when py is intentionally off.
+      if (isPyFlightDown(err)) {
+        this.logger.warn(
+          `inspector skipped — py flight unreachable (port 8815). traceId=${traceId}`,
+        );
+      } else {
+        this.logger.error(`inspector failed traceId=${traceId} err=${msg}`);
+      }
       return;
     }
     this.logger.log(

@@ -1,0 +1,31 @@
+/**
+ * Cross-process contract for the orchestration queue snapshot stream
+ * (`docs/modules/07-frontend.md` SSE addendum, `docs/modules/09-...md` §6).
+ *
+ * Mirrors the NestJS `QueueSnapshot` returned from
+ * `GET /api/orchestration/queue` and emitted as SSE events on
+ * `/api/orchestration/queue/stream`. Validated on the frontend before
+ * entering React state so a contract drift fails loudly.
+ */
+
+import { z } from 'zod';
+
+export const QueueSnapshotEntrySchema = z
+  .object({
+    name: z.string().min(1),
+    pending: z.number().int().nonnegative(),
+    inFlight: z.number().int().nonnegative(),
+    paused: z.boolean(),
+  })
+  .strict();
+
+export type QueueSnapshotEntry = z.infer<typeof QueueSnapshotEntrySchema>;
+
+export const QueueSnapshotSchema = z
+  .object({
+    ts: z.string().datetime({ offset: true }),
+    queues: z.array(QueueSnapshotEntrySchema),
+  })
+  .strict();
+
+export type QueueSnapshot = z.infer<typeof QueueSnapshotSchema>;
