@@ -8,13 +8,11 @@
  */
 
 import {
-  BlotterRowSchema,
   KlineBarSchema,
   MarketSentimentSchema,
   NlScreenResultSchema,
   SentimentSchema,
   StockMetaDtoSchema,
-  type BlotterRow,
   type KlineBar,
   type MarketSentiment,
   type NlScreenResult,
@@ -42,12 +40,6 @@ export async function listKline(code: string, range: string): Promise<readonly K
     `/api/kline/${encodeURIComponent(code)}?range=${encodeURIComponent(range)}`,
     KlineBarSchema,
   );
-}
-
-export async function listSectorHits(sectorIds: readonly string[]): Promise<readonly BlotterRow[]> {
-  if (sectorIds.length === 0) return [];
-  const q = sectorIds.map(encodeURIComponent).join(',');
-  return safeList(`/api/sectors/hits?ids=${q}`, BlotterRowSchema);
 }
 
 /**

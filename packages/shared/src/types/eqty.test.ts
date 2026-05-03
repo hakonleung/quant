@@ -1,10 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import {
-  BlotterRowSchema,
-  KlineBarSchema,
-  SentimentSchema,
-} from './eqty.js';
+import { KlineBarSchema, SentimentSchema } from './eqty.js';
 
 describe('KlineBarSchema', () => {
   const bar = {
@@ -42,30 +38,6 @@ describe('KlineBarSchema', () => {
   it('rejects when turnover is missing', () => {
     const { turnover: _t, ...missing } = bar;
     expect(() => KlineBarSchema.parse(missing)).toThrow();
-  });
-});
-
-describe('BlotterRowSchema', () => {
-  const row = {
-    code: '600519',
-    name: '贵州茅台',
-    last: 1684.2,
-    chgPct: 1.82,
-    volX: 1.3,
-    ma20Delta: 2.1,
-    rsi14: 58,
-    mcap: 2.11e12,
-    sentiment: 0.78,
-    evidence: '批价回升',
-    evidenceTag: '雪球',
-  };
-
-  it('parses a valid row', () => {
-    expect(BlotterRowSchema.parse(row).code).toBe('600519');
-  });
-
-  it('rejects missing column', () => {
-    expect(() => BlotterRowSchema.parse({ code: '600519' })).toThrow();
   });
 });
 

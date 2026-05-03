@@ -6,7 +6,6 @@ import { OrchestrationModule } from './modules/orchestration/orchestration.modul
 import { ScreenModule } from './modules/screen/screen.module.js';
 import { SentimentModule } from './modules/sentiment/sentiment.module.js';
 import { StockMetaModule } from './modules/stock-meta/stock-meta.module.js';
-import { UiModule } from './modules/ui/ui.module.js';
 
 @Module({
   imports: [
@@ -15,7 +14,6 @@ import { UiModule } from './modules/ui/ui.module.js';
     KlineModule,
     SentimentModule,
     ScreenModule,
-    UiModule,
   ],
   controllers: [HealthController],
   providers: [TraceMiddleware],

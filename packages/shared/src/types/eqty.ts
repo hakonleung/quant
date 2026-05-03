@@ -42,24 +42,6 @@ export const KlineBarSchema = z
   .strict();
 export type KlineBar = z.infer<typeof KlineBarSchema>;
 
-/** GET /api/sectors/hits?ids=a,b */
-export const BlotterRowSchema = z
-  .object({
-    code: z.string(),
-    name: z.string(),
-    last: z.number(),
-    chgPct: z.number(),
-    volX: z.number(),
-    ma20Delta: z.number(),
-    rsi14: z.number(),
-    mcap: z.number(),
-    sentiment: z.number(),
-    evidence: z.string(),
-    evidenceTag: z.string(),
-  })
-  .strict();
-export type BlotterRow = z.infer<typeof BlotterRowSchema>;
-
 /** GET /api/sentiment/:code */
 export const SentimentSchema = z
   .object({

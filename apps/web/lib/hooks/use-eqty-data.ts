@@ -1,6 +1,6 @@
 'use client';
 
-import type { BlotterRow, KlineBar, MarketSentiment, Sentiment, StockMetaDto } from '@quant/shared';
+import type { KlineBar, MarketSentiment, Sentiment, StockMetaDto } from '@quant/shared';
 import {
   useMutation,
   useQueries,
@@ -18,7 +18,6 @@ import {
   getCachedSentiment,
   getStockMeta,
   listKline,
-  listSectorHits,
 } from '../api/endpoints.js';
 
 const sentimentKey = (code: string): readonly ['sentiment', string] => ['sentiment', code];
@@ -92,14 +91,6 @@ export function useKlineByCodes(
     }
     return { byCode, isLoading: loading, readyCount: ready };
   }, [codes, results]);
-}
-
-export function useSectorHits(ids: readonly string[]): UseQueryResult<readonly BlotterRow[]> {
-  return useQuery({
-    queryKey: ['sector-hits', ids],
-    queryFn: () => listSectorHits(ids),
-    staleTime: 30_000,
-  });
 }
 
 /**

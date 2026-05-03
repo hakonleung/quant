@@ -15,8 +15,9 @@ export const Feat = {
   Blacklist: '003',
   Detail: '100',
   Chart: '101',
-  Blotter: '102',
   Stdout: '103',
+  SectorSentiment: '104',
+  PatternMatch: '105',
   SlackPush: '200',
   TaskQueue: '300',
 } as const;
@@ -37,8 +38,9 @@ export const FEAT_CONFIG_MAP: Readonly<Record<Feat, FeatConfig>> = {
   [Feat.Blacklist]: { title: () => 'blacklist', defaultMinimized: true },
   [Feat.Detail]: { title: () => 'equity', gridArea: 'CTOP' },
   [Feat.Chart]: { title: () => 'detail', gridArea: 'CMID' },
-  [Feat.Blotter]: { title: () => 'screen', gridArea: 'CBOT' },
-  [Feat.Stdout]: { title: () => 'sentiment', gridArea: 'R1' },
+  [Feat.Stdout]: { title: () => 'sentiment', gridArea: 'CBOT' },
+  [Feat.SectorSentiment]: { title: () => 'sector.sentiment', gridArea: 'R1' },
+  [Feat.PatternMatch]: { title: () => 'pattern.match' },
   [Feat.SlackPush]: {
     title: () => 'slack.push',
     gridArea: 'R2',

@@ -22,7 +22,6 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 
 import { LAYOUT_LIMITS, useLayoutStore } from '../../lib/stores/layout.store.js';
 import { useUiStore } from '../../lib/stores/ui.store.js';
-import { BlotterPanel } from '../eqty/blotter-panel.js';
 import { ChartPanel } from '../eqty/chart-panel.js';
 import { ListPanel } from '../eqty/list-panel.js';
 import { SectorsPanel } from '../eqty/sectors-panel.js';
@@ -67,7 +66,6 @@ export function EqtyModule(): React.ReactElement {
         {code !== null && (
           <>
             <ChartPanel code={code} />
-            <BlotterPanel />
             <StdoutPanel code={code} onResult={setSentiment} />
             <SlackPushPanel
               code={code}
