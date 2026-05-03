@@ -43,8 +43,10 @@ export function visibleSlice(
   if (total === 0 || stride <= 0) {
     return { startIdx: 0, count: 0, firstX: 0, stride };
   }
-  // pan-corrected right edge: the latest bar's right pixel
-  const latestRightX = viewWidth - vp.panPx;
+  // pan-corrected right edge: the latest bar's right pixel.
+  // panPx > 0 means the user has dragged to see older bars, so latest
+  // slides off to the *right* of the viewport (positive direction).
+  const latestRightX = viewWidth + vp.panPx;
   const latestLeftX = latestRightX - vp.candleW;
   // Number of bars that fit before latest
   const fits = Math.ceil(viewWidth / stride) + 1;

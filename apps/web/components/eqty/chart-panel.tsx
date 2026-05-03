@@ -19,7 +19,7 @@
  * Header actions: blacklist (with confirm) + add-to-sector dialog.
  */
 
-import { Box, Button, Flex, HStack, Text } from '@chakra-ui/react';
+import { Box, Button, Flex, Text } from '@chakra-ui/react';
 import type { KlineBar } from '@quant/shared';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
@@ -112,21 +112,16 @@ export function ChartPanel({ code }: Props): React.ReactElement {
     <Pane
       feat={Feat.Chart}
       right={
-        <Text>
-          {code}
-          {stockName === '' ? '' : ` · ${stockName}`}
-        </Text>
+        <ChartHeaderRight
+          code={code}
+          stockName={stockName}
+          onAddToSector={(): void => {
+            setShowAddDialog(true);
+          }}
+        />
       }
     >
-      <ChartTools
-        code={code}
-        stockName={stockName}
-        vp={vp}
-        setVp={setVp}
-        onAddToSector={(): void => {
-          setShowAddDialog(true);
-        }}
-      />
+      <ChartTools vp={vp} setVp={setVp} />
       <FocusLabel
         bar={focusBar}
         deltaPct={deltaPct}
@@ -258,11 +253,48 @@ function ChartCanvas({
   );
 
   const dragRef = useRef<{
-    startX: number;
+    startClientX: number;
     startPan: number;
     moved: boolean;
     isRange: boolean;
+    svgLeft: number;
+    svgTop: number;
   } | null>(null);
+
+  // While dragging, mouse moves outside the SVG would be lost — bind
+  // to the window so the gesture survives leaving the chart bounds and
+  // mouse-up always lands.
+  useEffect(() => {
+    const onWinMove = (e: MouseEvent): void => {
+      const drag = dragRef.current;
+      if (drag === null) return;
+      if (drag.isRange) {
+        const x = e.clientX - drag.svgLeft - PRICE_AXIS_W;
+        const idx = indexAtX(x, slice, bars.length);
+        if (idx !== null) onRangeMove(idx);
+        drag.moved = true;
+        return;
+      }
+      const dx = e.clientX - drag.startClientX;
+      if (Math.abs(dx) > 2) drag.moved = true;
+      // Drag right (dx > 0) → panPx decreases (back toward latest).
+      // Drag left  (dx < 0) → panPx increases (further into the past).
+      const nextPan = Math.max(0, drag.startPan - dx);
+      setVp(clampViewport({ ...vp, panPx: nextPan }));
+    };
+    const onWinUp = (): void => {
+      const drag = dragRef.current;
+      if (drag === null) return;
+      dragRef.current = null;
+      if (drag.isRange) onRangeEnd();
+    };
+    window.addEventListener('mousemove', onWinMove);
+    window.addEventListener('mouseup', onWinUp);
+    return () => {
+      window.removeEventListener('mousemove', onWinMove);
+      window.removeEventListener('mouseup', onWinUp);
+    };
+  }, [vp, setVp, slice, bars.length, onRangeMove, onRangeEnd]);
 
   const onMouseDown = (e: React.MouseEvent<SVGSVGElement>): void => {
     const rect = e.currentTarget.getBoundingClientRect();
@@ -272,31 +304,31 @@ function ChartCanvas({
       const idx = indexAtX(x, slice, bars.length);
       if (idx !== null) {
         onRangeStart(idx);
-        dragRef.current = { startX: e.clientX, startPan: vp.panPx, moved: false, isRange: true };
+        dragRef.current = {
+          startClientX: e.clientX,
+          startPan: vp.panPx,
+          moved: false,
+          isRange: true,
+          svgLeft: rect.left,
+          svgTop: rect.top,
+        };
         return;
       }
     }
-    dragRef.current = { startX: e.clientX, startPan: vp.panPx, moved: false, isRange: false };
+    dragRef.current = {
+      startClientX: e.clientX,
+      startPan: vp.panPx,
+      moved: false,
+      isRange: false,
+      svgLeft: rect.left,
+      svgTop: rect.top,
+    };
   };
   const onMouseMove = (e: React.MouseEvent<SVGSVGElement>): void => {
+    if (dragRef.current !== null) return; // window listener owns drag
     const rect = e.currentTarget.getBoundingClientRect();
     const x = e.clientX - rect.left - PRICE_AXIS_W;
     const y = e.clientY - rect.top;
-    if (dragRef.current !== null) {
-      if (dragRef.current.isRange) {
-        if (x >= 0 && y >= 0 && y <= PRICE_H) {
-          const idx = indexAtX(x, slice, bars.length);
-          if (idx !== null) onRangeMove(idx);
-        }
-        dragRef.current.moved = true;
-        return;
-      }
-      const dx = e.clientX - dragRef.current.startX;
-      if (Math.abs(dx) > 2) dragRef.current.moved = true;
-      const nextPan = Math.max(0, dragRef.current.startPan - dx);
-      setVp(clampViewport({ ...vp, panPx: nextPan }));
-      return;
-    }
     if (x >= 0 && y >= 0 && y <= PRICE_H) {
       const idx = indexAtX(x, slice, bars.length);
       setHoverIdx(idx);
@@ -307,12 +339,13 @@ function ChartCanvas({
     }
   };
   const onMouseUp = (e: React.MouseEvent<SVGSVGElement>): void => {
+    // The window listener cleared dragRef already if a real drag
+    // happened (moved=true). A click-without-drag still has dragRef
+    // set here when this fires before the window listener; either way
+    // we treat moved=true as "no click selection".
     const drag = dragRef.current;
-    dragRef.current = null;
-    if (drag?.isRange === true) {
-      onRangeEnd();
-      return;
-    }
+    if (drag !== null) dragRef.current = null;
+    if (drag?.isRange === true) return; // range commit handled by window up
     if (drag?.moved === true) return;
     const rect = e.currentTarget.getBoundingClientRect();
     const x = e.clientX - rect.left - PRICE_AXIS_W;
@@ -323,8 +356,6 @@ function ChartCanvas({
     setSelectedIdx(selectedIdx === idx ? null : idx);
   };
   const onMouseLeave = (): void => {
-    if (dragRef.current?.isRange === true) onRangeEnd();
-    dragRef.current = null;
     setHoverIdx(null);
     setHoverPrice(null);
   };
@@ -738,36 +769,11 @@ function Centered({ children }: { children: React.ReactNode }): React.ReactEleme
 }
 
 interface ToolsProps {
-  readonly code: string;
-  readonly stockName: string;
   readonly vp: ChartViewport;
   readonly setVp: (vp: ChartViewport) => void;
-  readonly onAddToSector: () => void;
 }
 
-function ChartTools({
-  code,
-  stockName,
-  vp,
-  setVp,
-  onAddToSector,
-}: ToolsProps): React.ReactElement {
-  const blacklist = useBlacklistStore((s) => s.entries);
-  const addBlacklist = useBlacklistStore((s) => s.add);
-  const alreadyBlacklisted = blacklist.some((b) => b.code === code);
-
-  const onBlacklist = (): void => {
-    if (alreadyBlacklisted) return;
-    if (!confirm(`Blacklist ${code}${stockName === '' ? '' : ` (${stockName})`}?`)) return;
-    if (!confirm(`Confirm: blacklist ${code} permanently?`)) return;
-    addBlacklist({
-      code,
-      name: stockName,
-      addedAt: new Date().toISOString().slice(0, 10),
-      note: '',
-    });
-  };
-
+function ChartTools({ vp, setVp }: ToolsProps): React.ReactElement {
   const zoomIn = (): void => {
     setVp(clampViewport({ ...vp, candleW: Math.min(MAX_CANDLE_W, vp.candleW * 1.4) }));
   };
@@ -800,23 +806,102 @@ function ChartTools({
       <ToolButton onClick={resetView} title="reset">
         ⟲
       </ToolButton>
-      <HStack ml="auto" gap="6px">
-        <ToolButton
-          onClick={onAddToSector}
-          title="add to sector"
-        >
-          + SECTOR
-        </ToolButton>
-        <ToolButton
-          onClick={onBlacklist}
-          danger
-          disabled={alreadyBlacklisted}
-          title={alreadyBlacklisted ? 'already blacklisted' : 'blacklist (asks twice)'}
-        >
-          {alreadyBlacklisted ? '✓ BLK' : 'BLACKLIST'}
-        </ToolButton>
-      </HStack>
+      <Text ml="6px" color="ink3" fontSize="10px">
+        SHIFT+DRAG → range
+      </Text>
     </Flex>
+  );
+}
+
+interface HeaderRightProps {
+  readonly code: string;
+  readonly stockName: string;
+  readonly onAddToSector: () => void;
+}
+
+function ChartHeaderRight({
+  code,
+  stockName,
+  onAddToSector,
+}: HeaderRightProps): React.ReactElement {
+  const blacklist = useBlacklistStore((s) => s.entries);
+  const addBlacklist = useBlacklistStore((s) => s.add);
+  const alreadyBlacklisted = blacklist.some((b) => b.code === code);
+
+  const onBlacklist = (): void => {
+    if (alreadyBlacklisted) return;
+    if (!confirm(`Blacklist ${code}${stockName === '' ? '' : ` (${stockName})`}?`)) return;
+    if (!confirm(`Confirm: blacklist ${code} permanently?`)) return;
+    addBlacklist({
+      code,
+      name: stockName,
+      addedAt: new Date().toISOString().slice(0, 10),
+      note: '',
+    });
+  };
+
+  return (
+    <Flex align="center" gap="8px">
+      <Text>
+        {code}
+        {stockName === '' ? '' : ` · ${stockName}`}
+      </Text>
+      <IconButton
+        title="add to sector"
+        onClick={onAddToSector}
+        active={false}
+      >
+        ★
+      </IconButton>
+      <IconButton
+        title={alreadyBlacklisted ? 'already blacklisted' : 'blacklist (double confirm)'}
+        onClick={onBlacklist}
+        active={alreadyBlacklisted}
+        danger
+      >
+        ⛔
+      </IconButton>
+    </Flex>
+  );
+}
+
+interface IconButtonProps {
+  readonly children: React.ReactNode;
+  readonly onClick: () => void;
+  readonly title: string;
+  readonly active: boolean;
+  readonly danger?: boolean;
+}
+
+function IconButton({
+  children,
+  onClick,
+  title,
+  active,
+  danger = false,
+}: IconButtonProps): React.ReactElement {
+  const color = danger ? 'up' : 'accent';
+  return (
+    <Box
+      as="button"
+      onClick={onClick}
+      title={title}
+      w="20px"
+      h="20px"
+      display="grid"
+      placeItems="center"
+      fontSize="13px"
+      lineHeight="1"
+      bg={active ? 'accentBg' : 'transparent'}
+      color={active ? color : 'ink3'}
+      borderWidth="1px"
+      borderColor={active ? color : 'line'}
+      borderRadius="0"
+      cursor="pointer"
+      _hover={{ color: color, borderColor: color }}
+    >
+      {children}
+    </Box>
   );
 }
 

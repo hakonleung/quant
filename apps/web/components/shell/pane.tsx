@@ -253,21 +253,11 @@ function PaneHeader({
         color={cyber ? 'term.green' : 'accent'}
         whiteSpace="nowrap"
         flexShrink={0}
-        pr="8px"
-        borderRightWidth="1px"
-        borderColor={cyber ? 'term.line' : 'line'}
       >
         {id}
       </Text>
       {titleSlot !== undefined ? (
-        <Box
-          flexShrink={0}
-          pr="8px"
-          borderRightWidth={right !== undefined ? '1px' : 0}
-          borderColor={cyber ? 'term.line' : 'line'}
-        >
-          {titleSlot}
-        </Box>
+        <Box flexShrink={0}>{titleSlot}</Box>
       ) : (
         <Text
           fontFamily="mono"
@@ -280,9 +270,6 @@ function PaneHeader({
           overflow="hidden"
           textOverflow="ellipsis"
           flexShrink={0}
-          pr="8px"
-          borderRightWidth={right !== undefined ? '1px' : 0}
-          borderColor={cyber ? 'term.line' : 'line'}
         >
           {title}
         </Text>
@@ -310,9 +297,6 @@ function PaneHeader({
         letterSpacing="0.06em"
         color={cyber ? 'term.ink3' : 'ink3'}
         flexShrink={0}
-        pl="8px"
-        borderLeftWidth="1px"
-        borderColor={cyber ? 'term.line' : 'line'}
       >
         <PaneControls
           cyber={cyber}

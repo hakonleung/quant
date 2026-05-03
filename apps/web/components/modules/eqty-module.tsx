@@ -65,10 +65,10 @@ export function EqtyModule(): React.ReactElement {
         max={LAYOUT_LIMITS.rightMax}
       />
       <Column width={`${String(rightWidth)}px`}>
+        {code !== null && <ChartPanel code={code} />}
         <SectorSentimentPanel />
         {code !== null && (
           <>
-            <ChartPanel code={code} />
             <StdoutPanel code={code} onResult={setSentiment} />
             <SlackPushPanel
               code={code}
