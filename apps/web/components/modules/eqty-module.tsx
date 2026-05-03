@@ -24,6 +24,7 @@ import { LAYOUT_LIMITS, useLayoutStore } from '../../lib/stores/layout.store.js'
 import { useUiStore } from '../../lib/stores/ui.store.js';
 import { ChartPanel } from '../eqty/chart-panel.js';
 import { ListPanel } from '../eqty/list-panel.js';
+import { SectorSentimentPanel } from '../eqty/sector-sentiment-panel.js';
 import { SectorsPanel } from '../eqty/sectors-panel.js';
 import { SlackPushPanel } from '../eqty/slack-push-panel.js';
 import { StdoutPanel } from '../eqty/stdout-panel.js';
@@ -63,6 +64,7 @@ export function EqtyModule(): React.ReactElement {
         max={LAYOUT_LIMITS.rightMax}
       />
       <Column width={`${String(rightWidth)}px`}>
+        <SectorSentimentPanel />
         {code !== null && (
           <>
             <ChartPanel code={code} />
