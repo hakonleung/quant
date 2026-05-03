@@ -1,19 +1,9 @@
-"""DeepSeek-backed :class:`LLMClient` (via the OpenAI Python SDK).
+"""Compatibility shim for callers that still import :class:`DeepSeekClient`.
 
-DeepSeek's chat-completions endpoint is OpenAI-compatible, so we drive
-it through ``openai.OpenAI`` rather than hand-rolling HTTP. The SDK
-handles retries, timeout plumbing, and JSON-mode framing for us.
-
-Defaults:
-
-* base url: ``https://api.deepseek.com``
-* model:    ``deepseek-chat``  (override via the constructor or env)
-* temperature: 0  (DSL translation must be deterministic)
-* response_format: ``{"type": "json_object"}``
-
-The constructor raises ``QuantError("LLM_FAILED")`` if neither the
-``api_key`` arg nor the ``DEEPSEEK_API_KEY`` env var is set, so misuse
-is caught at composition time, not at the first request.
+New code should call :func:`quant_io.llm.providers.build_llm_client` so
+the priority-ordered catalog (DeepSeek → OpenAI → Moonshot → ...) drives
+selection. This shim stays alive for existing tests and notebooks that
+constructed the DeepSeek client directly.
 """
 
 from __future__ import annotations
@@ -23,20 +13,29 @@ from typing import TYPE_CHECKING, Final
 
 from quant_core.errors import QuantError
 
+from quant_io.llm.openai_compatible import OpenAiCompatibleLlmClient
+from quant_io.llm.providers import LLM_PROVIDERS
+
 if TYPE_CHECKING:
     from openai import OpenAI
 
 
-_DEFAULT_BASE_URL: Final[str] = "https://api.deepseek.com"
-_DEFAULT_MODEL: Final[str] = "deepseek-chat"
-_DEFAULT_TIMEOUT_SEC: Final[float] = 60.0
-_NAME: Final[str] = "deepseek"
+_PROVIDER_NAME: Final[str] = "deepseek"
 
 
-class DeepSeekClient:
-    """Minimal :class:`LLMClient` adapter over the OpenAI Python SDK."""
+def _deepseek_config() -> tuple[str, str, str]:
+    """Pick the DeepSeek catalog row and return ``(model_pro, base_url, env)``."""
+    for cfg in LLM_PROVIDERS:
+        if cfg.provider == _PROVIDER_NAME:
+            return cfg.model_pro, cfg.base_url, cfg.api_key_env
+    raise QuantError(
+        "LLM_FAILED",
+        "deepseek provider missing from LLM_PROVIDERS catalog",
+    )
 
-    __slots__ = ("_client", "_model")
+
+class DeepSeekClient(OpenAiCompatibleLlmClient):
+    """Thin specialisation of the generic OpenAI-compatible client."""
 
     def __init__(
         self,
@@ -44,54 +43,22 @@ class DeepSeekClient:
         api_key: str | None = None,
         model: str | None = None,
         base_url: str | None = None,
-        timeout_sec: float = _DEFAULT_TIMEOUT_SEC,
+        timeout_sec: float = 60.0,
         client: OpenAI | None = None,
     ) -> None:
-        key = api_key or os.environ.get("DEEPSEEK_API_KEY")
+        default_model, default_base_url, env_var = _deepseek_config()
+        key = api_key or os.environ.get(env_var)
         if not key:
             raise QuantError(
                 "LLM_FAILED",
-                "DeepSeek API key missing (set DEEPSEEK_API_KEY or pass api_key=)",
-                {"source": _NAME},
+                f"DeepSeek API key missing (set {env_var} or pass api_key=)",
+                {"source": _PROVIDER_NAME},
             )
-        self._model = model or os.environ.get("DEEPSEEK_MODEL") or _DEFAULT_MODEL
-        if client is not None:
-            # Test override — caller has wired a stub OpenAI-shaped client.
-            self._client = client
-        else:
-            from openai import OpenAI  # imported lazily so tests don't pay the cost
-
-            resolved_base = (
-                base_url or os.environ.get("DEEPSEEK_BASE_URL") or _DEFAULT_BASE_URL
-            ).rstrip("/")
-            self._client = OpenAI(api_key=key, base_url=resolved_base, timeout=timeout_sec)
-
-    @property
-    def name(self) -> str:
-        return _NAME
-
-    def complete_json(self, *, system: str, user: str) -> str:
-        try:
-            response = self._client.chat.completions.create(
-                model=self._model,
-                temperature=0,
-                response_format={"type": "json_object"},
-                messages=[
-                    {"role": "system", "content": system},
-                    {"role": "user", "content": user},
-                ],
-            )
-        except Exception as exc:
-            raise QuantError(
-                "LLM_FAILED",
-                f"{_NAME}: {type(exc).__name__}: {exc}",
-                {"source": _NAME, "exc_type": type(exc).__name__},
-            ) from exc
-        choices = getattr(response, "choices", None)
-        if not choices:
-            raise QuantError("LLM_FAILED", f"{_NAME}: response has no choices")
-        message = getattr(choices[0], "message", None)
-        content = getattr(message, "content", None) if message is not None else None
-        if not isinstance(content, str):
-            raise QuantError("LLM_FAILED", f"{_NAME}: response 'content' is not a string")
-        return content
+        super().__init__(
+            provider_name=_PROVIDER_NAME,
+            base_url=base_url or default_base_url,
+            model=model or default_model,
+            api_key=key,
+            timeout_sec=timeout_sec,
+            client=client,
+        )

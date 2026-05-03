@@ -41,7 +41,7 @@ from quant_core.services.screening_pipeline import (
     ScreeningPipeline,
 )
 from quant_core.services.universe_screen_service import UniverseScreenService
-from quant_io.llm.deepseek_client import DeepSeekClient
+from quant_io.llm.providers import LLM_PROVIDERS, build_llm_client
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -49,11 +49,15 @@ if TYPE_CHECKING:
     from quant_core.services.nl_to_dsl_service import NlToDslResponse
 
 
+def _any_provider_key_set() -> bool:
+    return any(os.environ.get(cfg.api_key_env) for cfg in LLM_PROVIDERS)
+
+
 pytestmark = [
     pytest.mark.e2e,
     pytest.mark.skipif(
-        not os.environ.get("DEEPSEEK_API_KEY"),
-        reason="DEEPSEEK_API_KEY not set",
+        not _any_provider_key_set(),
+        reason="no LLM provider API key set in env",
     ),
 ]
 
@@ -241,7 +245,7 @@ def synthetic_pipeline(tmp_path_factory: pytest.TempPathFactory) -> dict[str, ob
         universe_service=UniverseScreenService(meta_repo=meta_repo),
         screen_service=ScreenService(kline_repo=kline_repo),
     )
-    nl_svc = NlToDslService(llm=DeepSeekClient())
+    nl_svc = NlToDslService(llm=build_llm_client())
     return {
         "pipeline": pipeline,
         "nl_svc": nl_svc,
@@ -267,17 +271,61 @@ def _translate_and_run(fixture: dict[str, object], nl_query: str) -> tuple[NlToD
     return response, result
 
 
-def _print_response_and_result(label: str, response: NlToDslResponse, result: object) -> None:
-    print(f"\n=== {label} ===")
-    print("warnings:", response.warnings)
-    print("rank:", response.rank)
+def _serialise(obj: object) -> object:
+    import dataclasses
+
+    if dataclasses.is_dataclass(obj) and not isinstance(obj, type):
+        return {k: _serialise(v) for k, v in dataclasses.asdict(obj).items()}
+    if isinstance(obj, dict):
+        return {k: _serialise(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [_serialise(v) for v in obj]
+    if isinstance(obj, Decimal):
+        return str(obj)
+    return obj.isoformat() if hasattr(obj, "isoformat") else obj
+
+
+def _print_warnings(response: NlToDslResponse) -> None:
+    print("WARNINGS:")
+    if not response.warnings:
+        print("  (none)")
+        return
+    for w in response.warnings:
+        print(f"  - {w}")
+
+
+def _print_plans(response: NlToDslResponse) -> None:
+    import json
+
+    print("\nSCREEN PLAN:")
+    print(json.dumps(_serialise(response.screen_plan), indent=2, ensure_ascii=False))
     if response.universe_plan is not None:
-        print(f"universe_plan asof={response.universe_plan.asof}")
-    print(f"matches: {len(result.matches)}")  # type: ignore[attr-defined]
-    for m in result.matches[:10]:  # type: ignore[attr-defined]
-        print(
-            f"  {m.code}: metrics={m.evidence.get('metrics')} rank={m.evidence.get('rank_metric')}"
-        )
+        print("\nUNIVERSE PLAN:")
+        print(json.dumps(_serialise(response.universe_plan), indent=2, ensure_ascii=False))
+    if response.rank is not None:
+        print("\nRANK:")
+        print(json.dumps(_serialise(response.rank), indent=2, ensure_ascii=False))
+
+
+def _print_matches(result: object) -> None:
+    matches = result.matches  # type: ignore[attr-defined]
+    print(f"\nMATCHES ({len(matches)}):")
+    for m in matches[:20]:
+        metrics = m.evidence.get("metrics") or {}
+        rank_metric = m.evidence.get("rank_metric")
+        line = f"  {m.code}"
+        if rank_metric is not None:
+            line += f"  rank={rank_metric}"
+        if metrics:
+            line += "  | " + "  ".join(f"{k}={v}" for k, v in metrics.items())
+        print(line)
+
+
+def _print_response_and_result(label: str, response: NlToDslResponse, result: object) -> None:
+    print(f"\n========== {label} ==========")
+    _print_warnings(response)
+    _print_plans(response)
+    _print_matches(result)
 
 
 # -- the user's prompt ---------------------------------------------------

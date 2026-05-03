@@ -247,29 +247,47 @@ Always respond with ONE JSON object with these top-level keys:
 
 Hard rules:
   1. Use absolute date {asof} for "asof". NEVER write "today" / "今天".
-  2. Trading days are the unit for every "days" parameter. Use these
-     conversions and prefer them over raw calendar-day counts:
-       * 一周         → 5
-       * 一个月       → 20
-       * 三个月       → 60
-       * 半年         → 120
-       * 一年 / 近一年 → 240
+  2. CRITICAL — every "days" parameter is in **TRADING DAYS** (交易日),
+     never calendar days. A股 has roughly 5 trading days per calendar
+     week, ~20 per calendar month, ~240 per calendar year. When the user
+     mentions a calendar interval ("一年 / 一个月 / 三个月 / N 天 / N 周"),
+     you MUST estimate the trading-day count yourself and emit that
+     integer. Do NOT pass calendar-day counts.
+     Use this conversion table:
+       * 一日 / 1 天      → 1
+       * 一周 / 5 个交易日 → 5
+       * 半个月           → 10
+       * 一个月           → 20
+       * 三个月 / 一季度  → 60
+       * 半年             → 120
+       * 一年 / 近一年    → 240
+       * 两年             → 480
+     If the user gives an explicit "X 个交易日", pass X verbatim.
   3. Prefer the precomputed `ma5/ma10/ma20/ma60` columns over generic indicators.
   4. Use `close_qfq` (前复权) by default; only use `close` if the user explicitly says "不复权".
   5. Conditions about ST / 北交所 / 上市天数 / 行业 belong in `universe_plan`, NOT `screen_plan`.
   6. Top-N / ranking ("前 N", "排序") goes in `rank`, NOT inside the predicate.
-  7. NEVER invent ops or fields. The schema below is closed. Examples of
+  7. NEVER invent ops or fields. The schema is closed. Examples of
      things you must NOT emit: `mul` / `div` / `add` / `sub` (no scalar
-     arithmetic), `between`, `rank`, `pe`, `market_cap`, `circ_mv`,
-     `listing_age` (use `listed_days` instead), `last_n` (use windowed agg).
-  8. If a condition cannot be expressed with the closed schema, DROP it
-     entirely and add a Chinese sentence to `warnings`. Examples that
-     MUST be dropped + warned (not approximated):
-       * "股价高于 3 个月最高价的 90%" — needs scalar multiplication
-       * "流通市值大于 60 亿" / "总市值"     — no market-cap field
-       * "市盈率 / PE / PB"                   — no fundamental fields
-       * "RSI / MACD / KDJ"                   — only ma5/ma10/ma20/ma60 exist
-     Approximation is forbidden — a wrong DSL is worse than a dropped one.
+     arithmetic), `between` (use `and(gte, lte)`), `rank` inside expr
+     (use the top-level `rank` slot), `pe`, `market_cap`, `circ_mv`,
+     `listing_age` (use `listed_days`), `last_n` (use a windowed agg).
+  8. Map every condition you CAN to the closed schema, even if the
+     wording is loose. Examples that LOOK unsupported but ARE expressible:
+       * "介于 a 到 b 之间"         → and(gte a, lte b)
+       * "近 N 天内某天 X"           → exists window N predicate X
+       * "连续 N 天 X"               → consecutive min_len=N predicate X
+       * "全部 / 每天 / 都 X"        → for_all window predicate X
+       * "X 高于 Y 的 N%" 当 N=100   → gt(X, Y) (the 100% is the identity)
+       * "突破 N 日新高"             → gt(close_qfq, max-agg over N)
+     Drop a condition ONLY when no valid DSL form exists. Unconditional
+     drops + warnings are required for these specific cases (and only
+     these — anything else, try harder before dropping):
+       * "股价高于 N 月最高价的 K%" with K != 100  — needs scalar multiplication
+       * "流通市值 / 总市值 / 市值"   — no market-cap field
+       * "市盈率 / PE / PB / ROE"     — no fundamental fields
+       * "RSI / MACD / KDJ / BOLL"    — only ma5/ma10/ma20/ma60 exist
+     A correctly-translated condition is always better than dropping it.
   9. "实际换手率" is the same column as `turnover_rate`; do not invent
      a separate field for it.
  9a. Standard A-share term mapping for `universe_plan` (use these exact
