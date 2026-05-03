@@ -1,10 +1,14 @@
 'use client';
 
 import { Box, Button, Flex, Text } from '@chakra-ui/react';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 
 import { Feat } from '../../lib/eqty/feat.js';
-import { useAnalyzeMany, useMarketSentiment } from '../../lib/hooks/use-eqty-data.js';
+import {
+  useAnalyzeMany,
+  useKlineBulk,
+  useMarketSentiment,
+} from '../../lib/hooks/use-eqty-data.js';
 import { useStockList } from '../../lib/hooks/use-stock-list.js';
 import { useBlacklistStore } from '../../lib/stores/blacklist.store.js';
 import { useSectorsStore, type Sector } from '../../lib/stores/sectors.store.js';
@@ -35,6 +39,26 @@ export function SectorsPanel(): React.ReactElement {
     codes: allCodes,
   };
 
+  // Bulk last-2-bar fetch for the union of every sector's members so
+  // each row can compute its own average chg% from the same payload.
+  const unionCodes = useMemo(() => {
+    const seen = new Set<string>(allCodes);
+    for (const s of sectors) for (const c of s.codes) seen.add(c);
+    return [...seen];
+  }, [allCodes, sectors]);
+  const klineBatch = useKlineBulk(unionCodes, 2);
+  const chgPctByCode = useMemo(() => {
+    const out = new Map<string, number>();
+    for (const [code, bars] of klineBatch.byCode) {
+      if (bars.length < 2) continue;
+      const cur = bars[bars.length - 1]!;
+      const prev = bars[bars.length - 2]!;
+      if (prev.close === 0) continue;
+      out.set(code, cur.close / prev.close - 1);
+    }
+    return out;
+  }, [klineBatch.byCode]);
+
   return (
     <Pane
       feat={Feat.Sectors}
@@ -56,6 +80,7 @@ export function SectorsPanel(): React.ReactElement {
           <SectorRow
             sector={allSector}
             selected={activeSectorId === ALL_SECTOR_ID}
+            chgPctByCode={chgPctByCode}
             onClick={(): void => {
               setActiveSector(ALL_SECTOR_ID);
             }}
@@ -69,6 +94,7 @@ export function SectorsPanel(): React.ReactElement {
                 key={r.id}
                 sector={r}
                 selected={activeSectorId === r.id}
+                chgPctByCode={chgPctByCode}
                 onClick={(): void => {
                   setActiveSector(r.id);
                 }}
@@ -84,6 +110,7 @@ export function SectorsPanel(): React.ReactElement {
                 key={r.id}
                 sector={r}
                 selected={activeSectorId === r.id}
+                chgPctByCode={chgPctByCode}
                 onClick={(): void => {
                   setActiveSector(r.id);
                 }}
@@ -193,14 +220,35 @@ function Empty({ children }: { children: React.ReactNode }): React.ReactElement 
 interface RowProps {
   readonly sector: Sector;
   readonly selected: boolean;
+  readonly chgPctByCode: ReadonlyMap<string, number>;
   readonly onClick: () => void;
 }
 
-function SectorRow({ sector, selected, onClick }: RowProps): React.ReactElement {
+function SectorRow({
+  sector,
+  selected,
+  chgPctByCode,
+  onClick,
+}: RowProps): React.ReactElement {
   const codes = sector.codes;
   const cached = useMarketSentiment(codes);
   const analyze = useAnalyzeMany(codes);
   const themeCount = cached.data?.themeClusters.length ?? 0;
+
+  // Average chg% across members that have a fresh latest+previous bar.
+  // Members without recent kline are excluded from both numerator and
+  // denominator so a half-loaded universe doesn't drag the mean to 0.
+  const avgChgPct = (() => {
+    let sum = 0;
+    let count = 0;
+    for (const c of codes) {
+      const v = chgPctByCode.get(c);
+      if (v === undefined) continue;
+      sum += v;
+      count += 1;
+    }
+    return count === 0 ? null : sum / count;
+  })();
 
   const onAnalyze = (e: React.MouseEvent): void => {
     e.stopPropagation();
@@ -233,10 +281,10 @@ function SectorRow({ sector, selected, onClick }: RowProps): React.ReactElement 
           {themeCount > 0 ? ` · themed:${String(themeCount)}` : ''}
         </Text>
       </Box>
-      {sector.chgPct !== null && (
-        <Text fontFamily="mono" color={sector.chgPct >= 0 ? 'up' : 'down'} fontWeight="600">
-          {sector.chgPct >= 0 ? '+' : ''}
-          {sector.chgPct.toFixed(2)}%
+      {avgChgPct !== null && (
+        <Text fontFamily="mono" color={avgChgPct >= 0 ? 'up' : 'down'} fontWeight="600">
+          {avgChgPct >= 0 ? '+' : ''}
+          {(avgChgPct * 100).toFixed(2)}%
         </Text>
       )}
       <AnalyzeBtn

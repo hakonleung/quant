@@ -38,7 +38,7 @@ interface SortState {
   readonly dir: 'asc' | 'desc';
 }
 
-const STICKY_COL_WIDTH = 180;
+const STICKY_COL_WIDTH = 130;
 
 export function ListPanel(): React.ReactElement {
   const activeSectorId = useUiStore((s) => s.activeSectorId);
@@ -568,7 +568,6 @@ function ColumnHeader({
             position={c.sticky === true ? 'sticky' : 'static'}
             left={c.sticky === true ? 0 : undefined}
             zIndex={c.sticky === true ? 4 : 3}
-            borderRightWidth={c.sticky === true ? '1px' : 0}
             borderColor="line"
             flexShrink={0}
           >
@@ -625,7 +624,7 @@ function RowItem({ row, columns, top, h, focused, onClick }: RowItemProps): Reac
           left={c.sticky === true ? 0 : undefined}
           bg={c.sticky === true ? (focused ? 'accentBg' : 'panel') : 'transparent'}
           zIndex={c.sticky === true ? 1 : 0}
-          borderRightWidth={c.sticky === true ? '1px' : 0}
+          borderBottomWidth={c.sticky === true ? '1px' : 0}
           borderColor="line2"
           flexShrink={0}
         >
