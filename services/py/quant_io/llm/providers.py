@@ -6,30 +6,31 @@ the OpenAI-compatible base URL is) is design-time data, not a secret.
 We hardcode it here so a fresh checkout works without YAML / TOML
 gymnastics, and only the per-provider API key is sourced from env.
 
-Usage::
+Selection priority used by :func:`build_llm_client`:
 
-    client = build_llm_client()                       # primary, no web-search
-    client = build_llm_client(tier="flash")           # cheap/fast model
-    client = build_llm_client(need_web_search=True)   # filter to pro-web-search
+1. ``need_web_search=True`` → first provider with ``is_pro_web_search=True``
+   (and an API key in env), use its ``model_pro``.
+2. ``use_flash=True`` → first provider that *defines* ``model_flash``
+   (and an API key in env), use its ``model_flash``.
+3. otherwise → first provider with an API key in env, use ``model_pro``.
 
-The list order is the priority. ``build_llm_client`` walks the list,
-filters by web-search if requested, and returns the first provider whose
-``api_key_env`` is set in ``os.environ``.
+The list order is the user-visible priority. ``model_flash`` is
+optional — providers that don't expose a cheap tier just leave it
+``None`` and are skipped when ``use_flash=True``.
 """
 
 from __future__ import annotations
 
 import os
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Final, Literal
+from typing import TYPE_CHECKING, Final
 
 from quant_core.errors import QuantError
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from quant_io.llm.openai_compatible import OpenAiCompatibleLlmClient
-
-
-Tier = Literal["pro", "flash"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -41,8 +42,6 @@ class LlmProviderConfig:
     ``name``."""
     model_pro: str
     """High-quality model — default for DSL translation."""
-    model_flash: str
-    """Cheap / fast model — for short-form prompts where latency wins."""
     is_pro_web_search: bool
     """Whether ``model_pro`` natively supports web search via the
     OpenAI-compatible chat endpoint."""
@@ -50,6 +49,9 @@ class LlmProviderConfig:
     """OpenAI-compatible base URL."""
     api_key_env: str
     """Environment variable name where the API key lives."""
+    model_flash: str | None = None
+    """Cheap / fast model — optional. When unset, the provider is
+    skipped under ``use_flash=True``."""
 
 
 LLM_PROVIDERS: Final[tuple[LlmProviderConfig, ...]] = (
@@ -64,7 +66,6 @@ LLM_PROVIDERS: Final[tuple[LlmProviderConfig, ...]] = (
     LlmProviderConfig(
         provider="moonshot",
         model_pro="kimi-k2.6",
-        model_flash="moonshot-v1-8k",
         is_pro_web_search=True,
         base_url="https://api.moonshot.cn/v1",
         api_key_env="MOONSHOT_API_KEY",
@@ -73,61 +74,72 @@ LLM_PROVIDERS: Final[tuple[LlmProviderConfig, ...]] = (
 """Priority-ordered list of LLM providers we know about."""
 
 
-def select_provider(*, need_web_search: bool = False) -> tuple[LlmProviderConfig, str]:
-    """Pick the first eligible provider whose API key is in env.
-
-    Args:
-        need_web_search: when ``True``, restrict to providers whose
-            ``is_pro_web_search`` is ``True``.
-
-    Returns:
-        ``(config, api_key)`` for the chosen provider.
-
-    Raises:
-        QuantError: ``LLM_FAILED`` if no provider in the catalog matches
-            the filter and has its API key set.
-    """
-    candidates = [cfg for cfg in LLM_PROVIDERS if not need_web_search or cfg.is_pro_web_search]
+def _first_eligible(
+    predicate: Callable[[LlmProviderConfig], bool],
+    *,
+    label: str,
+) -> tuple[LlmProviderConfig, str]:
+    """Walk the catalog in priority order, return the first row passing
+    ``predicate`` whose API key is set in ``os.environ``."""
+    candidates = [cfg for cfg in LLM_PROVIDERS if predicate(cfg)]
     if not candidates:
         raise QuantError(
             "LLM_FAILED",
-            "no provider in catalog supports the requested capability",
-            {"need_web_search": need_web_search},
+            f"no provider in catalog satisfies {label}",
+            {"selector": label},
         )
-    missing: list[str] = []
+    tried: list[str] = []
     for cfg in candidates:
         api_key = os.environ.get(cfg.api_key_env)
         if api_key:
             return cfg, api_key
-        missing.append(cfg.api_key_env)
+        tried.append(cfg.api_key_env)
     raise QuantError(
         "LLM_FAILED",
-        "no LLM API key set in env (tried: " + ", ".join(missing) + ")",
-        {"need_web_search": need_web_search, "tried": missing},
+        f"no API key set for any {label} provider (tried: {', '.join(tried)})",
+        {"selector": label, "tried": tried},
     )
 
 
 def build_llm_client(
     *,
-    tier: Tier = "pro",
     need_web_search: bool = False,
+    use_flash: bool = False,
 ) -> OpenAiCompatibleLlmClient:
     """Construct an LLM client honouring the catalog priority.
 
     Args:
-        tier: ``"pro"`` (default) → ``model_pro``; ``"flash"`` → cheap model.
-        need_web_search: see :func:`select_provider`.
+        need_web_search: filter to providers with ``is_pro_web_search=True``;
+            uses ``model_pro``. Mutually exclusive with ``use_flash``.
+        use_flash: pick the first provider that defines ``model_flash``;
+            uses that cheaper model.
 
     Returns:
-        A ready-to-call :class:`LLMClient` adapter.
+        A ready-to-call OpenAI-compatible :class:`LLMClient` adapter.
 
     Raises:
-        QuantError: ``LLM_FAILED`` from :func:`select_provider`.
+        QuantError: ``LLM_FAILED`` when no provider in the catalog
+            matches the requested capability or when no matching provider
+            has its API key set.
     """
     from quant_io.llm.openai_compatible import OpenAiCompatibleLlmClient
 
-    cfg, api_key = select_provider(need_web_search=need_web_search)
-    model = cfg.model_pro if tier == "pro" else cfg.model_flash
+    if need_web_search and use_flash:
+        raise QuantError(
+            "LLM_FAILED",
+            "need_web_search and use_flash are mutually exclusive",
+        )
+    if need_web_search:
+        cfg, api_key = _first_eligible(lambda c: c.is_pro_web_search, label="is_pro_web_search")
+        model = cfg.model_pro
+    elif use_flash:
+        cfg, api_key = _first_eligible(lambda c: c.model_flash is not None, label="has_model_flash")
+        # Narrowed by the predicate; assert keeps mypy happy.
+        assert cfg.model_flash is not None
+        model = cfg.model_flash
+    else:
+        cfg, api_key = _first_eligible(lambda _c: True, label="any")
+        model = cfg.model_pro
     return OpenAiCompatibleLlmClient(
         provider_name=cfg.provider,
         base_url=cfg.base_url,
