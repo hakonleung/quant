@@ -42,7 +42,7 @@ from quant_io.sources.akshare_stock_meta import AKShareStockMetaSource
 
 from quant_rpc.handlers import HandlerRegistry
 from quant_rpc.ops.kline import ListKlineWatermarksHandler, SyncKlineForCodeHandler
-from quant_rpc.ops.kline_read import ListKlineForCodeHandler
+from quant_rpc.ops.kline_read import ListKlineBulkLastNHandler, ListKlineForCodeHandler
 from quant_rpc.ops.nl_screen import NlScreenHandler
 from quant_rpc.ops.pattern import FindSimilarPatternsHandler
 from quant_rpc.ops.sentiment import (
@@ -153,6 +153,7 @@ def main() -> int:
     registry.register(SyncKlineForCodeHandler(kline_service))
     registry.register(ListKlineWatermarksHandler(meta_repo, kline_repo))
     registry.register(ListKlineForCodeHandler(kline_service))
+    registry.register(ListKlineBulkLastNHandler(kline_service))
     registry.register(GetCachedStockSentimentHandler(sentiment_cache, clock))
     registry.register(AnalyzeOneStockSentimentHandler(sentiment_service))
     registry.register(GetCachedMarketSentimentHandler(sentiment_cache, clock))

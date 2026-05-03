@@ -34,6 +34,48 @@ interface RowAccess {
 
 type ScaleMap = Readonly<Record<string, number>>;
 
+/**
+ * Bulk-mapper variant: the `list_kline_bulk_last_n` Arrow table tags
+ * every row with its source `code`, so the gateway groups by code in
+ * one pass instead of mounting one HTTP request per stock.
+ */
+export function arrowTableToKlineBarsByCode(table: Table): Record<string, KlineBar[]> {
+  const scales = decimalScales(table);
+  const out: Record<string, KlineBar[]> = {};
+  for (let i = 0; i < table.numRows; i++) {
+    const proxy = table.get(i);
+    if (proxy === null) continue;
+    const row = proxy.toJSON() as RowAccess & { code?: unknown };
+    if (typeof row.code !== 'string' || row.code.length === 0) continue;
+    const bar = decodeBar(row, scales);
+    const list = out[row.code];
+    if (list === undefined) {
+      out[row.code] = [bar];
+    } else {
+      list.push(bar);
+    }
+  }
+  return out;
+}
+
+function decodeBar(row: RowAccess, scales: ScaleMap): KlineBar {
+  const candidate = {
+    date: dateToIsoDate(row.trade_date, 'trade_date'),
+    open: requireNumber(row.open_qfq, 'open_qfq', scales),
+    high: requireNumber(row.high_qfq, 'high_qfq', scales),
+    low: requireNumber(row.low_qfq, 'low_qfq', scales),
+    close: requireNumber(row.close_qfq, 'close_qfq', scales),
+    volume: requireIntegralNumber(row.volume, 'volume'),
+    turnover: requireNumber(row.amount, 'amount', scales),
+    turnoverRate: requireNumber(row.turnover_rate, 'turnover_rate', scales),
+    ma5: optionalNumber(row.ma5, 'ma5', scales),
+    ma10: optionalNumber(row.ma10, 'ma10', scales),
+    ma20: optionalNumber(row.ma20, 'ma20', scales),
+    ma60: optionalNumber(row.ma60, 'ma60', scales),
+  };
+  return KlineBarSchema.parse(candidate);
+}
+
 export function arrowTableToKlineBars(table: Table): KlineBar[] {
   const scales = decimalScales(table);
   const out: KlineBar[] = [];

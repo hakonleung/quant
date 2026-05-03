@@ -3,7 +3,6 @@
 import type { KlineBar, MarketSentiment, Sentiment, StockMetaDto } from '@quant/shared';
 import {
   useMutation,
-  useQueries,
   useQuery,
   useQueryClient,
   type UseMutationResult,
@@ -18,6 +17,8 @@ import {
   getCachedSentiment,
   getStockMeta,
   listKline,
+  listKlineBulk,
+  type KlineBulkResponse,
 } from '../api/endpoints.js';
 
 const sentimentKey = (code: string): readonly ['sentiment', string] => ['sentiment', code];
@@ -52,10 +53,10 @@ export function useKline(code: string, range: string): UseQueryResult<readonly K
 }
 
 /**
- * Batch variant of {@link useKline}: kicks off N parallel kline queries
- * (one per code) and returns a `Map<code, bars>` plus an aggregate
- * loading flag. Used by the list panel so sortable metric columns can
- * be computed from real data before render.
+ * Bulk last-N kline read. One HTTP request returns
+ * `Record<code, bars>`, replacing the previous per-row useQueries
+ * fan-out which saturated the browser socket pool
+ * (ERR_INSUFFICIENT_RESOURCES) on big universes.
  */
 export interface BatchKlineState {
   readonly byCode: ReadonlyMap<string, readonly KlineBar[]>;
@@ -63,34 +64,28 @@ export interface BatchKlineState {
   readonly readyCount: number;
 }
 
-export function useKlineByCodes(
-  codes: readonly string[],
-  range: string,
-): BatchKlineState {
-  const results = useQueries({
-    queries: codes.map((code) => ({
-      queryKey: ['kline', code, range] as const,
-      queryFn: () => listKline(code, range),
-      enabled: code.length > 0,
-      staleTime: 60 * 60 * 1000,
-    })),
+export function useKlineBulk(codes: readonly string[], n: number): BatchKlineState {
+  // Canonical key — sorted + deduped — so re-orderings reuse the cache.
+  const keyCodes = useMemo(() => [...new Set(codes)].sort(), [codes]);
+  const query = useQuery<KlineBulkResponse>({
+    queryKey: ['kline.bulk', n, keyCodes.join(',')] as const,
+    queryFn: () => listKlineBulk(keyCodes, n),
+    enabled: keyCodes.length > 0,
+    staleTime: 60 * 60 * 1000,
   });
   return useMemo(() => {
     const byCode = new Map<string, readonly KlineBar[]>();
-    let ready = 0;
-    let loading = false;
-    for (let i = 0; i < codes.length; i += 1) {
-      const r = results[i];
-      const code = codes[i];
-      if (r === undefined || code === undefined) continue;
-      if (r.data !== undefined) {
-        byCode.set(code, r.data);
-        ready += 1;
+    if (query.data !== undefined) {
+      for (const [code, bars] of Object.entries(query.data)) {
+        byCode.set(code, bars);
       }
-      if (r.isLoading || r.isFetching) loading = true;
     }
-    return { byCode, isLoading: loading, readyCount: ready };
-  }, [codes, results]);
+    return {
+      byCode,
+      isLoading: query.isLoading || query.isFetching,
+      readyCount: byCode.size,
+    };
+  }, [query.data, query.isLoading, query.isFetching]);
 }
 
 /**

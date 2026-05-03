@@ -20,7 +20,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { Feat } from '../../lib/eqty/feat.js';
 import { deriveStats, type StockStats } from '../../lib/fp/stock-stats.js';
-import { useKlineByCodes } from '../../lib/hooks/use-eqty-data.js';
+import { useKlineBulk } from '../../lib/hooks/use-eqty-data.js';
 import { useStockList } from '../../lib/hooks/use-stock-list.js';
 import { useSectorsStore, type Sector } from '../../lib/stores/sectors.store.js';
 import { ALL_SECTOR_ID, useUiStore } from '../../lib/stores/ui.store.js';
@@ -66,7 +66,7 @@ export function ListPanel(): React.ReactElement {
     return sector.codes;
   }, [isAll, sector, ready]);
 
-  const klineBatch = useKlineByCodes(codes, '30D');
+  const klineBatch = useKlineBulk(codes, 5);
 
   const evidenceKeys: readonly string[] = useMemo(() => {
     if (!isDynamic || sector === null) return [];

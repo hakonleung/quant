@@ -45,6 +45,29 @@ export async function listKline(code: string, range: string): Promise<readonly K
   );
 }
 
+const KlineBulkSchema = z.record(z.string(), z.array(KlineBarSchema));
+export type KlineBulkResponse = z.infer<typeof KlineBulkSchema>;
+
+/**
+ * Bulk last-N read. `codes` empty → returns an empty object without
+ * hitting the gateway.
+ */
+export async function listKlineBulk(
+  codes: readonly string[],
+  n: number,
+): Promise<KlineBulkResponse> {
+  if (codes.length === 0) return {};
+  const q = codes.map(encodeURIComponent).join(',');
+  try {
+    return await apiGet(
+      `/api/kline/bulk?codes=${q}&n=${String(n)}`,
+      (raw) => KlineBulkSchema.parse(raw),
+    );
+  } catch {
+    return {};
+  }
+}
+
 /**
  * Cached read for the EQTY page's default render path. Returns `null`
  * when no cache row exists (404) so the panel can show "no analysis

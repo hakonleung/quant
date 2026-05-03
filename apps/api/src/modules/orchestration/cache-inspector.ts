@@ -34,18 +34,44 @@ export class CacheInspector {
     const result = await this.flight.doGet('list_kline_watermarks', {}, { traceId });
     const table = result.value;
     const today = todayInShanghai();
-    const stale: string[] = [];
+    interface Row {
+      readonly code: string;
+      readonly lastDate: string | null;
+    }
+    const rows: Row[] = [];
     for (let i = 0; i < table.numRows; i++) {
       const proxy = table.get(i);
       if (proxy === null) continue;
-      const row = proxy.toJSON() as { code: unknown; last_date: unknown };
-      if (typeof row.code !== 'string') continue;
-      const last = parseDateCell(row.last_date);
-      if (last === null || last < today) {
-        stale.push(row.code);
-      }
+      const raw = proxy.toJSON() as { code: unknown; last_date: unknown };
+      if (typeof raw.code !== 'string') continue;
+      rows.push({ code: raw.code, lastDate: parseDateCell(raw.last_date) });
     }
-    this.logger.debug(`stale_kline_count=${String(stale.length)} today=${today}`);
+    // The previous heuristic (`last_date < today`) flagged every code
+    // every cron tick on weekends and holidays — today never matches a
+    // trading day, so the worker spun up an infinite re-sync loop and
+    // hammered akshare for new bars that don't exist yet.
+    //
+    // The real signal we have is the per-code watermark distribution:
+    // codes that match the universe-wide max are caught up regardless
+    // of calendar date. Codes lagging the max are genuinely stale.
+    let universeMax: string | null = null;
+    for (const r of rows) {
+      if (r.lastDate === null) continue;
+      if (universeMax === null || r.lastDate > universeMax) universeMax = r.lastDate;
+    }
+    // Bound the threshold by today so a future-clock parquet doesn't
+    // reach forward and freeze syncs.
+    const threshold = universeMax === null
+      ? today
+      : universeMax > today
+        ? today
+        : universeMax;
+    const stale = rows
+      .filter((r) => r.lastDate === null || r.lastDate < threshold)
+      .map((r) => r.code);
+    this.logger.debug(
+      `stale_kline_count=${String(stale.length)} threshold=${threshold} today=${today}`,
+    );
     return stale;
   }
 }
