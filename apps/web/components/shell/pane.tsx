@@ -248,6 +248,9 @@ function PaneHeader({
         color={cyber ? 'term.green' : 'accent'}
         whiteSpace="nowrap"
         flexShrink={0}
+        pr="8px"
+        borderRightWidth="1px"
+        borderColor={cyber ? 'term.line' : 'line'}
       >
         {id}
       </Text>
@@ -261,10 +264,28 @@ function PaneHeader({
         whiteSpace="nowrap"
         overflow="hidden"
         textOverflow="ellipsis"
-        minW={0}
+        flexShrink={0}
+        pr="8px"
+        borderRightWidth={right !== undefined ? '1px' : 0}
+        borderColor={cyber ? 'term.line' : 'line'}
       >
         {title}
       </Text>
+      {right !== undefined && (
+        <Box
+          fontFamily="mono"
+          fontSize="10px"
+          letterSpacing="0.06em"
+          color={cyber ? 'term.ink3' : 'ink3'}
+          flex="1"
+          minW={0}
+          overflow="hidden"
+          textOverflow="ellipsis"
+          whiteSpace="nowrap"
+        >
+          {right}
+        </Box>
+      )}
       <HStack
         ml="auto"
         gap="10px"
@@ -272,8 +293,11 @@ function PaneHeader({
         fontSize="10px"
         letterSpacing="0.06em"
         color={cyber ? 'term.ink3' : 'ink3'}
+        flexShrink={0}
+        pl="8px"
+        borderLeftWidth="1px"
+        borderColor={cyber ? 'term.line' : 'line'}
       >
-        {right !== undefined && <>{right}</>}
         <PaneControls
           cyber={cyber}
           mode={mode}
