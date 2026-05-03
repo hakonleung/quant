@@ -15,6 +15,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Final
 
 import pyarrow as pa
+from quant_core.errors import QuantError
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -24,6 +25,7 @@ if TYPE_CHECKING:
 
 _CHECK_OP: Final[str] = "check_stock_meta_sources"
 _SYNC_OP: Final[str] = "sync_stock_meta_full"
+_ENRICH_OP: Final[str] = "enrich_stock_meta_for_code"
 
 
 SOURCE_HEALTH_SCHEMA: Final[pa.Schema] = pa.schema(
@@ -43,6 +45,14 @@ SYNC_REPORT_SCHEMA: Final[pa.Schema] = pa.schema(
         ("added", pa.int64()),
         ("changed", pa.int64()),
         ("unchanged", pa.int64()),
+    ]
+)
+
+
+ENRICH_REPORT_SCHEMA: Final[pa.Schema] = pa.schema(
+    [
+        ("code", pa.string()),
+        ("found", pa.bool_()),
     ]
 )
 
@@ -101,4 +111,35 @@ class SyncFullHandler:
                 }
             ],
             schema=SYNC_REPORT_SCHEMA,
+        )
+
+
+class EnrichOneHandler:
+    """``enrich_stock_meta_for_code`` — pull one stock's full meta + upsert.
+
+    Single-code companion to :class:`SyncFullHandler`; powers the
+    NestJS orchestration's per-code enrich queue
+    (`docs/modules/09-update-orchestration.md` §6.1).
+    """
+
+    op = _ENRICH_OP
+    schema = ENRICH_REPORT_SCHEMA
+
+    __slots__ = ("_sync",)
+
+    def __init__(self, sync: StockMetaSyncService) -> None:
+        self._sync = sync
+
+    def execute(self, args: Mapping[str, object]) -> pa.Table:
+        raw_code = args.get("code")
+        if not isinstance(raw_code, str) or not raw_code:
+            raise QuantError(
+                "INVALID_ARGUMENT",
+                "args.code must be a non-empty string",
+                {"key": "code"},
+            )
+        item = self._sync.enrich_one(raw_code)
+        return pa.Table.from_pylist(
+            [{"code": raw_code, "found": item is not None}],
+            schema=ENRICH_REPORT_SCHEMA,
         )

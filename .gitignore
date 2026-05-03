@@ -25,9 +25,6 @@ htmlcov/
 packages/shared/generated/
 services/py/quant_core/generated/
 
-# Local data + state (NOT committed)
-data/
-
 # Env / secrets
 .env
 .env.local

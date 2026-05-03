@@ -128,6 +128,25 @@ class StockMetaSyncService:
         """Forwarded to the chain — every source's current health."""
         return list(self._chain.healthcheck_all())
 
+    def enrich_one(self, code: str) -> StockMeta | None:
+        """Pull a single stock's full meta from the chain and upsert.
+
+        Returns the upserted record, or ``None`` if every source returned
+        ``None`` for ``code`` (i.e. unknown / delisted).
+
+        Raises:
+            QuantError: ``SOURCE_UNAVAILABLE`` if every source failed.
+        """
+
+        def fetch(source: StockMetaSource) -> StockMeta | None:
+            return source.fetch_one(code)
+
+        item = self._chain.call(fetch)
+        if item is None:
+            return None
+        self._repo.upsert_many([item])
+        return item
+
     # -- helpers --------------------------------------------------------
 
     def _upsert_diff(self, source_name: str, items: list[StockMeta]) -> SyncReport:
