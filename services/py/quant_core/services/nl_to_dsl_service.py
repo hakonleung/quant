@@ -95,8 +95,10 @@ class NlToDslService:
         system = _build_system_prompt(asof)
         user = f"User query (Chinese):\n{nl_query.strip()}"
         first_error: str | None = None
+        last_raw: str | None = None
         for attempt in range(2):
             raw = self._llm.complete_json(system=system, user=user)
+            last_raw = raw
             try:
                 return _parse_response(raw, nl_query)
             except QuantError as exc:
@@ -107,18 +109,22 @@ class NlToDslService:
                         "attempt": attempt,
                         "error": first_error,
                         "details": dict(exc.details),
+                        "raw_snippet": raw[:500],
                     },
                 )
-                # Hand the validator's error back to the model on retry.
+                # Hand the validator's error back to the model on retry,
+                # echoing both the error and the offending JSON so the
+                # model can self-correct without guessing.
                 user = (
                     f"User query (Chinese):\n{nl_query.strip()}\n\n"
-                    f"Previous attempt failed validation: {first_error}\n"
-                    "Fix the JSON and re-emit it."
+                    f"Your previous JSON failed validation: {first_error}\n"
+                    f"Previous JSON was:\n{raw}\n\n"
+                    "Emit the corrected JSON only. Do not repeat the same mistake."
                 )
         raise QuantError(
             "NL_TRANSLATION_FAILED",
             f"could not produce a valid plan after 2 attempts: {first_error}",
-            {"nl_query": nl_query},
+            {"nl_query": nl_query, "last_raw": (last_raw or "")[:1000]},
         )
 
 
@@ -241,13 +247,40 @@ Always respond with ONE JSON object with these top-level keys:
 
 Hard rules:
   1. Use absolute date {asof} for "asof". NEVER write "today" / "今天".
-  2. Trading days are the unit for every "days" parameter.
+  2. Trading days are the unit for every "days" parameter. Use these
+     conversions and prefer them over raw calendar-day counts:
+       * 一周         → 5
+       * 一个月       → 20
+       * 三个月       → 60
+       * 半年         → 120
+       * 一年 / 近一年 → 240
   3. Prefer the precomputed `ma5/ma10/ma20/ma60` columns over generic indicators.
   4. Use `close_qfq` (前复权) by default; only use `close` if the user explicitly says "不复权".
   5. Conditions about ST / 北交所 / 上市天数 / 行业 belong in `universe_plan`, NOT `screen_plan`.
   6. Top-N / ranking ("前 N", "排序") goes in `rank`, NOT inside the predicate.
-  7. If a condition cannot be expressed (e.g. "市值", non-supported indicator),
-     drop it and add a warning in Chinese.
+  7. NEVER invent ops or fields. The schema below is closed. Examples of
+     things you must NOT emit: `mul` / `div` / `add` / `sub` (no scalar
+     arithmetic), `between`, `rank`, `pe`, `market_cap`, `circ_mv`,
+     `listing_age` (use `listed_days` instead), `last_n` (use windowed agg).
+  8. If a condition cannot be expressed with the closed schema, DROP it
+     entirely and add a Chinese sentence to `warnings`. Examples that
+     MUST be dropped + warned (not approximated):
+       * "股价高于 3 个月最高价的 90%" — needs scalar multiplication
+       * "流通市值大于 60 亿" / "总市值"     — no market-cap field
+       * "市盈率 / PE / PB"                   — no fundamental fields
+       * "RSI / MACD / KDJ"                   — only ma5/ma10/ma20/ma60 exist
+     Approximation is forbidden — a wrong DSL is worse than a dropped one.
+  9. "实际换手率" is the same column as `turnover_rate`; do not invent
+     a separate field for it.
+ 9a. Standard A-share term mapping for `universe_plan` (use these exact
+     thresholds unless the user states their own number):
+       * "ST" / "*ST" / "st"       → `is_st = false`
+       * "北交所" / "北交"          → `code` not_starts_with one of "8"/"4"/"920"
+       * "新股" / "次新股"          → `listed_days >= 90`
+       * "上市超过 N 个月"          → `listed_days >= N*30`
+       * "上市超过一年"             → `listed_days >= 365`
+ 10. Inclusive range like "介于 a 到 b 之间" → emit `and` of `gte` + `lte`,
+     not a `between` op (which does not exist).
 
 K-line fields (screen_plan): {screen_fields}
 Universe fields (universe_plan): {universe_fields}

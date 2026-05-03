@@ -23,6 +23,7 @@ dev = [
     # quant_core / quant_cache available without `--all-packages`.
     "quant-py",
     "akshare>=1.18.60",
+    "python-dotenv>=1.2.2",
 ]
 
 [tool.uv.sources]

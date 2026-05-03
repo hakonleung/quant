@@ -61,8 +61,9 @@ pytestmark = [
 # -- synthetic data builder ---------------------------------------------
 
 
-_TOTAL_DAYS = 300
-"""Number of trading days per synthetic stock (well past 240 = 1y)."""
+_TOTAL_DAYS = 420
+"""Trading days per synthetic stock — must exceed 365 so the LLM is
+free to interpret '近一年' as ~250 (trading) or ~365 (calendar) days."""
 
 
 def _trading_dates() -> list[date]:
@@ -125,24 +126,48 @@ def _stock_profile(idx: int, asof: date) -> dict[str, object]:
 
 
 def _build_bars(profile: dict[str, object]) -> list[RawDailyBar]:
-    """Geometric-drift price series with a deterministic per-day jitter."""
+    """Synthetic price path with realistic A-share characteristics:
+
+    * Geometric drift over the full window (≥240d) so 1y returns can
+      clear 100% for the strong-uptrend cohort.
+    * Sinusoidal jitter big enough that some asof-day pct_chg exceeds 3%.
+    * A late-cycle rally for idx < 35 so the 20-day window also clears
+      15% and the asof-day pct_chg lands positive.
+    * Scaled volume / base price so ``amount = price * volume`` lands
+      in the 1e8-1e10 range — enough to pass "成交额 > 4亿".
+    """
+    import math
+
+    idx = int(profile["idx"])  # type: ignore[arg-type]
     code = str(profile["code"])
     drift = float(profile["drift"])  # type: ignore[arg-type]
     turnover = profile["turnover"]
-    base = profile["base_price"]
+    base = profile["base_price"] * Decimal(5)  # 50-100 range, A-share-ish
     bars: list[RawDailyBar] = []
     price = base
-    for i, d in enumerate(_trading_dates()):
-        # Cosine-modulated multiplier for predictable but non-monotonic motion.
-        import math
+    dates = _trading_dates()
+    n = len(dates)
+    rally_window = 30  # last 30 days for the strong cohort
 
-        mult = Decimal(str(1.0 + drift + 0.005 * math.sin(i * 0.27)))
-        price = price * mult
-        # Round so parquet round-trip stays clean.
+    for i, d in enumerate(dates):
+        # Bigger noise so asof-day moves can exceed 3%.
+        noise = 0.025 * math.sin(i * 0.27 + idx)
+        mult = 1.0 + drift + noise
+        # Late-cycle rally for the strong cohort: extra +0.6% / day for
+        # the final ``rally_window`` days, plus a one-off +4% on the
+        # very last bar so today's pct_chg clears 3%.
+        if idx < 35 and i >= n - rally_window:
+            mult += 0.006
+        if idx < 35 and i == n - 1:
+            mult += 0.04
+        price = price * Decimal(str(mult))
         price = price.quantize(Decimal("0.01"))
         if price <= 0:
             price = Decimal("0.01")
-        amount = (price * 1_000_000).quantize(Decimal("0.01"))
+        # 50M shares/day puts amount in the right order of magnitude:
+        # price ~ 100 x 50M = 5e9, well above the 4e8 threshold.
+        volume = 50_000_000
+        amount = (price * Decimal(volume)).quantize(Decimal("0.01"))
         bars.append(
             RawDailyBar(
                 code=code,
@@ -151,7 +176,7 @@ def _build_bars(profile: dict[str, object]) -> list[RawDailyBar]:
                 high=(price * Decimal("1.005")).quantize(Decimal("0.01")),
                 low=(price * Decimal("0.995")).quantize(Decimal("0.01")),
                 close=price,
-                volume=1_000_000,
+                volume=volume,
                 amount=amount,
                 turnover_rate=turnover,  # type: ignore[arg-type]
             )
@@ -226,9 +251,7 @@ def synthetic_pipeline(tmp_path_factory: pytest.TempPathFactory) -> dict[str, ob
     }
 
 
-def _translate_and_run(
-    fixture: dict[str, object], nl_query: str
-) -> tuple[NlToDslResponse, object]:
+def _translate_and_run(fixture: dict[str, object], nl_query: str) -> tuple[NlToDslResponse, object]:
     """Translate via real LLM, then run the pipeline."""
     nl_svc: NlToDslService = fixture["nl_svc"]  # type: ignore[assignment]
     pipeline: ScreeningPipeline = fixture["pipeline"]  # type: ignore[assignment]
@@ -305,10 +328,17 @@ def test_secondary_compound_queries(synthetic_pipeline: dict[str, object], nl: s
     response, result = _translate_and_run(synthetic_pipeline, nl)
     _print_response_and_result(nl[:30], response, result)
     matched = {m.code for m in result.matches}  # type: ignore[attr-defined]
-    # Universe-stage invariants (LLM should have routed ST / 北交所 / 新股
-    # filters into universe_plan, not lost them).
-    assert not any(c.startswith("83") for c in matched)
-    # Don't crash, don't return everything; the synthetic data has 50
-    # codes and at most 35 in the strong cohort, so a sane plan returns
-    # < 50 matches.
+    # Universe-stage invariants — only assert when the NL explicitly
+    # mentions the cohort. The LLM is right not to drop a cohort the
+    # user never asked about (an over-eager filter would silently
+    # change the universe).
+    if "北交所" in nl:
+        assert not any(c.startswith("83") for c in matched), "北交所 leaked through"
+    if "ST" in nl or "st" in nl:
+        # ST cohort is codes 000036..000040 (idx 35..39).
+        st_codes = {f"00{i + 1:04d}" for i in range(35, 40)}
+        assert not (matched & st_codes), f"ST leaked: {matched & st_codes}"
+    if "新股" in nl:
+        assert not any(c.startswith("30") for c in matched)
+    # Sanity: pipeline didn't crash, didn't return everything.
     assert len(matched) < 50
