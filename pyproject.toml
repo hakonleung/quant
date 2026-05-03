@@ -89,6 +89,9 @@ max-complexity = 10
 # Test-fixture entrypoint — uses `print` for the READY handshake the
 # NestJS contract test waits on. Not a long-lived CLI.
 "services/py/quant_rpc/__main__.py" = ["T201"]
+# E2E tests print pipeline results so the developer can eyeball them
+# when running with --run-e2e + -s.
+"services/py/tests/e2e/**" = ["T201"]
 
 [tool.ruff.format]
 quote-style = "double"
