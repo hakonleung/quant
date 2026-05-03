@@ -37,6 +37,7 @@ import {
 import { pctChangeToLatest, sparseIndices, type MaKey } from '../../lib/fp/kline-chart.js';
 import { useKline, useStockMetaQuery } from '../../lib/hooks/use-eqty-data.js';
 import { useBlacklistStore } from '../../lib/stores/blacklist.store.js';
+import { useUiStore } from '../../lib/stores/ui.store.js';
 import { palette } from '../../lib/theme/tokens.js';
 import { Pane } from '../shell/pane.js';
 import { AddToSectorDialog } from './add-to-sector-dialog.js';
@@ -73,6 +74,10 @@ export function ChartPanel({ code }: Props): React.ReactElement {
   const [hoverIdx, setHoverIdx] = useState<number | null>(null);
   const [hoverPrice, setHoverPrice] = useState<number | null>(null);
   const [showAddDialog, setShowAddDialog] = useState(false);
+  const [rangeAnchor, setRangeAnchor] = useState<number | null>(null);
+  const [rangeEnd, setRangeEnd] = useState<number | null>(null);
+  const setChartRange = useUiStore((s) => s.setChartRange);
+  const chartRange = useUiStore((s) => s.chartRange);
 
   // Reset viewport whenever the underlying series changes.
   const seriesKey = bars.length === 0 ? '' : `${bars[0]!.date}-${bars[bars.length - 1]!.date}`;
@@ -80,7 +85,22 @@ export function ChartPanel({ code }: Props): React.ReactElement {
     setVp(DEFAULT_VIEWPORT);
     setSelectedIdx(null);
     setHoverIdx(null);
+    setRangeAnchor(null);
+    setRangeEnd(null);
   }, [seriesKey]);
+
+  const commitRange = (a: number, b: number): void => {
+    const lo = Math.min(a, b);
+    const hi = Math.max(a, b);
+    const startBar = bars[lo];
+    const endBar = bars[hi];
+    if (startBar === undefined || endBar === undefined) return;
+    setChartRange({
+      code,
+      startDate: startBar.date,
+      endDate: endBar.date,
+    });
+  };
 
   const focusIdx = selectedIdx ?? hoverIdx ?? (bars.length > 0 ? bars.length - 1 : null);
   const focusBar = focusIdx === null ? null : (bars[focusIdx] ?? null);
@@ -130,6 +150,27 @@ export function ChartPanel({ code }: Props): React.ReactElement {
             hoverPrice={hoverPrice}
             setHoverPrice={setHoverPrice}
             focusIdx={focusIdx}
+            rangeAnchor={rangeAnchor}
+            rangeEnd={rangeEnd}
+            committedRange={
+              chartRange !== null && chartRange.code === code
+                ? findRangeIndices(bars, chartRange.startDate, chartRange.endDate)
+                : null
+            }
+            onRangeStart={(idx): void => {
+              setRangeAnchor(idx);
+              setRangeEnd(idx);
+            }}
+            onRangeMove={(idx): void => {
+              if (rangeAnchor !== null) setRangeEnd(idx);
+            }}
+            onRangeEnd={(): void => {
+              if (rangeAnchor !== null && rangeEnd !== null && rangeAnchor !== rangeEnd) {
+                commitRange(rangeAnchor, rangeEnd);
+              }
+              setRangeAnchor(null);
+              setRangeEnd(null);
+            }}
           />
         )}
       </Box>
@@ -154,6 +195,12 @@ interface CanvasProps {
   readonly hoverPrice: number | null;
   readonly setHoverPrice: (p: number | null) => void;
   readonly focusIdx: number | null;
+  readonly rangeAnchor: number | null;
+  readonly rangeEnd: number | null;
+  readonly committedRange: { readonly start: number; readonly end: number } | null;
+  readonly onRangeStart: (idx: number) => void;
+  readonly onRangeMove: (idx: number) => void;
+  readonly onRangeEnd: () => void;
 }
 
 function ChartCanvas({
@@ -166,6 +213,12 @@ function ChartCanvas({
   hoverPrice,
   setHoverPrice,
   focusIdx,
+  rangeAnchor,
+  rangeEnd,
+  committedRange,
+  onRangeStart,
+  onRangeMove,
+  onRangeEnd,
 }: CanvasProps): React.ReactElement {
   const wrapRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(900);
@@ -204,16 +257,40 @@ function ChartCanvas({
     [slice],
   );
 
-  const dragRef = useRef<{ startX: number; startPan: number; moved: boolean } | null>(null);
+  const dragRef = useRef<{
+    startX: number;
+    startPan: number;
+    moved: boolean;
+    isRange: boolean;
+  } | null>(null);
 
   const onMouseDown = (e: React.MouseEvent<SVGSVGElement>): void => {
-    dragRef.current = { startX: e.clientX, startPan: vp.panPx, moved: false };
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = e.clientX - rect.left - PRICE_AXIS_W;
+    const y = e.clientY - rect.top;
+    if (e.shiftKey && x >= 0 && y >= 0 && y <= PRICE_H) {
+      const idx = indexAtX(x, slice, bars.length);
+      if (idx !== null) {
+        onRangeStart(idx);
+        dragRef.current = { startX: e.clientX, startPan: vp.panPx, moved: false, isRange: true };
+        return;
+      }
+    }
+    dragRef.current = { startX: e.clientX, startPan: vp.panPx, moved: false, isRange: false };
   };
   const onMouseMove = (e: React.MouseEvent<SVGSVGElement>): void => {
     const rect = e.currentTarget.getBoundingClientRect();
     const x = e.clientX - rect.left - PRICE_AXIS_W;
     const y = e.clientY - rect.top;
     if (dragRef.current !== null) {
+      if (dragRef.current.isRange) {
+        if (x >= 0 && y >= 0 && y <= PRICE_H) {
+          const idx = indexAtX(x, slice, bars.length);
+          if (idx !== null) onRangeMove(idx);
+        }
+        dragRef.current.moved = true;
+        return;
+      }
       const dx = e.clientX - dragRef.current.startX;
       if (Math.abs(dx) > 2) dragRef.current.moved = true;
       const nextPan = Math.max(0, dragRef.current.startPan - dx);
@@ -230,9 +307,13 @@ function ChartCanvas({
     }
   };
   const onMouseUp = (e: React.MouseEvent<SVGSVGElement>): void => {
-    const wasDrag = dragRef.current?.moved ?? false;
+    const drag = dragRef.current;
     dragRef.current = null;
-    if (wasDrag) return;
+    if (drag?.isRange === true) {
+      onRangeEnd();
+      return;
+    }
+    if (drag?.moved === true) return;
     const rect = e.currentTarget.getBoundingClientRect();
     const x = e.clientX - rect.left - PRICE_AXIS_W;
     const y = e.clientY - rect.top;
@@ -242,6 +323,7 @@ function ChartCanvas({
     setSelectedIdx(selectedIdx === idx ? null : idx);
   };
   const onMouseLeave = (): void => {
+    if (dragRef.current?.isRange === true) onRangeEnd();
     dragRef.current = null;
     setHoverIdx(null);
     setHoverPrice(null);
@@ -382,6 +464,31 @@ function ChartCanvas({
 
         {/* Plot, translated past the price axis */}
         <g transform={`translate(${String(PRICE_AXIS_W)},0)`}>
+          {/* Active drag selection overlay */}
+          {rangeAnchor !== null && rangeEnd !== null && (
+            <rect
+              x={Math.min(xForIndex(rangeAnchor), xForIndex(rangeEnd))}
+              y={0}
+              width={Math.abs(xForIndex(rangeEnd) - xForIndex(rangeAnchor)) + vp.candleW}
+              height={PRICE_H + VOL_GAP + VOL_H}
+              fill="rgba(30,98,200,0.10)"
+              stroke="rgba(30,98,200,0.55)"
+              strokeDasharray="3 3"
+            />
+          )}
+          {/* Committed range overlay */}
+          {committedRange !== null && rangeAnchor === null && (
+            <rect
+              x={xForIndex(committedRange.start)}
+              y={0}
+              width={
+                xForIndex(committedRange.end) - xForIndex(committedRange.start) + vp.candleW
+              }
+              height={PRICE_H + VOL_GAP + VOL_H}
+              fill="rgba(30,98,200,0.06)"
+              stroke="rgba(30,98,200,0.45)"
+            />
+          )}
           {candles}
           {(['ma60', 'ma20', 'ma10', 'ma5'] as const).map((k) =>
             maPaths[k] === '' ? null : (
@@ -719,6 +826,23 @@ interface ButtonProps {
   readonly title?: string;
   readonly danger?: boolean;
   readonly disabled?: boolean;
+}
+
+function findRangeIndices(
+  bars: readonly KlineBar[],
+  startDate: string,
+  endDate: string,
+): { readonly start: number; readonly end: number } | null {
+  let s = -1;
+  let e = -1;
+  for (let i = 0; i < bars.length; i += 1) {
+    const b = bars[i];
+    if (b === undefined) continue;
+    if (b.date === startDate) s = i;
+    if (b.date === endDate) e = i;
+  }
+  if (s < 0 || e < 0) return null;
+  return { start: Math.min(s, e), end: Math.max(s, e) };
 }
 
 function ToolButton({

@@ -24,6 +24,8 @@ from quant_cache.parquet_kline_repo import ParquetKlineRepo
 from quant_cache.parquet_sentiment_cache import ParquetSentimentCache
 from quant_cache.parquet_stock_meta_repo import ParquetStockMetaRepo
 from quant_core.adapters.clock import SystemClock
+from quant_core.adapters.pattern.dtw_engine import DTWPatternEngine
+from quant_core.services.pattern_service import PatternService
 from quant_core.errors import QuantError
 from quant_core.ports.stock_meta_source import StockMetaSource
 from quant_core.services.kline_service import KlineService
@@ -42,6 +44,7 @@ from quant_rpc.handlers import HandlerRegistry
 from quant_rpc.ops.kline import ListKlineWatermarksHandler, SyncKlineForCodeHandler
 from quant_rpc.ops.kline_read import ListKlineForCodeHandler
 from quant_rpc.ops.nl_screen import NlScreenHandler
+from quant_rpc.ops.pattern import FindSimilarPatternsHandler
 from quant_rpc.ops.sentiment import (
     AnalyzeManyStockSentimentHandler,
     AnalyzeOneStockSentimentHandler,
@@ -154,6 +157,9 @@ def main() -> int:
     registry.register(AnalyzeOneStockSentimentHandler(sentiment_service))
     registry.register(GetCachedMarketSentimentHandler(sentiment_cache, clock))
     registry.register(AnalyzeManyStockSentimentHandler(sentiment_service))
+    pattern_engine = DTWPatternEngine(kline_repo)
+    pattern_service = PatternService(kline_repo, pattern_engine)
+    registry.register(FindSimilarPatternsHandler(pattern_service, meta_repo, clock))
     registry.register(
         NlScreenHandler(
             translator=nl_translator,

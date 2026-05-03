@@ -11,11 +11,14 @@ import {
   KlineBarSchema,
   MarketSentimentSchema,
   NlScreenResultSchema,
+  PatternFindSimilarResponseSchema,
   SentimentSchema,
   StockMetaDtoSchema,
   type KlineBar,
   type MarketSentiment,
   type NlScreenResult,
+  type PatternFindSimilarRequest,
+  type PatternFindSimilarResponse,
   type Sentiment,
   type StockMetaDto,
 } from '@quant/shared';
@@ -99,6 +102,14 @@ export async function runNlScreen(
     `/api/screen/nl`,
     asof === undefined ? { nl } : { nl, asof },
     (raw) => NlScreenResultSchema.parse(raw),
+  );
+}
+
+export async function findSimilarPatterns(
+  req: PatternFindSimilarRequest,
+): Promise<PatternFindSimilarResponse> {
+  return apiPost(`/api/pattern/find_similar`, req, (raw) =>
+    PatternFindSimilarResponseSchema.parse(raw),
   );
 }
 

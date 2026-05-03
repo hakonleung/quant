@@ -14,6 +14,16 @@ import { create } from 'zustand';
 /** Synthetic sector id for the always-pinned "All" entry — no filter. */
 export const ALL_SECTOR_ID = 'all';
 
+/**
+ * Active reference range selected on the price chart, used by Feat 105
+ * pattern-match. Cleared when the focused stock changes.
+ */
+export interface ChartRangeSelection {
+  readonly code: string;
+  readonly startDate: string;
+  readonly endDate: string;
+}
+
 interface UiState {
   /** Currently focused stock code, or null when no row has been selected. */
   readonly focusCode: string | null;
@@ -25,22 +35,29 @@ interface UiState {
    * result panel. `null` = no query has been run this session.
    */
   readonly nlResult: NlScreenResult | null;
+  /** Pattern-match reference range; null = not selected. */
+  readonly chartRange: ChartRangeSelection | null;
   setFocusCode(code: string | null): void;
   setActiveSector(id: string): void;
   setNlResult(result: NlScreenResult | null): void;
+  setChartRange(range: ChartRangeSelection | null): void;
 }
 
 export const useUiStore = create<UiState>((set) => ({
   focusCode: null,
   activeSectorId: ALL_SECTOR_ID,
   nlResult: null,
+  chartRange: null,
   setFocusCode: (code) => {
-    set({ focusCode: code });
+    set({ focusCode: code, chartRange: null });
   },
   setActiveSector: (id) => {
-    set({ activeSectorId: id, focusCode: null });
+    set({ activeSectorId: id, focusCode: null, chartRange: null });
   },
   setNlResult: (result) => {
     set({ nlResult: result });
+  },
+  setChartRange: (range) => {
+    set({ chartRange: range });
   },
 }));

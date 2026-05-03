@@ -24,6 +24,7 @@ import { LAYOUT_LIMITS, useLayoutStore } from '../../lib/stores/layout.store.js'
 import { useUiStore } from '../../lib/stores/ui.store.js';
 import { ChartPanel } from '../eqty/chart-panel.js';
 import { ListPanel } from '../eqty/list-panel.js';
+import { PatternMatchPanel } from '../eqty/pattern-match-panel.js';
 import { SectorSentimentPanel } from '../eqty/sector-sentiment-panel.js';
 import { SectorsPanel } from '../eqty/sectors-panel.js';
 import { SlackPushPanel } from '../eqty/slack-push-panel.js';
@@ -53,6 +54,7 @@ export function EqtyModule(): React.ReactElement {
       />
       <Column flex="1">
         <ListPanel />
+        <PatternMatchPanel />
       </Column>
       <Divider
         side="right"
