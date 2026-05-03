@@ -3,36 +3,34 @@
 /**
  * Module 07 §workbench — List (Feat 001).
  *
- * Renders the active-sector membership as a sortable table.
+ * Pre-fetches kline (30D) for every visible code via
+ * `useKlineByCodes` so sortable metric columns operate on real data.
+ * Evidence values from dynamic sectors are flattened onto the row so
+ * sortValue reads them directly.
  *
- * Header switches by sector kind:
- *   - "All" / user — name+code filter input.
- *   - dynamic      — read-only NL replay + parsed DSL tree.
- *
- * Columns:
- *   1) name + code (stacked)
- *   2) chgPct · turnoverRate · turnover (成交额) · consecUp days
- *   3) for dynamic: union of evaluator-evidence keys (one per column)
- * All columns are sortable.
+ * The first column (CODE) is sticky during horizontal scroll; the
+ * column header scrolls in lock-step inside a single horizontally
+ * scrollable container.
  */
 
 import { Box, Flex, Input, Text } from '@chakra-ui/react';
-import type { StockMetaDto } from '@quant/shared';
+import type { KlineBar, StockMetaDto } from '@quant/shared';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { Feat } from '../../lib/eqty/feat.js';
 import { deriveStats, type StockStats } from '../../lib/fp/stock-stats.js';
-import { useKline } from '../../lib/hooks/use-eqty-data.js';
+import { useKlineByCodes } from '../../lib/hooks/use-eqty-data.js';
 import { useStockList } from '../../lib/hooks/use-stock-list.js';
 import { useSectorsStore, type Sector } from '../../lib/stores/sectors.store.js';
 import { ALL_SECTOR_ID, useUiStore } from '../../lib/stores/ui.store.js';
 import { Pane } from '../shell/pane.js';
 
-interface ListRow {
+interface ListRow extends StockStats {
   readonly code: string;
   readonly name: string;
   readonly evidence: Readonly<Record<string, unknown>>;
+  readonly statsReady: boolean;
 }
 
 interface SortState {
@@ -40,11 +38,14 @@ interface SortState {
   readonly dir: 'asc' | 'desc';
 }
 
+const STICKY_COL_WIDTH = 180;
+
 export function ListPanel(): React.ReactElement {
   const activeSectorId = useUiStore((s) => s.activeSectorId);
   const setFocusCode = useUiStore((s) => s.setFocusCode);
   const focusCode = useUiStore((s) => s.focusCode);
   const sectors = useSectorsStore((s) => s.sectors);
+  const upsert = useSectorsStore((s) => s.upsert);
 
   const { data, isLoading, error } = useStockList();
   const universe = data ?? [];
@@ -59,28 +60,29 @@ export function ListPanel(): React.ReactElement {
   const isAll = activeSectorId === ALL_SECTOR_ID;
   const isDynamic = sector !== null && sector.kind === 'dynamic';
 
-  const baseRows: readonly ListRow[] = useMemo(() => {
-    if (isAll) {
-      return ready.map((r) => ({ code: r.code, name: r.name, evidence: {} }));
-    }
+  const codes: readonly string[] = useMemo(() => {
+    if (isAll) return ready.map((r) => r.code);
     if (sector === null) return [];
-    const evidenceMap = sector.evidence ?? {};
-    return sector.codes.map((code) => {
-      const meta = universeByCode.get(code);
-      return {
-        code,
-        name: meta?.name ?? code,
-        evidence: evidenceMap[code] ?? {},
-      };
-    });
-  }, [isAll, sector, ready, universeByCode]);
+    return sector.codes;
+  }, [isAll, sector, ready]);
+
+  const klineBatch = useKlineByCodes(codes, '30D');
 
   const evidenceKeys: readonly string[] = useMemo(() => {
-    if (!isDynamic) return [];
+    if (!isDynamic || sector === null) return [];
+    const ev = sector.evidence ?? {};
     const seen = new Set<string>();
-    for (const r of baseRows) for (const k of Object.keys(r.evidence)) seen.add(k);
+    for (const code of Object.keys(ev)) {
+      const inner = ev[code];
+      if (inner !== undefined) for (const k of Object.keys(inner)) seen.add(k);
+    }
     return [...seen].sort();
-  }, [isDynamic, baseRows]);
+  }, [isDynamic, sector]);
+
+  const baseRows: readonly ListRow[] = useMemo(
+    () => buildRows(codes, universeByCode, klineBatch.byCode, sector?.evidence ?? null),
+    [codes, universeByCode, klineBatch.byCode, sector?.evidence],
+  );
 
   const [filter, setFilter] = useState('');
   const filteredRows: readonly ListRow[] = useMemo(() => {
@@ -101,6 +103,12 @@ export function ListPanel(): React.ReactElement {
 
   const columns: readonly ColumnDef[] = useMemo(() => buildColumns(evidenceKeys), [evidenceKeys]);
 
+  const onTitleSave = (next: string): void => {
+    if (sector === null || isAll) return;
+    if (next.trim().length === 0 || next === sector.name) return;
+    upsert({ ...sector, name: next.trim() });
+  };
+
   const right =
     error !== null && error !== undefined ? (
       <Text color="up">// {(error as Error).message}</Text>
@@ -109,15 +117,24 @@ export function ListPanel(): React.ReactElement {
     ) : (
       <Text>
         {focusCode === null ? '— no selection' : `▎ ${focusCode}`} · {sortedRows.length} rows
+        {klineBatch.isLoading ? ` · stats ${String(klineBatch.readyCount)}/${String(codes.length)}` : ''}
       </Text>
     );
 
   return (
-    <Pane feat={Feat.List} right={right}>
+    <Pane
+      feat={Feat.List}
+      titleSlot={
+        <EditableTitle
+          value={sector?.name ?? 'list'}
+          editable={sector !== null && !isAll}
+          onSave={onTitleSave}
+        />
+      }
+      right={right}
+    >
       <Flex direction="column" h="100%" minH={0}>
-        {isDynamic ? (
-          <DynamicHeader sector={sector} />
-        ) : (
+        {!isDynamic && (
           <FilterHeader
             filter={filter}
             setFilter={setFilter}
@@ -125,10 +142,12 @@ export function ListPanel(): React.ReactElement {
             hits={filteredRows.length}
           />
         )}
-        <ColumnHeader columns={columns} sort={sort} setSort={setSort} />
-        <VirtualBody
-          rows={sortedRows}
+        {isDynamic && sector !== null && <DynamicHeader sector={sector} />}
+        <ScrollGrid
           columns={columns}
+          rows={sortedRows}
+          sort={sort}
+          setSort={setSort}
           focusedCode={focusCode}
           onRowClick={(row): void => {
             setFocusCode(row.code);
@@ -143,6 +162,111 @@ export function ListPanel(): React.ReactElement {
         />
       </Flex>
     </Pane>
+  );
+}
+
+function buildRows(
+  codes: readonly string[],
+  meta: ReadonlyMap<string, StockMetaDto>,
+  klineByCode: ReadonlyMap<string, readonly KlineBar[]>,
+  evidenceMap: Readonly<Record<string, Readonly<Record<string, unknown>>>> | null,
+): readonly ListRow[] {
+  const rows: ListRow[] = [];
+  for (const code of codes) {
+    const m = meta.get(code);
+    const bars = klineByCode.get(code);
+    const stats = bars === undefined ? null : deriveStats(bars);
+    const evidence = evidenceMap?.[code] ?? {};
+    const flat: Record<string, unknown> = { ...evidence };
+    if (stats !== null) {
+      flat['price'] = stats.price;
+      flat['chgPct'] = stats.chgPct;
+      flat['turnoverRate'] = stats.turnoverRate;
+      flat['turnover'] = stats.turnover;
+      flat['consecUpDays'] = stats.consecUpDays;
+    }
+    rows.push({
+      code,
+      name: m?.name ?? code,
+      evidence: flat,
+      statsReady: stats !== null,
+      price: stats?.price ?? 0,
+      chgPct: stats?.chgPct ?? null,
+      turnoverRate: stats?.turnoverRate ?? null,
+      turnover: stats?.turnover ?? null,
+      consecUpDays: stats?.consecUpDays ?? 0,
+    });
+  }
+  return rows;
+}
+
+interface EditableTitleProps {
+  readonly value: string;
+  readonly editable: boolean;
+  readonly onSave: (next: string) => void;
+}
+
+function EditableTitle({ value, editable, onSave }: EditableTitleProps): React.ReactElement {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(value);
+  useEffect(() => {
+    setDraft(value);
+  }, [value]);
+
+  if (editing) {
+    const commit = (): void => {
+      onSave(draft);
+      setEditing(false);
+    };
+    return (
+      <Input
+        autoFocus
+        value={draft}
+        onChange={(e): void => {
+          setDraft(e.target.value);
+        }}
+        onBlur={commit}
+        onKeyDown={(e): void => {
+          if (e.key === 'Enter') commit();
+          if (e.key === 'Escape') {
+            setDraft(value);
+            setEditing(false);
+          }
+        }}
+        h="20px"
+        w="160px"
+        bg="panel"
+        borderWidth="1px"
+        borderColor="accent"
+        borderRadius="0"
+        fontFamily="mono"
+        fontSize="10px"
+        letterSpacing="0.12em"
+        px="6px"
+        textTransform="uppercase"
+      />
+    );
+  }
+  return (
+    <Text
+      fontFamily="mono"
+      fontSize="10px"
+      letterSpacing="0.18em"
+      textTransform="uppercase"
+      fontWeight="600"
+      color="ink2"
+      whiteSpace="nowrap"
+      overflow="hidden"
+      textOverflow="ellipsis"
+      cursor={editable ? 'text' : 'default'}
+      _hover={editable ? { color: 'accent' } : {}}
+      onClick={(): void => {
+        if (editable) setEditing(true);
+      }}
+      title={editable ? 'click to rename' : undefined}
+    >
+      {value}
+    </Text>
   );
 }
 
@@ -228,10 +352,11 @@ function DynamicHeader({ sector }: { sector: Sector }): React.ReactElement {
 interface ColumnDef {
   readonly key: string;
   readonly label: string;
-  readonly w: string;
+  readonly w: number;
   readonly align: 'left' | 'right';
-  readonly render: (row: ListRow, stats: StockStats | null) => React.ReactNode;
-  readonly sortValue: (row: ListRow) => number | string;
+  readonly sticky?: boolean;
+  readonly render: (row: ListRow) => React.ReactNode;
+  readonly sortValue: (row: ListRow) => number | string | null;
 }
 
 function buildColumns(evidenceKeys: readonly string[]): readonly ColumnDef[] {
@@ -239,8 +364,9 @@ function buildColumns(evidenceKeys: readonly string[]): readonly ColumnDef[] {
     {
       key: 'name',
       label: 'CODE',
-      w: '180px',
+      w: STICKY_COL_WIDTH,
       align: 'left',
+      sticky: true,
       render: (r) => (
         <Box>
           <Text fontFamily="mono" fontSize="12px" color="ink" fontWeight="600">
@@ -256,57 +382,57 @@ function buildColumns(evidenceKeys: readonly string[]): readonly ColumnDef[] {
     {
       key: 'price',
       label: 'PRICE',
-      w: '90px',
+      w: 90,
       align: 'right',
-      render: (_r, s) => <PriceCell pct={s?.chgPct ?? null} price={s?.price} />,
-      sortValue: () => 0,
+      render: (r) => <PriceCell pct={r.chgPct} price={r.statsReady ? r.price : null} />,
+      sortValue: (r) => (r.statsReady ? r.price : null),
     },
     {
       key: 'chgPct',
       label: 'CHG%',
-      w: '90px',
+      w: 90,
       align: 'right',
-      render: (_r, s) => <ChgPctCell value={s?.chgPct ?? null} />,
-      sortValue: () => 0,
+      render: (r) => <ChgPctCell value={r.chgPct} />,
+      sortValue: (r) => r.chgPct,
     },
     {
       key: 'turnoverRate',
       label: '换手',
-      w: '90px',
+      w: 90,
       align: 'right',
-      render: (_r, s) => <PctCell value={s?.turnoverRate ?? null} />,
-      sortValue: () => 0,
+      render: (r) => <PctCell value={r.turnoverRate} />,
+      sortValue: (r) => r.turnoverRate,
     },
     {
       key: 'turnover',
       label: '成交额',
-      w: '110px',
+      w: 110,
       align: 'right',
-      render: (_r, s) => <CnyCell value={s?.turnover ?? null} />,
-      sortValue: () => 0,
+      render: (r) => <CnyCell value={r.turnover} />,
+      sortValue: (r) => r.turnover,
     },
     {
       key: 'consecUp',
       label: '连涨',
-      w: '70px',
+      w: 70,
       align: 'right',
-      render: (_r, s) => (
+      render: (r) => (
         <Text
           fontFamily="mono"
           fontSize="11px"
-          color={s !== null && s.consecUpDays > 0 ? 'up' : 'ink3'}
+          color={r.statsReady && r.consecUpDays > 0 ? 'up' : 'ink3'}
         >
-          {s === null ? '—' : `${s.consecUpDays}d`}
+          {r.statsReady ? `${String(r.consecUpDays)}d` : '—'}
         </Text>
       ),
-      sortValue: () => 0,
+      sortValue: (r) => r.consecUpDays,
     },
   ];
   for (const k of evidenceKeys) {
     base.push({
       key: `ev:${k}`,
       label: k.toUpperCase(),
-      w: 'minmax(110px, 1fr)',
+      w: 130,
       align: 'right',
       render: (r) => (
         <Text fontFamily="mono" fontSize="11px" color="ink2">
@@ -317,6 +443,77 @@ function buildColumns(evidenceKeys: readonly string[]): readonly ColumnDef[] {
     });
   }
   return base;
+}
+
+interface ScrollGridProps {
+  readonly columns: readonly ColumnDef[];
+  readonly rows: readonly ListRow[];
+  readonly sort: SortState | null;
+  readonly setSort: (s: SortState | null) => void;
+  readonly focusedCode: string | null;
+  readonly onRowClick: (row: ListRow) => void;
+  readonly emptyHint: string;
+}
+
+function ScrollGrid({
+  columns,
+  rows,
+  sort,
+  setSort,
+  focusedCode,
+  onRowClick,
+  emptyHint,
+}: ScrollGridProps): React.ReactElement {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const totalWidth = columns.reduce((acc, c) => acc + c.w, 0);
+
+  const rowVirtualizer = useVirtualizer({
+    count: rows.length,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => 38,
+    overscan: 12,
+  });
+
+  if (rows.length === 0) {
+    return (
+      <Box flex="1" overflow="auto" px="14px" py="14px">
+        <Text fontFamily="mono" fontSize="11px" color="ink3" letterSpacing="0.12em">
+          // {emptyHint}
+        </Text>
+      </Box>
+    );
+  }
+
+  return (
+    <Box ref={scrollRef} flex="1" overflow="auto" position="relative">
+      <Box w={`${String(totalWidth)}px`} minW="100%">
+        <ColumnHeader columns={columns} sort={sort} setSort={setSort} />
+        <Box
+          position="relative"
+          h={`${String(rowVirtualizer.getTotalSize())}px`}
+          w={`${String(totalWidth)}px`}
+        >
+          {rowVirtualizer.getVirtualItems().map((vi) => {
+            const row = rows[vi.index];
+            if (row === undefined) return null;
+            return (
+              <RowItem
+                key={vi.key}
+                row={row}
+                columns={columns}
+                top={vi.start}
+                h={vi.size}
+                focused={focusedCode !== null && row.code === focusedCode}
+                onClick={(): void => {
+                  onRowClick(row);
+                }}
+              />
+            );
+          })}
+        </Box>
+      </Box>
+    </Box>
+  );
 }
 
 function ColumnHeader({
@@ -330,13 +527,14 @@ function ColumnHeader({
 }): React.ReactElement {
   return (
     <Box
-      display="grid"
-      gridTemplateColumns={columns.map((c) => c.w).join(' ')}
-      gap="0"
+      display="flex"
       bg="panel3"
       borderBottomWidth="1px"
       borderColor="line"
       flexShrink={0}
+      position="sticky"
+      top={0}
+      zIndex={3}
     >
       {columns.map((c) => {
         const active = sort?.key === c.key;
@@ -354,6 +552,7 @@ function ColumnHeader({
                 setSort(null);
               }
             }}
+            w={`${String(c.w)}px`}
             px="10px"
             py="6px"
             textAlign={c.align}
@@ -363,9 +562,15 @@ function ColumnHeader({
             letterSpacing="0.16em"
             textTransform="uppercase"
             fontWeight="700"
-            bg="transparent"
+            bg="panel3"
             cursor="pointer"
             _hover={{ color: 'accent' }}
+            position={c.sticky === true ? 'sticky' : 'static'}
+            left={c.sticky === true ? 0 : undefined}
+            zIndex={c.sticky === true ? 4 : 3}
+            borderRightWidth={c.sticky === true ? '1px' : 0}
+            borderColor="line"
+            flexShrink={0}
           >
             {c.label}
             {arrow}
@@ -376,113 +581,55 @@ function ColumnHeader({
   );
 }
 
-interface BodyProps {
-  readonly rows: readonly ListRow[];
-  readonly columns: readonly ColumnDef[];
-  readonly focusedCode: string | null;
-  readonly onRowClick: (row: ListRow) => void;
-  readonly emptyHint: string;
-}
-
-function VirtualBody({
-  rows,
-  columns,
-  focusedCode,
-  onRowClick,
-  emptyHint,
-}: BodyProps): React.ReactElement {
-  const parentRef = useRef<HTMLDivElement>(null);
-  const rowVirtualizer = useVirtualizer({
-    count: rows.length,
-    getScrollElement: () => parentRef.current,
-    estimateSize: () => 38,
-    overscan: 12,
-  });
-  if (rows.length === 0) {
-    return (
-      <Box flex="1" overflow="auto" px="14px" py="14px">
-        <Text fontFamily="mono" fontSize="11px" color="ink3" letterSpacing="0.12em">
-          // {emptyHint}
-        </Text>
-      </Box>
-    );
-  }
-  const cols = columns.map((c) => c.w).join(' ');
-  return (
-    <Box ref={parentRef} flex="1" overflow="auto">
-      <Box position="relative" h={`${String(rowVirtualizer.getTotalSize())}px`}>
-        {rowVirtualizer.getVirtualItems().map((vi) => {
-          const row = rows[vi.index];
-          if (row === undefined) return null;
-          return (
-            <RowItem
-              key={vi.key}
-              row={row}
-              columns={columns}
-              cols={cols}
-              top={vi.start}
-              h={vi.size}
-              focused={focusedCode !== null && row.code === focusedCode}
-              onClick={(): void => {
-                onRowClick(row);
-              }}
-            />
-          );
-        })}
-      </Box>
-    </Box>
-  );
-}
-
 interface RowItemProps {
   readonly row: ListRow;
   readonly columns: readonly ColumnDef[];
-  readonly cols: string;
   readonly top: number;
   readonly h: number;
   readonly focused: boolean;
   readonly onClick: () => void;
 }
 
-/**
- * Per-row component. Calls `useKline(code, '30D')` lazily — only rows
- * the virtualizer mounts trigger fetches, so the network cost scales
- * with the visible viewport, not the universe size.
- */
-function RowItem({
-  row,
-  columns,
-  cols,
-  top,
-  h,
-  focused,
-  onClick,
-}: RowItemProps): React.ReactElement {
-  const { data } = useKline(row.code, '30D');
-  const stats: StockStats | null = data === undefined ? null : deriveStats(data);
+function RowItem({ row, columns, top, h, focused, onClick }: RowItemProps): React.ReactElement {
   return (
     <Box
       position="absolute"
       top={0}
       left={0}
-      right={0}
       transform={`translateY(${String(top)}px)`}
       h={`${String(h)}px`}
-      display="grid"
-      gridTemplateColumns={cols}
+      display="flex"
       alignItems="center"
       borderBottomWidth="1px"
       borderColor="line2"
       borderLeftWidth={focused ? '2px' : 0}
       borderLeftColor="accent"
-      bg={focused ? 'accentBg' : 'transparent'}
+      bg={focused ? 'accentBg' : 'panel'}
       cursor="pointer"
       _hover={focused ? {} : { bg: 'hover' }}
       onClick={onClick}
     >
       {columns.map((c) => (
-        <Box key={c.key} px="10px" py="4px" textAlign={c.align} overflow="hidden">
-          {c.render(row, stats)}
+        <Box
+          key={c.key}
+          w={`${String(c.w)}px`}
+          h={`${String(h)}px`}
+          px="10px"
+          py="4px"
+          textAlign={c.align}
+          overflow="hidden"
+          display="flex"
+          alignItems="center"
+          justifyContent={c.align === 'right' ? 'flex-end' : 'flex-start'}
+          position={c.sticky === true ? 'sticky' : 'static'}
+          left={c.sticky === true ? 0 : undefined}
+          bg={c.sticky === true ? (focused ? 'accentBg' : 'panel') : 'transparent'}
+          zIndex={c.sticky === true ? 1 : 0}
+          borderRightWidth={c.sticky === true ? '1px' : 0}
+          borderColor="line2"
+          flexShrink={0}
+        >
+          {c.render(row)}
         </Box>
       ))}
     </Box>
@@ -494,19 +641,19 @@ function PriceCell({
   price,
 }: {
   pct: number | null;
-  price: number | undefined;
+  price: number | null;
 }): React.ReactElement {
-  if (pct === null) {
+  if (price === null) {
     return (
       <Text fontFamily="mono" fontSize="11px" color="ink3">
         —
       </Text>
     );
   }
-  const color = pct > 0 ? 'up' : pct < 0 ? 'down' : 'ink3';
+  const color = pct === null ? 'ink3' : pct > 0 ? 'up' : pct < 0 ? 'down' : 'ink3';
   return (
     <Text fontFamily="mono" fontSize="11px" color={color} fontWeight="600">
-      {price?.toFixed(2)}
+      {price.toFixed(2)}
     </Text>
   );
 }
@@ -546,8 +693,6 @@ function CnyCell({ value }: { value: number | null }): React.ReactElement {
       </Text>
     );
   }
-  // Format CNY notional in 亿 / 万 — list-panel rows are too narrow for
-  // raw scientific notation.
   const yi = 1e8;
   const wan = 1e4;
   const text =
@@ -564,30 +709,34 @@ function CnyCell({ value }: { value: number | null }): React.ReactElement {
 }
 
 function compareRows(a: ListRow, b: ListRow, key: string): number {
-  // Look up the column's sortValue via key prefix (evidence cols are
-  // namespaced; built-ins use direct keys).
   const va = sortValue(a, key);
   const vb = sortValue(b, key);
+  if (va === null && vb === null) return 0;
+  if (va === null) return -1;
+  if (vb === null) return 1;
   if (typeof va === 'number' && typeof vb === 'number') return va - vb;
   return String(va).localeCompare(String(vb));
 }
 
-function sortValue(r: ListRow, key: string): number | string {
+function sortValue(r: ListRow, key: string): number | string | null {
   if (key === 'name') return r.name;
   if (key === 'code') return r.code;
+  if (key === 'price') return r.statsReady ? r.price : null;
+  if (key === 'chgPct') return r.chgPct;
+  if (key === 'turnoverRate') return r.turnoverRate;
+  if (key === 'turnover') return r.turnover;
+  if (key === 'consecUp') return r.consecUpDays;
   if (key.startsWith('ev:')) {
     const k = key.slice(3);
     return evidenceSortKey(r.evidence[k]);
   }
-  // Placeholder columns (chgPct/turnoverRate/turnover/consecUp) — no
-  // server data yet, so sorting is a no-op.
-  return 0;
+  return null;
 }
 
-function evidenceSortKey(v: unknown): number | string {
+function evidenceSortKey(v: unknown): number | string | null {
   if (typeof v === 'number') return v;
   if (typeof v === 'boolean') return v ? 1 : 0;
-  if (v === null || v === undefined) return Number.NEGATIVE_INFINITY;
+  if (v === null || v === undefined) return null;
   return String(v);
 }
 

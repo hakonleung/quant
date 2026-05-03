@@ -13,11 +13,13 @@ interface PaneProps {
   readonly feat: Feat;
   /** Optional override; defaults to {@link FEAT_CONFIG_MAP}.title(). */
   readonly title?: string;
+  /** Custom title slot — when present takes the whole title position. */
+  readonly titleSlot?: ReactNode;
   readonly right?: ReactNode;
   readonly children: ReactNode;
 }
 
-export function Pane({ feat, title, right, children }: PaneProps): React.ReactElement {
+export function Pane({ feat, title, titleSlot, right, children }: PaneProps): React.ReactElement {
   const config = FEAT_CONFIG_MAP[feat];
   const resolvedTitle = title ?? config.title();
   const cyber = config.cyber ?? false;
@@ -150,6 +152,7 @@ export function Pane({ feat, title, right, children }: PaneProps): React.ReactEl
       <PaneHeader
         id={feat}
         title={resolvedTitle}
+        titleSlot={titleSlot}
         right={right}
         cyber={cyber}
         mode={mode}
@@ -209,6 +212,7 @@ function cornerStyle(corner: 'tl' | 'br', cyber: boolean): Record<string, unknow
 interface HeaderProps {
   readonly id: string;
   readonly title: string;
+  readonly titleSlot?: ReactNode;
   readonly right?: ReactNode;
   readonly cyber: boolean;
   readonly mode: PaneMode;
@@ -221,6 +225,7 @@ interface HeaderProps {
 function PaneHeader({
   id,
   title,
+  titleSlot,
   right,
   cyber,
   mode,
@@ -254,23 +259,34 @@ function PaneHeader({
       >
         {id}
       </Text>
-      <Text
-        fontFamily="mono"
-        fontSize="10px"
-        letterSpacing="0.18em"
-        textTransform="uppercase"
-        fontWeight="600"
-        color={cyber ? 'term.ink2' : 'ink2'}
-        whiteSpace="nowrap"
-        overflow="hidden"
-        textOverflow="ellipsis"
-        flexShrink={0}
-        pr="8px"
-        borderRightWidth={right !== undefined ? '1px' : 0}
-        borderColor={cyber ? 'term.line' : 'line'}
-      >
-        {title}
-      </Text>
+      {titleSlot !== undefined ? (
+        <Box
+          flexShrink={0}
+          pr="8px"
+          borderRightWidth={right !== undefined ? '1px' : 0}
+          borderColor={cyber ? 'term.line' : 'line'}
+        >
+          {titleSlot}
+        </Box>
+      ) : (
+        <Text
+          fontFamily="mono"
+          fontSize="10px"
+          letterSpacing="0.18em"
+          textTransform="uppercase"
+          fontWeight="600"
+          color={cyber ? 'term.ink2' : 'ink2'}
+          whiteSpace="nowrap"
+          overflow="hidden"
+          textOverflow="ellipsis"
+          flexShrink={0}
+          pr="8px"
+          borderRightWidth={right !== undefined ? '1px' : 0}
+          borderColor={cyber ? 'term.line' : 'line'}
+        >
+          {title}
+        </Text>
+      )}
       {right !== undefined && (
         <Box
           fontFamily="mono"

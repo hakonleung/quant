@@ -3,11 +3,13 @@
 import type { BlotterRow, KlineBar, MarketSentiment, Sentiment, StockMetaDto } from '@quant/shared';
 import {
   useMutation,
+  useQueries,
   useQuery,
   useQueryClient,
   type UseMutationResult,
   type UseQueryResult,
 } from '@tanstack/react-query';
+import { useMemo } from 'react';
 
 import {
   analyzeManySentiment,
@@ -48,6 +50,48 @@ export function useKline(code: string, range: string): UseQueryResult<readonly K
     // Daily kline updates after market close; aggressive caching is fine.
     staleTime: 60 * 60 * 1000,
   });
+}
+
+/**
+ * Batch variant of {@link useKline}: kicks off N parallel kline queries
+ * (one per code) and returns a `Map<code, bars>` plus an aggregate
+ * loading flag. Used by the list panel so sortable metric columns can
+ * be computed from real data before render.
+ */
+export interface BatchKlineState {
+  readonly byCode: ReadonlyMap<string, readonly KlineBar[]>;
+  readonly isLoading: boolean;
+  readonly readyCount: number;
+}
+
+export function useKlineByCodes(
+  codes: readonly string[],
+  range: string,
+): BatchKlineState {
+  const results = useQueries({
+    queries: codes.map((code) => ({
+      queryKey: ['kline', code, range] as const,
+      queryFn: () => listKline(code, range),
+      enabled: code.length > 0,
+      staleTime: 60 * 60 * 1000,
+    })),
+  });
+  return useMemo(() => {
+    const byCode = new Map<string, readonly KlineBar[]>();
+    let ready = 0;
+    let loading = false;
+    for (let i = 0; i < codes.length; i += 1) {
+      const r = results[i];
+      const code = codes[i];
+      if (r === undefined || code === undefined) continue;
+      if (r.data !== undefined) {
+        byCode.set(code, r.data);
+        ready += 1;
+      }
+      if (r.isLoading || r.isFetching) loading = true;
+    }
+    return { byCode, isLoading: loading, readyCount: ready };
+  }, [codes, results]);
 }
 
 export function useSectorHits(ids: readonly string[]): UseQueryResult<readonly BlotterRow[]> {
