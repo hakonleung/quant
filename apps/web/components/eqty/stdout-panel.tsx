@@ -34,23 +34,26 @@ export function StdoutPanel({ code, onResult }: Props): React.ReactElement {
     });
   };
 
-  const lines: readonly string[] = sentiment === null
-    ? [`$ sentiment.analyze_one --code ${code}`, '// awaiting trigger']
-    : sentiment.rawLog.length > 0
-      ? sentiment.rawLog
-      : [`$ sentiment.analyze_one --code ${code}`, `▎ score   ${sentiment.score.toFixed(2)}`];
+  const lines: readonly string[] =
+    sentiment === null
+      ? [`$ sentiment.analyze_one --code ${code}`, '// awaiting trigger']
+      : sentiment.rawLog.length > 0
+        ? sentiment.rawLog
+        : [`$ sentiment.analyze_one --code ${code}`, `▎ score   ${sentiment.score.toFixed(2)}`];
 
-  const status = analyze.isPending
-    ? <Text color="accent">● analyzing</Text>
-    : analyze.isError
-      ? <Text color="up">✘ {analyze.error.message}</Text>
-      : sentiment === null
-        ? <Text color="prompt">○ idle</Text>
-        : <Text color="prompt">● cached</Text>;
+  const status = analyze.isPending ? (
+    <Text color="accent">● analyzing</Text>
+  ) : analyze.isError ? (
+    <Text color="up">✘ {analyze.error.message}</Text>
+  ) : sentiment === null ? (
+    <Text color="prompt">○ idle</Text>
+  ) : (
+    <Text color="prompt">● cached</Text>
+  );
 
   return (
     <Pane
-      feat={Feat.Stdout}
+      feat={Feat.Sentiment}
       right={
         <Flex gap="8px" align="center">
           {status}

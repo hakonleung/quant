@@ -47,14 +47,12 @@ export function SectorsPanel(): React.ReactElement {
     codes: allCodes,
   };
 
-  // Bulk last-2-bar fetch for the union of every sector's members so
-  // each row can compute its own average chg% from the same payload.
-  const unionCodes = useMemo(() => {
-    const seen = new Set<string>(allCodes);
-    for (const s of sectors) for (const c of s.codes) seen.add(c);
-    return [...seen];
-  }, [allCodes, sectors]);
-  const klineBatch = useKlineBulk(unionCodes, 2);
+  // Bulk last-2-bar fetch — the panel renders every sector's avg
+  // chg%, and the union always includes the synthetic "All" basket
+  // which already covers the full universe. So we always ask for the
+  // universe (`codes=[]`) instead of enumerating thousands of
+  // 6-digit ids in the query string. The server applies its own cap.
+  const klineBatch = useKlineBulk([], 2);
   const chgPctByCode = useMemo(() => {
     const out = new Map<string, number>();
     for (const [code, bars] of klineBatch.byCode) {

@@ -83,13 +83,19 @@ export function ListPanel(): React.ReactElement {
   const isAll = activeSectorId === ALL_SECTOR_ID;
   const isDynamic = sector !== null && sector.kind === 'dynamic';
 
+  // Codes used for both row construction and the bulk kline fetch.
+  // For the synthetic "All" sector we render every meta-listed stock
+  // but do NOT enumerate them on the wire — the bulk endpoint expands
+  // an empty `codes` to the full universe server-side (and applies the
+  // server-side cap), saving us from a multi-kilobyte query string.
   const codes: readonly string[] = useMemo(() => {
     if (isAll) return ready.map((r) => r.code);
     if (sector === null) return [];
     return sector.codes;
   }, [isAll, sector, ready]);
+  const bulkCodes: readonly string[] = isAll ? [] : codes;
 
-  const klineBatch = useKlineBulk(codes, 5);
+  const klineBatch = useKlineBulk(bulkCodes, 5);
 
   const evidenceKeys: readonly string[] = useMemo(() => {
     if (!isDynamic || sector === null) return [];

@@ -9,7 +9,7 @@
  * to the Flight op, and decodes the resulting Arrow table.
  */
 
-import { Controller, Get, Inject, Param, Query, Req } from '@nestjs/common';
+import { Controller, Get, Inject, Logger, Param, Query, Req } from '@nestjs/common';
 import type { KlineBar } from '@quant/shared';
 import type { Request } from 'express';
 import { z } from 'zod';
@@ -38,13 +38,19 @@ const bulkPipe = new ZodValidationPipe(BulkQuerySchema);
 
 @Controller('kline')
 export class KlineController {
+  private readonly logger = new Logger(KlineController.name);
+
   constructor(@Inject(KLINE_FLIGHT_CLIENT) private readonly flight: FlightClient) {}
 
   /**
    * Bulk last-N kline. Resolves with `Record<code, KlineBar[]>`.
    * Empty `codes` → full universe (Python expands via stock-meta).
-   * Codes without persisted bars are simply absent from the result;
-   * the response never 404s on partial misses.
+   *
+   * Best-effort by contract: any upstream failure (op missing, Flight
+   * unreachable, decode glitch) degrades to an empty `{}` with HTTP
+   * 200, because the list-panel renders a "—" for codes without stats
+   * but breaks for the whole sector if this endpoint 4xx/5xx's. The
+   * underlying error is logged at WARN with the trace id for ops.
    *
    * Wired before `:code` so the literal segment doesn't get caught by
    * the dynamic param.
@@ -61,8 +67,17 @@ export class KlineController {
       .filter((s) => /^\d{6}$/.test(s));
     const args: Record<string, unknown> = { n: query.n };
     if (codes.length > 0) args['codes'] = codes;
-    const result = await this.flight.doGet('list_kline_bulk_last_n', args, { traceId });
-    return arrowTableToKlineBarsByCode(result.value);
+    try {
+      const result = await this.flight.doGet('list_kline_bulk_last_n', args, { traceId });
+      return arrowTableToKlineBarsByCode(result.value);
+    } catch (err) {
+      this.logger.warn(
+        `kline_bulk_fallback trace=${traceId} codes=${String(codes.length)} err=${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+      return {};
+    }
   }
 
   @Get(':code')

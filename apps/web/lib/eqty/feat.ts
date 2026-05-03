@@ -9,16 +9,20 @@
  */
 
 export const Feat = {
-  Search: '000',
-  List: '001',
-  Sectors: '002',
-  Blacklist: '003',
-  Detail: '100',
+  // C: collection
+  Sectors: 'C-0',
+  List: 'C-1',
+  Blacklist: 'C-9',
   Chart: '101',
-  Stdout: '103',
-  SectorSentiment: '104',
+
+  // A: ai
+  Sentiment: 'A-0',
+  SectorSentiment: 'A-1',
+
+  // M: match
+  Search: 'M-0',
   PatternMatch: '105',
-  SlackPush: '200',
+  Notif: '200',
   Status: '300',
 } as const;
 
@@ -36,12 +40,11 @@ export const FEAT_CONFIG_MAP: Readonly<Record<Feat, FeatConfig>> = {
   [Feat.List]: { title: () => 'list' },
   [Feat.Sectors]: { title: () => 'sector', gridArea: 'L' },
   [Feat.Blacklist]: { title: () => 'blacklist', defaultMinimized: true },
-  [Feat.Detail]: { title: () => 'equity', gridArea: 'CTOP' },
   [Feat.Chart]: { title: () => 'detail', gridArea: 'CMID' },
-  [Feat.Stdout]: { title: () => 'sentiment', gridArea: 'CBOT' },
+  [Feat.Sentiment]: { title: () => 'sentiment', gridArea: 'CBOT' },
   [Feat.SectorSentiment]: { title: () => 'sector.sentiment', gridArea: 'R1' },
   [Feat.PatternMatch]: { title: () => 'pattern.match', defaultMinimized: true },
-  [Feat.SlackPush]: {
+  [Feat.Notif]: {
     title: () => 'slack.push',
     gridArea: 'R2',
     cyber: true,

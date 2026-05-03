@@ -30,12 +30,13 @@ export function SlackPushPanel({ code, sentimentScore, theme }: Props): React.Re
     defaultValues: { channel: '#quant-signals', note: '' },
   });
 
-  const payload = sentimentScore === null
-    ? `${code} · sentiment unavailable`
-    : `${code} · sent ${sentimentScore.toFixed(2)}${theme === null ? '' : ` · 题材[${theme}]`}`;
+  const payload =
+    sentimentScore === null
+      ? `${code} · sentiment unavailable`
+      : `${code} · sent ${sentimentScore.toFixed(2)}${theme === null ? '' : ` · 题材[${theme}]`}`;
 
   return (
-    <Pane feat={Feat.SlackPush} right={<Text color="term.green">● ready</Text>}>
+    <Pane feat={Feat.Notif} right={<Text color="term.green">● ready</Text>}>
       <Box
         as="form"
         position="relative"
@@ -71,7 +72,10 @@ export function SlackPushPanel({ code, sentimentScore, theme }: Props): React.Re
         </PushRow>
         {Object.keys(form.formState.errors).length > 0 && (
           <Text mt="6px" color="term.red" fontSize="11px">
-            ✘ {Object.values(form.formState.errors).map((e) => e.message).join(' · ')}
+            ✘{' '}
+            {Object.values(form.formState.errors)
+              .map((e) => e.message)
+              .join(' · ')}
           </Text>
         )}
       </Box>
@@ -86,7 +90,12 @@ export function SlackPushPanel({ code, sentimentScore, theme }: Props): React.Re
         <CyberButton kind="ghost" type="button" onClick={() => form.reset()}>
           CANCEL
         </CyberButton>
-        <CyberButton kind="primary" type="submit" ml="auto" onClick={form.handleSubmit(() => undefined)}>
+        <CyberButton
+          kind="primary"
+          type="submit"
+          ml="auto"
+          onClick={form.handleSubmit(() => undefined)}
+        >
           ▶ PUSH
         </CyberButton>
       </Flex>
@@ -94,7 +103,13 @@ export function SlackPushPanel({ code, sentimentScore, theme }: Props): React.Re
   );
 }
 
-function PushRow({ label, children }: { label: string; children: React.ReactNode }): React.ReactElement {
+function PushRow({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}): React.ReactElement {
   return (
     <Flex gap="10px" py="2px" align="center" position="relative" zIndex={1}>
       <Text color="term.cyan" fontSize="11px" minW="80px">
@@ -106,25 +121,27 @@ function PushRow({ label, children }: { label: string; children: React.ReactNode
 }
 
 type CyberInputProps = Omit<React.InputHTMLAttributes<HTMLInputElement>, 'size'>;
-const CyberInput = React.forwardRef<HTMLInputElement, CyberInputProps>(function CyberInput(props, ref) {
-  return (
-  <Input
-    ref={ref}
-    {...props}
-    bg="term.inputBg"
-    borderWidth="1px"
-    borderColor="term.line2"
-    color="term.ink"
-    fontFamily="mono"
-    fontSize="12px"
-    h="28px"
-    borderRadius="2px"
-    px="10px"
-    py="5px"
-    _focus={{ borderColor: 'term.green', boxShadow: 'none' }}
-  />
+const CyberInput = React.forwardRef<HTMLInputElement, CyberInputProps>(
+  function CyberInput(props, ref) {
+    return (
+      <Input
+        ref={ref}
+        {...props}
+        bg="term.inputBg"
+        borderWidth="1px"
+        borderColor="term.line2"
+        color="term.ink"
+        fontFamily="mono"
+        fontSize="12px"
+        h="28px"
+        borderRadius="2px"
+        px="10px"
+        py="5px"
+        _focus={{ borderColor: 'term.green', boxShadow: 'none' }}
+      />
+    );
+  },
 );
-});
 
 interface CyberButtonProps {
   readonly kind: 'primary' | 'ghost' | 'danger';
@@ -134,7 +151,13 @@ interface CyberButtonProps {
   readonly ml?: string;
 }
 
-function CyberButton({ kind, children, type = 'button', onClick, ml }: CyberButtonProps): React.ReactElement {
+function CyberButton({
+  kind,
+  children,
+  type = 'button',
+  onClick,
+  ml,
+}: CyberButtonProps): React.ReactElement {
   const styles = {
     primary: { bg: 'term.green', color: 'term.bg', borderColor: 'term.green' },
     ghost: { bg: 'transparent', color: 'term.ink2', borderColor: 'term.line2' },
@@ -158,7 +181,9 @@ function CyberButton({ kind, children, type = 'button', onClick, ml }: CyberButt
       fontSize="11px"
       letterSpacing="0.18em"
       textTransform="uppercase"
-      _hover={kind === 'primary' ? { bg: 'panel' } : { borderColor: 'term.green', color: 'term.green' }}
+      _hover={
+        kind === 'primary' ? { bg: 'panel' } : { borderColor: 'term.green', color: 'term.green' }
+      }
     >
       {children}
     </Button>
