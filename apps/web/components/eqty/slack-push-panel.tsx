@@ -6,6 +6,7 @@ import * as React from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 
+import { Feat } from '../../lib/eqty/feat.js';
 import { Pane } from '../shell/pane.js';
 
 const SlackPushSchema = z
@@ -34,7 +35,7 @@ export function SlackPushPanel({ code, sentimentScore, theme }: Props): React.Re
     : `${code} · sent ${sentimentScore.toFixed(2)}${theme === null ? '' : ` · 题材[${theme}]`}`;
 
   return (
-    <Pane id="230" title="slack.push --preview" gridArea="R3" cyber right={<Text color="term.green">● ready</Text>}>
+    <Pane feat={Feat.SlackPush} right={<Text color="term.green">● ready</Text>}>
       <Box
         as="form"
         position="relative"

@@ -1,12 +1,6 @@
 'use client';
 
-import type {
-  BlotterRow,
-  KlineBar,
-  MarketSentiment,
-  Sentiment,
-  StockMetaDto,
-} from '@quant/shared';
+import type { BlotterRow, KlineBar, MarketSentiment, Sentiment, StockMetaDto } from '@quant/shared';
 import {
   useMutation,
   useQuery,
@@ -32,9 +26,7 @@ const sentimentKey = (code: string): readonly ['sentiment', string] => ['sentime
  * canonicalised join means re-ordered or duplicated input codes share
  * the same cache entry — same contract as the Python cache hash.
  */
-const marketSentimentKey = (
-  codes: readonly string[],
-): readonly ['sentiment.many', string] => [
+const marketSentimentKey = (codes: readonly string[]): readonly ['sentiment.many', string] => [
   'sentiment.many',
   [...new Set(codes)].sort().join(','),
 ];
@@ -135,4 +127,3 @@ export function useAnalyzeMany(
     },
   });
 }
-

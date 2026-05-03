@@ -11,31 +11,34 @@
 import type { NlScreenResult } from '@quant/shared';
 import { create } from 'zustand';
 
-export type ModuleId = 'eqty' | 'stocks';
+/** Synthetic sector id for the always-pinned "All" entry — no filter. */
+export const ALL_SECTOR_ID = 'all';
 
 interface UiState {
-  readonly view: ModuleId;
-  readonly focusCode: string;
+  /** Currently focused stock code, or null when no row has been selected. */
+  readonly focusCode: string | null;
+  /** Active sector id; drives the middle list panel. Defaults to "All". */
+  readonly activeSectorId: string;
   /**
    * Latest NL screen result (parsed AST + matches). Set by the command
    * bar after a successful `/api/screen/nl` mutation; rendered by the
    * result panel. `null` = no query has been run this session.
    */
   readonly nlResult: NlScreenResult | null;
-  setView(view: ModuleId): void;
-  setFocusCode(code: string): void;
+  setFocusCode(code: string | null): void;
+  setActiveSector(id: string): void;
   setNlResult(result: NlScreenResult | null): void;
 }
 
 export const useUiStore = create<UiState>((set) => ({
-  view: 'eqty',
-  focusCode: '600519',
+  focusCode: null,
+  activeSectorId: ALL_SECTOR_ID,
   nlResult: null,
-  setView: (view) => {
-    set({ view });
-  },
   setFocusCode: (code) => {
     set({ focusCode: code });
+  },
+  setActiveSector: (id) => {
+    set({ activeSectorId: id, focusCode: null });
   },
   setNlResult: (result) => {
     set({ nlResult: result });

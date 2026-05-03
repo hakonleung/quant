@@ -16,8 +16,8 @@ import { openDB, type IDBPDatabase } from 'idb';
 import type { StateStorage } from 'zustand/middleware';
 
 const DB_NAME = 'quant-app';
-const DB_VERSION = 3;
-const STORES = ['sectors', 'blacklist', 'settings'] as const;
+const DB_VERSION = 4;
+const STORES = ['sectors', 'blacklist', 'settings', 'layout'] as const;
 type StoreName = (typeof STORES)[number];
 
 let dbPromise: Promise<IDBPDatabase> | null = null;

@@ -1,30 +1,78 @@
 'use client';
 
-import { Box, Flex, Text } from '@chakra-ui/react';
+import { Box, Button, Flex, Text } from '@chakra-ui/react';
 import type { Sentiment } from '@quant/shared';
+import { useEffect } from 'react';
 
+import { Feat } from '../../lib/eqty/feat.js';
+import { useAnalyzeSentiment, useSentiment } from '../../lib/hooks/use-eqty-data.js';
 import { Pane } from '../shell/pane.js';
 
 interface Props {
   readonly code: string;
-  /** Latest sentiment payload — supplied by the page after the user
-   *  clicks FETCH on the SentimentPanel. */
-  readonly sentiment: Sentiment | null;
+  /** Bubbles the latest analysis result up to the page so siblings (e.g.
+   *  the Slack panel) can render the same payload. */
+  readonly onResult?: (s: Sentiment) => void;
 }
 
-export function StdoutPanel({ code, sentiment }: Props): React.ReactElement {
+export function StdoutPanel({ code, onResult }: Props): React.ReactElement {
+  const cached = useSentiment(code);
+  const analyze = useAnalyzeSentiment(code);
+  const sentiment = cached.data ?? null;
+
+  useEffect(() => {
+    if (sentiment !== null && onResult !== undefined) {
+      onResult(sentiment);
+    }
+  }, [sentiment, onResult]);
+
+  const onFetch = (): void => {
+    analyze.mutate(undefined, {
+      onSuccess: (data) => {
+        onResult?.(data);
+      },
+    });
+  };
+
   const lines: readonly string[] = sentiment === null
     ? [`$ sentiment.analyze_one --code ${code}`, '// awaiting trigger']
     : sentiment.rawLog.length > 0
       ? sentiment.rawLog
       : [`$ sentiment.analyze_one --code ${code}`, `▎ score   ${sentiment.score.toFixed(2)}`];
 
+  const status = analyze.isPending
+    ? <Text color="accent">● analyzing</Text>
+    : analyze.isError
+      ? <Text color="up">✘ {analyze.error.message}</Text>
+      : sentiment === null
+        ? <Text color="prompt">○ idle</Text>
+        : <Text color="prompt">● cached</Text>;
+
   return (
     <Pane
-      id="210"
-      title="stdout · sentiment.analyze_one"
-      gridArea="R2"
-      right={<Text color="prompt">{sentiment === null ? '○ idle' : '● cached'}</Text>}
+      feat={Feat.Stdout}
+      right={
+        <Flex gap="8px" align="center">
+          {status}
+          <Button
+            bg="accent"
+            color="panel"
+            h="auto"
+            px="10px"
+            py="3px"
+            fontFamily="mono"
+            fontSize="10px"
+            fontWeight="600"
+            letterSpacing="0.16em"
+            borderRadius="0"
+            onClick={onFetch}
+            loading={analyze.isPending}
+            _hover={{ bg: 'accentDark' }}
+          >
+            ⟳ FETCH
+          </Button>
+        </Flex>
+      }
     >
       <Box
         position="relative"

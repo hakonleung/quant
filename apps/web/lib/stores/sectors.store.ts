@@ -34,23 +34,29 @@ export interface Sector {
    * without conditionals.
    */
   readonly codes: readonly string[];
+  /**
+   * For `kind === 'dynamic'`: the source NL query so the list view can
+   * show / re-run it. Undefined for user sectors.
+   */
+  readonly nl?: string;
+  /**
+   * For `kind === 'dynamic'`: per-code evaluator evidence captured at
+   * save time (key/value pairs surfaced as extra list columns).
+   */
+  readonly evidence?: Readonly<Record<string, Readonly<Record<string, unknown>>>>;
 }
 
 interface SectorsState {
   readonly sectors: readonly Sector[];
-  readonly selectedIds: readonly string[];
   setSectors(rows: readonly Sector[]): void;
   upsert(sector: Sector): void;
   remove(id: string): void;
-  toggleSelect(id: string): void;
-  clearSelection(): void;
 }
 
 export const useSectorsStore = create<SectorsState>()(
   persist(
     (set) => ({
       sectors: [],
-      selectedIds: [],
       setSectors: (rows) => {
         set({ sectors: rows });
       },
@@ -63,19 +69,7 @@ export const useSectorsStore = create<SectorsState>()(
       remove: (id) => {
         set((state) => ({
           sectors: state.sectors.filter((s) => s.id !== id),
-          selectedIds: state.selectedIds.filter((sid) => sid !== id),
         }));
-      },
-      toggleSelect: (id) => {
-        set((state) => {
-          const sel = new Set(state.selectedIds);
-          if (sel.has(id)) sel.delete(id);
-          else sel.add(id);
-          return { selectedIds: [...sel] };
-        });
-      },
-      clearSelection: () => {
-        set({ selectedIds: [] });
       },
     }),
     {

@@ -11,7 +11,7 @@ interface AppLayoutProps {
 
 export default function AppLayout({ children }: AppLayoutProps): ReactNode {
   return (
-    <Box as="main" minH="100vh" bg="bg" display="flex" flexDirection="column">
+    <Box as="main" h="100vh" bg="bg" display="flex" flexDirection="column" overflow="hidden">
       <TopBar />
       <Box flex="1" minH={0}>
         {children}

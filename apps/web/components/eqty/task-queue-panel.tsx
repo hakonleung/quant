@@ -3,6 +3,7 @@
 import { Box, Flex, Grid, Text } from '@chakra-ui/react';
 import type { QueueSnapshotEntry } from '@quant/shared';
 
+import { Feat } from '../../lib/eqty/feat.js';
 import { useQueueStream } from '../../lib/hooks/use-queue-stream.js';
 import { Pane } from '../shell/pane.js';
 
@@ -16,7 +17,7 @@ export function TaskQueuePanel(): React.ReactElement {
   })();
 
   return (
-    <Pane id="240" title="task.queue --watch" gridArea="R4" cyber right={right}>
+    <Pane feat={Feat.TaskQueue} right={right}>
       <Box
         position="relative"
         px="18px"

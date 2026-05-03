@@ -4,8 +4,14 @@ import { Box, Button, Flex, HStack, Text } from '@chakra-ui/react';
 import type { KlineBar } from '@quant/shared';
 import { useEffect, useMemo, useState } from 'react';
 
-import { buildLayout, buildMaPath, pctChangeToLatest, type MaKey } from '../../lib/fp/kline-chart.js';
-import { useKline } from '../../lib/hooks/use-eqty-data.js';
+import { Feat } from '../../lib/eqty/feat.js';
+import {
+  buildLayout,
+  buildMaPath,
+  pctChangeToLatest,
+  type MaKey,
+} from '../../lib/fp/kline-chart.js';
+import { useKline, useStockMetaQuery } from '../../lib/hooks/use-eqty-data.js';
 import { palette } from '../../lib/theme/tokens.js';
 import { Pane } from '../shell/pane.js';
 
@@ -32,6 +38,8 @@ export function ChartPanel({ code }: Props): React.ReactElement {
   const [range, setRange] = useState<Range>('90D');
   const [selectedIdx, setSelectedIdx] = useState<number | null>(null);
   const { data, isLoading } = useKline(code, range);
+  const meta = useStockMetaQuery(code);
+  const stockName = meta.data?.name ?? '';
   const bars = data ?? [];
 
   const barsKey = bars.length === 0 ? '' : `${bars[0]!.date}-${bars[bars.length - 1]!.date}`;
@@ -40,11 +48,19 @@ export function ChartPanel({ code }: Props): React.ReactElement {
   }, [barsKey]);
 
   const focusBar = selectedIdx === null ? bars[bars.length - 1] : bars[selectedIdx];
-  const focusIdx = focusBar === undefined ? null : selectedIdx ?? bars.length - 1;
+  const focusIdx = focusBar === undefined ? null : (selectedIdx ?? bars.length - 1);
   const deltaPct = focusIdx === null ? null : pctChangeToLatest(bars, focusIdx);
 
   return (
-    <Pane id="110" title="Price Chart · D · MA{5,10,20,60}" gridArea="CMID" right={<Text>tz:Asia/Shanghai</Text>}>
+    <Pane
+      feat={Feat.Chart}
+      right={
+        <Text>
+          {code}
+          {stockName === '' ? '' : ` · ${stockName}`}
+        </Text>
+      }
+    >
       <ChartTools range={range} setRange={setRange} />
       <FocusLabel bar={focusBar ?? null} deltaPct={deltaPct} selected={selectedIdx !== null} />
       <Box position="relative" h={`${String(PRICE_VIEW_H + VOL_VIEW_H + VOL_GAP)}px`} bg="panel">
@@ -275,7 +291,15 @@ function Stat({
   );
 }
 
-function MaInline({ ma, value, color }: { ma: string; value: number | null; color: string }): React.ReactElement {
+function MaInline({
+  ma,
+  value,
+  color,
+}: {
+  ma: string;
+  value: number | null;
+  color: string;
+}): React.ReactElement {
   return (
     <Box>
       <Text as="span" color={color} letterSpacing="0.10em" fontWeight="700">
@@ -335,11 +359,6 @@ function ChartTools({ range, setRange }: ToolsProps): React.ReactElement {
           {r}
         </ToolButton>
       ))}
-      <Text ml="14px">STUDIES:</Text>
-      <ToolButton active>MA5</ToolButton>
-      <ToolButton active>MA10</ToolButton>
-      <ToolButton active>MA20</ToolButton>
-      <ToolButton active>MA60</ToolButton>
       <HStack ml="auto" gap="14px">
         <Text>CLICK→Δ%</Text>
       </HStack>

@@ -17,9 +17,11 @@ interface Props {
   readonly rows: readonly StockMetaDto[];
   readonly emptyHint: string;
   readonly onRowClick?: (row: StockMetaDto) => void;
+  /** Code of the currently focused stock — that row is highlighted. */
+  readonly focusedCode?: string | null;
 }
 
-export function StockTable({ rows, emptyHint, onRowClick }: Props): React.ReactElement {
+export function StockTable({ rows, emptyHint, onRowClick, focusedCode = null }: Props): React.ReactElement {
   const [query, setQuery] = useState('');
   const filtered = useMemo(() => filterRows(rows, query), [rows, query]);
 
@@ -27,7 +29,12 @@ export function StockTable({ rows, emptyHint, onRowClick }: Props): React.ReactE
     <Flex direction="column" h="100%" minH={0}>
       <SearchBar query={query} setQuery={setQuery} total={rows.length} hits={filtered.length} />
       <Header />
-      <VirtualBody rows={filtered} emptyHint={emptyHint} onRowClick={onRowClick} />
+      <VirtualBody
+        rows={filtered}
+        emptyHint={emptyHint}
+        onRowClick={onRowClick}
+        focusedCode={focusedCode}
+      />
     </Flex>
   );
 }
@@ -128,9 +135,10 @@ interface BodyProps {
   readonly rows: readonly StockMetaDto[];
   readonly emptyHint: string;
   readonly onRowClick: ((row: StockMetaDto) => void) | undefined;
+  readonly focusedCode: string | null;
 }
 
-function VirtualBody({ rows, emptyHint, onRowClick }: BodyProps): React.ReactElement {
+function VirtualBody({ rows, emptyHint, onRowClick, focusedCode }: BodyProps): React.ReactElement {
   const parentRef = useRef<HTMLDivElement>(null);
   const rowVirtualizer = useVirtualizer({
     count: rows.length,
@@ -155,6 +163,7 @@ function VirtualBody({ rows, emptyHint, onRowClick }: BodyProps): React.ReactEle
         {rowVirtualizer.getVirtualItems().map((vi) => {
           const row = rows[vi.index];
           if (row === undefined) return null;
+          const focused = focusedCode !== null && row.code === focusedCode;
           return (
             <Box
               key={vi.key}
@@ -168,8 +177,11 @@ function VirtualBody({ rows, emptyHint, onRowClick }: BodyProps): React.ReactEle
               gridTemplateColumns={COLS.map((c) => c.w).join(' ')}
               borderBottomWidth="1px"
               borderColor="line2"
+              borderLeftWidth={focused ? '2px' : 0}
+              borderLeftColor="accent"
+              bg={focused ? 'accentBg' : 'transparent'}
               cursor={onRowClick === undefined ? 'default' : 'pointer'}
-              _hover={{ bg: 'hover' }}
+              _hover={focused ? {} : { bg: 'hover' }}
               onClick={(): void => {
                 onRowClick?.(row);
               }}

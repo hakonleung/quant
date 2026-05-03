@@ -1,27 +1,19 @@
 'use client';
 
 import { Box, Flex, HStack, Input, Text } from '@chakra-ui/react';
-import { useState, type KeyboardEvent } from 'react';
+import type { StockMetaDto } from '@quant/shared';
+import React, { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 
-import { useNlScreen } from '../../lib/hooks/use-nl-screen.js';
-import { useUiStore, type ModuleId } from '../../lib/stores/ui.store.js';
-
-interface MenuItem {
-  readonly label: string;
-  readonly view: ModuleId;
-}
-
-const MENU: readonly MenuItem[] = [
-  { label: 'EQTY', view: 'eqty' },
-  { label: 'STKS', view: 'stocks' },
-];
+import { Feat } from '../../lib/eqty/feat.js';
+import { useStockList } from '../../lib/hooks/use-stock-list.js';
+import { useUiStore } from '../../lib/stores/ui.store.js';
+import { Pane } from './pane.js';
 
 export function TopBar(): React.ReactElement {
   return (
-    <Flex h="42px" bg="panel" borderBottomWidth="2px" borderBottomColor="accent" align="center">
+    <Flex minH="42px" bg="panel" borderBottomWidth="2px" borderBottomColor="accent" align="stretch">
       <Brand />
-      <Menu />
-      <Box flex="1" />
+      <Box flex="1" minW={0} />
       <CommandBar />
     </Flex>
   );
@@ -83,150 +75,268 @@ function Brand(): React.ReactElement {
   );
 }
 
-function Menu(): React.ReactElement {
-  const view = useUiStore((s) => s.view);
-  const setView = useUiStore((s) => s.setView);
-  return (
-    <HStack as="nav" gap={0} h="100%">
-      {MENU.map((item) => {
-        const active = item.view === view;
-        return (
-          <Flex
-            key={item.label}
-            align="center"
-            px="14px"
-            h="100%"
-            color={active ? 'accent' : 'ink2'}
-            bg={active ? 'accentBg' : 'transparent'}
-            fontWeight={active ? '700' : '500'}
-            borderRightWidth="1px"
-            borderRightColor="line"
-            fontFamily="mono"
-            fontSize="11px"
-            letterSpacing="0.14em"
-            textTransform="uppercase"
-            cursor="pointer"
-            onClick={(): void => {
-              setView(item.view);
-            }}
-            _hover={active ? {} : { color: 'ink', bg: 'hover' }}
-          >
-            {item.label}
-          </Flex>
-        );
-      })}
-    </HStack>
-  );
-}
+const MAX_DROPDOWN_VISIBLE = 5;
+const DROPDOWN_ROW_PX = 30;
+const SOFT_RESULT_CAP = 200;
+const DROPDOWN_TRANSITION_MS = 180;
 
 /**
- * Command bar — accepts a natural-language screen query (or a 6-digit
- * code for direct lookup). On `Enter` it fires `useNlScreen`; the
- * mutation result lands in the UI store and the BlotterPanel renders
- * the parsed AST + matches side by side.
+ * Command bar — fast in-memory search by `code | name | pinyin`. Hits
+ * land in a dropdown directly under the input; ↑/↓ move the highlight,
+ * Enter focuses the highlighted code, Esc closes the panel.
  */
 function CommandBar(): React.ReactElement {
   const [text, setText] = useState('');
-  const setNlResult = useUiStore((s) => s.setNlResult);
+  const [open, setOpen] = useState(false);
+  const [highlight, setHighlight] = useState(0);
   const setFocusCode = useUiStore((s) => s.setFocusCode);
-  const screen = useNlScreen();
+  const universe = useStockList();
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
-  const onSubmit = (): void => {
-    const nl = text.trim();
-    if (nl.length === 0 || screen.isPending) return;
-    if (/^\d{6}$/.test(nl)) {
-      // bare code → focus it; no need to LLM-translate
-      setFocusCode(nl);
-      return;
-    }
-    screen.mutate(
-      { nl },
-      {
-        onSuccess: (data) => {
-          setNlResult(data);
-        },
-      },
-    );
+  const matches = useMemo(
+    () => searchUniverse(universe.data ?? [], text, SOFT_RESULT_CAP),
+    [universe.data, text],
+  );
+
+  // Keep the highlighted row valid as the result list mutates.
+  useEffect(() => {
+    if (highlight >= matches.length) setHighlight(0);
+  }, [matches.length, highlight]);
+
+  // Auto-scroll the highlighted row into view inside the dropdown.
+  useEffect(() => {
+    const container = dropdownRef.current;
+    if (container === null) return;
+    const child = container.querySelector(`[data-i="${String(highlight)}"]`);
+    if (child instanceof HTMLElement) child.scrollIntoView({ block: 'nearest' });
+  }, [highlight, open]);
+
+  const commit = (code: string): void => {
+    setFocusCode(code);
+    setText('');
+    setOpen(false);
   };
 
   const onKey = (e: KeyboardEvent<HTMLInputElement>): void => {
-    if (e.key === 'Enter') {
+    if (e.key === 'ArrowDown') {
       e.preventDefault();
-      onSubmit();
+      setOpen(true);
+      setHighlight((h) => (matches.length === 0 ? 0 : (h + 1) % matches.length));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setOpen(true);
+      setHighlight((h) => (matches.length === 0 ? 0 : (h - 1 + matches.length) % matches.length));
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      const t = text.trim();
+      if (matches.length > 0) {
+        const row = matches[highlight] ?? matches[0]!;
+        commit(row.code);
+      } else if (/^\d{6}$/.test(t)) {
+        commit(t);
+      }
+    } else if (e.key === 'Escape') {
+      setOpen(false);
     }
   };
 
-  const status = screen.isPending
-    ? '…RUN'
-    : screen.isError
-      ? '✘ ERR'
-      : '↵ EXEC';
-  const statusColor = screen.isError ? 'term.red' : 'term.ink3';
+  const status =
+    !open || text.trim().length === 0
+      ? '↵ FOCUS'
+      : `${matches.length} hit${matches.length === 1 ? '' : 's'}`;
 
   return (
-    <Flex
-      h="100%"
-      px="14px"
-      align="center"
-      gap="10px"
+    <Box
+      flex="1"
+      maxW="440px"
+      minW="240px"
       borderLeftWidth="1px"
       borderLeftColor="line"
-      bg="term.bg"
       position="relative"
-      _before={{
-        content: '""',
-        position: 'absolute',
-        inset: 0,
-        pointerEvents: 'none',
-        background:
-          'repeating-linear-gradient(to bottom, rgba(255,255,255,0.012) 0 1px, transparent 1px 3px)',
+    >
+      <Pane feat={Feat.Search} right={<Text color="term.ink3">{status}</Text>}>
+        <Flex
+          h="100%"
+          px="12px"
+          align="center"
+          gap="8px"
+          bg="term.bg"
+          position="relative"
+          _before={{
+            content: '""',
+            position: 'absolute',
+            inset: 0,
+            pointerEvents: 'none',
+            background:
+              'repeating-linear-gradient(to bottom, rgba(255,255,255,0.012) 0 1px, transparent 1px 3px)',
+          }}
+        >
+          <Text color="term.green" fontFamily="mono" fontSize="12px" fontWeight="600" zIndex={1}>
+            &gt;
+          </Text>
+          <Input
+            variant="outline"
+            border="0"
+            h="auto"
+            minH="auto"
+            p={0}
+            bg="transparent"
+            color="term.ink"
+            fontFamily="mono"
+            fontSize="13px"
+            letterSpacing="0.04em"
+            placeholder="code · name · pinyin"
+            value={text}
+            onChange={(e): void => {
+              setText(e.target.value);
+              setOpen(true);
+              setHighlight(0);
+            }}
+            onFocus={(): void => {
+              setOpen(true);
+            }}
+            onBlur={(): void => {
+              // Defer so a click on the dropdown can land before close.
+              window.setTimeout(() => {
+                setOpen(false);
+              }, 120);
+            }}
+            onKeyDown={onKey}
+            zIndex={1}
+            outline="none"
+            outlineColor="transparent"
+            outlineOffset={0}
+            css={{ outline: 'none' }}
+            _focus={{ boxShadow: 'none', outline: 'none' }}
+            _focusVisible={{ boxShadow: 'none', outline: 'none' }}
+          />
+          <Text className="blink" color="term.green" fontWeight="700" fontFamily="mono" zIndex={1}>
+            ▌
+          </Text>
+        </Flex>
+      </Pane>
+      <SearchDropdown
+        ref={dropdownRef}
+        open={open && text.trim().length > 0}
+        matches={matches}
+        highlight={highlight}
+        onPick={commit}
+        onHover={setHighlight}
+      />
+    </Box>
+  );
+}
+
+interface DropdownProps {
+  readonly open: boolean;
+  readonly matches: readonly StockMetaDto[];
+  readonly highlight: number;
+  readonly onPick: (code: string) => void;
+  readonly onHover: (i: number) => void;
+}
+
+const SearchDropdown = React.forwardRef<HTMLDivElement, DropdownProps>(function SearchDropdown(
+  { open, matches, highlight, onPick, onHover },
+  ref,
+) {
+  const maxH = MAX_DROPDOWN_VISIBLE * DROPDOWN_ROW_PX;
+  // The container always renders so opening/closing animates max-height
+  // and opacity. Pointer events fall back to `none` when collapsed so a
+  // closed dropdown does not eat clicks beneath the input.
+  const transition = `max-height ${String(DROPDOWN_TRANSITION_MS)}ms ease, opacity ${String(DROPDOWN_TRANSITION_MS)}ms ease`;
+  return (
+    <Box
+      ref={ref}
+      position="absolute"
+      top="100%"
+      left={0}
+      right={0}
+      zIndex={1500}
+      bg="term.panel"
+      borderWidth={open ? '1px' : 0}
+      borderColor="term.line"
+      borderTopWidth={0}
+      overflowY="auto"
+      pointerEvents={open ? 'auto' : 'none'}
+      onMouseDown={(e): void => {
+        // Prevent the input's blur (which would close us before the click
+        // resolves) when the user picks an item with the mouse.
+        e.preventDefault();
+      }}
+      style={{
+        maxHeight: open ? `${String(maxH)}px` : '0px',
+        opacity: open ? 1 : 0,
+        transition,
       }}
     >
-      <Flex
-        align="center"
-        gap="8px"
-        bg="term.inputBg"
-        borderWidth="1px"
-        borderColor="term.line2"
-        px="12px"
-        h="28px"
-        w="380px"
-        position="relative"
-        zIndex={1}
-        _before={{
-          content: '">"',
-          color: 'term.green',
-          fontFamily: 'mono',
-          fontSize: '12px',
-          fontWeight: '600',
-        }}
-      >
-        <Input
-          variant="outline"
-          border="0"
-          h="auto"
-          minH="auto"
-          p={0}
-          bg="transparent"
-          color="term.ink"
-          fontFamily="mono"
-          fontSize="13px"
-          letterSpacing="0.04em"
-          placeholder="<code> 或 自然语言筛选语句"
-          value={text}
-          onChange={(e): void => {
-            setText(e.target.value);
-          }}
-          onKeyDown={onKey}
-          _focus={{ boxShadow: 'none' }}
-        />
-        <Text className="blink" color="term.green" fontWeight="700" fontFamily="mono">
-          ▌
-        </Text>
-        <Text color={statusColor} fontFamily="mono" fontSize="10px" letterSpacing="0.18em">
-          {status}
-        </Text>
-      </Flex>
-    </Flex>
+      {matches.length === 0 && open && (
+        <Box px="12px" py="10px" fontFamily="mono" fontSize="11px" color="term.ink3">
+          // no matches
+        </Box>
+      )}
+      {matches.map((m: StockMetaDto, i: number) => {
+        const active = i === highlight;
+        return (
+          <Box
+            key={m.code}
+            data-i={String(i)}
+            onMouseEnter={(): void => {
+              onHover(i);
+            }}
+            onClick={(): void => {
+              onPick(m.code);
+            }}
+            display="grid"
+            gridTemplateColumns="68px 1fr 60px"
+            alignItems="center"
+            gap="8px"
+            px="12px"
+            h={`${String(DROPDOWN_ROW_PX)}px`}
+            bg={active ? 'term.line' : 'transparent'}
+            cursor="pointer"
+            fontFamily="mono"
+            fontSize="12px"
+          >
+            <Text color={active ? 'term.green' : 'term.ink2'} fontWeight="600">
+              {m.code}
+            </Text>
+            <Text color="term.ink" overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap">
+              {m.name}
+            </Text>
+            <Text
+              color="term.ink3"
+              fontSize="10px"
+              textAlign="right"
+              overflow="hidden"
+              textOverflow="ellipsis"
+              whiteSpace="nowrap"
+            >
+              {m.name_pinyin}
+            </Text>
+          </Box>
+        );
+      })}
+    </Box>
   );
+});
+
+function searchUniverse(
+  rows: readonly StockMetaDto[],
+  query: string,
+  cap: number,
+): readonly StockMetaDto[] {
+  const term = query.trim().toLowerCase();
+  if (term === '') return [];
+  const out: StockMetaDto[] = [];
+  for (const r of rows) {
+    if (
+      r.code.startsWith(term) ||
+      r.name.toLowerCase().includes(term) ||
+      r.name_pinyin.toLowerCase().includes(term)
+    ) {
+      out.push(r);
+      if (out.length >= cap) break;
+    }
+  }
+  return out;
 }

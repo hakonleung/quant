@@ -3,9 +3,9 @@
 import { Box, Flex, Table, Text } from '@chakra-ui/react';
 
 import type { BlotterRow, NlScreenResult, ScreenMatchView } from '@quant/shared';
+import { Feat, FEAT_CONFIG_MAP } from '../../lib/eqty/feat.js';
 import { useSectorHits } from '../../lib/hooks/use-eqty-data.js';
-import { useSectorsStore } from '../../lib/stores/sectors.store.js';
-import { useUiStore } from '../../lib/stores/ui.store.js';
+import { ALL_SECTOR_ID, useUiStore } from '../../lib/stores/ui.store.js';
 import { DslTree } from '../dsl/dsl-tree.js';
 import { Pane } from '../shell/pane.js';
 
@@ -34,9 +34,8 @@ function NlScreenView({ result }: { result: NlScreenResult }): React.ReactElemen
   const setNlResult = useUiStore((s) => s.setNlResult);
   return (
     <Pane
-      id="120"
-      title={`NL Screen · "${truncate(result.nl, 60)}"`}
-      gridArea="CBOT"
+      feat={Feat.Blotter}
+      title={`${FEAT_CONFIG_MAP[Feat.Blotter].title()} · "${truncate(result.nl, 60)}"`}
       right={
         <>
           <Text>{result.matches.length} hits</Text>
@@ -66,12 +65,13 @@ function NlScreenView({ result }: { result: NlScreenResult }): React.ReactElemen
 }
 
 function SectorHitsView(): React.ReactElement {
-  const selectedIds = useSectorsStore((s) => s.selectedIds);
-  const { data, isLoading } = useSectorHits(selectedIds);
-  const title = selectedIds.length === 0 ? 'Sector Hits · (none selected)' : `Sector Hits · ${String(selectedIds.length)} sector(s)`;
+  const activeSectorId = useUiStore((s) => s.activeSectorId);
+  const ids = activeSectorId === ALL_SECTOR_ID ? [] : [activeSectorId];
+  const { data, isLoading } = useSectorHits(ids);
+  const title = ids.length === 0 ? 'Sector Hits · (All)' : `Sector Hits · ${activeSectorId}`;
 
   return (
-    <Pane id="120" title={title} gridArea="CBOT" right={<Text>{data?.length ?? 0} rows</Text>}>
+    <Pane feat={Feat.Blotter} title={title} right={<Text>{data?.length ?? 0} rows</Text>}>
       <Box overflow="auto" h="100%">
         <Table.Root size="sm" w="100%" fontSize="11px" css={{ borderCollapse: 'collapse' }}>
           <Table.Header>
@@ -107,7 +107,7 @@ function SectorHitsView(): React.ReactElement {
             ) : data === undefined || data.length === 0 ? (
               <Table.Row>
                 <Table.Cell colSpan={COLS.length} px="10px" py="14px" color="ink3" fontFamily="mono" fontSize="11px" letterSpacing="0.12em">
-                  // {selectedIds.length === 0 ? 'select sectors on the left to see hits' : 'no hits'}
+                  // {ids.length === 0 ? 'pick a sector on the left to see hits' : 'no hits'}
                 </Table.Cell>
               </Table.Row>
             ) : (

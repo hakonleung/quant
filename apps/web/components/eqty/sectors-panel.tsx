@@ -1,28 +1,51 @@
 'use client';
 
-import { Box, Button, Flex, HStack, Text } from '@chakra-ui/react';
+import { Box, Button, Flex, Text } from '@chakra-ui/react';
+import { useState } from 'react';
 
+import { Feat } from '../../lib/eqty/feat.js';
 import { useAnalyzeMany, useMarketSentiment } from '../../lib/hooks/use-eqty-data.js';
+import { useStockList } from '../../lib/hooks/use-stock-list.js';
 import { useBlacklistStore } from '../../lib/stores/blacklist.store.js';
 import { useSectorsStore, type Sector } from '../../lib/stores/sectors.store.js';
+import { ALL_SECTOR_ID, useUiStore } from '../../lib/stores/ui.store.js';
 import { Pane } from '../shell/pane.js';
+import { NewSectorDialog } from './new-sector-dialog.js';
 
 export function SectorsPanel(): React.ReactElement {
   const sectors = useSectorsStore((s) => s.sectors);
-  const selectedIds = useSectorsStore((s) => s.selectedIds);
-  const toggleSelect = useSectorsStore((s) => s.toggleSelect);
+  const activeSectorId = useUiStore((s) => s.activeSectorId);
+  const setActiveSector = useUiStore((s) => s.setActiveSector);
   const blacklist = useBlacklistStore((s) => s.entries);
+  const universe = useStockList();
+  const [dialogOpen, setDialogOpen] = useState(false);
 
   const userRows = sectors.filter((r) => r.kind === 'user');
   const dynRows = sectors.filter((r) => r.kind === 'dynamic');
 
+  // Synthetic "All" sector — total universe, always pinned at the top.
+  const allCodes = (universe.data ?? []).map((s) => s.code);
+  const allSector: Sector = {
+    id: ALL_SECTOR_ID,
+    name: 'All',
+    kind: 'user',
+    count: allCodes.length,
+    meta: 'every stock',
+    chgPct: null,
+    codes: allCodes,
+  };
+
   return (
     <Pane
-      id="001"
-      title="Sectors // Watchlists"
-      gridArea="L"
+      feat={Feat.Sectors}
       right={
-        <Text cursor="pointer" _hover={{ color: 'accent' }}>
+        <Text
+          cursor="pointer"
+          _hover={{ color: 'accent' }}
+          onClick={(): void => {
+            setDialogOpen(true);
+          }}
+        >
           + NEW
         </Text>
       }
@@ -30,7 +53,14 @@ export function SectorsPanel(): React.ReactElement {
       <Flex direction="column" h="100%">
         <SideHead />
         <Box flex="1" overflow="auto">
-          <SubHead label="// USER" />
+          <SectorRow
+            sector={allSector}
+            selected={activeSectorId === ALL_SECTOR_ID}
+            onClick={(): void => {
+              setActiveSector(ALL_SECTOR_ID);
+            }}
+          />
+          <SubHead label="// USER" border />
           {userRows.length === 0 ? (
             <Empty>no user sectors yet</Empty>
           ) : (
@@ -38,9 +68,9 @@ export function SectorsPanel(): React.ReactElement {
               <SectorRow
                 key={r.id}
                 sector={r}
-                selected={selectedIds.includes(r.id)}
+                selected={activeSectorId === r.id}
                 onClick={(): void => {
-                  toggleSelect(r.id);
+                  setActiveSector(r.id);
                 }}
               />
             ))
@@ -53,65 +83,57 @@ export function SectorsPanel(): React.ReactElement {
               <SectorRow
                 key={r.id}
                 sector={r}
-                selected={selectedIds.includes(r.id)}
+                selected={activeSectorId === r.id}
                 onClick={(): void => {
-                  toggleSelect(r.id);
+                  setActiveSector(r.id);
                 }}
               />
             ))
           )}
         </Box>
-        <MergeBar selectedCount={selectedIds.length} />
-        <Flex
-          align="center"
-          gap="8px"
-          px="10px"
-          h="28px"
-          borderTopWidth="1px"
-          borderColor="line"
-          bg="panel"
-          flexShrink={0}
-        >
-          <Text fontFamily="mono" fontSize="10px" letterSpacing="0.18em" fontWeight="700" color="accent">
-            002
-          </Text>
-          <Text fontFamily="mono" fontSize="10px" letterSpacing="0.18em" textTransform="uppercase" fontWeight="600" color="ink2">
-            Blacklist
-          </Text>
-          <Text ml="auto" fontFamily="mono" fontSize="10px" color="ink3">
-            {blacklist.length}
-          </Text>
-        </Flex>
-        <Box maxH="160px" overflow="auto">
-          {blacklist.length === 0 ? (
-            <Empty>no blacklisted stocks</Empty>
-          ) : (
-            blacklist.map((b) => (
-              <Flex
-                key={b.code}
-                align="center"
-                gap="8px"
-                px="10px"
-                py="6px"
-                borderBottomWidth="1px"
-                borderColor="line2"
-                fontSize="11px"
-                _hover={{ bg: 'hover' }}
-              >
-                <CheckBox />
-                <Box>
-                  <Text fontFamily="mono" fontSize="11px" color="ink" fontWeight="500" letterSpacing="0.04em">
-                    {b.code} {b.name}
-                  </Text>
-                  <Text fontFamily="mono" fontSize="9px" color="ink3" letterSpacing="0.14em" mt="1px">
-                    added {b.addedAt}
-                  </Text>
-                </Box>
-              </Flex>
-            ))
-          )}
+        <Box flexShrink={0} maxH="190px" display="flex" flexDirection="column">
+          <Pane
+            feat={Feat.Blacklist}
+            right={<Text>{blacklist.length}</Text>}
+          >
+            <Box overflow="auto" h="100%">
+              {blacklist.length === 0 ? (
+                <Empty>no blacklisted stocks</Empty>
+              ) : (
+                blacklist.map((b) => (
+                  <Flex
+                    key={b.code}
+                    align="center"
+                    gap="8px"
+                    px="10px"
+                    py="6px"
+                    borderBottomWidth="1px"
+                    borderColor="line2"
+                    fontSize="11px"
+                    _hover={{ bg: 'hover' }}
+                  >
+                    <CheckBox />
+                    <Box>
+                      <Text fontFamily="mono" fontSize="11px" color="ink" fontWeight="500" letterSpacing="0.04em">
+                        {b.code} {b.name}
+                      </Text>
+                      <Text fontFamily="mono" fontSize="9px" color="ink3" letterSpacing="0.14em" mt="1px">
+                        added {b.addedAt}
+                      </Text>
+                    </Box>
+                  </Flex>
+                ))
+              )}
+            </Box>
+          </Pane>
         </Box>
       </Flex>
+      <NewSectorDialog
+        open={dialogOpen}
+        onClose={(): void => {
+          setDialogOpen(false);
+        }}
+      />
     </Pane>
   );
 }
@@ -282,40 +304,3 @@ function CheckBox({ checked = false }: { checked?: boolean }): React.ReactElemen
   );
 }
 
-function MergeBar({ selectedCount }: { selectedCount: number }): React.ReactElement {
-  const enabled = selectedCount >= 2;
-  return (
-    <HStack
-      px="10px"
-      py="8px"
-      borderTopWidth="1px"
-      borderColor="line"
-      bg="panel3"
-      fontFamily="mono"
-      fontSize="10px"
-      color="ink3"
-      letterSpacing="0.14em"
-      fontWeight="700"
-      flexShrink={0}
-    >
-      <Text>SEL={selectedCount}</Text>
-      <Button
-        ml="auto"
-        bg={enabled ? 'accent' : 'badgeBg'}
-        color={enabled ? 'panel' : 'ink3'}
-        h="auto"
-        px="12px"
-        py="5px"
-        fontFamily="mono"
-        fontSize="10px"
-        fontWeight="600"
-        letterSpacing="0.16em"
-        borderRadius="0"
-        disabled={!enabled}
-        _hover={enabled ? { bg: 'accentDark' } : {}}
-      >
-        MERGE →
-      </Button>
-    </HStack>
-  );
-}
