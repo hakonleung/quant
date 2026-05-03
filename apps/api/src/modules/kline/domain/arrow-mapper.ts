@@ -14,7 +14,7 @@
  * BFF — bloats the cross-process contract for no UI benefit.
  */
 
-import type { Table } from 'apache-arrow';
+import { DataType, Decimal, type Table } from 'apache-arrow';
 import { KlineBarSchema, type KlineBar } from '@quant/shared';
 
 interface RowAccess {
@@ -32,7 +32,10 @@ interface RowAccess {
   readonly ma60: unknown;
 }
 
+type ScaleMap = Readonly<Record<string, number>>;
+
 export function arrowTableToKlineBars(table: Table): KlineBar[] {
+  const scales = decimalScales(table);
   const out: KlineBar[] = [];
   for (let i = 0; i < table.numRows; i++) {
     const proxy = table.get(i);
@@ -40,25 +43,35 @@ export function arrowTableToKlineBars(table: Table): KlineBar[] {
     const row = proxy.toJSON() as RowAccess;
     const candidate = {
       date: dateToIsoDate(row.trade_date, 'trade_date'),
-      open: requireNumber(row.open_qfq, 'open_qfq'),
-      high: requireNumber(row.high_qfq, 'high_qfq'),
-      low: requireNumber(row.low_qfq, 'low_qfq'),
-      close: requireNumber(row.close_qfq, 'close_qfq'),
+      open: requireNumber(row.open_qfq, 'open_qfq', scales),
+      high: requireNumber(row.high_qfq, 'high_qfq', scales),
+      low: requireNumber(row.low_qfq, 'low_qfq', scales),
+      close: requireNumber(row.close_qfq, 'close_qfq', scales),
       volume: requireIntegralNumber(row.volume, 'volume'),
-      turnover: requireNumber(row.amount, 'amount'),
-      turnoverRate: requireNumber(row.turnover_rate, 'turnover_rate'),
-      ma5: optionalNumber(row.ma5),
-      ma10: optionalNumber(row.ma10),
-      ma20: optionalNumber(row.ma20),
-      ma60: optionalNumber(row.ma60),
+      turnover: requireNumber(row.amount, 'amount', scales),
+      turnoverRate: requireNumber(row.turnover_rate, 'turnover_rate', scales),
+      ma5: optionalNumber(row.ma5, 'ma5', scales),
+      ma10: optionalNumber(row.ma10, 'ma10', scales),
+      ma20: optionalNumber(row.ma20, 'ma20', scales),
+      ma60: optionalNumber(row.ma60, 'ma60', scales),
     };
     out.push(KlineBarSchema.parse(candidate));
   }
   return out;
 }
 
-function requireNumber(raw: unknown, field: string): number {
-  const n = coerceNumber(raw);
+function decimalScales(table: Table): ScaleMap {
+  const scales: Record<string, number> = {};
+  for (const field of table.schema.fields) {
+    if (DataType.isDecimal(field.type)) {
+      scales[field.name] = (field.type as Decimal).scale;
+    }
+  }
+  return scales;
+}
+
+function requireNumber(raw: unknown, field: string, scales: ScaleMap): number {
+  const n = coerceNumber(raw, scales[field]);
   if (n === null) {
     throw new Error(`kline.${field}: expected numeric, got ${describe(raw)}`);
   }
@@ -75,28 +88,58 @@ function requireIntegralNumber(raw: unknown, field: string): number {
   throw new Error(`kline.${field}: expected integral, got ${describe(raw)}`);
 }
 
-function optionalNumber(raw: unknown): number | null {
+function optionalNumber(raw: unknown, field: string, scales: ScaleMap): number | null {
   if (raw === null || raw === undefined) return null;
-  return coerceNumber(raw);
+  return coerceNumber(raw, scales[field]);
 }
 
-function coerceNumber(raw: unknown): number | null {
+function coerceNumber(raw: unknown, scale: number | undefined): number | null {
+  const divisor = scale && scale > 0 ? Math.pow(10, scale) : 1;
   if (raw === null || raw === undefined) return null;
-  if (typeof raw === 'number') return Number.isFinite(raw) ? raw : null;
-  if (typeof raw === 'bigint') return Number(raw);
+  if (typeof raw === 'number') return Number.isFinite(raw) ? raw / divisor : null;
+  if (typeof raw === 'bigint') return Number(raw) / divisor;
   if (typeof raw === 'string') {
     const n = Number(raw);
-    return Number.isFinite(n) ? n : null;
+    return Number.isFinite(n) ? n / divisor : null;
   }
-  // Arrow `Decimal128` exposes a `.toString()` that returns the decimal
-  // representation; we go through the string path to avoid platform
-  // differences in numeric coercion.
+  // apache-arrow `Decimal128` rows surface as a Uint32Array of four 32-bit
+  // little-endian limbs holding the unscaled two's-complement integer. We
+  // reconstruct via BigInt arithmetic to preserve sign and 128-bit range,
+  // then divide by 10^scale to land back in JS-number territory.
+  if (raw instanceof Uint32Array && raw.length === 4) {
+    const unscaled = uint32QuadToBigInt(raw);
+    return bigIntToScaledNumber(unscaled, divisor);
+  }
   if (typeof raw === 'object' && raw !== null && 'toString' in raw) {
-    const s = String(raw);
-    const n = Number(s);
-    return Number.isFinite(n) ? n : null;
+    const n = Number(String(raw));
+    return Number.isFinite(n) ? n / divisor : null;
   }
   return null;
+}
+
+function uint32QuadToBigInt(quad: Uint32Array): bigint {
+  // Four little-endian 32-bit limbs → unsigned 128-bit, then re-interpret
+  // the top bit as the sign.
+  const [a = 0, b = 0, c = 0, d = 0] = quad;
+  let unsigned =
+    BigInt(a) | (BigInt(b) << 32n) | (BigInt(c) << 64n) | (BigInt(d) << 96n);
+  const SIGN_BIT = 1n << 127n;
+  const RANGE = 1n << 128n;
+  if (unsigned & SIGN_BIT) unsigned -= RANGE;
+  return unsigned;
+}
+
+function bigIntToScaledNumber(unscaled: bigint, divisor: number): number {
+  if (divisor === 1) return Number(unscaled);
+  const negative = unscaled < 0n;
+  const abs = negative ? -unscaled : unscaled;
+  const scale = BigInt(Math.round(Math.log10(divisor)));
+  const factor = 10n ** scale;
+  const intPart = abs / factor;
+  const fracPart = abs % factor;
+  const fracStr = fracPart.toString().padStart(Number(scale), '0');
+  const value = Number(`${intPart.toString()}.${fracStr}`);
+  return negative ? -value : value;
 }
 
 function dateToIsoDate(raw: unknown, field: string): string {
@@ -110,9 +153,14 @@ function dateToIsoDate(raw: unknown, field: string): string {
     return `${String(y)}-${m}-${d}`;
   }
   if (typeof raw === 'number') {
-    // Arrow date32 → days since epoch.
-    const dt = new Date(raw * 86_400_000);
-    return dateToIsoDate(dt, field);
+    // apache-arrow's DateDay (date32) `toJSON()` emits milliseconds
+    // since epoch (not days). Anything below ~1e8 we treat as days for
+    // safety against alternate bindings.
+    const ms = raw > 1e8 ? raw : raw * 86_400_000;
+    return dateToIsoDate(new Date(ms), field);
+  }
+  if (typeof raw === 'bigint') {
+    return dateToIsoDate(Number(raw), field);
   }
   throw new Error(`kline.${field}: cannot interpret ${describe(raw)} as date`);
 }

@@ -81,6 +81,15 @@ def main() -> int:
     )
     log = logging.getLogger("quant_rpc.main")
 
+    # Warm up V8 on the main thread before gRPC worker threads spin up.
+    # akshare's `stock_zh_a_daily` (sina) constructs `py_mini_racer.MiniRacer()`
+    # per call to decode encrypted params; concurrent first-time
+    # instantiation across threads triggers V8's address_pool_manager
+    # double-init check and aborts the process.
+    import py_mini_racer  # noqa: PLC0415
+
+    py_mini_racer.MiniRacer().eval("1+1")
+
     root = _data_root()
     meta_path = root / "meta" / "stocks.parquet"
     kline_root = root / "kline"

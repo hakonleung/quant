@@ -4,7 +4,7 @@
  * generic 500 with the trace_id so users can quote it back to support.
  */
 
-import { Catch, Logger, type ArgumentsHost, type ExceptionFilter } from '@nestjs/common';
+import { Catch, HttpException, Logger, type ArgumentsHost, type ExceptionFilter } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import { QuantError, ERROR_HTTP_STATUS, TRACE_HEADER } from '@quant/shared';
 import type { RequestWithTraceId } from './trace.middleware.js';
@@ -37,6 +37,29 @@ export class QuantErrorFilter implements ExceptionFilter {
       };
       this.logger.warn(
         `quant_error code=${exception.code} status=${String(status)} trace_id=${traceId} msg=${exception.message}`,
+      );
+      res.status(status).json(body);
+      return;
+    }
+
+    if (exception instanceof HttpException) {
+      const status = exception.getStatus();
+      const raw = exception.getResponse();
+      const fromBody =
+        typeof raw === 'object' && raw !== null ? (raw as Record<string, unknown>) : {};
+      const code =
+        typeof fromBody['code'] === 'string' ? (fromBody['code'] as string) : exception.name;
+      const message =
+        typeof fromBody['message'] === 'string'
+          ? (fromBody['message'] as string)
+          : exception.message;
+      const details =
+        typeof fromBody['details'] === 'object' && fromBody['details'] !== null
+          ? (fromBody['details'] as Record<string, unknown>)
+          : {};
+      const body: ErrorBody = { code, message, trace_id: traceId, details };
+      this.logger.warn(
+        `http_error code=${code} status=${String(status)} trace_id=${traceId} msg=${message}`,
       );
       res.status(status).json(body);
       return;

@@ -129,7 +129,7 @@ echo "${C_BOLD}└────────────────────�
 
 if [[ $RUN_PY -eq 1 ]]; then
   spawn "py " "$C_PY" "$LOG_DIR/py.log" \
-    "uv run python -m quant_rpc"
+    "uv run python -m quant_rpc.main"
 fi
 
 if [[ $RUN_API -eq 1 ]]; then
