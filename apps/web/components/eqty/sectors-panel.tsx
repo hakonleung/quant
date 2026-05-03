@@ -112,7 +112,6 @@ export function SectorsPanel(): React.ReactElement {
                     fontSize="11px"
                     _hover={{ bg: 'hover' }}
                   >
-                    <CheckBox />
                     <Box>
                       <Text fontFamily="mono" fontSize="11px" color="ink" fontWeight="500" letterSpacing="0.04em">
                         {b.code} {b.name}
@@ -225,7 +224,6 @@ function SectorRow({ sector, selected, onClick }: RowProps): React.ReactElement 
       fontSize="11px"
       onClick={onClick}
     >
-      <CheckBox checked={selected} />
       <Box flex="1" minW={0}>
         <Text fontFamily="mono" fontSize="11px" color="ink" fontWeight="500" letterSpacing="0.04em" overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap">
           {sector.name}
@@ -284,23 +282,4 @@ function AnalyzeBtn({ onClick, loading, empty, themed }: AnalyzeBtnProps): React
   );
 }
 
-function CheckBox({ checked = false }: { checked?: boolean }): React.ReactElement {
-  return (
-    <Box
-      w="12px"
-      h="12px"
-      borderWidth="1px"
-      borderColor={checked ? 'accent' : 'ink3'}
-      bg={checked ? 'accent' : 'panel'}
-      color={checked ? 'panel' : 'accent'}
-      display="grid"
-      placeItems="center"
-      fontSize="10px"
-      lineHeight="1"
-      flexShrink={0}
-    >
-      {checked ? '✓' : ''}
-    </Box>
-  );
-}
 
