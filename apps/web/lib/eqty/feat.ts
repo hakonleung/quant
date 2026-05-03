@@ -40,7 +40,7 @@ export const FEAT_CONFIG_MAP: Readonly<Record<Feat, FeatConfig>> = {
   [Feat.Chart]: { title: () => 'detail', gridArea: 'CMID' },
   [Feat.Stdout]: { title: () => 'sentiment', gridArea: 'CBOT' },
   [Feat.SectorSentiment]: { title: () => 'sector.sentiment', gridArea: 'R1' },
-  [Feat.PatternMatch]: { title: () => 'pattern.match' },
+  [Feat.PatternMatch]: { title: () => 'pattern.match', defaultMinimized: true },
   [Feat.SlackPush]: {
     title: () => 'slack.push',
     gridArea: 'R2',

@@ -53,6 +53,11 @@ export function EqtyModule(): React.ReactElement {
       />
       <Column flex="1">
         <ListPanel />
+        {/* 101 chart sits directly above 105 pattern-match — pattern
+            match operates on a range selected from the chart, so the
+            two related surfaces are stacked together in the middle
+            column. */}
+        {code !== null && <ChartPanel code={code} />}
         <PatternMatchPanel />
       </Column>
       <Divider
@@ -65,7 +70,6 @@ export function EqtyModule(): React.ReactElement {
         max={LAYOUT_LIMITS.rightMax}
       />
       <Column width={`${String(rightWidth)}px`}>
-        {code !== null && <ChartPanel code={code} />}
         <SectorSentimentPanel />
         {code !== null && (
           <>

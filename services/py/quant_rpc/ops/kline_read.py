@@ -149,17 +149,26 @@ class ListKlineBulkLastNHandler:
         codes = _optional_code_list(args)
         n = _require_positive_int(args, "n", default=5)
         if codes is None:
-            codes = [m.code for m in self._meta_repo.list_all()][:_MAX_BULK_CODES]
+            try:
+                codes = [m.code for m in self._meta_repo.list_all()][:_MAX_BULK_CODES]
+            except Exception:  # noqa: BLE001 — meta repo is a soft dep here
+                codes = []
         tables: list[pa.Table] = []
+        # Bulk read is best-effort: any per-code failure (missing
+        # parquet, decimal-decode hiccup, repo I/O glitch) just means
+        # that code is absent from the response. The handler must never
+        # raise — the gateway maps absence to "stats not yet available"
+        # in the list-panel and renders a "—" placeholder.
         for code in codes:
             try:
                 slice_ = self._service.get_last_n(code, n)
-            except QuantError:
-                # Missing parquet / unknown code → skip; the gateway
-                # treats absent rows as "stats not yet available".
+            except Exception:  # noqa: BLE001 — adapter boundary
                 continue
             if slice_.num_rows > 0:
                 tables.append(slice_)
         if not tables:
             return KLINE_SCHEMA.empty_table()
-        return pa.concat_tables(tables, promote_options="default")
+        try:
+            return pa.concat_tables(tables, promote_options="default")
+        except Exception:  # noqa: BLE001 — schema-promotion fallback
+            return KLINE_SCHEMA.empty_table()

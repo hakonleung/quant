@@ -644,20 +644,65 @@ function buildColumns(evidenceKeys: readonly string[]): readonly ColumnDef[] {
     },
   ];
   for (const k of evidenceKeys) {
+    const kind = evidenceColumnKind(k);
     base.push({
       key: `ev:${k}`,
       label: k.toUpperCase(),
       w: 130,
       align: 'right',
-      render: (r) => (
-        <Text fontFamily="mono" fontSize="11px" color="ink2">
-          {formatEvidence(r[k])}
-        </Text>
-      ),
+      render: (r) => renderEvidenceCell(kind, r[k]),
       sortValue: (r) => evidenceSortKey(r[k]),
     });
   }
   return base;
+}
+
+type EvidenceColumnKind = 'cny' | 'chgPct' | 'raw';
+
+/**
+ * Pick a display formatter for a dynamic-sector evidence key based on
+ * the screening evaluator's column-name conventions:
+ *
+ *   - `amount`               → CNY notional (万 / 亿)
+ *   - `*pct*`                → change-pct (signed, two-decimal %)
+ *   - `*period_return*`      → change-pct (period total return, fraction)
+ *   - `*rate*`               → change-pct (turnover_rate etc., fraction)
+ *   - everything else        → raw formatter (numbers / strings / arrays)
+ *
+ * Match is on lowercased substring so casing variations (`pct_chg_qfq`,
+ * `PERIOD_RETURN_240D`, `TurnoverRate`) all hit the right branch.
+ */
+function evidenceColumnKind(key: string): EvidenceColumnKind {
+  const k = key.toLowerCase();
+  if (k === 'amount') return 'cny';
+  if (k.includes('pct')) return 'chgPct';
+  if (k.includes('period_return')) return 'chgPct';
+  if (k.includes('rate')) return 'chgPct';
+  return 'raw';
+}
+
+function renderEvidenceCell(kind: EvidenceColumnKind, raw: unknown): React.ReactNode {
+  if (kind === 'cny') {
+    return <CnyCell value={toNumberOrNull(raw)} />;
+  }
+  if (kind === 'chgPct') {
+    return <ChgPctCell value={toNumberOrNull(raw)} />;
+  }
+  return (
+    <Text fontFamily="mono" fontSize="11px" color="ink2">
+      {formatEvidence(raw)}
+    </Text>
+  );
+}
+
+function toNumberOrNull(raw: unknown): number | null {
+  if (typeof raw === 'number' && Number.isFinite(raw)) return raw;
+  if (typeof raw === 'string') {
+    if (!/^-?\d+(?:\.\d+)?$/.test(raw)) return null;
+    const n = Number(raw);
+    return Number.isFinite(n) ? n : null;
+  }
+  return null;
 }
 
 interface ScrollGridProps {
