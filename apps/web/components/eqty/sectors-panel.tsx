@@ -16,6 +16,14 @@ import { ALL_SECTOR_ID, useUiStore } from '../../lib/stores/ui.store.js';
 import { Pane } from '../shell/pane.js';
 import { NewSectorDialog } from './new-sector-dialog.js';
 
+/**
+ * Cap on members per analyze_many call. Each member fans out into a
+ * web-search + LLM aggregator pass; >50 routinely runs into provider
+ * rate-limits and burns minutes of paid LLM time. Surfaces in the
+ * sector-row analyze button and 104 sector.sentiment FETCH.
+ */
+export const ANALYZE_MAX_CODES = 50;
+
 export function SectorsPanel(): React.ReactElement {
   const sectors = useSectorsStore((s) => s.sectors);
   const activeSectorId = useUiStore((s) => s.activeSectorId);
@@ -250,9 +258,15 @@ function SectorRow({
     return count === 0 ? null : sum / count;
   })();
 
+  // Hard cap: analyze_many burns one paid LLM call per cluster + a
+  // batched search per code, so >50 members would routinely exceed the
+  // provider rate-limit. The button stays visible but un-clickable so
+  // the user sees the gate instead of the action silently no-op'ing.
+  const tooLarge = codes.length > ANALYZE_MAX_CODES;
+
   const onAnalyze = (e: React.MouseEvent): void => {
     e.stopPropagation();
-    if (codes.length === 0 || analyze.isPending) return;
+    if (codes.length === 0 || analyze.isPending || tooLarge) return;
     analyze.mutate();
   };
 
@@ -292,6 +306,8 @@ function SectorRow({
         loading={analyze.isPending}
         empty={codes.length === 0}
         themed={themeCount > 0}
+        tooLarge={tooLarge}
+        memberCount={codes.length}
       />
     </Flex>
   );
@@ -302,9 +318,24 @@ interface AnalyzeBtnProps {
   readonly loading: boolean;
   readonly empty: boolean;
   readonly themed: boolean;
+  readonly tooLarge: boolean;
+  readonly memberCount: number;
 }
 
-function AnalyzeBtn({ onClick, loading, empty, themed }: AnalyzeBtnProps): React.ReactElement {
+function AnalyzeBtn({
+  onClick,
+  loading,
+  empty,
+  themed,
+  tooLarge,
+  memberCount,
+}: AnalyzeBtnProps): React.ReactElement {
+  const disabled = empty || tooLarge;
+  const title = empty
+    ? 'no members'
+    : tooLarge
+      ? `too many members (${String(memberCount)} > ${String(ANALYZE_MAX_CODES)}); narrow the sector first`
+      : 'analyze members';
   return (
     <Button
       ml="2px"
@@ -321,9 +352,9 @@ function AnalyzeBtn({ onClick, loading, empty, themed }: AnalyzeBtnProps): React
       borderRadius="0"
       onClick={onClick}
       loading={loading}
-      disabled={empty}
-      _hover={empty ? {} : { borderColor: 'accent', color: 'accent' }}
-      title={empty ? 'no members' : 'analyze members'}
+      disabled={disabled}
+      _hover={disabled ? {} : { borderColor: 'accent', color: 'accent' }}
+      title={title}
     >
       ⌘
     </Button>

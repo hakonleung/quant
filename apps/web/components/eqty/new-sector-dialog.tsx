@@ -95,6 +95,8 @@ export function NewSectorDialog({ open, onClose }: Props): React.ReactElement | 
       codes,
       nl: preview.nl,
       evidence,
+      screenPlan: preview.screenPlan,
+      universePlan: preview.universePlan,
     };
     upsert(s);
     setActiveSector(id);

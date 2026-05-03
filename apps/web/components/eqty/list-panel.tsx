@@ -13,7 +13,7 @@
  * scrollable container.
  */
 
-import { Box, Flex, Input, Text } from '@chakra-ui/react';
+import { Box, Button, Flex, Input, Text, Textarea } from '@chakra-ui/react';
 import type { KlineBar, StockMetaDto } from '@quant/shared';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -21,9 +21,11 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Feat } from '../../lib/eqty/feat.js';
 import { deriveStats, type StockStats } from '../../lib/fp/stock-stats.js';
 import { useKlineBulk } from '../../lib/hooks/use-eqty-data.js';
+import { useNlScreen } from '../../lib/hooks/use-nl-screen.js';
 import { useStockList } from '../../lib/hooks/use-stock-list.js';
 import { useSectorsStore, type Sector } from '../../lib/stores/sectors.store.js';
 import { ALL_SECTOR_ID, useUiStore } from '../../lib/stores/ui.store.js';
+import { DslTree } from '../dsl/dsl-tree.js';
 import { Pane } from '../shell/pane.js';
 
 /**
@@ -96,7 +98,7 @@ export function ListPanel(): React.ReactElement {
     for (const code of Object.keys(ev)) {
       const inner = ev[code];
       if (inner === undefined) continue;
-      for (const k of Object.keys(inner)) {
+      for (const k of Object.keys(flattenEvidence(inner))) {
         // Built-in stat columns already cover these — skipping avoids
         // duplicate side-by-side columns when the screening evaluator
         // surfaces the same metric we compute from kline.
@@ -206,7 +208,8 @@ function buildRows(
     const m = meta.get(code);
     const bars = klineByCode.get(code);
     const stats = bars === undefined ? null : deriveStats(bars);
-    const evidence = evidenceMap?.[code] ?? {};
+    const rawEvidence = evidenceMap?.[code] ?? {};
+    const evidence = flattenEvidence(rawEvidence);
     // {...stock, ...evidence, ...metrics} — kline-derived metrics win
     // last so they override anything the screening evaluator emitted
     // under the same key (the built-in column already shows the kline
@@ -226,6 +229,52 @@ function buildRows(
     rows.push(row as ListRow);
   }
   return rows;
+}
+
+/**
+ * Flatten one stock's evaluator evidence and coerce numeric strings.
+ *
+ * The screening service emits a nested shape:
+ *
+ *     { metrics: { amount: "5.3e9", pct_chg_qfq: "0.034", ... },
+ *       window:  ["2025-04-03", "2026-04-30"] }
+ *
+ * The list-panel renders one column per leaf key, so we lift every
+ * dict-valued field's children into the parent and turn decimal-as-
+ * string values into numbers for sort + format. Non-dict values
+ * (arrays, scalars) pass through unchanged.
+ */
+function flattenEvidence(
+  raw: Readonly<Record<string, unknown>>,
+): Readonly<Record<string, unknown>> {
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(raw)) {
+    if (isPlainObject(v)) {
+      for (const [inK, inV] of Object.entries(v)) {
+        out[inK] = coerceNumeric(inV);
+      }
+    } else {
+      out[k] = coerceNumeric(v);
+    }
+  }
+  return out;
+}
+
+function isPlainObject(v: unknown): v is Record<string, unknown> {
+  if (v === null || typeof v !== 'object') return false;
+  if (Array.isArray(v)) return false;
+  const proto = Object.getPrototypeOf(v) as unknown;
+  return proto === null || proto === Object.prototype;
+}
+
+function coerceNumeric(v: unknown): unknown {
+  if (typeof v !== 'string') return v;
+  // Decimal-as-string round-tripped from Python; treat as number when
+  // the entire string parses cleanly. Leaves dates / arbitrary text
+  // alone.
+  if (!/^-?\d+(?:\.\d+)?$/.test(v)) return v;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : v;
 }
 
 interface EditableTitleProps {
@@ -347,6 +396,39 @@ function FilterHeader({
 }
 
 function DynamicHeader({ sector }: { sector: Sector }): React.ReactElement {
+  const upsert = useSectorsStore((s) => s.upsert);
+  const screen = useNlScreen();
+  const sourceText = sector.nl ?? sector.meta;
+
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(sourceText);
+  useEffect(() => {
+    setDraft(sourceText);
+  }, [sourceText]);
+
+  const onSave = (): void => {
+    const next = draft.trim();
+    if (next.length === 0 || screen.isPending) return;
+    screen.mutate(
+      { nl: next },
+      {
+        onSuccess: (data) => {
+          upsert({
+            ...sector,
+            nl: data.nl,
+            meta: data.nl,
+            count: data.matches.length,
+            codes: data.matches.map((m) => m.code),
+            evidence: matchesToEvidenceMap(data.matches),
+            screenPlan: data.screenPlan,
+            universePlan: data.universePlan,
+          });
+          setEditing(false);
+        },
+      },
+    );
+  };
+
   return (
     <Flex
       direction="column"
@@ -358,23 +440,128 @@ function DynamicHeader({ sector }: { sector: Sector }): React.ReactElement {
       bg="panel3"
       flexShrink={0}
     >
-      <Flex align="center" gap="8px">
-        <Text color="prompt" fontFamily="mono" fontSize="12px" fontWeight="700">
-          $
-        </Text>
+      <Flex align="flex-start" gap="8px">
         <Text
+          color="prompt"
           fontFamily="mono"
           fontSize="12px"
-          color="ink"
-          overflow="hidden"
-          textOverflow="ellipsis"
-          whiteSpace="nowrap"
+          fontWeight="700"
+          mt="2px"
+          flexShrink={0}
         >
-          {sector.nl ?? sector.meta}
+          $
         </Text>
+        {editing ? (
+          <Textarea
+            value={draft}
+            onChange={(e): void => {
+              setDraft(e.target.value);
+            }}
+            autoFocus
+            rows={Math.min(8, Math.max(2, draft.split('\n').length))}
+            bg="panel"
+            borderWidth="1px"
+            borderColor="accent"
+            borderRadius="0"
+            fontFamily="mono"
+            fontSize="12px"
+            color="ink"
+            px="8px"
+            py="4px"
+            flex="1"
+            minH="auto"
+            resize="vertical"
+            _focus={{ borderColor: 'accent', boxShadow: 'none' }}
+          />
+        ) : (
+          <Text
+            fontFamily="mono"
+            fontSize="12px"
+            color="ink"
+            whiteSpace="pre-wrap"
+            wordBreak="break-word"
+            flex="1"
+            cursor="text"
+            _hover={{ color: 'accent' }}
+            onClick={(): void => {
+              setEditing(true);
+            }}
+            title="click to edit"
+          >
+            {sourceText}
+          </Text>
+        )}
+        <Flex gap="6px" flexShrink={0}>
+          {editing && (
+            <Button
+              h="22px"
+              px="8px"
+              bg="panel"
+              color="ink2"
+              borderWidth="1px"
+              borderColor="line"
+              borderRadius="0"
+              fontFamily="mono"
+              fontSize="10px"
+              letterSpacing="0.14em"
+              onClick={(): void => {
+                setDraft(sourceText);
+                setEditing(false);
+              }}
+              disabled={screen.isPending}
+            >
+              CANCEL
+            </Button>
+          )}
+          <Button
+            h="22px"
+            px="10px"
+            bg={editing ? 'accent' : 'panel'}
+            color={editing ? 'panel' : 'ink2'}
+            borderWidth="1px"
+            borderColor={editing ? 'accent' : 'line'}
+            borderRadius="0"
+            fontFamily="mono"
+            fontSize="10px"
+            letterSpacing="0.14em"
+            fontWeight="700"
+            loading={screen.isPending}
+            onClick={editing ? onSave : (): void => setEditing(true)}
+          >
+            {editing ? 'SAVE' : 'EDIT'}
+          </Button>
+        </Flex>
       </Flex>
+      {screen.isError && (
+        <Text fontFamily="mono" fontSize="10px" color="up">
+          // {screen.error.message}
+        </Text>
+      )}
+      {sector.screenPlan !== undefined && (
+        <Box
+          mt="4px"
+          pt="6px"
+          borderTopWidth="1px"
+          borderTopColor="line2"
+          maxH="220px"
+          overflow="auto"
+        >
+          <DslTree
+            screenPlan={sector.screenPlan}
+            universePlan={sector.universePlan ?? null}
+          />
+        </Box>
+      )}
     </Flex>
   );
+}
+
+function matchesToEvidenceMap(
+  matches: readonly { readonly code: string; readonly evidence: Readonly<Record<string, unknown>> }[],
+): Readonly<Record<string, Readonly<Record<string, unknown>>>> {
+  const out: Record<string, Readonly<Record<string, unknown>>> = {};
+  for (const m of matches) out[m.code] = { ...m.evidence };
+  return out;
 }
 
 interface ColumnDef {

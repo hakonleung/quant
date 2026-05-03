@@ -10,6 +10,7 @@
 
 'use client';
 
+import type { ScreenPlanAst, UniversePlanAst } from '@quant/shared';
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 
@@ -44,6 +45,10 @@ export interface Sector {
    * save time (key/value pairs surfaced as extra list columns).
    */
   readonly evidence?: Readonly<Record<string, Readonly<Record<string, unknown>>>>;
+  /** Parsed screen-plan AST (for inline DSL render in the list view). */
+  readonly screenPlan?: ScreenPlanAst;
+  /** Parsed universe-plan AST; `null` means no universe filter. */
+  readonly universePlan?: UniversePlanAst | null;
 }
 
 interface SectorsState {

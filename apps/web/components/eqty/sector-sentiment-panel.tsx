@@ -19,6 +19,7 @@ import {
 import { useSectorsStore } from '../../lib/stores/sectors.store.js';
 import { ALL_SECTOR_ID, useUiStore } from '../../lib/stores/ui.store.js';
 import { Pane } from '../shell/pane.js';
+import { ANALYZE_MAX_CODES } from './sectors-panel.js';
 
 export function SectorSentimentPanel(): React.ReactElement | null {
   const activeSectorId = useUiStore((s) => s.activeSectorId);
@@ -29,8 +30,9 @@ export function SectorSentimentPanel(): React.ReactElement | null {
   const analyze = useAnalyzeMany(codes);
   const data = cached.data ?? null;
 
+  const tooLarge = codes.length > ANALYZE_MAX_CODES;
   const onFetch = (): void => {
-    if (codes.length === 0 || analyze.isPending) return;
+    if (codes.length === 0 || analyze.isPending || tooLarge) return;
     analyze.mutate();
   };
 
@@ -88,7 +90,12 @@ export function SectorSentimentPanel(): React.ReactElement | null {
             borderRadius="0"
             onClick={onFetch}
             loading={analyze.isPending}
-            disabled={codes.length === 0}
+            disabled={codes.length === 0 || tooLarge}
+            title={
+              tooLarge
+                ? `too many members (${String(codes.length)} > ${String(ANALYZE_MAX_CODES)})`
+                : undefined
+            }
           >
             ⟳ FETCH
           </Button>

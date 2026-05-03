@@ -877,13 +877,11 @@ function IconButton({
       placeItems="center"
       fontSize="13px"
       lineHeight="1"
-      bg={active ? 'accentBg' : 'transparent'}
+      bg="transparent"
       color={active ? color : 'ink3'}
-      borderWidth="1px"
-      borderColor={active ? color : 'line'}
       borderRadius="0"
       cursor="pointer"
-      _hover={{ color: color, borderColor: color }}
+      _hover={{ color: color }}
     >
       {children}
     </Box>

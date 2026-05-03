@@ -173,6 +173,12 @@ def main() -> int:
         )
     )
 
+    # Visible at startup: every Flight op the gateway can call. If the
+    # NestJS controller logs `unknown op: 'foo'`, scan this line first
+    # — it usually means the server is running stale code from before
+    # the op was registered.
+    log.info("flight ops registered: %s", ",".join(sorted(registry._handlers)))
+
     server = QuantFlightServer(registry, location=f"grpc://{args.host}:{args.port}")
     log.info("flight server listening on grpc://%s:%d", args.host, server.port)
     print(f"READY {server.port}", flush=True)
