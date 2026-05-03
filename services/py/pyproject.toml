@@ -13,6 +13,8 @@ dependencies = [
     # Used by IO source adapters to derive `name_pinyin` from a Chinese
     # company name. Pure-Python, no native deps.
     "pypinyin>=0.55",
+    "polars>=1.40.1",
+    "duckdb>=1.5.2",
 ]
 
 [build-system]

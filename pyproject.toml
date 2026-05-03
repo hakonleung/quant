@@ -134,7 +134,14 @@ disallow_any_unimported = false
 # upstream stubs improve. Scope is kept narrow to the cache adapter modules
 # that actually consume pyarrow at the type level.
 [[tool.mypy.overrides]]
-module = ["quant_core.ports.cache", "quant_cache.*", "quant_rpc.*"]
+module = [
+    "quant_core.ports.cache",
+    "quant_core.ports.kline_repo",
+    "quant_core.services.kline_service",
+    "quant_core.domain.rules.kline_assemble",
+    "quant_cache.*",
+    "quant_rpc.*",
+]
 disallow_any_unimported = false
 disallow_untyped_calls = false
 disallow_any_explicit = false
