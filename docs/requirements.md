@@ -160,7 +160,7 @@
 
 ## 8. 已决策事项
 
-- ✅ **LLM**：v1 引入 deepseek + kimi 两家，主路 / 兜底由 `.env` 配置（`LLM_PRIMARY_PROVIDER` / `LLM_FALLBACK_PROVIDER`）；上线后 PK 一段时间再决定主路
+- ✅ **LLM**：v1 引入 deepseek + moonshot 两家；selection 由 `services/py/quant_io/llm/providers.py` 的硬编码目录顺序 + `.env` 中实际存在的 API key 共同决定（详见 `docs/integrations/llm-providers.md` §10）
 - ✅ **新闻源**：v1 仅 AKShare（含其后端聚合 sina / eastmoney）；之后看效果再加东方财富 / 同花顺爬虫
 - ✅ **通知**：v1 推送到 Slack（incoming webhook 起步，必要时切 bot token）；微信 / 飞书等其它 IM 留 v2
 - ✅ **研报 PDF**：v1 仅取标题 + 摘要 + URL，不解析正文；之后看效果再加

@@ -128,7 +128,7 @@ class FundamentalThesis:
 
 ### 4.1.5 N1.5: web_research（Kimi 内置 web_search）
 
-定位：**补齐本地缓存的盲区** —— 公告/研报覆盖不到的并购传闻、近期热点轮动、产品涨价信号、中长期供需关系。本节点**只在 LLM 主路 = Kimi 时启用**（DeepSeek 当前未提供等价的 search tool），由 graph 入口根据 `LLM_PRIMARY_PROVIDER` 决定是否跳过。
+定位：**补齐本地缓存的盲区** —— 公告/研报覆盖不到的并购传闻、近期热点轮动、产品涨价信号、中长期供需关系。本节点**只在存在 web-search 能力的 provider 时启用**（DeepSeek 当前未提供等价的 search tool），由 graph 入口调用 `build_llm_client(need_web_search=True)`，捕获 `LLM_FAILED` 时跳过本节点（详见 `docs/integrations/llm-providers.md` §10）。
 
 调用方式（OpenAI 兼容工具调用 + Kimi `$web_search` 内置工具）：
 

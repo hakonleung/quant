@@ -169,51 +169,22 @@ CI 默认用 `ReplayLLM`，fixture 由开发者用 `RecordingLLM` 包装真 LLM 
 
 ## 10. 配置
 
-主路 / 兜底通过 `.env` 决定，`config/llm.yaml` 给每个 provider 配静态参数：
+Provider 目录硬编码在 `services/py/quant_io/llm/providers.py` 的 `LLM_PROVIDERS` 元组里（base_url / 模型名 / 是否原生支持 web search / 对应的 API key env 名），列表顺序即优先级。**没有 YAML / TOML 配置文件** —— 一份 fresh checkout 只要在 `.env` 里填 key 就能跑。
 
-`.env`：
+选择规则（见 `build_llm_client`）：
+
+1. `need_web_search=True` → 第一个 `is_pro_web_search=True` 且 env 中有 key 的 provider，用其 `model_pro`
+2. `use_flash=True` → 第一个 `model_flash` 非空且 env 中有 key 的 provider，用其 `model_flash`
+3. 其它 → 第一个 env 中有 key 的 provider，用其 `model_pro`
+
+`.env` 只放 API key；用哪个 provider 由"哪些 key 实际存在"决定：
 
 ```bash
-LLM_PRIMARY_PROVIDER=deepseek      # 主路
-LLM_FALLBACK_PROVIDER=kimi         # 兜底
 DEEPSEEK_API_KEY=sk-...
-KIMI_API_KEY=sk-...
+MOONSHOT_API_KEY=sk-...
 ```
 
-`config/llm.yaml`：
-
-```yaml
-chat:
-  cache:
-    backend: file
-    ttl_sec: 86400
-  providers:
-    - name: deepseek
-      base_url: https://api.deepseek.com/v1
-      model: deepseek-chat
-      api_key_env: DEEPSEEK_API_KEY
-      rate_limit:
-        requests_per_min: 60
-        input_tokens_per_min: 200000
-    - name: kimi
-      base_url: https://api.moonshot.cn/v1
-      model: moonshot-v1-32k
-      api_key_env: KIMI_API_KEY
-      rate_limit:
-        requests_per_min: 60
-        input_tokens_per_min: 200000
-
-embedding:
-  provider: bge-m3
-  endpoint: http://localhost:8000/embed
-  batch_size: 32
-```
-
-启动时 pydantic 校验：
-
-- `LLM_PRIMARY_PROVIDER` 必须在 `providers` 列表中
-- 主路与兜底对应的 `api_key_env` 必须有值（否则启动失败）
-- 未启用的 provider（`enabled: false`）不校验 key
+新增 provider = 在 `LLM_PROVIDERS` 末尾追加一行 + 在 `.env.example` 加注释；不需要改任何 YAML。
 
 ## 11. 安全
 
