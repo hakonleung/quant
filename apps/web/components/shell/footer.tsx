@@ -1,7 +1,17 @@
 'use client';
 
-import { Box, Flex, HStack, Text } from '@chakra-ui/react';
-import { useEffect, useState } from 'react';
+/**
+ * Status footer.
+ *
+ * Each strip is a "feat capsule" — a compact, framed status read for
+ * one workbench surface. The 300 task-queue capsule lives here too
+ * (it replaces the previous full-pane TaskQueuePanel), so the right
+ * column stays focused on the active stock.
+ */
+
+import { Box, Flex, Text } from '@chakra-ui/react';
+import type { QueueSnapshotEntry } from '@quant/shared';
+import { useEffect, useState, type ReactNode } from 'react';
 
 import { useQueueStream } from '../../lib/hooks/use-queue-stream.js';
 
@@ -9,14 +19,17 @@ export function Footer(): React.ReactElement {
   const stream = useQueueStream();
   const now = useClock();
 
-  const rpc =
+  const sseLabel =
     stream.status === 'open'
-      ? '● live'
+      ? 'live'
       : stream.status === 'connecting'
-        ? '○ connecting'
-        : '✘ stream lost';
-  const queueDepth =
-    stream.snapshot?.queues.reduce((acc, q) => acc + q.pending + q.inFlight, 0) ?? 0;
+        ? 'connecting'
+        : 'lost';
+  const sseColor =
+    stream.status === 'open' ? 'prompt' : stream.status === 'error' ? 'up' : 'accent';
+  const sseGlyph = stream.status === 'open' ? '●' : stream.status === 'error' ? '✘' : '○';
+
+  const queues: readonly QueueSnapshotEntry[] = stream.snapshot?.queues ?? [];
 
   return (
     <Flex
@@ -25,28 +38,85 @@ export function Footer(): React.ReactElement {
       color="ink3"
       borderTopWidth="2px"
       borderTopColor="accent"
-      align="center"
-      gap="14px"
-      px="14px"
+      align="stretch"
       fontFamily="mono"
       fontSize="10px"
-      letterSpacing="0.18em"
+      letterSpacing="0.14em"
     >
-      <Text
-        color={stream.status === 'open' ? 'prompt' : stream.status === 'error' ? 'up' : 'accent'}
-      >
-        {rpc}
-      </Text>
-      <Text>QUEUE {queueDepth}</Text>
-      <Text color="ink3">PERSIST: indexedDB(quant-app v3)</Text>
-      <HStack gap="14px" ml="auto">
-        <Text>
-          {now}{' '}
-          <Box as="span" className="blink" color="prompt">
-            ●
-          </Box>
+      <Capsule code="SSE">
+        <Text as="span" color={sseColor}>
+          {sseGlyph}
         </Text>
-      </HStack>
+        <Text as="span" color={sseColor}>
+          {sseLabel}
+        </Text>
+      </Capsule>
+      <Capsule code="300" label="QUEUE">
+        <QueueCapsuleBody queues={queues} />
+      </Capsule>
+      <Capsule code="IDB">persist</Capsule>
+      <Box flex="1" />
+      <Capsule code="UTC">
+        <Text as="span">{now}</Text>
+        <Text as="span" className="blink" color="prompt">
+          ●
+        </Text>
+      </Capsule>
+    </Flex>
+  );
+}
+
+interface CapsuleProps {
+  readonly code: string;
+  readonly label?: string;
+  readonly children: ReactNode;
+}
+
+function Capsule({ code, label, children }: CapsuleProps): React.ReactElement {
+  return (
+    <Flex
+      align="center"
+      gap="6px"
+      px="10px"
+      borderRightWidth="1px"
+      borderColor="line2"
+      whiteSpace="nowrap"
+    >
+      <Text color="accent" fontWeight="700" letterSpacing="0.18em">
+        {code}
+      </Text>
+      {label !== undefined && (
+        <Text color="ink3" letterSpacing="0.18em">
+          {label}
+        </Text>
+      )}
+      {children}
+    </Flex>
+  );
+}
+
+function QueueCapsuleBody({
+  queues,
+}: {
+  queues: readonly QueueSnapshotEntry[];
+}): React.ReactElement {
+  if (queues.length === 0) {
+    return <Text color="ink3">— idle</Text>;
+  }
+  return (
+    <Flex gap="8px" align="center">
+      {queues.map((q) => {
+        const busy = q.inFlight > 0 || q.pending > 0;
+        const color = q.paused ? 'accent' : busy ? 'up' : 'prompt';
+        return (
+          <Flex key={q.name} gap="3px" align="center" color={color}>
+            <Text>{q.name}</Text>
+            <Text fontWeight="700">
+              {String(q.inFlight)}/{String(q.pending)}
+            </Text>
+          </Flex>
+        );
+      })}
     </Flex>
   );
 }
