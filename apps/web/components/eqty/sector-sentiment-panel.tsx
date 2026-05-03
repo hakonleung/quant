@@ -12,10 +12,7 @@
 import { Box, Button, Flex, Text } from '@chakra-ui/react';
 
 import { Feat } from '../../lib/eqty/feat.js';
-import {
-  useAnalyzeMany,
-  useMarketSentiment,
-} from '../../lib/hooks/use-eqty-data.js';
+import { useAnalyzeMany, useMarketSentiment } from '../../lib/hooks/use-eqty-data.js';
 import { useSectorsStore } from '../../lib/stores/sectors.store.js';
 import { ALL_SECTOR_ID, useUiStore } from '../../lib/stores/ui.store.js';
 import { Pane } from '../shell/pane.js';
@@ -46,33 +43,37 @@ export function SectorSentimentPanel(): React.ReactElement | null {
     <Text color="prompt">● cached</Text>
   );
 
-  const sectorLabel = sector === null
-    ? '(no sector selected)'
-    : activeSectorId === ALL_SECTOR_ID
-      ? 'All'
-      : sector.name;
+  const sectorLabel =
+    sector === null
+      ? '(no sector selected)'
+      : activeSectorId === ALL_SECTOR_ID
+        ? 'All'
+        : sector.name;
 
-  const lines: readonly string[] = data === null
-    ? [
-        `$ sentiment.analyze_many --sector ${sectorLabel} --members ${String(codes.length)}`,
-        codes.length === 0 ? '// no members' : '// awaiting trigger',
-      ]
-    : [
-        `$ sentiment.analyze_many --asof ${data.asof} --window ${String(data.windowDays)}d`,
-        `▎ members ${String(data.codes.length)}  themes ${String(data.themeClusters.length)}`,
-        ...data.themeClusters.map(
-          (t) =>
-            `  · ${t.label} [${String(t.memberCount)}m heat=${t.heatScore.toFixed(2)}] ${t.summary}`,
-        ),
-        '',
-        '▎ trend',
-        `  ${data.marketTrendSummary}`,
-        ...(data.caveats.length === 0 ? [] : ['', '▎ caveats', ...data.caveats.map((c) => `  ! ${c}`)]),
-      ];
+  const lines: readonly string[] =
+    data === null
+      ? [
+          `$ sentiment.analyze_many --sector ${sectorLabel} --members ${String(codes.length)}`,
+          codes.length === 0 ? '// no members' : '// awaiting trigger',
+        ]
+      : [
+          `$ sentiment.analyze_many --asof ${data.asof} --window ${String(data.windowDays)}d`,
+          `▎ members ${String(data.codes.length)}  themes ${String(data.themeClusters.length)}`,
+          ...data.themeClusters.map(
+            (t) =>
+              `  · ${t.label} [${String(t.memberCount)}m heat=${t.heatScore.toFixed(2)}] ${t.summary}`,
+          ),
+          '',
+          '▎ trend',
+          `  ${data.marketTrendSummary}`,
+          ...(data.caveats.length === 0
+            ? []
+            : ['', '▎ caveats', ...data.caveats.map((c) => `  ! ${c}`)]),
+        ];
 
   return (
     <Pane
-      feat={Feat.SectorSentiment}
+      feat={Feat.Insights}
       right={
         <Flex gap="8px" align="center">
           <Text color="ink3">▎ {sectorLabel}</Text>

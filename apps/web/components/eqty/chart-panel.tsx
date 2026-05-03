@@ -111,7 +111,7 @@ export function ChartPanel({ code }: Props): React.ReactElement {
 
   return (
     <Pane
-      feat={Feat.Chart}
+      feat={Feat.Equity}
       right={
         <ChartHeaderRight
           code={code}

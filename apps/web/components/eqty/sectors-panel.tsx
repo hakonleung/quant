@@ -52,7 +52,9 @@ export function SectorsPanel(): React.ReactElement {
   // which already covers the full universe. So we always ask for the
   // universe (`codes=[]`) instead of enumerating thousands of
   // 6-digit ids in the query string. The server applies its own cap.
-  const klineBatch = useKlineBulk([], 2);
+  // `enabled: true` forces the request because the hook would
+  // otherwise gate out the empty-codes case.
+  const klineBatch = useKlineBulk([], 2, { enabled: true });
   const chgPctByCode = useMemo(() => {
     const out = new Map<string, number>();
     for (const [code, bars] of klineBatch.byCode) {

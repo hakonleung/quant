@@ -94,8 +94,12 @@ export function ListPanel(): React.ReactElement {
     return sector.codes;
   }, [isAll, sector, ready]);
   const bulkCodes: readonly string[] = isAll ? [] : codes;
-
-  const klineBatch = useKlineBulk(bulkCodes, 5);
+  // For "All" we deliberately send [] and rely on the server to expand
+  // to the full universe — force-enable the query in that mode so the
+  // hook's default-disabled-on-empty rule doesn't gate it off.
+  const klineBatch = useKlineBulk(bulkCodes, 5, {
+    enabled: isAll || bulkCodes.length > 0,
+  });
 
   const evidenceKeys: readonly string[] = useMemo(() => {
     if (!isDynamic || sector === null) return [];
@@ -161,7 +165,7 @@ export function ListPanel(): React.ReactElement {
 
   return (
     <Pane
-      feat={Feat.List}
+      feat={Feat.EquityList}
       titleSlot={
         <EditableTitle
           value={sector?.name ?? 'list'}
@@ -552,10 +556,7 @@ function DynamicHeader({ sector }: { sector: Sector }): React.ReactElement {
           maxH="220px"
           overflow="auto"
         >
-          <DslTree
-            screenPlan={sector.screenPlan}
-            universePlan={sector.universePlan ?? null}
-          />
+          <DslTree screenPlan={sector.screenPlan} universePlan={sector.universePlan ?? null} />
         </Box>
       )}
     </Flex>
@@ -563,7 +564,10 @@ function DynamicHeader({ sector }: { sector: Sector }): React.ReactElement {
 }
 
 function matchesToEvidenceMap(
-  matches: readonly { readonly code: string; readonly evidence: Readonly<Record<string, unknown>> }[],
+  matches: readonly {
+    readonly code: string;
+    readonly evidence: Readonly<Record<string, unknown>>;
+  }[],
 ): Readonly<Record<string, Readonly<Record<string, unknown>>>> {
   const out: Record<string, Readonly<Record<string, unknown>>> = {};
   for (const m of matches) out[m.code] = { ...m.evidence };

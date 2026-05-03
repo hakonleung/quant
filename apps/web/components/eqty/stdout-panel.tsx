@@ -53,7 +53,7 @@ export function StdoutPanel({ code, onResult }: Props): React.ReactElement {
 
   return (
     <Pane
-      feat={Feat.Sentiment}
+      feat={Feat.Insight}
       right={
         <Flex gap="8px" align="center">
           {status}

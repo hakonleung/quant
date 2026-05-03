@@ -113,7 +113,7 @@ export function PatternMatchPanel(): React.ReactElement {
   );
 
   return (
-    <Pane feat={Feat.PatternMatch} right={right}>
+    <Pane feat={Feat.Pattern} right={right}>
       <Box flex="1" overflow="auto" bg="panel">
         {mutation.data === undefined ? (
           <Empty hint={range === null ? 'no reference range' : 'press FIND to scan'} />

@@ -11,19 +11,23 @@
 export const Feat = {
   // C: collection
   Sectors: 'C-0',
-  List: 'C-1',
   Blacklist: 'C-9',
-  Chart: '101',
 
-  // A: ai
-  Sentiment: 'A-0',
-  SectorSentiment: 'A-1',
+  // E: Equity
+  Equity: 'E-0',
+  EquityList: 'E-1',
 
   // M: match
   Search: 'M-0',
-  PatternMatch: '105',
-  Notif: '200',
-  Status: '300',
+  Pattern: 'M-1',
+
+  // A: ai
+  Insight: 'A-0',
+  Insights: 'A-1',
+
+  // S: system
+  Status: 'S-0',
+  Notif: 'S-1',
 } as const;
 
 export type Feat = (typeof Feat)[keyof typeof Feat];
@@ -37,23 +41,27 @@ export interface FeatConfig {
 }
 
 export const FEAT_CONFIG_MAP: Readonly<Record<Feat, FeatConfig>> = {
-  [Feat.List]: { title: () => 'list' },
   [Feat.Sectors]: { title: () => 'sector', gridArea: 'L' },
   [Feat.Blacklist]: { title: () => 'blacklist', defaultMinimized: true },
-  [Feat.Chart]: { title: () => 'detail', gridArea: 'CMID' },
-  [Feat.Sentiment]: { title: () => 'sentiment', gridArea: 'CBOT' },
-  [Feat.SectorSentiment]: { title: () => 'sector.sentiment', gridArea: 'R1' },
-  [Feat.PatternMatch]: { title: () => 'pattern.match', defaultMinimized: true },
-  [Feat.Notif]: {
-    title: () => 'slack.push',
-    gridArea: 'R2',
-    cyber: true,
-    defaultMinimized: true,
-  },
+
+  [Feat.Equity]: { title: () => 'equity', gridArea: 'CMID' },
+  [Feat.EquityList]: { title: () => 'list' },
+
+  [Feat.Search]: { title: () => 'search', cyber: true },
+  [Feat.Pattern]: { title: () => 'pattern', defaultMinimized: true },
+
+  [Feat.Insight]: { title: () => 'insight', gridArea: 'CBOT' },
+  [Feat.Insights]: { title: () => 'insight.s', gridArea: 'R1' },
+
   [Feat.Status]: {
     title: () => 'status',
     cyber: true,
     defaultMinimized: true,
   },
-  [Feat.Search]: { title: () => 'search', cyber: true },
+  [Feat.Notif]: {
+    title: () => 'slack',
+    gridArea: 'R2',
+    cyber: true,
+    defaultMinimized: true,
+  },
 };

@@ -64,13 +64,33 @@ export interface BatchKlineState {
   readonly readyCount: number;
 }
 
-export function useKlineBulk(codes: readonly string[], n: number): BatchKlineState {
+export interface UseKlineBulkOptions {
+  /**
+   * Default enabled rule — `codes.length > 0`. Override to `true` when
+   * passing an empty `codes` array intentionally means "the server
+   * should expand to the full universe". Override to `false` to gate
+   * the query off entirely (e.g. before a parent dependency resolves).
+   */
+  readonly enabled?: boolean;
+}
+
+export function useKlineBulk(
+  codes: readonly string[],
+  n: number,
+  opts: UseKlineBulkOptions = {},
+): BatchKlineState {
   // Canonical key — sorted + deduped — so re-orderings reuse the cache.
   const keyCodes = useMemo(() => [...new Set(codes)].sort(), [codes]);
+  // The `[]` case is now load-bearing: callers use it to mean "fetch
+  // every code the server knows about" (the All sector, the sectors
+  // panel's universe-wide chg% map). The default enabled rule still
+  // gates out the no-data-yet path so a transiently-empty subset
+  // doesn't accidentally fan out into a full-universe pull.
+  const enabled = opts.enabled ?? keyCodes.length > 0;
   const query = useQuery<KlineBulkResponse>({
     queryKey: ['kline.bulk', n, keyCodes.join(',')] as const,
     queryFn: () => listKlineBulk(keyCodes, n),
-    enabled: keyCodes.length > 0,
+    enabled,
     staleTime: 60 * 60 * 1000,
   });
   return useMemo(() => {
