@@ -84,10 +84,24 @@ export class CacheInspector {
   }
 }
 
-function parseDateCell(value: unknown): string | null {
+/**
+ * Decode an Arrow `date32` cell into ISO `YYYY-MM-DD`.
+ *
+ * `apache-arrow` is inconsistent about what `proxy.toJSON()` emits for
+ * date32 columns: some bindings hand back a `Date`, some a string,
+ * some the raw `days since epoch`, and some the `ms since epoch`. The
+ * old "always treat number as days" branch silently turned today's
+ * watermarks (emitted as ms by the binding we're on) into year-56000
+ * dates, which then sorted *before* `latest_trade_day` and re-flagged
+ * every code as stale every cron tick — the symptom the user reported
+ * as "kline keeps re-syncing".
+ *
+ * Heuristic mirrors `kline/domain/arrow-mapper.ts`: anything bigger
+ * than 1e8 is already milliseconds, smaller is days.
+ */
+export function parseDateCell(value: unknown): string | null {
   if (value === null || value === undefined) return null;
   if (value instanceof Date) {
-    // Arrow date32 decodes to a Date at UTC midnight.
     const y = value.getUTCFullYear();
     const m = String(value.getUTCMonth() + 1).padStart(2, '0');
     const d = String(value.getUTCDate()).padStart(2, '0');
@@ -95,10 +109,11 @@ function parseDateCell(value: unknown): string | null {
   }
   if (typeof value === 'string' && value.length >= 10) return value.slice(0, 10);
   if (typeof value === 'number') {
-    // date32 is days since unix epoch.
-    const ms = value * 86_400_000;
-    const dt = new Date(ms);
-    return parseDateCell(dt);
+    const ms = value > 1e8 ? value : value * 86_400_000;
+    return parseDateCell(new Date(ms));
+  }
+  if (typeof value === 'bigint') {
+    return parseDateCell(Number(value));
   }
   return null;
 }
