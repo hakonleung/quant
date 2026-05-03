@@ -183,13 +183,31 @@ def _apply_rank(matches: list[ScreenMatch], rank: RankSpec) -> list[ScreenMatch]
     return matches
 
 
+_EVIDENCE_QUANT: Final = "0.0001"
+"""4 decimal places — uniform across every metric the UI / API shows."""
+
+
 def _evidence_value(v: object) -> object:
-    """Coerce eval result to something JSON-serialisable for evidence dict."""
-    from decimal import Decimal
+    """Coerce eval result to a 4dp string for the evidence dict.
+
+    Decimal results are quantised to 4 decimal places so prices, ratios,
+    returns, and rank metrics all share the same display precision. The
+    underlying Parquet schema keeps its native precision (4dp prices /
+    6dp rates) — this is purely the user-visible surface.
+    """
+    from decimal import Decimal, InvalidOperation
 
     if isinstance(v, Decimal):
-        return str(v)
-    return None if not isinstance(v, (int, float, str, bool)) else v
+        try:
+            return str(v.quantize(Decimal(_EVIDENCE_QUANT)))
+        except InvalidOperation:
+            return str(v)
+    if isinstance(v, (int, float)):
+        try:
+            return str(Decimal(str(v)).quantize(Decimal(_EVIDENCE_QUANT)))
+        except InvalidOperation:
+            return v
+    return None if not isinstance(v, (str, bool)) else v
 
 
 def intersect(a: ScreenResult, b: ScreenResult) -> ScreenResult:
