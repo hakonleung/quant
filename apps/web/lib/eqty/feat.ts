@@ -19,7 +19,7 @@ export const Feat = {
   SectorSentiment: '104',
   PatternMatch: '105',
   SlackPush: '200',
-  TaskQueue: '300',
+  Status: '300',
 } as const;
 
 export type Feat = (typeof Feat)[keyof typeof Feat];
@@ -47,9 +47,8 @@ export const FEAT_CONFIG_MAP: Readonly<Record<Feat, FeatConfig>> = {
     cyber: true,
     defaultMinimized: true,
   },
-  [Feat.TaskQueue]: {
-    title: () => 'task.queue',
-    gridArea: 'R3',
+  [Feat.Status]: {
+    title: () => 'status',
     cyber: true,
     defaultMinimized: true,
   },

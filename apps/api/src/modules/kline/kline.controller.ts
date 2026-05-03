@@ -28,7 +28,8 @@ const rangePipe = new ZodValidationPipe(KlineRangeQuerySchema);
 
 const BulkQuerySchema = z
   .object({
-    codes: z.string().min(1, 'codes is required'),
+    /** Comma-separated 6-digit codes; empty = full universe. */
+    codes: z.string().default(''),
     n: z.coerce.number().int().positive().max(60).default(5),
   })
   .strict();
@@ -40,9 +41,13 @@ export class KlineController {
   constructor(@Inject(KLINE_FLIGHT_CLIENT) private readonly flight: FlightClient) {}
 
   /**
-   * Bulk last-N kline. Resolves with `Record<code, KlineBar[]>`. Wired
-   * before `:code` so the literal segment doesn't get caught by the
-   * dynamic param.
+   * Bulk last-N kline. Resolves with `Record<code, KlineBar[]>`.
+   * Empty `codes` → full universe (Python expands via stock-meta).
+   * Codes without persisted bars are simply absent from the result;
+   * the response never 404s on partial misses.
+   *
+   * Wired before `:code` so the literal segment doesn't get caught by
+   * the dynamic param.
    */
   @Get('bulk')
   async listBulk(
@@ -54,12 +59,9 @@ export class KlineController {
       .split(',')
       .map((s) => s.trim())
       .filter((s) => /^\d{6}$/.test(s));
-    if (codes.length === 0) return {};
-    const result = await this.flight.doGet(
-      'list_kline_bulk_last_n',
-      { codes, n: query.n },
-      { traceId },
-    );
+    const args: Record<string, unknown> = { n: query.n };
+    if (codes.length > 0) args['codes'] = codes;
+    const result = await this.flight.doGet('list_kline_bulk_last_n', args, { traceId });
     return arrowTableToKlineBarsByCode(result.value);
   }
 

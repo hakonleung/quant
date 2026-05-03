@@ -45,6 +45,7 @@ from quant_rpc.ops.kline import ListKlineWatermarksHandler, SyncKlineForCodeHand
 from quant_rpc.ops.kline_read import ListKlineBulkLastNHandler, ListKlineForCodeHandler
 from quant_rpc.ops.nl_screen import NlScreenHandler
 from quant_rpc.ops.pattern import FindSimilarPatternsHandler
+from quant_rpc.ops.trading_calendar import GetLatestTradeDayHandler
 from quant_rpc.ops.sentiment import (
     AnalyzeManyStockSentimentHandler,
     AnalyzeOneStockSentimentHandler,
@@ -153,7 +154,7 @@ def main() -> int:
     registry.register(SyncKlineForCodeHandler(kline_service))
     registry.register(ListKlineWatermarksHandler(meta_repo, kline_repo))
     registry.register(ListKlineForCodeHandler(kline_service))
-    registry.register(ListKlineBulkLastNHandler(kline_service))
+    registry.register(ListKlineBulkLastNHandler(kline_service, meta_repo))
     registry.register(GetCachedStockSentimentHandler(sentiment_cache, clock))
     registry.register(AnalyzeOneStockSentimentHandler(sentiment_service))
     registry.register(GetCachedMarketSentimentHandler(sentiment_cache, clock))
@@ -161,6 +162,7 @@ def main() -> int:
     pattern_engine = DTWPatternEngine(kline_repo)
     pattern_service = PatternService(kline_repo, pattern_engine)
     registry.register(FindSimilarPatternsHandler(pattern_service, meta_repo, clock))
+    registry.register(GetLatestTradeDayHandler(clock))
     registry.register(
         NlScreenHandler(
             translator=nl_translator,

@@ -16,8 +16,6 @@ import { FlightClient } from '../../adapters/flight/flight-client.js';
 import { ORCH_FLIGHT_CLIENT } from './flight.token.js';
 import { arrowTableToStockMetaDtos } from '../stock-meta/domain/arrow-mapper.js';
 
-const SHANGHAI_TZ = 'Asia/Shanghai';
-
 @Injectable()
 export class CacheInspector {
   private readonly logger = new Logger(CacheInspector.name);
@@ -31,9 +29,11 @@ export class CacheInspector {
   }
 
   async findStaleKline(traceId: string): Promise<readonly string[]> {
-    const result = await this.flight.doGet('list_kline_watermarks', {}, { traceId });
-    const table = result.value;
-    const today = todayInShanghai();
+    const [watermarks, latestTradeDay] = await Promise.all([
+      this.flight.doGet('list_kline_watermarks', {}, { traceId }),
+      this.fetchLatestTradeDay(traceId),
+    ]);
+    const table = watermarks.value;
     interface Row {
       readonly code: string;
       readonly lastDate: string | null;
@@ -46,45 +46,42 @@ export class CacheInspector {
       if (typeof raw.code !== 'string') continue;
       rows.push({ code: raw.code, lastDate: parseDateCell(raw.last_date) });
     }
-    // The previous heuristic (`last_date < today`) flagged every code
-    // every cron tick on weekends and holidays — today never matches a
-    // trading day, so the worker spun up an infinite re-sync loop and
-    // hammered akshare for new bars that don't exist yet.
-    //
-    // The real signal we have is the per-code watermark distribution:
-    // codes that match the universe-wide max are caught up regardless
-    // of calendar date. Codes lagging the max are genuinely stale.
-    let universeMax: string | null = null;
-    for (const r of rows) {
-      if (r.lastDate === null) continue;
-      if (universeMax === null || r.lastDate > universeMax) universeMax = r.lastDate;
+    // Authoritative threshold = the latest trading day whose bar is
+    // expected to be available right now (akshare calendar +
+    // post-close gating, owned by Python). On weekends, holidays, or
+    // mid-session the threshold is the previous trade day, so a code
+    // synced to that date is correctly considered fresh and skips the
+    // queue. Without this gate, every cron tick on a non-trading day
+    // re-enqueued every code forever.
+    if (latestTradeDay === null) {
+      this.logger.warn(`latest_trade_day_unavailable — skipping stale-kline scan`);
+      return [];
     }
-    // Bound the threshold by today so a future-clock parquet doesn't
-    // reach forward and freeze syncs.
-    const threshold = universeMax === null
-      ? today
-      : universeMax > today
-        ? today
-        : universeMax;
     const stale = rows
-      .filter((r) => r.lastDate === null || r.lastDate < threshold)
+      .filter((r) => r.lastDate === null || r.lastDate < latestTradeDay)
       .map((r) => r.code);
     this.logger.debug(
-      `stale_kline_count=${String(stale.length)} threshold=${threshold} today=${today}`,
+      `stale_kline_count=${String(stale.length)} latest_trade_day=${latestTradeDay}`,
     );
     return stale;
   }
-}
 
-function todayInShanghai(): string {
-  // Format as YYYY-MM-DD using Shanghai timezone.
-  const fmt = new Intl.DateTimeFormat('en-CA', {
-    timeZone: SHANGHAI_TZ,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  });
-  return fmt.format(new Date());
+  private async fetchLatestTradeDay(traceId: string): Promise<string | null> {
+    try {
+      const result = await this.flight.doGet('get_latest_trade_day', {}, { traceId });
+      const table = result.value;
+      if (table.numRows === 0) return null;
+      const proxy = table.get(0);
+      if (proxy === null) return null;
+      const row = proxy.toJSON() as { trade_date?: unknown };
+      return parseDateCell(row.trade_date);
+    } catch (err) {
+      this.logger.warn(
+        `get_latest_trade_day failed: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      return null;
+    }
+  }
 }
 
 function parseDateCell(value: unknown): string | null {

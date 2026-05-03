@@ -118,12 +118,12 @@ export function SectorsPanel(): React.ReactElement {
             ))
           )}
         </Box>
-        <Box flexShrink={0} maxH="190px" display="flex" flexDirection="column">
+        <Box flex="0 0 auto">
           <Pane
             feat={Feat.Blacklist}
             right={<Text>{blacklist.length}</Text>}
           >
-            <Box overflow="auto" h="100%">
+            <Box overflow="auto" maxH="160px">
               {blacklist.length === 0 ? (
                 <Empty>no blacklisted stocks</Empty>
               ) : (

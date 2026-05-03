@@ -1,123 +1,116 @@
 'use client';
 
 /**
- * Status footer.
+ * Status pane (Feat 300, cyber skin).
  *
- * Each strip is a "feat capsule" — a compact, framed status read for
- * one workbench surface. The 300 task-queue capsule lives here too
- * (it replaces the previous full-pane TaskQueuePanel), so the right
- * column stays focused on the active stock.
+ * The site footer slot — wrapped in a regular {@link Pane} so it
+ * inherits the workbench chrome (terminal corners, minimize/fullscreen
+ * toggles). Header shows four "·" capsules at a glance:
+ *
+ *   1. SSE   — live | connecting | lost
+ *   2. IDB   — local-storage backend identifier
+ *   3. meta  — `inFlight/pending` (omitted when both are 0)
+ *   4. kline — `inFlight/pending` (omitted when both are 0)
+ *
+ * Body carries the wall clock and additional debug info.
  */
 
 import { Box, Flex, Text } from '@chakra-ui/react';
 import type { QueueSnapshotEntry } from '@quant/shared';
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useState } from 'react';
 
+import { Feat } from '../../lib/eqty/feat.js';
 import { useQueueStream } from '../../lib/hooks/use-queue-stream.js';
+import { Pane } from './pane.js';
 
 export function Footer(): React.ReactElement {
   const stream = useQueueStream();
   const now = useClock();
 
-  const sseLabel =
-    stream.status === 'open'
-      ? 'live'
-      : stream.status === 'connecting'
-        ? 'connecting'
-        : 'lost';
   const sseColor =
-    stream.status === 'open' ? 'prompt' : stream.status === 'error' ? 'up' : 'accent';
+    stream.status === 'open' ? 'term.green' : stream.status === 'error' ? 'term.red' : 'term.amber';
   const sseGlyph = stream.status === 'open' ? '●' : stream.status === 'error' ? '✘' : '○';
 
   const queues: readonly QueueSnapshotEntry[] = stream.snapshot?.queues ?? [];
+  const meta = queues.find((q) => q.name === 'meta') ?? null;
+  const kline = queues.find((q) => q.name === 'kline') ?? null;
 
   return (
-    <Flex
-      h="22px"
-      bg="panel"
-      color="ink3"
-      borderTopWidth="2px"
-      borderTopColor="accent"
-      align="stretch"
-      fontFamily="mono"
-      fontSize="10px"
-      letterSpacing="0.14em"
+    <Pane
+      feat={Feat.Status}
+      right={
+        <Flex gap="14px" align="center" fontFamily="mono" fontSize="10px" letterSpacing="0.14em">
+          <Capsule code="SSE">
+            <Text as="span" color={sseColor}>
+              {sseGlyph}
+            </Text>
+          </Capsule>
+          <Capsule code="IDB">
+            <Text as="span" color="term.green">
+              ●
+            </Text>
+          </Capsule>
+          <QueueCapsule code="meta" queue={meta} />
+          <QueueCapsule code="kline" queue={kline} />
+        </Flex>
+      }
     >
-      <Capsule code="SSE">
-        <Text as="span" color={sseColor}>
-          {sseGlyph}
-        </Text>
-        <Text as="span" color={sseColor}>
-          {sseLabel}
-        </Text>
-      </Capsule>
-      <Capsule code="300" label="QUEUE">
-        <QueueCapsuleBody queues={queues} />
-      </Capsule>
-      <Capsule code="IDB">persist</Capsule>
-      <Box flex="1" />
-      <Capsule code="UTC">
-        <Text as="span">{now}</Text>
-        <Text as="span" className="blink" color="prompt">
-          ●
-        </Text>
-      </Capsule>
-    </Flex>
+      <Box
+        px="12px"
+        py="6px"
+        bg="term.panel"
+        color="term.ink2"
+        fontFamily="mono"
+        fontSize="10px"
+        letterSpacing="0.14em"
+        h="100%"
+      >
+        <Flex gap="14px" align="center">
+          <Text color="term.ink3">$ status --watch</Text>
+          <Text color="term.ink2">{now}</Text>
+          <Text as="span" className="blink" color="term.green">
+            ▌
+          </Text>
+        </Flex>
+      </Box>
+    </Pane>
   );
 }
 
 interface CapsuleProps {
   readonly code: string;
-  readonly label?: string;
-  readonly children: ReactNode;
+  readonly children: React.ReactNode;
 }
 
-function Capsule({ code, label, children }: CapsuleProps): React.ReactElement {
+function Capsule({ code, children }: CapsuleProps): React.ReactElement {
   return (
-    <Flex
-      align="center"
-      gap="6px"
-      px="10px"
-      borderRightWidth="1px"
-      borderColor="line2"
-      whiteSpace="nowrap"
-    >
-      <Text color="accent" fontWeight="700" letterSpacing="0.18em">
+    <Flex align="center" gap="5px" whiteSpace="nowrap">
+      <Text color="term.green" fontWeight="700" letterSpacing="0.18em">
         {code}
       </Text>
-      {label !== undefined && (
-        <Text color="ink3" letterSpacing="0.18em">
-          {label}
-        </Text>
-      )}
       {children}
     </Flex>
   );
 }
 
-function QueueCapsuleBody({
-  queues,
+function QueueCapsule({
+  code,
+  queue,
 }: {
-  queues: readonly QueueSnapshotEntry[];
-}): React.ReactElement {
-  if (queues.length === 0) {
-    return <Text color="ink3">— idle</Text>;
-  }
+  code: string;
+  queue: QueueSnapshotEntry | null;
+}): React.ReactElement | null {
+  if (queue === null) return null;
+  // Hide queue capsules when there's nothing in flight or pending —
+  // keeps the header quiet when the system is idle.
+  if (queue.inFlight === 0 && queue.pending === 0) return null;
+  const color = queue.paused ? 'term.amber' : 'term.red';
   return (
-    <Flex gap="8px" align="center">
-      {queues.map((q) => {
-        const busy = q.inFlight > 0 || q.pending > 0;
-        const color = q.paused ? 'accent' : busy ? 'up' : 'prompt';
-        return (
-          <Flex key={q.name} gap="3px" align="center" color={color}>
-            <Text>{q.name}</Text>
-            <Text fontWeight="700">
-              {String(q.inFlight)}/{String(q.pending)}
-            </Text>
-          </Flex>
-        );
-      })}
-    </Flex>
+    <Capsule code={code}>
+      <Text as="span" color={color} fontWeight="700">
+        {String(queue.inFlight)}/{String(queue.pending)}
+      </Text>
+    </Capsule>
   );
 }
 

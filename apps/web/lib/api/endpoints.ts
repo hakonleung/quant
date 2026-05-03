@@ -49,15 +49,15 @@ const KlineBulkSchema = z.record(z.string(), z.array(KlineBarSchema));
 export type KlineBulkResponse = z.infer<typeof KlineBulkSchema>;
 
 /**
- * Bulk last-N read. `codes` empty → returns an empty object without
- * hitting the gateway.
+ * Bulk last-N read. Pass empty `codes` to fetch the full universe
+ * (server expands to every stock-meta code). Codes whose parquet is
+ * missing are simply absent from the response — never a 404.
  */
 export async function listKlineBulk(
   codes: readonly string[],
   n: number,
 ): Promise<KlineBulkResponse> {
-  if (codes.length === 0) return {};
-  const q = codes.map(encodeURIComponent).join(',');
+  const q = codes.length === 0 ? '' : codes.map(encodeURIComponent).join(',');
   try {
     return await apiGet(
       `/api/kline/bulk?codes=${q}&n=${String(n)}`,

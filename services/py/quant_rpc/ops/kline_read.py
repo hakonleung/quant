@@ -24,6 +24,7 @@ from quant_core.errors import QuantError
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
+    from quant_core.ports.stock_meta_repo import StockMetaRepo
     from quant_core.services.kline_service import KlineService
 
 
@@ -63,13 +64,24 @@ def _require_positive_int(args: "Mapping[str, object]", key: str, *, default: in
     return raw
 
 
-def _require_code_list(args: "Mapping[str, object]") -> list[str]:
+def _optional_code_list(args: "Mapping[str, object]") -> list[str] | None:
+    """Parse ``args.codes`` if present; ``None`` when omitted/empty.
+
+    The bulk endpoint treats omission as "expand to the full universe"
+    — a stronger contract than the previous "must be non-empty", which
+    matched the gateway's intent (caller wants every stock's stats)
+    without forcing it to enumerate them client-side.
+    """
     raw = args.get("codes")
-    if not isinstance(raw, list) or len(raw) == 0:
+    if raw is None:
+        return None
+    if not isinstance(raw, list):
         raise QuantError(
             "INVALID_ARGUMENT",
-            "args.codes must be a non-empty list of strings",
+            "args.codes must be a list of strings or omitted",
         )
+    if len(raw) == 0:
+        return None
     if len(raw) > _MAX_BULK_CODES:
         raise QuantError(
             "INVALID_ARGUMENT",
@@ -116,25 +128,34 @@ class ListKlineBulkLastNHandler:
     saturated the browser socket pool (ERR_INSUFFICIENT_RESOURCES).
     This op is the bulk variant: the table carries every row tagged
     with its ``code`` so the gateway can group by code in one pass.
+
+    Args:
+        codes: ``list[str]`` — explicit subset.
+            Omitted / empty → expand to the full universe via
+            :class:`StockMetaRepo`.
+        n: positive int, default 5.
     """
 
     op = _BULK_OP
     schema = KLINE_SCHEMA
 
-    __slots__ = ("_service",)
+    __slots__ = ("_meta_repo", "_service")
 
-    def __init__(self, service: "KlineService") -> None:
+    def __init__(self, service: "KlineService", meta_repo: "StockMetaRepo") -> None:
         self._service = service
+        self._meta_repo = meta_repo
 
     def execute(self, args: "Mapping[str, object]") -> pa.Table:
-        codes = _require_code_list(args)
+        codes = _optional_code_list(args)
         n = _require_positive_int(args, "n", default=5)
+        if codes is None:
+            codes = [m.code for m in self._meta_repo.list_all()][:_MAX_BULK_CODES]
         tables: list[pa.Table] = []
         for code in codes:
             try:
                 slice_ = self._service.get_last_n(code, n)
             except QuantError:
-                # Missing parquet / unknown code → skip; the list-panel
+                # Missing parquet / unknown code → skip; the gateway
                 # treats absent rows as "stats not yet available".
                 continue
             if slice_.num_rows > 0:

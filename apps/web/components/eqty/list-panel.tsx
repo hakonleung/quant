@@ -26,12 +26,33 @@ import { useSectorsStore, type Sector } from '../../lib/stores/sectors.store.js'
 import { ALL_SECTOR_ID, useUiStore } from '../../lib/stores/ui.store.js';
 import { Pane } from '../shell/pane.js';
 
-interface ListRow extends StockStats {
+/**
+ * Row payload — flat record so dynamic sectors literally see
+ * ``{...stock, ...metrics, ...evidence}`` and arbitrary evidence keys
+ * resolve via ``row[key]`` without indirection.
+ */
+interface ListRow extends StockStats, Record<string, unknown> {
   readonly code: string;
   readonly name: string;
-  readonly evidence: Readonly<Record<string, unknown>>;
   readonly statsReady: boolean;
 }
+
+/**
+ * Built-in column keys covered by the standard stat columns; evidence
+ * keys colliding with these are folded into the standard column rather
+ * than producing a duplicate.
+ */
+const BUILTIN_KEYS: ReadonlySet<string> = new Set([
+  'name',
+  'code',
+  'price',
+  'chgPct',
+  'turnoverRate',
+  'turnover',
+  'consecUp',
+  'consecUpDays',
+  'statsReady',
+]);
 
 interface SortState {
   readonly key: string;
@@ -74,7 +95,14 @@ export function ListPanel(): React.ReactElement {
     const seen = new Set<string>();
     for (const code of Object.keys(ev)) {
       const inner = ev[code];
-      if (inner !== undefined) for (const k of Object.keys(inner)) seen.add(k);
+      if (inner === undefined) continue;
+      for (const k of Object.keys(inner)) {
+        // Built-in stat columns already cover these — skipping avoids
+        // duplicate side-by-side columns when the screening evaluator
+        // surfaces the same metric we compute from kline.
+        if (BUILTIN_KEYS.has(k)) continue;
+        seen.add(k);
+      }
     }
     return [...seen].sort();
   }, [isDynamic, sector]);
@@ -117,7 +145,9 @@ export function ListPanel(): React.ReactElement {
     ) : (
       <Text>
         {focusCode === null ? '— no selection' : `▎ ${focusCode}`} · {sortedRows.length} rows
-        {klineBatch.isLoading ? ` · stats ${String(klineBatch.readyCount)}/${String(codes.length)}` : ''}
+        {klineBatch.isLoading
+          ? ` · stats ${String(klineBatch.readyCount)}/${String(codes.length)}`
+          : ''}
       </Text>
     );
 
@@ -177,25 +207,23 @@ function buildRows(
     const bars = klineByCode.get(code);
     const stats = bars === undefined ? null : deriveStats(bars);
     const evidence = evidenceMap?.[code] ?? {};
-    const flat: Record<string, unknown> = { ...evidence };
-    if (stats !== null) {
-      flat['price'] = stats.price;
-      flat['chgPct'] = stats.chgPct;
-      flat['turnoverRate'] = stats.turnoverRate;
-      flat['turnover'] = stats.turnover;
-      flat['consecUpDays'] = stats.consecUpDays;
-    }
-    rows.push({
+    // {...stock, ...evidence, ...metrics} — kline-derived metrics win
+    // last so they override anything the screening evaluator emitted
+    // under the same key (the built-in column already shows the kline
+    // value; the evidence column has been filtered out upstream).
+    const row: Record<string, unknown> = {
+      ...m,
+      ...evidence,
       code,
       name: m?.name ?? code,
-      evidence: flat,
       statsReady: stats !== null,
       price: stats?.price ?? 0,
       chgPct: stats?.chgPct ?? null,
       turnoverRate: stats?.turnoverRate ?? null,
       turnover: stats?.turnover ?? null,
       consecUpDays: stats?.consecUpDays ?? 0,
-    });
+    };
+    rows.push(row as ListRow);
   }
   return rows;
 }
@@ -436,10 +464,10 @@ function buildColumns(evidenceKeys: readonly string[]): readonly ColumnDef[] {
       align: 'right',
       render: (r) => (
         <Text fontFamily="mono" fontSize="11px" color="ink2">
-          {formatEvidence(r.evidence[k])}
+          {formatEvidence(r[k])}
         </Text>
       ),
-      sortValue: (r) => evidenceSortKey(r.evidence[k]),
+      sortValue: (r) => evidenceSortKey(r[k]),
     });
   }
   return base;
@@ -727,7 +755,7 @@ function sortValue(r: ListRow, key: string): number | string | null {
   if (key === 'consecUp') return r.consecUpDays;
   if (key.startsWith('ev:')) {
     const k = key.slice(3);
-    return evidenceSortKey(r.evidence[k]);
+    return evidenceSortKey(r[k]);
   }
   return null;
 }

@@ -21,6 +21,7 @@
 
 import { Box, Button, Flex, Text } from '@chakra-ui/react';
 import type { KlineBar } from '@quant/shared';
+import { Ban, Star } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { Feat } from '../../lib/eqty/feat.js';
@@ -277,9 +278,12 @@ function ChartCanvas({
       }
       const dx = e.clientX - drag.startClientX;
       if (Math.abs(dx) > 2) drag.moved = true;
-      // Drag right (dx > 0) → panPx decreases (back toward latest).
-      // Drag left  (dx < 0) → panPx increases (further into the past).
-      const nextPan = Math.max(0, drag.startPan - dx);
+      // Pan-follows-mouse convention: dragging right slides every bar
+      // to the right (older bars come into view from the left), and
+      // dragging left brings latest back toward the right edge. Pan
+      // tracks the cursor so the gesture feels "I'm grabbing the bars
+      // and sliding them with my hand".
+      const nextPan = Math.max(0, drag.startPan + dx);
       setVp(clampViewport({ ...vp, panPx: nextPan }));
     };
     const onWinUp = (): void => {
@@ -452,13 +456,7 @@ function ChartCanvas({
         onMouseLeave={onMouseLeave}
       >
         {/* Background separator */}
-        <line
-          x1={PRICE_AXIS_W}
-          x2={width}
-          y1={PRICE_H}
-          y2={PRICE_H}
-          stroke={palette.light.line}
-        />
+        <line x1={PRICE_AXIS_W} x2={width} y1={PRICE_H} y2={PRICE_H} stroke={palette.light.line} />
         <line
           x1={PRICE_AXIS_W}
           x2={width}
@@ -472,13 +470,7 @@ function ChartCanvas({
           const y = scaleY(p);
           return (
             <g key={`pt-${String(i)}`}>
-              <line
-                x1={PRICE_AXIS_W - 3}
-                x2={width}
-                y1={y}
-                y2={y}
-                stroke={palette.light.line2}
-              />
+              <line x1={PRICE_AXIS_W - 3} x2={width} y1={y} y2={y} stroke={palette.light.line2} />
               <text
                 x={PRICE_AXIS_W - 6}
                 y={y + 3}
@@ -512,9 +504,7 @@ function ChartCanvas({
             <rect
               x={xForIndex(committedRange.start)}
               y={0}
-              width={
-                xForIndex(committedRange.end) - xForIndex(committedRange.start) + vp.candleW
-              }
+              width={xForIndex(committedRange.end) - xForIndex(committedRange.start) + vp.candleW}
               height={PRICE_H + VOL_GAP + VOL_H}
               fill="rgba(30,98,200,0.06)"
               stroke="rgba(30,98,200,0.45)"
@@ -637,13 +627,7 @@ interface FocusProps {
   readonly hovered: boolean;
 }
 
-function FocusLabel({
-  bar,
-  deltaPct,
-  daysAgo,
-  selected,
-  hovered,
-}: FocusProps): React.ReactElement {
+function FocusLabel({ bar, deltaPct, daysAgo, selected, hovered }: FocusProps): React.ReactElement {
   if (bar === null) {
     return (
       <Box px="14px" py="4px" borderBottomWidth="1px" borderColor="line" bg="panel3">
@@ -653,8 +637,7 @@ function FocusLabel({
       </Box>
     );
   }
-  const closeColor =
-    bar.close > bar.open ? 'up' : bar.close < bar.open ? 'down' : 'ink2';
+  const closeColor = bar.close > bar.open ? 'up' : bar.close < bar.open ? 'down' : 'ink2';
   const tag = selected ? `SEL ${bar.date}` : hovered ? `HOV ${bar.date}` : `LATEST ${bar.date}`;
   return (
     <Flex
@@ -684,7 +667,13 @@ function FocusLabel({
       >
         {tag}
       </Box>
-      <Text fontSize="13px" color={closeColor} fontWeight="800" letterSpacing="0.04em">
+      <Text
+        fontFamily="mono"
+        fontSize="13px"
+        color={closeColor}
+        fontWeight="800"
+        letterSpacing="0.04em"
+      >
         {bar.close.toFixed(2)}
       </Text>
       {daysAgo !== null && deltaPct !== null && (
@@ -719,7 +708,7 @@ function Stat({
   bold?: boolean;
 }): React.ReactElement {
   return (
-    <Box>
+    <Box fontFamily="mono">
       <Text as="span" color="ink3" letterSpacing="0.14em">
         {label}
       </Text>{' '}
@@ -740,7 +729,7 @@ function MaInline({
   color: string;
 }): React.ReactElement {
   return (
-    <Box>
+    <Box fontFamily="mono">
       <Text as="span" color={color} letterSpacing="0.10em" fontWeight="700">
         {ma}
       </Text>{' '}
@@ -846,12 +835,8 @@ function ChartHeaderRight({
         {code}
         {stockName === '' ? '' : ` · ${stockName}`}
       </Text>
-      <IconButton
-        title="add to sector"
-        onClick={onAddToSector}
-        active={false}
-      >
-        ★
+      <IconButton title="add to sector" onClick={onAddToSector} active={false}>
+        <Star size={13} strokeWidth={1.6} />
       </IconButton>
       <IconButton
         title={alreadyBlacklisted ? 'already blacklisted' : 'blacklist (double confirm)'}
@@ -859,7 +844,7 @@ function ChartHeaderRight({
         active={alreadyBlacklisted}
         danger
       >
-        ⛔
+        <Ban size={13} strokeWidth={1.6} />
       </IconButton>
     </Flex>
   );
