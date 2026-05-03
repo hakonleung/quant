@@ -40,6 +40,10 @@ services/py/quant_core/generated/
 *.swp
 .AppleDouble
 
+# Runtime-only data dirs (audit logs, scratch caches). Underscore-prefixed
+# subdirs of data/ are operator-owned, not source.
+data/_*/
+
 # Test output
 coverage/
 playwright-report/
