@@ -17,16 +17,19 @@ from datetime import timedelta
 from typing import TYPE_CHECKING, Final
 
 from quant_core.domain.rules.screen_compile import summarise
-from quant_core.domain.rules.screen_eval import evaluate_predicate
+from quant_core.domain.rules.screen_eval import evaluate_predicate, evaluate_scalar
 from quant_core.domain.types.kline import KLINE_FLOOR_DATE
 from quant_core.domain.types.screen import (
     Aggregate,
     Compare,
+    Consecutive,
     Const,
+    Exists,
     Field,
     ForAll,
     Logical,
     PeriodReturn,
+    RankSpec,
     ScreenMatch,
     ScreenResult,
 )
@@ -36,8 +39,6 @@ if TYPE_CHECKING:
     from collections.abc import Sequence
 
     from quant_core.domain.types.screen import (
-        Consecutive,
-        Exists,
         Predicate,
         Scalar,
         ScreenPlan,
@@ -57,25 +58,35 @@ class ScreenService:
     def __init__(self, kline_repo: KlineRepo) -> None:
         self._kline_repo = kline_repo
 
-    def execute(self, plan: ScreenPlan, universe: Sequence[str]) -> ScreenResult:
+    def execute(
+        self,
+        plan: ScreenPlan,
+        universe: Sequence[str],
+        *,
+        rank: RankSpec | None = None,
+    ) -> ScreenResult:
         """Run ``plan`` over ``universe`` and return the matched rows.
 
         Args:
             plan: The validated AST.
             universe: Codes to consider. Empty is allowed and returns
                 an empty result.
+            rank: Optional ranking + top-N to apply *after* matching.
+                When given, matches are reordered by the metric (per-code
+                Scalar evaluation) and trimmed to ``rank.top_n`` if set.
 
         Returns:
-            :class:`ScreenResult`. Matches preserve input ``universe``
-            order so the UI can render deterministic tables.
+            :class:`ScreenResult`. Without ``rank``, matches preserve
+            input ``universe`` order. With ``rank``, matches are sorted
+            by the chosen metric.
         """
         summary = summarise(plan.expr)
-        # Required columns plus {trade_date, code}: code so we can group
-        # per-stock; trade_date so the per-code rows stay ordered.
-        columns = sorted({"trade_date", "code", *summary.columns})
+        rank_columns, rank_lookback = _rank_summary(rank)
+        columns = sorted({"trade_date", "code", *summary.columns, *rank_columns})
+        lookback = max(summary.lookback_days, rank_lookback)
         # Trading days are ~70% of calendar days; widen by 1.6x + buffer
         # to make sure we cover the longest needed lookback.
-        calendar_days = int(summary.lookback_days * 1.6) + _BUFFER_DAYS
+        calendar_days = int(lookback * 1.6) + _BUFFER_DAYS
         start = max(plan.asof - timedelta(days=calendar_days), KLINE_FLOOR_DATE)
         if plan.asof < KLINE_FLOOR_DATE:
             raise QuantError(
@@ -83,7 +94,7 @@ class ScreenService:
                 f"asof {plan.asof} precedes KLINE_FLOOR_DATE {KLINE_FLOOR_DATE}",
                 {"asof": plan.asof.isoformat()},
             )
-        signature = plan_signature(plan)
+        signature = plan_signature(plan, rank)
         if not universe:
             return ScreenResult(asof=plan.asof, plan_signature=signature, matches=())
         table = self._kline_repo.get_universe_slice(
@@ -100,19 +111,85 @@ class ScreenService:
             stock_rows = rows_by_code.get(code, [])
             stock_rows.sort(key=lambda r: r["trade_date"])  # type: ignore[arg-type, return-value]
             if evaluate_predicate(stock_rows, plan.expr):
-                matches.append(
-                    ScreenMatch(code=code, evidence=_build_evidence(stock_rows, plan.expr))
-                )
+                evidence = _build_evidence(stock_rows, plan.expr)
+                if rank is not None:
+                    metric_value = evaluate_scalar(stock_rows, rank.metric)
+                    evidence = {**evidence, "rank_metric": _evidence_value(metric_value)}
+                matches.append(ScreenMatch(code=code, evidence=evidence))
+        if rank is not None:
+            matches = _apply_rank(matches, rank)
         return ScreenResult(asof=plan.asof, plan_signature=signature, matches=tuple(matches))
 
 
-def plan_signature(plan: ScreenPlan) -> str:
+def plan_signature(plan: ScreenPlan, rank: RankSpec | None = None) -> str:
     """Deterministic SHA-256 hash of the canonical JSON form of ``plan``.
 
-    Used as the stable cache key for the result (RFC 0001 §12).
+    Used as the stable cache key for the result (RFC 0001 §12). When
+    ``rank`` is given it is folded into the canonical payload so a
+    ranked variant of the same plan keys differently.
     """
-    canonical = json.dumps(_plan_to_jsonable(plan), sort_keys=True, separators=(",", ":"))
+    payload: dict[str, object] = _plan_to_jsonable(plan)
+    if rank is not None:
+        payload["rank"] = {
+            "metric": _scalar_to_jsonable(rank.metric),
+            "order": rank.order,
+            "top_n": rank.top_n,
+        }
+    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+# -- rank helpers --------------------------------------------------------
+
+
+def _rank_summary(rank: RankSpec | None) -> tuple[set[str], int]:
+    if rank is None:
+        return set(), 1
+    if isinstance(rank.metric, Field):
+        return {rank.metric.field}, 1
+    if isinstance(rank.metric, Const):
+        return set(), 1
+    if isinstance(rank.metric, Aggregate):
+        return {rank.metric.field}, rank.metric.days
+    if isinstance(rank.metric, PeriodReturn):
+        return {"close_qfq"}, rank.metric.days + 1
+    raise QuantError("DSL_INVALID", f"unsupported rank metric: {type(rank.metric).__name__}")
+
+
+def _apply_rank(matches: list[ScreenMatch], rank: RankSpec) -> list[ScreenMatch]:
+    """Sort ``matches`` by their pre-computed ``evidence['rank_metric']``.
+
+    Codes whose metric is missing (e.g. insufficient history for
+    ``period_return``) sink to the bottom regardless of order.
+    """
+    from decimal import Decimal
+
+    def key(m: ScreenMatch) -> tuple[int, Decimal]:
+        v = m.evidence.get("rank_metric")
+        if v is None:
+            return (1, Decimal(0))
+        try:
+            return (0, Decimal(str(v)))
+        except (ValueError, ArithmeticError):
+            return (1, Decimal(0))
+
+    matches = sorted(
+        matches,
+        key=key,
+        reverse=(rank.order == "desc"),
+    )
+    if rank.top_n is not None and rank.top_n >= 0:
+        matches = matches[: rank.top_n]
+    return matches
+
+
+def _evidence_value(v: object) -> object:
+    """Coerce eval result to something JSON-serialisable for evidence dict."""
+    from decimal import Decimal
+
+    if isinstance(v, Decimal):
+        return str(v)
+    return None if not isinstance(v, (int, float, str, bool)) else v
 
 
 def intersect(a: ScreenResult, b: ScreenResult) -> ScreenResult:
@@ -160,27 +237,64 @@ def _combine(op: str, a: ScreenResult, b: ScreenResult) -> str:
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
-def _build_evidence(rows: Sequence[dict[str, object]], _pred: Predicate) -> dict[str, object]:
-    """Collect a small evidence payload — first/last bar in the slice.
+def _build_evidence(rows: Sequence[dict[str, object]], pred: Predicate) -> dict[str, object]:
+    """Collect window + per-condition derived fields for a matched stock.
 
-    The doc calls for richer per-node evidence (RFC 0001 §8). v1 ships a
-    minimal version: the date range and the closing price at asof. This
-    keeps the surface deterministic; richer extraction is tracked as a
-    follow-up.
+    For every Scalar that participates in a ``Compare`` inside ``pred``,
+    we evaluate it against ``rows`` and attach the value under a
+    deterministic, human-readable key (e.g. ``"period_return_20d"``,
+    ``"mean_turnover_rate_10d"``, ``"close_qfq"``). This lets the UI
+    render a per-stock breakdown of "why did this code match" without
+    re-evaluating the AST.
     """
     if not rows:
-        return {"window": [], "values": []}
+        return {"window": [], "metrics": {}}
     first = rows[0]["trade_date"]
     last = rows[-1]["trade_date"]
-    values = {
-        k: rows[-1][k]
-        for k in ("close_qfq", "ma5", "ma10", "ma20", "ma60", "pct_chg_qfq")
-        if k in rows[-1]
-    }
-    return {
-        "window": [_iso(first), _iso(last)],
-        "asof_values": values,
-    }
+    metrics: dict[str, object] = {}
+    for scalar in _collect_compare_scalars(pred):
+        name = _scalar_label(scalar)
+        if name is None or name in metrics:
+            continue
+        value = evaluate_scalar(rows, scalar)
+        metrics[name] = _evidence_value(value)
+    return {"window": [_iso(first), _iso(last)], "metrics": metrics}
+
+
+def _collect_compare_scalars(pred: Predicate) -> list[Scalar]:
+    """Walk ``pred`` and emit every Scalar that drives a Compare node.
+
+    Const nodes are skipped (no metric to display). Order is the AST
+    traversal order so callers see the same labelling on each match.
+    """
+    out: list[Scalar] = []
+    _walk_for_metrics(pred, out)
+    return out
+
+
+def _walk_for_metrics(node: Predicate, out: list[Scalar]) -> None:
+    if isinstance(node, Compare):
+        for side in (node.left, node.right):
+            if not isinstance(side, Const):
+                out.append(side)
+        return
+    if isinstance(node, Logical):
+        for arg in node.args:
+            _walk_for_metrics(arg, out)
+        return
+    if isinstance(node, (ForAll, Exists, Consecutive)):
+        _walk_for_metrics(node.predicate, out)
+
+
+def _scalar_label(scalar: Scalar) -> str | None:
+    """Deterministic name for a Scalar — used as the evidence dict key."""
+    if isinstance(scalar, Field):
+        return scalar.field
+    if isinstance(scalar, Aggregate):
+        return f"{scalar.agg}_{scalar.field}_{scalar.days}d"
+    if isinstance(scalar, PeriodReturn):
+        return f"period_return_{scalar.days}d"
+    return None
 
 
 def _iso(value: object) -> str:

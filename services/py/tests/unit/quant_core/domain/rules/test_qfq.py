@@ -49,21 +49,21 @@ def test_compute_qfq_single_factor_window_returns_raw_prices() -> None:
 
 @pytest.mark.unit
 def test_compute_qfq_multi_ex_div_history_rewrites_only_backwards() -> None:
+    """QFQ-anchored: factor=1.0 on the latest stored bar, > 1.0 going back."""
     bars = [
         _bar("600519", date(2024, 9, 20), close="10"),
         _bar("600519", date(2024, 12, 20), close="20"),  # ex-div day
-        _bar("600519", date(2025, 6, 26), close="30"),  # second ex-div
+        _bar("600519", date(2025, 6, 26), close="30"),  # latest (anchor)
     ]
     factors = [
-        _factor("600519", date(2024, 9, 20), "1.0"),
-        _factor("600519", date(2024, 12, 20), "1.5"),
-        _factor("600519", date(2025, 6, 26), "2.0"),
+        _factor("600519", date(2024, 9, 20), "1.5"),
+        _factor("600519", date(2024, 12, 20), "1.2"),
+        _factor("600519", date(2025, 6, 26), "1.0"),
     ]
     out = compute_qfq_prices(bars, factors)
-    latest = Decimal("2.0")
-    assert out[0][3] == Decimal("10") * Decimal("1.0") / latest
-    assert out[1][3] == Decimal("20") * Decimal("1.5") / latest
-    assert out[2][3] == Decimal("30")  # latest factor self-cancels
+    assert out[0][3] == Decimal("10") / Decimal("1.5")
+    assert out[1][3] == Decimal("20") / Decimal("1.2")
+    assert out[2][3] == Decimal("30")  # anchor: factor=1.0
 
 
 @pytest.mark.unit
@@ -98,13 +98,18 @@ def test_compute_qfq_unsorted_bars_raise() -> None:
 
 @pytest.mark.unit
 def test_compute_qfq_ratio_invariant_two_points() -> None:
-    """Property: qfq[a]/qfq[b] == raw[a]/raw[b] for any pair when factor unchanged."""
+    """Property: qfq[a]/qfq[b] == raw[a]/raw[b] for any pair when factor unchanged.
+
+    Use exactly-representable values so Decimal precision doesn't round
+    one side differently from the other.
+    """
     bars = [
-        _bar("X", date(2024, 9, 20), close="10"),
-        _bar("X", date(2024, 9, 23), close="12"),
+        _bar("X", date(2024, 9, 20), close="20"),
+        _bar("X", date(2024, 9, 23), close="40"),
     ]
-    factors = [_factor("X", date(2024, 9, 20), "1.5")]
+    factors = [_factor("X", date(2024, 9, 20), "2")]
     out = compute_qfq_prices(bars, factors)
+    # qfq = raw / factor, ratio = (20/2)/(40/2) = 10/20 = 1/2
     assert out[0][3] / out[1][3] == bars[0].close / bars[1].close
 
 

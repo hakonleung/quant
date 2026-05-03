@@ -53,6 +53,15 @@ def parse_plan(raw: Mapping[str, object]) -> ScreenPlan:
     return ScreenPlan(asof=asof, expr=expr)
 
 
+def parse_scalar(raw: object, path: str) -> Scalar:
+    """Public entry-point for parsing a Scalar AST node.
+
+    Reused by the NL→DSL service to validate ``rank.metric`` payloads.
+    Raises ``QuantError("DSL_INVALID")`` on malformed input.
+    """
+    return _parse_scalar(raw, path)
+
+
 def parse_predicate(raw: object, path: str) -> Predicate:
     if not isinstance(raw, dict):
         raise _invalid(path, "predicate must be an object")

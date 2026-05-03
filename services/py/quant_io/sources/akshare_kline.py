@@ -4,11 +4,20 @@ Uses ``ak.stock_zh_a_daily`` (sina backend) twice:
 
 * ``adjust=""`` — un-adjusted OHLCV + ``amount`` (元) + ``turnover``
   (already a fraction). Volumes come back in shares.
-* ``adjust="hfq-factor"`` — one row **per ex-dividend / split date** with
-  the cumulative HFQ factor in effect from that date onward. We re-emit
-  the most-recent-prior factor at the requested window's lower bound so
-  the qfq computation has a baseline entry even when no ex-div day falls
-  inside the range.
+* ``adjust="qfq-factor"`` — one row **per ex-dividend / split date** with
+  the cumulative QFQ factor in effect from that date onward, anchored at
+  the most recent trading day (``factor=1.0`` at present, factor > 1.0
+  going back in time). The qfq formula is ``qfq[t] = raw[t] / factor[t]``
+  (see :func:`quant_core.domain.rules.qfq.compute_qfq_prices`).
+  We re-emit the most-recent-prior factor at the requested window's
+  lower bound so qfq computation has a baseline entry even when no
+  ex-div day falls inside the range.
+
+Why QFQ-factor and not HFQ-factor: HFQ is anchored at IPO and the
+absolute factor magnitude depends on every ex-div from IPO onward —
+even those outside our 2024-09-20+ window. QFQ is anchored at the
+present, so factor values are bounded and the computation is robust
+against the windowed start.
 """
 
 from __future__ import annotations
@@ -101,7 +110,7 @@ class AKShareKlineSource:
                 symbol=symbol,
                 start_date=_yyyymmdd(start),
                 end_date=_yyyymmdd(end),
-                adjust="hfq-factor",
+                adjust="qfq-factor",
             )
         except Exception as exc:
             raise QuantError(
@@ -178,7 +187,7 @@ def _daily_row_to_bar(code: str, row: Mapping[str, object]) -> RawDailyBar | Non
 
 def _factor_row_to_af(code: str, row: Mapping[str, object]) -> AdjFactor | None:
     trade_date = _coerce_date(row.get("date"))
-    factor_raw = row.get("hfq_factor")
+    factor_raw = row.get("qfq_factor")
     if trade_date is None or factor_raw is None:
         return None
     try:

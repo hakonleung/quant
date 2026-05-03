@@ -130,3 +130,27 @@ class ScreenResult:
     asof: date
     plan_signature: str
     matches: tuple[ScreenMatch, ...]
+
+
+# -- ranking / top-N (post-processing) --------------------------------
+
+
+RankOrder = Literal["asc", "desc"]
+
+
+@dataclass(frozen=True, slots=True)
+class RankSpec:
+    """Sort matched stocks by a Scalar metric and (optionally) take top-N.
+
+    The ``metric`` reuses the screening :class:`Scalar` family so the
+    same primitives that drive predicates also drive rankings — no new
+    surface to learn for the LLM.
+
+    Cross-sectional ranks (RFC 0001 §13) are still out of v1; this is
+    only a per-stock metric evaluated on its own slice, then sorted in
+    Python after matching.
+    """
+
+    metric: Scalar
+    order: RankOrder = "desc"
+    top_n: int | None = None

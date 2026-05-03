@@ -3,11 +3,17 @@
 Pure function over ``(raw_bars, adj_factors)``: produces qfq prices
 (open/high/low/close) using the formula::
 
-    qfq_price[t] = raw_price[t] * adj_factor[t] / adj_factor[latest]
+    qfq_price[t] = raw_price[t] / adj_factor[t]
 
-where ``adj_factor[latest]`` is the factor on the most recent date in
-``adj_factors``. The latest factor cancels itself, so the most recent
-qfq price equals the raw price — qfq only rewrites history backwards.
+where ``adj_factor`` follows the QFQ-anchored convention: ``factor=1.0``
+on the most recent stored bar, ``factor > 1.0`` going back in time as
+ex-dividends are unwound. The latest day's qfq price equals its raw
+price — qfq only rewrites history backwards.
+
+Convention note: this matches AKShare's ``qfq-factor`` channel, which
+is anchored at the present rather than at IPO. HFQ-anchored factors
+(``hfq-factor``) would also work mathematically but are sensitive to
+ex-div events outside the stored window (KLINE_FLOOR_DATE = 2024-09-20).
 
 Inputs and output are ordered by ``trade_date`` ascending. Sorting is
 the caller's responsibility — the function asserts monotonicity to fail
@@ -91,7 +97,7 @@ def compute_qfq_prices(
         QuantError: ``EVALUATION_FAILED`` for non-positive prices,
             empty / non-positive adj_factors, or non-ascending bar dates.
     """
-    factor_map, latest = build_factor_map(adj_factors)
+    factor_map, _latest = build_factor_map(adj_factors)
     sorted_factor_keys = sorted(factor_map.keys())
     out: list[tuple[Decimal, Decimal, Decimal, Decimal, Decimal]] = []
     prev_date = None
@@ -110,13 +116,13 @@ def compute_qfq_prices(
                 {"code": bar.code, "trade_date": bar.trade_date.isoformat()},
             )
         factor = _resolve_factor(factor_map, sorted_factor_keys, bar.trade_date)
-        ratio = factor / latest
+        # QFQ-anchored: qfq[t] = raw[t] / factor[t]; factor=1.0 at present.
         out.append(
             (
-                bar.open * ratio,
-                bar.high * ratio,
-                bar.low * ratio,
-                bar.close * ratio,
+                bar.open / factor,
+                bar.high / factor,
+                bar.low / factor,
+                bar.close / factor,
                 factor,
             )
         )

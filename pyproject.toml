@@ -139,6 +139,7 @@ module = [
     "quant_core.ports.kline_repo",
     "quant_core.services.kline_service",
     "quant_core.domain.rules.kline_assemble",
+    "quant_io.llm.deepseek_client",
     "quant_cache.*",
     "quant_rpc.*",
 ]
@@ -146,7 +147,7 @@ disallow_any_unimported = false
 disallow_untyped_calls = false
 disallow_any_explicit = false
 disallow_subclassing_any = false
-disable_error_code = ["attr-defined", "name-defined"]
+disable_error_code = ["attr-defined", "name-defined", "import-untyped"]
 
 # ---- pytest ----
 [tool.pytest.ini_options]

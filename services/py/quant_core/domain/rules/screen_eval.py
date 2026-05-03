@@ -39,6 +39,17 @@ if TYPE_CHECKING:
 _NA = object()
 
 
+def evaluate_scalar(rows: Sequence[Mapping[str, object]], scalar: Scalar) -> object:
+    """Evaluate a Scalar AST node against ``rows``; returns ``_NA`` on miss.
+
+    Exposed so post-processing (ranking) can reuse the same primitives
+    that drive predicates. Callers should treat any return value other
+    than a Decimal as "no value at this code" — typically by skipping
+    the row in the rank.
+    """
+    return _eval_scalar(rows, scalar)
+
+
 def evaluate_predicate(rows: Sequence[Mapping[str, object]], pred: Predicate) -> bool:
     """Return True iff ``pred`` matches given the stock's window slice.
 

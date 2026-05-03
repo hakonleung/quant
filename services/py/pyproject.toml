@@ -15,6 +15,7 @@ dependencies = [
     "pypinyin>=0.55",
     "polars>=1.40.1",
     "duckdb>=1.5.2",
+    "openai>=2.33.0",
 ]
 
 [build-system]
