@@ -36,7 +36,7 @@ export const FEAT_CONFIG_MAP: Readonly<Record<Feat, FeatConfig>> = {
   [Feat.Sectors]: { title: () => 'sector', gridArea: 'L' },
   [Feat.Blacklist]: { title: () => 'blacklist', defaultMinimized: true },
   [Feat.Detail]: { title: () => 'equity', gridArea: 'CTOP' },
-  [Feat.Chart]: { title: () => 'price', gridArea: 'CMID' },
+  [Feat.Chart]: { title: () => 'detail', gridArea: 'CMID' },
   [Feat.Blotter]: { title: () => 'screen', gridArea: 'CBOT' },
   [Feat.Stdout]: { title: () => 'sentiment', gridArea: 'R1' },
   [Feat.SlackPush]: {

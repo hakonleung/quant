@@ -1,55 +1,92 @@
 'use client';
 
+/**
+ * 101 — Detail / price chart.
+ *
+ * Always loads 250D kline. Single SVG renders candles, MA lines, an
+ * OHLC volume strip, the left price axis, the bottom date axis, a
+ * crosshair with a price label, and date markers for the focused day.
+ *
+ * Interaction:
+ *   - Default focus = latest bar (right edge of the viewport).
+ *   - Mouse-move highlights the nearest bar; hover and selection share
+ *     the same label payload, the only difference is whether the focus
+ *     is sticky.
+ *   - Click a bar to pin selection; click the same bar again to clear.
+ *   - Drag the chart body to pan; +/- buttons zoom by adjusting candle
+ *     width.
+ *
+ * Header actions: blacklist (with confirm) + add-to-sector dialog.
+ */
+
 import { Box, Button, Flex, HStack, Text } from '@chakra-ui/react';
 import type { KlineBar } from '@quant/shared';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { Feat } from '../../lib/eqty/feat.js';
 import {
-  buildLayout,
-  buildMaPath,
-  pctChangeToLatest,
-  type MaKey,
-} from '../../lib/fp/kline-chart.js';
+  clampViewport,
+  DEFAULT_VIEWPORT,
+  indexAtX,
+  MAX_CANDLE_W,
+  MIN_CANDLE_W,
+  priceBounds,
+  visibleSlice,
+  type ChartViewport,
+} from '../../lib/fp/chart-view.js';
+import { pctChangeToLatest, sparseIndices, type MaKey } from '../../lib/fp/kline-chart.js';
 import { useKline, useStockMetaQuery } from '../../lib/hooks/use-eqty-data.js';
+import { useBlacklistStore } from '../../lib/stores/blacklist.store.js';
 import { palette } from '../../lib/theme/tokens.js';
 import { Pane } from '../shell/pane.js';
+import { AddToSectorDialog } from './add-to-sector-dialog.js';
 
-const RANGES = ['30D', '90D', '250D'] as const;
-type Range = (typeof RANGES)[number];
+// Render space — height fixed; width fills container via SVG width=100%.
+const PRICE_H = 240;
+const VOL_H = 64;
+const VOL_GAP = 4;
+const TOP_PAD = 8;
+const BOTTOM_PAD = 8;
+const PRICE_AXIS_W = 48;
+const TOTAL_H = PRICE_H + VOL_GAP + VOL_H + 22; // last 22 = bottom date axis
 
 const MA_COLORS: Readonly<Record<MaKey, string>> = {
-  ma5: palette.light.amber,
-  ma10: palette.light.violet,
-  ma20: palette.light.blue,
-  ma60: palette.light.green,
+  // Smaller window -> deeper / warmer color.
+  ma5: '#7a3a05',
+  ma10: '#a66610',
+  ma20: '#d59231',
+  ma60: '#e3b975',
 };
-
-const CHART_VIEW_W = 1080;
-const PRICE_VIEW_H = 240;
-const VOL_VIEW_H = 80;
-const VOL_GAP = 4;
 
 interface Props {
   readonly code: string;
 }
 
 export function ChartPanel({ code }: Props): React.ReactElement {
-  const [range, setRange] = useState<Range>('90D');
-  const [selectedIdx, setSelectedIdx] = useState<number | null>(null);
-  const { data, isLoading } = useKline(code, range);
+  const { data, isLoading } = useKline(code, '250D');
   const meta = useStockMetaQuery(code);
   const stockName = meta.data?.name ?? '';
   const bars = data ?? [];
 
-  const barsKey = bars.length === 0 ? '' : `${bars[0]!.date}-${bars[bars.length - 1]!.date}`;
-  useEffect(() => {
-    setSelectedIdx(null);
-  }, [barsKey]);
+  const [vp, setVp] = useState<ChartViewport>(DEFAULT_VIEWPORT);
+  const [selectedIdx, setSelectedIdx] = useState<number | null>(null);
+  const [hoverIdx, setHoverIdx] = useState<number | null>(null);
+  const [hoverPrice, setHoverPrice] = useState<number | null>(null);
+  const [showAddDialog, setShowAddDialog] = useState(false);
 
-  const focusBar = selectedIdx === null ? bars[bars.length - 1] : bars[selectedIdx];
-  const focusIdx = focusBar === undefined ? null : (selectedIdx ?? bars.length - 1);
-  const deltaPct = focusIdx === null ? null : pctChangeToLatest(bars, focusIdx);
+  // Reset viewport whenever the underlying series changes.
+  const seriesKey = bars.length === 0 ? '' : `${bars[0]!.date}-${bars[bars.length - 1]!.date}`;
+  useEffect(() => {
+    setVp(DEFAULT_VIEWPORT);
+    setSelectedIdx(null);
+    setHoverIdx(null);
+  }, [seriesKey]);
+
+  const focusIdx = selectedIdx ?? hoverIdx ?? (bars.length > 0 ? bars.length - 1 : null);
+  const focusBar = focusIdx === null ? null : (bars[focusIdx] ?? null);
+  const deltaPct =
+    focusIdx === null || focusIdx === bars.length - 1 ? null : pctChangeToLatest(bars, focusIdx);
+  const daysAgo = focusIdx === null ? null : bars.length - 1 - focusIdx;
 
   return (
     <Pane
@@ -61,156 +98,414 @@ export function ChartPanel({ code }: Props): React.ReactElement {
         </Text>
       }
     >
-      <ChartTools range={range} setRange={setRange} />
-      <FocusLabel bar={focusBar ?? null} deltaPct={deltaPct} selected={selectedIdx !== null} />
-      <Box position="relative" h={`${String(PRICE_VIEW_H + VOL_VIEW_H + VOL_GAP)}px`} bg="panel">
+      <ChartTools
+        code={code}
+        stockName={stockName}
+        vp={vp}
+        setVp={setVp}
+        onAddToSector={(): void => {
+          setShowAddDialog(true);
+        }}
+      />
+      <FocusLabel
+        bar={focusBar}
+        deltaPct={deltaPct}
+        daysAgo={daysAgo}
+        selected={selectedIdx !== null}
+        hovered={selectedIdx === null && hoverIdx !== null}
+      />
+      <Box position="relative" h={`${String(TOTAL_H)}px`} bg="panel">
         {isLoading ? (
           <Centered>loading kline…</Centered>
         ) : bars.length === 0 ? (
           <Centered>// no kline data</Centered>
         ) : (
-          <ChartSvg
+          <ChartCanvas
             bars={bars}
+            vp={vp}
+            setVp={setVp}
             selectedIdx={selectedIdx}
-            onSelect={(idx): void => {
-              setSelectedIdx((prev) => (prev === idx ? null : idx));
-            }}
+            setSelectedIdx={setSelectedIdx}
+            setHoverIdx={setHoverIdx}
+            hoverPrice={hoverPrice}
+            setHoverPrice={setHoverPrice}
+            focusIdx={focusIdx}
           />
         )}
       </Box>
+      <AddToSectorDialog
+        open={showAddDialog}
+        code={code}
+        onClose={(): void => {
+          setShowAddDialog(false);
+        }}
+      />
     </Pane>
   );
 }
 
-interface ChartSvgProps {
+interface CanvasProps {
   readonly bars: readonly KlineBar[];
+  readonly vp: ChartViewport;
+  readonly setVp: (next: ChartViewport) => void;
   readonly selectedIdx: number | null;
-  readonly onSelect: (idx: number) => void;
+  readonly setSelectedIdx: (n: number | null) => void;
+  readonly setHoverIdx: (n: number | null) => void;
+  readonly hoverPrice: number | null;
+  readonly setHoverPrice: (p: number | null) => void;
+  readonly focusIdx: number | null;
 }
 
-function ChartSvg({ bars, selectedIdx, onSelect }: ChartSvgProps): React.ReactElement {
-  const { layout, scaleY } = useMemo(() => buildLayout(bars), [bars]);
-  const ma5 = useMemo(() => buildMaPath(bars, 'ma5', scaleY), [bars, scaleY]);
-  const ma10 = useMemo(() => buildMaPath(bars, 'ma10', scaleY), [bars, scaleY]);
-  const ma20 = useMemo(() => buildMaPath(bars, 'ma20', scaleY), [bars, scaleY]);
-  const ma60 = useMemo(() => buildMaPath(bars, 'ma60', scaleY), [bars, scaleY]);
-  const volScale = useMemo(() => buildVolumeScale(bars), [bars]);
-  const totalH = PRICE_VIEW_H + VOL_GAP + VOL_VIEW_H;
+function ChartCanvas({
+  bars,
+  vp,
+  setVp,
+  selectedIdx,
+  setSelectedIdx,
+  setHoverIdx,
+  hoverPrice,
+  setHoverPrice,
+  focusIdx,
+}: CanvasProps): React.ReactElement {
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const [width, setWidth] = useState(900);
+  useEffect(() => {
+    const el = wrapRef.current;
+    if (el === null) return;
+    const ro = new ResizeObserver((entries) => {
+      const w = entries[0]?.contentRect.width ?? 0;
+      if (w > 0) setWidth(Math.round(w));
+    });
+    ro.observe(el);
+    return () => {
+      ro.disconnect();
+    };
+  }, []);
+
+  const innerW = Math.max(0, width - PRICE_AXIS_W);
+  const slice = useMemo(() => visibleSlice(bars.length, vp, innerW), [bars.length, vp, innerW]);
+  const bounds = useMemo(
+    () => priceBounds(bars, slice.startIdx, slice.count),
+    [bars, slice.startIdx, slice.count],
+  );
+  const usableH = PRICE_H - TOP_PAD - BOTTOM_PAD;
+  const range = bounds.max - bounds.min || 1;
+  const scaleY = useCallback(
+    (price: number): number => PRICE_H - BOTTOM_PAD - ((price - bounds.min) / range) * usableH,
+    [bounds.min, range, usableH],
+  );
+  const inverseY = useCallback(
+    (y: number): number => bounds.min + ((PRICE_H - BOTTOM_PAD - y) / usableH) * range,
+    [bounds.min, range, usableH],
+  );
+
+  const xForIndex = useCallback(
+    (idx: number): number => slice.firstX + (idx - slice.startIdx) * slice.stride,
+    [slice],
+  );
+
+  const dragRef = useRef<{ startX: number; startPan: number; moved: boolean } | null>(null);
+
+  const onMouseDown = (e: React.MouseEvent<SVGSVGElement>): void => {
+    dragRef.current = { startX: e.clientX, startPan: vp.panPx, moved: false };
+  };
+  const onMouseMove = (e: React.MouseEvent<SVGSVGElement>): void => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = e.clientX - rect.left - PRICE_AXIS_W;
+    const y = e.clientY - rect.top;
+    if (dragRef.current !== null) {
+      const dx = e.clientX - dragRef.current.startX;
+      if (Math.abs(dx) > 2) dragRef.current.moved = true;
+      const nextPan = Math.max(0, dragRef.current.startPan - dx);
+      setVp(clampViewport({ ...vp, panPx: nextPan }));
+      return;
+    }
+    if (x >= 0 && y >= 0 && y <= PRICE_H) {
+      const idx = indexAtX(x, slice, bars.length);
+      setHoverIdx(idx);
+      setHoverPrice(inverseY(y));
+    } else {
+      setHoverIdx(null);
+      setHoverPrice(null);
+    }
+  };
+  const onMouseUp = (e: React.MouseEvent<SVGSVGElement>): void => {
+    const wasDrag = dragRef.current?.moved ?? false;
+    dragRef.current = null;
+    if (wasDrag) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = e.clientX - rect.left - PRICE_AXIS_W;
+    const y = e.clientY - rect.top;
+    if (x < 0 || y < 0 || y > PRICE_H) return;
+    const idx = indexAtX(x, slice, bars.length);
+    if (idx === null) return;
+    setSelectedIdx(selectedIdx === idx ? null : idx);
+  };
+  const onMouseLeave = (): void => {
+    dragRef.current = null;
+    setHoverIdx(null);
+    setHoverPrice(null);
+  };
+
+  // ----- pre-compute renderables -----
+  const candles: React.ReactNode[] = [];
+  const volBars: React.ReactNode[] = [];
+  let volMax = 0;
+  for (let i = slice.startIdx; i < slice.startIdx + slice.count; i += 1) {
+    const b = bars[i];
+    if (b === undefined) continue;
+    if (b.volume > volMax) volMax = b.volume;
+  }
+
+  for (let i = slice.startIdx; i < slice.startIdx + slice.count; i += 1) {
+    const b = bars[i];
+    if (b === undefined) continue;
+    const x = xForIndex(i);
+    const up = b.close >= b.open;
+    const col = up ? palette.light.up : palette.light.down;
+    const top = scaleY(Math.max(b.open, b.close));
+    const bot = scaleY(Math.min(b.open, b.close));
+    const isFocused = focusIdx === i;
+    candles.push(
+      <g key={`c-${String(i)}`}>
+        {isFocused && (
+          <rect
+            x={x - 1}
+            y={0}
+            width={vp.candleW + 2}
+            height={PRICE_H + VOL_GAP + VOL_H}
+            fill="rgba(184,117,20,0.08)"
+          />
+        )}
+        <line
+          x1={x + vp.candleW / 2}
+          x2={x + vp.candleW / 2}
+          y1={scaleY(b.high)}
+          y2={scaleY(b.low)}
+          stroke={col}
+        />
+        <rect x={x} y={top} width={vp.candleW} height={Math.max(1, bot - top)} fill={col} />
+      </g>,
+    );
+    const volH = volMax === 0 ? 0 : (b.volume / volMax) * (VOL_H - 4);
+    volBars.push(
+      <rect
+        key={`v-${String(i)}`}
+        x={x}
+        y={PRICE_H + VOL_GAP + (VOL_H - volH)}
+        width={vp.candleW}
+        height={Math.max(1, volH)}
+        fill={col}
+        opacity={focusIdx === null || focusIdx === i ? 0.85 : 0.4}
+      />,
+    );
+  }
+
+  const maPaths: Record<MaKey, string> = { ma5: '', ma10: '', ma20: '', ma60: '' };
+  (['ma5', 'ma10', 'ma20', 'ma60'] as const).forEach((k) => {
+    let started = false;
+    for (let i = slice.startIdx; i < slice.startIdx + slice.count; i += 1) {
+      const b = bars[i];
+      if (b === undefined) continue;
+      const v = b[k];
+      if (v === null) continue;
+      const x = xForIndex(i) + vp.candleW / 2;
+      const y = scaleY(v).toFixed(1);
+      maPaths[k] += `${started ? 'L' : 'M'}${String(x.toFixed(1))},${y} `;
+      started = true;
+    }
+  });
+
+  // ----- price axis ticks (sparse) -----
+  const priceTickCount = 5;
+  const priceTicks: number[] = [];
+  for (let i = 0; i < priceTickCount; i += 1) {
+    priceTicks.push(bounds.min + ((bounds.max - bounds.min) / (priceTickCount - 1)) * i);
+  }
+
+  // ----- date axis ticks (sparse) -----
+  const targetDateTicks = Math.max(2, Math.min(8, Math.round(slice.count / 12)));
+  const dateTickIdx = sparseIndices(slice.count, targetDateTicks).map((k) => slice.startIdx + k);
 
   return (
-    <Box
-      as="svg"
-      display="block"
-      w="100%"
-      h={`${String(totalH)}px`}
-      cursor="crosshair"
-      {...{ viewBox: `0 0 ${String(CHART_VIEW_W)} ${String(totalH)}`, preserveAspectRatio: 'none' }}
-    >
-      <defs>
-        <pattern id="grid" width="60" height="60" patternUnits="userSpaceOnUse">
-          <path d="M60 0H0V60" fill="none" stroke={palette.light.line2} />
-        </pattern>
-      </defs>
-
-      {/* Price area */}
-      <rect width={CHART_VIEW_W} height={PRICE_VIEW_H} fill="url(#grid)" />
-      {layout.map((c, i) => {
-        const col = c.up ? palette.light.up : palette.light.down;
-        const isSel = selectedIdx === i;
-        return (
-          <g
-            key={i}
-            onClick={(): void => {
-              onSelect(i);
-            }}
-            style={{ cursor: 'pointer' }}
-          >
-            <rect
-              x={c.x - 2}
-              y={0}
-              width={14}
-              height={totalH}
-              fill={isSel ? 'rgba(184,117,20,0.10)' : 'transparent'}
-            />
-            <line x1={c.x + 5} x2={c.x + 5} y1={c.highY} y2={c.lowY} stroke={col} />
-            <rect x={c.x} y={c.bodyY} width="10" height={c.bodyH} fill={col} />
-            {isSel && (
-              <line
-                x1={c.x + 5}
-                x2={c.x + 5}
-                y1={0}
-                y2={totalH}
-                stroke={palette.light.amber}
-                strokeDasharray="2 3"
-                opacity="0.7"
-              />
-            )}
-          </g>
-        );
-      })}
-      {ma5 !== null && <path d={ma5} fill="none" stroke={MA_COLORS.ma5} strokeWidth="1.2" />}
-      {ma10 !== null && <path d={ma10} fill="none" stroke={MA_COLORS.ma10} strokeWidth="1.2" />}
-      {ma20 !== null && <path d={ma20} fill="none" stroke={MA_COLORS.ma20} strokeWidth="1.2" />}
-      {ma60 !== null && <path d={ma60} fill="none" stroke={MA_COLORS.ma60} strokeWidth="1.2" />}
-
-      {/* Volume area */}
-      <line
-        x1={0}
-        x2={CHART_VIEW_W}
-        y1={PRICE_VIEW_H}
-        y2={PRICE_VIEW_H}
-        stroke={palette.light.line}
-        strokeWidth="1"
-      />
-      <text
-        x={6}
-        y={PRICE_VIEW_H + 12}
-        fontSize="10"
-        fontFamily="JetBrains Mono"
-        fill={palette.light.ink3}
-        letterSpacing="0.16em"
+    <Box ref={wrapRef} w="100%" h={`${String(TOTAL_H)}px`} position="relative">
+      <svg
+        width="100%"
+        height={TOTAL_H}
+        style={{ display: 'block', cursor: dragRef.current === null ? 'crosshair' : 'grabbing' }}
+        onMouseDown={onMouseDown}
+        onMouseMove={onMouseMove}
+        onMouseUp={onMouseUp}
+        onMouseLeave={onMouseLeave}
       >
-        VOL
-      </text>
-      {bars.map((b, i) => {
-        const c = layout[i];
-        if (c === undefined) return null;
-        const h = volScale(b.volume);
-        const y = PRICE_VIEW_H + VOL_GAP + (VOL_VIEW_H - h);
-        const col = b.close >= b.open ? palette.light.up : palette.light.down;
-        return (
-          <rect
-            key={i}
-            x={c.x}
-            y={y}
-            width="10"
-            height={Math.max(1, h)}
-            fill={col}
-            opacity={selectedIdx === null || selectedIdx === i ? 0.85 : 0.35}
-          />
-        );
-      })}
+        {/* Background separator */}
+        <line
+          x1={PRICE_AXIS_W}
+          x2={width}
+          y1={PRICE_H}
+          y2={PRICE_H}
+          stroke={palette.light.line}
+        />
+        <line
+          x1={PRICE_AXIS_W}
+          x2={width}
+          y1={PRICE_H + VOL_GAP + VOL_H}
+          y2={PRICE_H + VOL_GAP + VOL_H}
+          stroke={palette.light.line}
+        />
+
+        {/* Price axis (left) */}
+        {priceTicks.map((p, i) => {
+          const y = scaleY(p);
+          return (
+            <g key={`pt-${String(i)}`}>
+              <line
+                x1={PRICE_AXIS_W - 3}
+                x2={width}
+                y1={y}
+                y2={y}
+                stroke={palette.light.line2}
+              />
+              <text
+                x={PRICE_AXIS_W - 6}
+                y={y + 3}
+                fontSize="9"
+                fontFamily="JetBrains Mono"
+                fill={palette.light.ink3}
+                textAnchor="end"
+              >
+                {p.toFixed(2)}
+              </text>
+            </g>
+          );
+        })}
+
+        {/* Plot, translated past the price axis */}
+        <g transform={`translate(${String(PRICE_AXIS_W)},0)`}>
+          {candles}
+          {(['ma60', 'ma20', 'ma10', 'ma5'] as const).map((k) =>
+            maPaths[k] === '' ? null : (
+              <path
+                key={k}
+                d={maPaths[k]}
+                fill="none"
+                stroke={MA_COLORS[k]}
+                strokeWidth="1.1"
+                opacity="0.95"
+              />
+            ),
+          )}
+          {volBars}
+          <text
+            x={6}
+            y={PRICE_H + 12}
+            fontSize="9"
+            fontFamily="JetBrains Mono"
+            fill={palette.light.ink3}
+            letterSpacing="0.16em"
+          >
+            VOL
+          </text>
+
+          {/* Date axis */}
+          {dateTickIdx.map((idx) => {
+            const b = bars[idx];
+            if (b === undefined) return null;
+            const x = xForIndex(idx) + vp.candleW / 2;
+            return (
+              <text
+                key={`dt-${String(idx)}`}
+                x={x}
+                y={TOTAL_H - 6}
+                fontSize="9"
+                fontFamily="JetBrains Mono"
+                fill={palette.light.ink3}
+                textAnchor="middle"
+              >
+                {b.date.slice(5)}
+              </text>
+            );
+          })}
+
+          {/* Focus date marker */}
+          {focusIdx !== null && bars[focusIdx] !== undefined && (
+            <g>
+              <rect
+                x={xForIndex(focusIdx) - 16}
+                y={TOTAL_H - 18}
+                width={Math.max(40, vp.candleW + 32)}
+                height={14}
+                fill={palette.light.amberBg}
+                stroke={palette.light.amber}
+              />
+              <text
+                x={xForIndex(focusIdx) + vp.candleW / 2}
+                y={TOTAL_H - 8}
+                fontSize="9"
+                fontFamily="JetBrains Mono"
+                fill={palette.light.amberDark}
+                textAnchor="middle"
+                fontWeight="700"
+              >
+                {bars[focusIdx]!.date}
+              </text>
+            </g>
+          )}
+        </g>
+
+        {/* Hover crosshair (price) */}
+        {hoverPrice !== null && selectedIdx === null && (
+          <g>
+            <line
+              x1={0}
+              x2={width}
+              y1={scaleY(hoverPrice)}
+              y2={scaleY(hoverPrice)}
+              stroke={palette.light.amber}
+              strokeDasharray="2 3"
+              opacity="0.7"
+            />
+            <rect
+              x={0}
+              y={scaleY(hoverPrice) - 7}
+              width={PRICE_AXIS_W - 2}
+              height={14}
+              fill={palette.light.amberBg}
+              stroke={palette.light.amber}
+            />
+            <text
+              x={PRICE_AXIS_W - 6}
+              y={scaleY(hoverPrice) + 3}
+              fontSize="9"
+              fontFamily="JetBrains Mono"
+              fill={palette.light.amberDark}
+              textAnchor="end"
+              fontWeight="700"
+            >
+              {hoverPrice.toFixed(2)}
+            </text>
+          </g>
+        )}
+      </svg>
     </Box>
   );
-}
-
-function buildVolumeScale(bars: readonly KlineBar[]): (volume: number) => number {
-  if (bars.length === 0) return () => 0;
-  let max = 0;
-  for (const b of bars) {
-    if (b.volume > max) max = b.volume;
-  }
-  if (max === 0) return () => 0;
-  return (volume: number): number => (volume / max) * (VOL_VIEW_H - 8);
 }
 
 interface FocusProps {
   readonly bar: KlineBar | null;
   readonly deltaPct: number | null;
+  readonly daysAgo: number | null;
   readonly selected: boolean;
+  readonly hovered: boolean;
 }
 
-function FocusLabel({ bar, deltaPct, selected }: FocusProps): React.ReactElement {
+function FocusLabel({
+  bar,
+  deltaPct,
+  daysAgo,
+  selected,
+  hovered,
+}: FocusProps): React.ReactElement {
   if (bar === null) {
     return (
       <Box px="14px" py="4px" borderBottomWidth="1px" borderColor="line" bg="panel3">
@@ -220,6 +515,9 @@ function FocusLabel({ bar, deltaPct, selected }: FocusProps): React.ReactElement
       </Box>
     );
   }
+  const closeColor =
+    bar.close > bar.open ? 'up' : bar.close < bar.open ? 'down' : 'ink2';
+  const tag = selected ? `SEL ${bar.date}` : hovered ? `HOV ${bar.date}` : `LATEST ${bar.date}`;
   return (
     <Flex
       px="14px"
@@ -228,7 +526,7 @@ function FocusLabel({ bar, deltaPct, selected }: FocusProps): React.ReactElement
       borderColor="line"
       bg="panel3"
       align="center"
-      gap="10px"
+      gap="12px"
       fontFamily="mono"
       fontSize="10px"
       color="ink2"
@@ -246,20 +544,23 @@ function FocusLabel({ bar, deltaPct, selected }: FocusProps): React.ReactElement
         fontWeight="700"
         letterSpacing="0.12em"
       >
-        {selected ? `SEL ${bar.date}` : `LATEST ${bar.date}`}
+        {tag}
       </Box>
-      <Stat label="O" value={bar.open.toFixed(2)} />
-      <Stat label="H" value={bar.high.toFixed(2)} color="up" />
-      <Stat label="L" value={bar.low.toFixed(2)} color="down" />
-      <Stat label="换手" value={`${(bar.turnoverRate * 100).toFixed(2)}%`} />
-      {deltaPct !== null && (
+      <Text fontSize="13px" color={closeColor} fontWeight="800" letterSpacing="0.04em">
+        {bar.close.toFixed(2)}
+      </Text>
+      {daysAgo !== null && deltaPct !== null && (
         <Stat
-          label="距今"
+          label={`距今${String(daysAgo)}d`}
           value={`${deltaPct >= 0 ? '+' : ''}${deltaPct.toFixed(2)}%`}
           color={deltaPct >= 0 ? 'up' : 'down'}
           bold
         />
       )}
+      <Stat label="换手" value={`${(bar.turnoverRate * 100).toFixed(2)}%`} />
+      <Stat label="H" value={bar.high.toFixed(2)} color="up" />
+      <Stat label="L" value={bar.low.toFixed(2)} color="down" />
+      <Stat label="O" value={bar.open.toFixed(2)} />
       <MaInline ma="MA5" value={bar.ma5} color={MA_COLORS.ma5} />
       <MaInline ma="MA10" value={bar.ma10} color={MA_COLORS.ma10} />
       <MaInline ma="MA20" value={bar.ma20} color={MA_COLORS.ma20} />
@@ -330,11 +631,46 @@ function Centered({ children }: { children: React.ReactNode }): React.ReactEleme
 }
 
 interface ToolsProps {
-  readonly range: Range;
-  readonly setRange: (r: Range) => void;
+  readonly code: string;
+  readonly stockName: string;
+  readonly vp: ChartViewport;
+  readonly setVp: (vp: ChartViewport) => void;
+  readonly onAddToSector: () => void;
 }
 
-function ChartTools({ range, setRange }: ToolsProps): React.ReactElement {
+function ChartTools({
+  code,
+  stockName,
+  vp,
+  setVp,
+  onAddToSector,
+}: ToolsProps): React.ReactElement {
+  const blacklist = useBlacklistStore((s) => s.entries);
+  const addBlacklist = useBlacklistStore((s) => s.add);
+  const alreadyBlacklisted = blacklist.some((b) => b.code === code);
+
+  const onBlacklist = (): void => {
+    if (alreadyBlacklisted) return;
+    if (!confirm(`Blacklist ${code}${stockName === '' ? '' : ` (${stockName})`}?`)) return;
+    if (!confirm(`Confirm: blacklist ${code} permanently?`)) return;
+    addBlacklist({
+      code,
+      name: stockName,
+      addedAt: new Date().toISOString().slice(0, 10),
+      note: '',
+    });
+  };
+
+  const zoomIn = (): void => {
+    setVp(clampViewport({ ...vp, candleW: Math.min(MAX_CANDLE_W, vp.candleW * 1.4) }));
+  };
+  const zoomOut = (): void => {
+    setVp(clampViewport({ ...vp, candleW: Math.max(MIN_CANDLE_W, vp.candleW / 1.4) }));
+  };
+  const resetView = (): void => {
+    setVp(DEFAULT_VIEWPORT);
+  };
+
   return (
     <Flex
       align="center"
@@ -348,19 +684,30 @@ function ChartTools({ range, setRange }: ToolsProps): React.ReactElement {
       color="ink3"
       letterSpacing="0.14em"
     >
-      {RANGES.map((r) => (
+      <ToolButton onClick={zoomOut} title="zoom out">
+        −
+      </ToolButton>
+      <ToolButton onClick={zoomIn} title="zoom in">
+        +
+      </ToolButton>
+      <ToolButton onClick={resetView} title="reset">
+        ⟲
+      </ToolButton>
+      <HStack ml="auto" gap="6px">
         <ToolButton
-          key={r}
-          active={r === range}
-          onClick={(): void => {
-            setRange(r);
-          }}
+          onClick={onAddToSector}
+          title="add to sector"
         >
-          {r}
+          + SECTOR
         </ToolButton>
-      ))}
-      <HStack ml="auto" gap="14px">
-        <Text>CLICK→Δ%</Text>
+        <ToolButton
+          onClick={onBlacklist}
+          danger
+          disabled={alreadyBlacklisted}
+          title={alreadyBlacklisted ? 'already blacklisted' : 'blacklist (asks twice)'}
+        >
+          {alreadyBlacklisted ? '✓ BLK' : 'BLACKLIST'}
+        </ToolButton>
       </HStack>
     </Flex>
   );
@@ -368,11 +715,19 @@ function ChartTools({ range, setRange }: ToolsProps): React.ReactElement {
 
 interface ButtonProps {
   readonly children: React.ReactNode;
-  readonly active?: boolean;
   readonly onClick?: () => void;
+  readonly title?: string;
+  readonly danger?: boolean;
+  readonly disabled?: boolean;
 }
 
-function ToolButton({ children, active = false, onClick }: ButtonProps): React.ReactElement {
+function ToolButton({
+  children,
+  onClick,
+  title,
+  danger = false,
+  disabled = false,
+}: ButtonProps): React.ReactElement {
   return (
     <Button
       h="auto"
@@ -382,14 +737,16 @@ function ToolButton({ children, active = false, onClick }: ButtonProps): React.R
       fontSize="10px"
       letterSpacing="0.14em"
       textTransform="uppercase"
-      bg={active ? 'accentBg' : 'panel'}
-      color={active ? 'accent' : 'ink2'}
+      bg="panel"
+      color={danger ? 'up' : 'ink2'}
       borderWidth="1px"
-      borderColor={active ? 'accent' : 'line'}
+      borderColor={danger ? 'up' : 'line'}
       borderRadius="0"
-      fontWeight={active ? '700' : '500'}
+      fontWeight="500"
       onClick={onClick}
-      _hover={active ? {} : { bg: 'hover' }}
+      disabled={disabled}
+      title={title}
+      _hover={disabled ? {} : { bg: 'hover' }}
     >
       {children}
     </Button>

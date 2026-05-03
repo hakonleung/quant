@@ -39,6 +39,8 @@ export const DEFAULT_GEOMETRY: ChartGeometry = {
 interface BuiltLayout {
   readonly layout: readonly CandleLayout[];
   readonly scaleY: (price: number) => number;
+  readonly priceMin: number;
+  readonly priceMax: number;
 }
 
 export function buildLayout(
@@ -46,7 +48,12 @@ export function buildLayout(
   geometry: ChartGeometry = DEFAULT_GEOMETRY,
 ): BuiltLayout {
   if (bars.length === 0) {
-    return { layout: [], scaleY: () => geometry.viewHeight - geometry.bottomPad };
+    return {
+      layout: [],
+      scaleY: () => geometry.viewHeight - geometry.bottomPad,
+      priceMin: 0,
+      priceMax: 0,
+    };
   }
   let max = bars[0]!.high;
   let min = bars[0]!.low;
@@ -72,7 +79,7 @@ export function buildLayout(
       up: b.close >= b.open,
     };
   });
-  return { layout, scaleY };
+  return { layout, scaleY, priceMin: min, priceMax: max };
 }
 
 export type MaKey = 'ma5' | 'ma10' | 'ma20' | 'ma60';
@@ -110,4 +117,31 @@ export function pctChangeToLatest(
   if (index === bars.length - 1) return null;
   if (bar.close === 0) return null;
   return ((last.close - bar.close) / bar.close) * 100;
+}
+
+/**
+ * Returns sparsely-sampled tick positions across the bar index space.
+ * Used by the chart's bottom date axis and left price axis: render
+ * roughly `target` tick marks (>=2) without crowding.
+ */
+export function sparseIndices(total: number, target: number): readonly number[] {
+  if (total <= 0) return [];
+  if (total <= target) return Array.from({ length: total }, (_, i) => i);
+  const step = Math.max(1, Math.floor(total / target));
+  const out: number[] = [];
+  for (let i = 0; i < total; i += step) out.push(i);
+  if (out[out.length - 1] !== total - 1) out.push(total - 1);
+  return out;
+}
+
+/**
+ * Return ~`count` evenly-spaced price tick values between min and max.
+ * Used for the left price axis. Always returns at least min and max.
+ */
+export function priceTicks(min: number, max: number, count: number): readonly number[] {
+  if (count < 2) return [min, max];
+  const step = (max - min) / (count - 1);
+  const out: number[] = [];
+  for (let i = 0; i < count; i += 1) out.push(min + step * i);
+  return out;
 }
