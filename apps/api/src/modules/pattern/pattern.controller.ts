@@ -41,11 +41,15 @@ export class PatternController {
   ): Promise<PatternFindSimilarResponse> {
     const r = req as Request & { traceId?: string };
     const traceId = r.traceId ?? '';
+    // Universe is intentionally NOT forwarded — the python op
+    // ``find_similar_patterns`` falls back to the full meta universe
+    // when ``universe`` is absent / empty (see services/py
+    // /quant_rpc/ops/pattern.py). Pattern matching is meaningful only
+    // against the broadest cohort, so we always run global.
     const args: Record<string, unknown> = {
       code: body.code,
       start_date: body.startDate,
       end_date: body.endDate,
-      universe: [...body.universe],
       lookback_days: body.lookbackDays,
       top_n: body.topN,
     };

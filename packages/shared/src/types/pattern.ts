@@ -14,8 +14,6 @@ export const PatternFindSimilarRequestSchema = z
     startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
     /** YYYY-MM-DD inclusive. */
     endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-    /** Universe to scan; empty = whole market (server-side cap applies). */
-    universe: z.array(z.string()).default([]),
     lookbackDays: z.number().int().positive().default(250),
     topN: z.number().int().positive().max(200).default(20),
   })

@@ -19,17 +19,13 @@ import { Feat } from '../../lib/eqty/feat.js';
 import { findSimilarPatterns } from '../../lib/api/endpoints.js';
 import { useKline } from '../../lib/hooks/use-eqty-data.js';
 import { useLayoutStore } from '../../lib/stores/layout.store.js';
-import { useSectorsStore } from '../../lib/stores/sectors.store.js';
-import { ALL_SECTOR_ID, useUiStore } from '../../lib/stores/ui.store.js';
+import { useUiStore } from '../../lib/stores/ui.store.js';
 import { FeatView } from "../feat-view/feat-view.js";
 import { FeatViewAction, FeatViewHeaderRight, FeatViewStatus } from "../feat-view/feat-view-header.js";
 
 export function FeatScrPat(): React.ReactElement {
   const range = useUiStore((s) => s.chartRange);
   const setChartRange = useUiStore((s) => s.setChartRange);
-  const activeSectorId = useUiStore((s) => s.activeSectorId);
-  const sectors = useSectorsStore((s) => s.sectors);
-  const sector = sectors.find((s) => s.id === activeSectorId) ?? null;
 
   // When the user selects a range on E-0 we expand this pane out of the
   // minimized state so FIND is visible and clickable without an extra
@@ -42,18 +38,17 @@ export function FeatScrPat(): React.ReactElement {
     }
   }, [range, featViewMode, setFeatViewMode]);
 
-  const universe: readonly string[] =
-    activeSectorId === ALL_SECTOR_ID || sector === null ? [] : sector.codes;
-
+  // Pattern match always runs against the full universe — narrowing to
+  // a sector loses the population needed for DTW similarity to be
+  // meaningful, so the request payload no longer carries `universe`.
   const mutation = useMutation<PatternFindSimilarResponse, Error, void>({
-    mutationKey: ['pattern.find_similar', range, universe],
+    mutationKey: ['pattern.find_similar', range],
     mutationFn: async (): Promise<PatternFindSimilarResponse> => {
       if (range === null) throw new Error('no chart range selected');
       return findSimilarPatterns({
         code: range.code,
         startDate: range.startDate,
         endDate: range.endDate,
-        universe: [...universe],
         lookbackDays: 250,
         topN: 20,
       });
