@@ -15,8 +15,13 @@
  * Body carries the wall clock and additional debug info.
  */
 
-import { Box, Button, Flex, Text } from '@chakra-ui/react';
-import { ScanResultSchema, type QueueSnapshotEntry, type ScanResult } from '@quant/shared';
+import { Box, Flex, Text } from '@chakra-ui/react';
+import {
+  ScanResultSchema,
+  type QueueSnapshotEntry,
+  type ScanKind,
+  type ScanResult,
+} from '@quant/shared';
 import { useEffect, useState } from 'react';
 
 import { Feat } from '../../lib/eqty/feat.js';
@@ -26,7 +31,8 @@ import { Pane } from './pane.js';
 export function Footer(): React.ReactElement {
   const stream = useQueueStream();
   const now = useClock();
-  const scan = useManualScan();
+  const metaScan = useManualScan('meta');
+  const klineScan = useManualScan('kline');
 
   const sseColor =
     stream.status === 'open' ? 'term.green' : stream.status === 'error' ? 'term.red' : 'term.amber';
@@ -51,31 +57,8 @@ export function Footer(): React.ReactElement {
               ●
             </Text>
           </Capsule>
-          <QueueCapsule code="meta" queue={meta} />
-          <QueueCapsule code="kline" queue={kline} />
-          <Button
-            onClick={(): void => {
-              scan.run();
-            }}
-            loading={scan.pending}
-            disabled={scan.pending}
-            bg="transparent"
-            color="term.green"
-            borderWidth="1px"
-            borderColor="term.green"
-            h="auto"
-            px="8px"
-            py="2px"
-            fontFamily="mono"
-            fontSize="9px"
-            letterSpacing="0.18em"
-            fontWeight="700"
-            borderRadius="0"
-            _hover={{ bg: 'term.green', color: 'term.panel' }}
-            title="trigger meta+kline scan now"
-          >
-            ⟳ SCAN
-          </Button>
+          <QueueCapsule code="meta" queue={meta} scan={metaScan} />
+          <QueueCapsule code="kline" queue={kline} scan={klineScan} />
         </Flex>
       }
     >
@@ -92,14 +75,8 @@ export function Footer(): React.ReactElement {
         <Flex gap="14px" align="center" wrap="wrap">
           <Text color="term.ink3">$ status --watch</Text>
           <Text color="term.ink2">{now}</Text>
-          {scan.last !== null && (
-            <Text color="term.ink3">
-              // last scan {scan.last.startedAt.slice(11, 19)} · meta+
-              {String(scan.last.metaEnqueued)} kline+{String(scan.last.klineEnqueued)} ·{' '}
-              {String(scan.last.elapsedMs)}ms
-            </Text>
-          )}
-          {scan.error !== null && <Text color="term.red">// scan: {scan.error}</Text>}
+          <ScanReadout label="meta" scan={metaScan} />
+          <ScanReadout label="kline" scan={klineScan} />
           <Text as="span" className="blink" color="term.green">
             ▌
           </Text>
@@ -128,21 +105,75 @@ function Capsule({ code, children }: CapsuleProps): React.ReactElement {
 function QueueCapsule({
   code,
   queue,
+  scan,
 }: {
   code: string;
   queue: QueueSnapshotEntry | null;
-}): React.ReactElement | null {
-  if (queue === null) return null;
-  // Hide queue capsules when there's nothing in flight or pending —
-  // keeps the header quiet when the system is idle.
-  if (queue.inFlight === 0 && queue.pending === 0) return null;
-  const color = queue.paused ? 'term.amber' : 'term.red';
+  scan: ManualScan;
+}): React.ReactElement {
+  // The capsule label is itself the trigger — click `META` / `KLINE`
+  // to fire that kind's scan. Renders a dim "·" when the queue has no
+  // pending/in-flight work, the live counter otherwise.
+  const idle = queue === null || (queue.inFlight === 0 && queue.pending === 0);
+  const counterColor =
+    queue === null ? 'term.ink3' : queue.paused ? 'term.amber' : 'term.red';
+  const labelColor = scan.pending ? 'term.amber' : 'term.green';
   return (
-    <Capsule code={code}>
-      <Text as="span" color={color} fontWeight="700">
-        {String(queue.inFlight)}/{String(queue.pending)}
+    <Flex
+      as="button"
+      onClick={(): void => {
+        scan.run();
+      }}
+      align="center"
+      gap="5px"
+      whiteSpace="nowrap"
+      bg="transparent"
+      cursor={scan.pending ? 'wait' : 'pointer'}
+      opacity={scan.pending ? 0.6 : 1}
+      _hover={scan.pending ? {} : { color: 'term.green' }}
+      title={`trigger ${code} scan now`}
+    >
+      <Text color={labelColor} fontWeight="700" letterSpacing="0.18em">
+        {code}
       </Text>
-    </Capsule>
+      {idle ? (
+        <Text as="span" color="term.ink3">
+          ·
+        </Text>
+      ) : (
+        <Text as="span" color={counterColor} fontWeight="700">
+          {String(queue?.inFlight ?? 0)}/{String(queue?.pending ?? 0)}
+        </Text>
+      )}
+    </Flex>
+  );
+}
+
+function ScanReadout({
+  label,
+  scan,
+}: {
+  label: string;
+  scan: ManualScan;
+}): React.ReactElement | null {
+  if (scan.pending) {
+    return <Text color="term.amber">// {label}: scanning…</Text>;
+  }
+  if (scan.error !== null) {
+    return (
+      <Text color="term.red">
+        // {label}: {scan.error}
+      </Text>
+    );
+  }
+  if (scan.last === null) return null;
+  const enqueued =
+    label === 'meta' ? scan.last.metaEnqueued : scan.last.klineEnqueued;
+  return (
+    <Text color="term.ink3">
+      // {label}: {scan.last.startedAt.slice(11, 19)} +{String(enqueued)} ·{' '}
+      {String(scan.last.elapsedMs)}ms
+    </Text>
   );
 }
 
@@ -153,7 +184,7 @@ interface ManualScan {
   readonly error: string | null;
 }
 
-function useManualScan(): ManualScan {
+function useManualScan(kind: ScanKind): ManualScan {
   const [pending, setPending] = useState(false);
   const [last, setLast] = useState<ScanResult | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -161,7 +192,7 @@ function useManualScan(): ManualScan {
     if (pending) return;
     setPending(true);
     setError(null);
-    fetch('/api/orchestration/scan', { method: 'POST' })
+    fetch(`/api/orchestration/scan?kind=${kind}`, { method: 'POST' })
       .then(async (r) => {
         const raw: unknown = await r.json();
         if (!r.ok) throw new Error(`HTTP ${String(r.status)}`);

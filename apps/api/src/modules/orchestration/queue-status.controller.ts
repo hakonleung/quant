@@ -12,9 +12,17 @@
  * the orchestration module owns.
  */
 
-import { Controller, Get, Inject, Post, Sse } from '@nestjs/common';
-import type { QueueSnapshot, QueueSnapshotEntry, ScanResult } from '@quant/shared';
+import { Controller, Get, Inject, Post, Query, Sse } from '@nestjs/common';
+import {
+  ScanKindSchema,
+  type QueueSnapshot,
+  type QueueSnapshotEntry,
+  type ScanKind,
+  type ScanResult,
+} from '@quant/shared';
 import { Observable, interval, map, startWith } from 'rxjs';
+
+import { ZodValidationPipe } from '../../common/zod-pipe.js';
 
 import { CronOrchestrator } from './cron.orchestrator.js';
 import type { InMemoryQueue } from './domain/in-memory-queue.js';
@@ -49,13 +57,17 @@ export class QueueStatusController {
   }
 
   /**
-   * Manual trigger for the meta+kline scan. Coalesces with any
-   * in-flight scheduled scan via {@link CronOrchestrator.triggerScan},
-   * so spam-clicking from the UI cannot stampede the inspector.
+   * Manual trigger for the meta and/or kline scan. Coalesces per-kind
+   * via {@link CronOrchestrator.triggerScan}, so spam-clicking from
+   * the UI cannot stampede the inspector. `?kind=meta|kline` runs only
+   * that side; default `'all'` runs both in parallel.
    */
   @Post('scan')
-  async manualScan(): Promise<ScanResult> {
-    return this.cron.triggerScan();
+  async manualScan(
+    @Query('kind', new ZodValidationPipe(ScanKindSchema.default('all')))
+    kind: ScanKind,
+  ): Promise<ScanResult> {
+    return this.cron.triggerScan(kind);
   }
 
   private makeSnapshot(): QueueSnapshot {

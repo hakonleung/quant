@@ -20,7 +20,7 @@
  */
 
 import { Inject, Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
-import { newTraceId, type ScanResult } from '@quant/shared';
+import { newTraceId, type ScanKind, type ScanResult } from '@quant/shared';
 import { CacheInspector } from './cache-inspector.js';
 import { KLINE_QUEUE, META_QUEUE } from './flight.token.js';
 import type { InMemoryQueue } from './domain/in-memory-queue.js';
@@ -66,7 +66,10 @@ export function msUntilNextBjt1515(now: number = Date.now()): number {
 export class CronOrchestrator implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(CronOrchestrator.name);
   private timer: NodeJS.Timeout | null = null;
-  private inFlight: Promise<ScanResult> | null = null;
+  // Per-kind coalescing — meta and kline can run concurrently (they hit
+  // independent queues + workers), but two manual meta clicks share one
+  // inspector call. `'all'` reuses both per-kind slots.
+  private inFlight: Partial<Record<ScanKind, Promise<ScanResult>>> = {};
   private destroyed = false;
 
   constructor(
@@ -86,16 +89,16 @@ export class CronOrchestrator implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * Run a scan, coalescing with any in-flight one. Safe to invoke from
-   * the daily timer, the bootstrap hook, or the manual-trigger HTTP
-   * endpoint without risking parallel inspector calls.
+   * Run a scan of the given kind, coalescing with any in-flight one of
+   * the same kind. `'all'` runs both meta and kline in parallel.
    */
-  triggerScan(): Promise<ScanResult> {
-    if (this.inFlight !== null) return this.inFlight;
-    const p = this.scan().finally(() => {
-      this.inFlight = null;
+  triggerScan(kind: ScanKind): Promise<ScanResult> {
+    const existing = this.inFlight[kind];
+    if (existing !== undefined) return existing;
+    const p = this.scan(kind).finally(() => {
+      delete this.inFlight[kind];
     });
-    this.inFlight = p;
+    this.inFlight[kind] = p;
     return p;
   }
 
@@ -104,7 +107,7 @@ export class CronOrchestrator implements OnModuleInit, OnModuleDestroy {
     const delay = msUntilNextBjt1515();
     this.logger.log(`next_daily_scan_in_ms=${String(delay)}`);
     this.timer = setTimeout(() => {
-      void this.triggerScan()
+      void this.triggerScan('all')
         .catch((err: unknown) => {
           this.logScanFailure('daily', err);
         })
@@ -114,29 +117,21 @@ export class CronOrchestrator implements OnModuleInit, OnModuleDestroy {
     }, delay);
   }
 
-  private async scan(): Promise<ScanResult> {
+  private async scan(kind: ScanKind): Promise<ScanResult> {
     const traceId = newTraceId();
     const startedAt = new Date().toISOString();
     const t0 = Date.now();
+    const wantMeta = kind === 'meta' || kind === 'all';
+    const wantKline = kind === 'kline' || kind === 'all';
     let metaEnqueued = 0;
     let klineEnqueued = 0;
     try {
-      const [incomplete, stale] = await Promise.all([
-        this.inspector.findIncompleteMeta(traceId),
-        this.inspector.findStaleKline(traceId),
+      const [meta, kline] = await Promise.all([
+        wantMeta ? this.scanMeta(traceId) : Promise.resolve(0),
+        wantKline ? this.scanKline(traceId) : Promise.resolve(0),
       ]);
-      metaEnqueued = this.metaQueue.addBulk(
-        incomplete.map((code) => ({
-          data: { kind: 'enrich' as const, code, traceId },
-          options: { id: `enrich:${code}` },
-        })),
-      );
-      klineEnqueued = this.klineQueue.addBulk(
-        stale.map((code) => ({
-          data: { kind: 'sync' as const, code, traceId },
-          options: { id: `sync:${code}` },
-        })),
-      );
+      metaEnqueued = meta;
+      klineEnqueued = kline;
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       // ECONNREFUSED on the Flight port is a benign dev-time signal —
@@ -151,6 +146,7 @@ export class CronOrchestrator implements OnModuleInit, OnModuleDestroy {
         this.logger.error(`inspector failed traceId=${traceId} err=${msg}`);
       }
       return {
+        kind,
         traceId,
         startedAt,
         elapsedMs: Date.now() - t0,
@@ -160,9 +156,29 @@ export class CronOrchestrator implements OnModuleInit, OnModuleDestroy {
     }
     const elapsedMs = Date.now() - t0;
     this.logger.log(
-      `cron_scan_done traceId=${traceId} meta_enqueued=${String(metaEnqueued)} kline_enqueued=${String(klineEnqueued)} elapsedMs=${String(elapsedMs)}`,
+      `cron_scan_done kind=${kind} traceId=${traceId} meta_enqueued=${String(metaEnqueued)} kline_enqueued=${String(klineEnqueued)} elapsedMs=${String(elapsedMs)}`,
     );
-    return { traceId, startedAt, elapsedMs, metaEnqueued, klineEnqueued };
+    return { kind, traceId, startedAt, elapsedMs, metaEnqueued, klineEnqueued };
+  }
+
+  private async scanMeta(traceId: string): Promise<number> {
+    const incomplete = await this.inspector.findIncompleteMeta(traceId);
+    return this.metaQueue.addBulk(
+      incomplete.map((code) => ({
+        data: { kind: 'enrich' as const, code, traceId },
+        options: { id: `enrich:${code}` },
+      })),
+    );
+  }
+
+  private async scanKline(traceId: string): Promise<number> {
+    const stale = await this.inspector.findStaleKline(traceId);
+    return this.klineQueue.addBulk(
+      stale.map((code) => ({
+        data: { kind: 'sync' as const, code, traceId },
+        options: { id: `sync:${code}` },
+      })),
+    );
   }
 
   private logScanFailure(phase: 'daily' | 'manual', err: unknown): void {
