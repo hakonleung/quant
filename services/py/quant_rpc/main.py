@@ -52,6 +52,7 @@ from quant_rpc.ops.sentiment import (
     GetCachedMarketSentimentHandler,
     GetCachedStockSentimentHandler,
 )
+from quant_rpc.ops.stock_snapshot import ListStockSnapshotsHandler
 from quant_rpc.ops.stock_meta import (
     GetStockMetaBatchHandler,
     ListAllHandler,
@@ -148,6 +149,7 @@ def main() -> int:
     registry.register(GetStockMetaBatchHandler(meta_service))
     registry.register(ListByIndustryHandler(meta_service))
     registry.register(ListAllHandler(meta_service))
+    registry.register(ListStockSnapshotsHandler(meta_service, kline_service))
     registry.register(CheckSourcesHandler(sync_service))
     registry.register(SyncFullHandler(sync_service))
     registry.register(EnrichOneHandler(sync_service))

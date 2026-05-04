@@ -4,6 +4,7 @@
  *   GET /api/stocks/:code              → StockMetaDto                | 404 if not found
  *   GET /api/stocks/batch?codes=a,b    → StockMetaDto[]              | sorted as input
  *   GET /api/stocks/by-industry?sw_l2= → StockMetaDto[]              | sorted by code
+ *   GET /api/stocks/snapshots?codes=…  → StockSnapshotDto[]          | sorted as input
  *
  * Search-by-name lands later (depends on a Python pinyin index — see
  * modules/01-stock-meta.md §6.1).
@@ -15,7 +16,7 @@
 
 import { Controller, Get, Inject, Param, Query, Req } from '@nestjs/common';
 import type { Request } from 'express';
-import type { StockMetaDto } from '@quant/shared';
+import type { StockMetaDto, StockSnapshotDto } from '@quant/shared';
 import { ZodValidationPipe } from '../../common/zod-pipe.js';
 import type { RequestWithTraceId } from '../../common/trace.middleware.js';
 import { GetBatchQuerySchema, type GetBatchQuery } from './dto/get-batch.dto.js';
@@ -24,6 +25,8 @@ import { StockMetaService } from './stock-meta.service.js';
 
 const getBatchPipe = new ZodValidationPipe(GetBatchQuerySchema);
 const listByIndustryPipe = new ZodValidationPipe(ListByIndustryQuerySchema);
+// Snapshot accepts the same `?codes=` shape as /batch — re-use the schema.
+const snapshotsPipe = new ZodValidationPipe(GetBatchQuerySchema);
 
 @Controller('stocks')
 export class StockMetaController {
@@ -49,6 +52,14 @@ export class StockMetaController {
     @Query(listByIndustryPipe) query: ListByIndustryQuery,
   ): Promise<readonly StockMetaDto[]> {
     return this.service.listByIndustry(query.sw_l2, traceId(req));
+  }
+
+  @Get('snapshots')
+  async listSnapshots(
+    @Req() req: Request,
+    @Query(snapshotsPipe) query: GetBatchQuery,
+  ): Promise<readonly StockSnapshotDto[]> {
+    return this.service.listSnapshots(query.codes, traceId(req));
   }
 
   @Get(':code')

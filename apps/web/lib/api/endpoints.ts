@@ -14,6 +14,7 @@ import {
   PatternFindSimilarResponseSchema,
   SentimentSchema,
   StockMetaDtoSchema,
+  StockSnapshotDtoSchema,
   type KlineBar,
   type MarketSentiment,
   type NlScreenResult,
@@ -21,6 +22,7 @@ import {
   type PatternFindSimilarResponse,
   type Sentiment,
   type StockMetaDto,
+  type StockSnapshotDto,
 } from '@quant/shared';
 import { z } from 'zod';
 
@@ -66,6 +68,21 @@ export async function listKlineBulk(
   } catch {
     return {};
   }
+}
+
+/**
+ * meta + price-derived metrics for the given codes. Empty `codes` short-
+ * circuits to `[]` without hitting the network — the snapshot endpoint
+ * does not support full-universe expansion (would issue 5500 kline
+ * lookups). Caller is responsible for keeping the list sized to the
+ * visible viewport.
+ */
+export async function listStockSnapshots(
+  codes: readonly string[],
+): Promise<readonly StockSnapshotDto[]> {
+  if (codes.length === 0) return [];
+  const q = codes.map(encodeURIComponent).join(',');
+  return safeList(`/api/stocks/snapshots?codes=${q}`, StockSnapshotDtoSchema);
 }
 
 /**

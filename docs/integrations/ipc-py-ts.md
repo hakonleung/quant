@@ -9,7 +9,7 @@
 | 场景                                     | 通道                  | 编码                         |
 | ---------------------------------------- | --------------------- | ---------------------------- |
 | 短控制调用（< 1MB 结果）                 | gRPC unary            | protobuf                     |
-| 大数据集查询（K 线、新闻列表、筛选结果） | Arrow Flight DoGet    | Arrow IPC（列存零拷贝）      |
+| 大数据集查询（K 线、新闻列表、筛选结果、stock 派生 snapshot） | Arrow Flight DoGet    | Arrow IPC（列存零拷贝）      |
 | 客户端推数据（少见）                     | Arrow Flight DoPut    | Arrow IPC                    |
 | 长任务进度流                             | gRPC server-streaming | protobuf（小消息，不传数据） |
 | NestJS → Web                             | HTTP/JSON / SSE       | JSON                         |

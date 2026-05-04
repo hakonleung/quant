@@ -5,7 +5,7 @@
  * §2.5.1) means it stays IO-free at the type level.
  */
 
-import type { StockMetaDto } from '@quant/shared';
+import type { StockMetaDto, StockSnapshotDto } from '@quant/shared';
 
 export const STOCK_META_PORT = Symbol('STOCK_META_PORT');
 
@@ -32,4 +32,15 @@ export interface StockMetaPort {
    * A-share); the controller serves the whole list in one response.
    */
   listAll(traceId: string): Promise<readonly StockMetaDto[]>;
+
+  /**
+   * Snapshot view (meta + latest close + price-derived metrics) for the
+   * given codes. Returns rows in input order; codes without a meta
+   * record are dropped (matching `getBatch`); codes whose kline cache
+   * is empty come back with `price: null` and every derived field null.
+   */
+  listSnapshots(
+    codes: readonly string[],
+    traceId: string,
+  ): Promise<readonly StockSnapshotDto[]>;
 }

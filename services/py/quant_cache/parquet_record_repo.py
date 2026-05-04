@@ -119,12 +119,21 @@ class ParquetRecordRepo(Generic[T]):
             raise CacheCorrupted(
                 f"failed to read parquet: {self._path}", {"path": str(self._path)}
             ) from exc
-        if table.schema != self._schema:
+        if table.schema == self._schema:
+            return table
+        # Forward-compatible read: if the on-disk file is missing columns
+        # the codec gained later, project the absent columns as null
+        # arrays of the expected type so the codec's `from_row` can keep
+        # consuming the row dict. Type / column-set mismatches that go
+        # the other way (extra columns, type drift) still trip cache-
+        # corruption — those are real schema regressions.
+        try:
+            return _project_to_schema(table, self._schema)
+        except _SchemaMismatchError as exc:
             raise CacheCorrupted(
-                f"parquet schema mismatch: {self._path}",
+                f"parquet schema mismatch: {self._path} ({exc})",
                 {"path": str(self._path)},
-            )
-        return table
+            ) from exc
 
     def _write_table(self, table: pa.Table) -> None:
         try:
@@ -348,3 +357,38 @@ def _or_all(parts: list[_Expr]) -> _Expr:
     for p in parts[1:]:
         expr = expr | p
     return expr
+
+
+class _SchemaMismatchError(Exception):
+    """Raised when a parquet table cannot be reshaped to the expected schema."""
+
+
+def _project_to_schema(table: pa.Table, target: pa.Schema) -> pa.Table:
+    """Add nullable columns missing from ``table`` so it conforms to ``target``.
+
+    Used by :meth:`ParquetRecordRepo._read_table` to keep older parquet
+    files readable after a schema bump that only **added** columns. Any
+    other kind of drift — extra columns the codec doesn't know, or a
+    type change on a shared column — raises :class:`_SchemaMismatchError`,
+    which the caller surfaces as cache corruption.
+    """
+    on_disk_fields = {field.name: field for field in table.schema}
+    extra = set(on_disk_fields) - {f.name for f in target}
+    if extra:
+        raise _SchemaMismatchError(f"unexpected columns on disk: {sorted(extra)}")
+    n = table.num_rows
+    columns: list[pa.Array | pa.ChunkedArray] = []
+    names: list[str] = []
+    for field in target:
+        on_disk = on_disk_fields.get(field.name)
+        if on_disk is None:
+            columns.append(pa.nulls(n, type=field.type))
+            names.append(field.name)
+            continue
+        if on_disk.type != field.type:
+            raise _SchemaMismatchError(
+                f"column {field.name!r} type {on_disk.type} != expected {field.type}"
+            )
+        columns.append(table[field.name])
+        names.append(field.name)
+    return pa.Table.from_arrays(columns, names=names).cast(target)
