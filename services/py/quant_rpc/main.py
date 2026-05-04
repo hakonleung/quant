@@ -36,6 +36,7 @@ from quant_core.services.source_chain import SourceChain
 from quant_core.services.stock_meta_service import StockMetaService
 from quant_core.services.stock_meta_sync_service import StockMetaSyncService
 from quant_core.services.financials_service import FinancialsService
+from quant_core.services.watch_quote_service import WatchQuoteService
 from quant_core.services.universe_screen_service import UniverseScreenService
 from quant_io.llm.providers import build_llm_client
 from quant_io.sources.akshare_financials import (
@@ -44,6 +45,7 @@ from quant_io.sources.akshare_financials import (
 )
 from quant_io.sources.akshare_kline import AKShareKlineSource
 from quant_io.sources.akshare_stock_meta import AKShareStockMetaSource
+from quant_io.sources.akshare_watch import AKShareWatchSource
 
 from quant_rpc.handlers import HandlerRegistry
 from quant_rpc.ops.kline import ListKlineWatermarksHandler, SyncKlineForCodeHandler
@@ -63,6 +65,7 @@ from quant_rpc.ops.financials import (
     FindStaleFinancialsHandler,
 )
 from quant_rpc.ops.stock_snapshot import ListStockSnapshotsHandler
+from quant_rpc.ops.watch import WatchQuoteOneHandler, WatchUniverseRefreshHandler
 from quant_rpc.ops.stock_meta import (
     GetStockMetaBatchHandler,
     ListAllHandler,
@@ -180,6 +183,11 @@ def main() -> int:
     registry.register(AnalyzeOneStockSentimentHandler(sentiment_service))
     registry.register(GetCachedMarketSentimentHandler(sentiment_cache, clock))
     registry.register(AnalyzeManyStockSentimentHandler(sentiment_service))
+    watch_source = AKShareWatchSource()
+    watch_service = WatchQuoteService(quotes=watch_source, universe=watch_source)
+    registry.register(WatchQuoteOneHandler(watch_service))
+    registry.register(WatchUniverseRefreshHandler(watch_service))
+
     pattern_engine = DTWPatternEngine(kline_repo)
     pattern_service = PatternService(kline_repo, pattern_engine)
     registry.register(FindSimilarPatternsHandler(pattern_service, meta_repo, clock))

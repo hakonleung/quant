@@ -28,6 +28,9 @@ export const Feat = {
   // S: system
   Status: 'S-0',
   Notif: 'S-1',
+
+  // W: watch
+  Watch: 'W-0',
 } as const;
 
 export type Feat = (typeof Feat)[keyof typeof Feat];
@@ -61,6 +64,12 @@ export const FEAT_CONFIG_MAP: Readonly<Record<Feat, FeatConfig>> = {
   [Feat.Notif]: {
     title: () => 'slack',
     gridArea: 'R2',
+    cyber: true,
+    defaultMinimized: true,
+  },
+  [Feat.Watch]: {
+    title: () => 'watch',
+    gridArea: 'R3',
     cyber: true,
     defaultMinimized: true,
   },
