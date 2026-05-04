@@ -21,7 +21,7 @@ if TYPE_CHECKING:
     from decimal import Decimal
 
 
-SCHEMA_VERSION: Final[int] = 2
+SCHEMA_VERSION: Final[int] = 3
 """Bump on any breaking change to the dataclasses below; the cache adapter
 treats older payloads as expired."""
 
@@ -91,7 +91,7 @@ class Insight:
     direction: Direction
     confidence: float
     is_rumor: bool
-    evidence: tuple[Evidence, ...]
+    evidence: tuple[Evidence, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -105,7 +105,7 @@ class ThemeTag:
     label: str
     relevance: float
     rationale: str
-    evidence: tuple[Evidence, ...]
+    evidence: tuple[Evidence, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -125,7 +125,7 @@ class PriceSignal:
     product: str
     change: PriceChange
     horizon: PriceHorizon
-    evidence: tuple[Evidence, ...]
+    evidence: tuple[Evidence, ...] = ()
     magnitude: str | None = None
 
 
@@ -156,7 +156,7 @@ class CompetitorInfo:
     threat_level: ThreatLevel
     note: str
     """One-sentence description of overlap, technical gap, customer share."""
-    evidence: tuple[Evidence, ...]
+    evidence: tuple[Evidence, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -170,10 +170,10 @@ class CompetitiveLandscape:
 
     market_position: MarketPosition
     summary: str
-    competitors: tuple[CompetitorInfo, ...]
-    moats: tuple[str, ...]
-    risks: tuple[str, ...]
-    evidence: tuple[Evidence, ...]
+    competitors: tuple[CompetitorInfo, ...] = ()
+    moats: tuple[str, ...] = ()
+    risks: tuple[str, ...] = ()
+    evidence: tuple[Evidence, ...] = ()
     market_share_pct: float | None = None
 
 
@@ -191,6 +191,14 @@ class StockSentiment:
     """Overall sentiment score in ``[-1.0, 1.0]``."""
     fetched_at: datetime
     schema_version: int = SCHEMA_VERSION
+    result: str = ""
+    """Raw plain-text analyst write-up returned by the web-search LLM step.
+
+    Step-1 of the analyze_one pipeline asks the search-enabled LLM for a
+    free-form analysis; the verbatim reply is stored here. The structured
+    fields below are produced by a second flash-model summarisation pass
+    over this same text — so ``result`` is the source of truth and the
+    other fields are derived views."""
     core_drivers: tuple[Insight, ...] = ()
     m_and_a: tuple[Insight, ...] = ()
     hot_themes: tuple[ThemeTag, ...] = ()

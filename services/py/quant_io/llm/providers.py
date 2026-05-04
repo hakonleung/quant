@@ -23,7 +23,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Final
+from typing import TYPE_CHECKING, Final, Literal
 
 from quant_core.errors import QuantError
 
@@ -31,6 +31,16 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
     from quant_io.llm.openai_compatible import OpenAiCompatibleLlmClient
+
+
+WebSearchKind = Literal["moonshot_tool", "dashscope_extra_body"]
+"""How the provider exposes web search:
+
+* ``moonshot_tool``: Kimi-style ``$web_search`` builtin_function tool loop.
+* ``dashscope_extra_body``: DashScope (Qwen) — single chat call with
+  ``extra_body={"enable_search": True}``; the platform folds search results
+  into the assistant reply transparently.
+"""
 
 
 @dataclass(frozen=True, slots=True)
@@ -52,9 +62,21 @@ class LlmProviderConfig:
     model_flash: str | None = None
     """Cheap / fast model — optional. When unset, the provider is
     skipped under ``use_flash=True``."""
+    web_search_kind: WebSearchKind = "moonshot_tool"
+    """Which on-the-wire web-search protocol the adapter should drive when
+    ``is_pro_web_search=True``. Ignored when web search is not requested."""
 
 
 LLM_PROVIDERS: Final[tuple[LlmProviderConfig, ...]] = (
+    LlmProviderConfig(
+        provider="dashscope",
+        model_pro="qwen-plus",
+        model_flash="qwen-turbo",
+        is_pro_web_search=True,
+        web_search_kind="dashscope_extra_body",
+        base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
+        api_key_env="DASHSCOPE_API_KEY",
+    ),
     LlmProviderConfig(
         provider="deepseek",
         model_pro="deepseek-v4-pro",
@@ -67,6 +89,7 @@ LLM_PROVIDERS: Final[tuple[LlmProviderConfig, ...]] = (
         provider="moonshot",
         model_pro="kimi-k2.6",
         is_pro_web_search=True,
+        web_search_kind="moonshot_tool",
         base_url="https://api.moonshot.cn/v1",
         api_key_env="MOONSHOT_API_KEY",
     ),
@@ -145,4 +168,5 @@ def build_llm_client(
         base_url=cfg.base_url,
         model=model,
         api_key=api_key,
+        web_search_kind=cfg.web_search_kind,
     )

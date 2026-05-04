@@ -1,10 +1,10 @@
 """Unit tests for :class:`NewsSentimentService`.
 
-Covers the golden path (single stock, multi stock), boundary errors
-(empty codes, missing meta), the ``asof + 2 days`` cache reuse, and
-the LLM-output-validation retry. The Kimi web_search loop and the
-filesystem cache adapter are exercised through fakes; their wiring is
-tested in their own modules.
+Covers the two-step single-stock pipeline (web-search analyst pass +
+flash summariser), the multi-stock fan-out + cluster/synth aggregation,
+boundary errors, the ``asof + 2 days`` cache reuse, and the LLM-output
+retry. The web-search and aggregator clients are exercised through fakes;
+their wiring is tested in their own modules.
 """
 
 from __future__ import annotations
@@ -60,7 +60,7 @@ class _FakeMetaRepo:
 
 
 class _ScriptedSearchLLM:
-    """Returns successive canned JSON strings from ``responses``.
+    """Returns successive plain-text analyst replies from ``responses``.
 
     Each call to ``complete_with_web_search`` pops one item; the call
     arguments are stashed on ``calls`` for assertions. If the script is
@@ -100,6 +100,10 @@ class _ScriptedAggregatorLLM:
 # -- prompt fixtures ---------------------------------------------------------
 
 
+_RESEARCH_TEXT_MAOTAI = "贵州茅台（600519）研究纪要：高端白酒动销改善，批价稳定。"
+_RESEARCH_TEXT_WULIANGYE = "五粮液（000858）研究纪要：跟随茅台上涨。"
+
+
 def _maotai_payload(score: float = 0.6) -> dict[str, object]:
     return {
         "core_drivers": [
@@ -108,14 +112,6 @@ def _maotai_payload(score: float = 0.6) -> dict[str, object]:
                 "direction": "positive",
                 "confidence": 0.7,
                 "is_rumor": False,
-                "evidence": [
-                    {
-                        "source_type": "research",
-                        "quoted_text": "渠道反馈批价企稳",
-                        "url": "https://example.com/r/1",
-                        "published_at": "2026-04-30",
-                    }
-                ],
             }
         ],
         "m_and_a": [],
@@ -124,13 +120,6 @@ def _maotai_payload(score: float = 0.6) -> dict[str, object]:
                 "label": "高端白酒",
                 "relevance": 0.9,
                 "rationale": "茅台是核心标的",
-                "evidence": [
-                    {
-                        "source_type": "news",
-                        "quoted_text": "茅台领涨白酒板块",
-                        "url": "https://example.com/n/1",
-                    }
-                ],
             }
         ],
         "core_products": [
@@ -142,13 +131,6 @@ def _maotai_payload(score: float = 0.6) -> dict[str, object]:
                 "change": "stable",
                 "horizon": "spot",
                 "magnitude": None,
-                "evidence": [
-                    {
-                        "source_type": "industry",
-                        "quoted_text": "批价稳定",
-                        "url": "https://example.com/i/1",
-                    }
-                ],
             }
         ],
         "supply_demand": [],
@@ -176,13 +158,6 @@ def _wuliangye_payload() -> dict[str, object]:
             "label": "高端白酒概念",
             "relevance": 0.85,
             "rationale": "五粮液同属高端白酒板块",
-            "evidence": [
-                {
-                    "source_type": "news",
-                    "quoted_text": "五粮液跟随茅台上涨",
-                    "url": "https://example.com/n/2",
-                }
-            ],
         }
     ]
     return payload
@@ -256,8 +231,11 @@ def service(
     cache: ParquetSentimentCache,
     meta_repo: _FakeMetaRepo,
 ) -> NewsSentimentService:
-    search = _ScriptedSearchLLM([json.dumps(_maotai_payload())])
+    search = _ScriptedSearchLLM([_RESEARCH_TEXT_MAOTAI])
+    # Aggregator script ordering for a single analyze_one call: 1× summarise.
+    # analyze_many would consume more (per-stock summarise + cluster + synth).
     agg = _ScriptedAggregatorLLM([
+        json.dumps(_maotai_payload()),
         json.dumps(_cluster_payload()),
         json.dumps(_market_payload()),
     ])
@@ -276,7 +254,7 @@ def service(
 
 @pytest.mark.unit
 class TestAnalyzeOne:
-    def test_golden_path_populates_seven_fields(
+    def test_golden_path_populates_structured_fields_and_result(
         self, service: NewsSentimentService
     ) -> None:
         result = service.analyze_one("600519", days=30, asof=_TODAY)
@@ -284,11 +262,14 @@ class TestAnalyzeOne:
         assert result.code == "600519"
         assert result.window_days == 30
         assert result.sentiment_score == pytest.approx(0.6)
+        # Step-1 plain-text reply preserved verbatim.
+        assert result.result == _RESEARCH_TEXT_MAOTAI
+        # Step-2 flash summariser populated structured fields without
+        # requiring evidence.
         assert len(result.core_drivers) == 1
-        assert result.core_drivers[0].evidence[0].url.startswith("https://")
+        assert result.core_drivers[0].evidence == ()
         assert result.hot_themes[0].label == "高端白酒"
         assert result.research_targets[0].broker == "中金"
-        # Decimal round-trip preserves the upside.
         assert str(result.research_targets[0].target_upside_pct) == "25.0"
 
     def test_unknown_code_raises_stock_not_found(
@@ -308,33 +289,36 @@ class TestAnalyzeOne:
         tmp_path: Path,
         meta_repo: _FakeMetaRepo,
     ) -> None:
-        # First call populates the cache.
         clock = FrozenClock(_NOW)
         cache = _build_cache(tmp_path, clock)
-        search1 = _ScriptedSearchLLM([json.dumps(_maotai_payload())])
+        search1 = _ScriptedSearchLLM([_RESEARCH_TEXT_MAOTAI])
+        agg1 = _ScriptedAggregatorLLM([json.dumps(_maotai_payload())])
         svc1 = NewsSentimentService(
             search_llm=search1,
-            aggregator_llm=_ScriptedAggregatorLLM(["{}"]),
+            aggregator_llm=agg1,
             cache=cache,
             meta_repo=meta_repo,
             clock=clock,
         )
         first = svc1.analyze_one("600519", days=30, asof=_TODAY)
         assert len(search1.calls) == 1
+        assert len(agg1.calls) == 1
 
-        # Second call (one day later) — must hit the cache, no LLM.
         clock.advance(seconds=24 * 3600)
-        search2 = _ScriptedSearchLLM([json.dumps(_maotai_payload(score=-0.99))])
+        search2 = _ScriptedSearchLLM(["unrelated"])
+        agg2 = _ScriptedAggregatorLLM([json.dumps(_maotai_payload(score=-0.99))])
         svc2 = NewsSentimentService(
             search_llm=search2,
-            aggregator_llm=_ScriptedAggregatorLLM(["{}"]),
+            aggregator_llm=agg2,
             cache=cache,
             meta_repo=meta_repo,
             clock=clock,
         )
         second = svc2.analyze_one("600519", days=30, asof=_TODAY)
-        assert search2.calls == []  # cache hit, search untouched
+        assert search2.calls == []
+        assert agg2.calls == []
         assert second.sentiment_score == first.sentiment_score
+        assert second.result == first.result
 
     def test_cache_expires_after_two_days(
         self,
@@ -343,13 +327,14 @@ class TestAnalyzeOne:
     ) -> None:
         clock = FrozenClock(_NOW)
         cache = _build_cache(tmp_path, clock)
-        search = _ScriptedSearchLLM([
+        search = _ScriptedSearchLLM([_RESEARCH_TEXT_MAOTAI])
+        agg = _ScriptedAggregatorLLM([
             json.dumps(_maotai_payload(score=0.6)),
             json.dumps(_maotai_payload(score=-0.2)),
         ])
         svc = NewsSentimentService(
             search_llm=search,
-            aggregator_llm=_ScriptedAggregatorLLM(["{}"]),
+            aggregator_llm=agg,
             cache=cache,
             meta_repo=meta_repo,
             clock=clock,
@@ -357,11 +342,11 @@ class TestAnalyzeOne:
         first = svc.analyze_one("600519", days=30, asof=_TODAY)
         assert first.sentiment_score == pytest.approx(0.6)
 
-        # Advance past the asof + 2 days boundary.
         clock.advance(seconds=2 * 24 * 3600)
         refreshed = svc.analyze_one("600519", days=30, asof=_TODAY)
         assert refreshed.sentiment_score == pytest.approx(-0.2)
         assert len(search.calls) == 2
+        assert len(agg.calls) == 2
 
     def test_bypass_cache_forces_re_query(
         self,
@@ -370,13 +355,14 @@ class TestAnalyzeOne:
     ) -> None:
         clock = FrozenClock(_NOW)
         cache = _build_cache(tmp_path, clock)
-        search = _ScriptedSearchLLM([
+        search = _ScriptedSearchLLM([_RESEARCH_TEXT_MAOTAI])
+        agg = _ScriptedAggregatorLLM([
             json.dumps(_maotai_payload(score=0.6)),
             json.dumps(_maotai_payload(score=0.1)),
         ])
         svc = NewsSentimentService(
             search_llm=search,
-            aggregator_llm=_ScriptedAggregatorLLM(["{}"]),
+            aggregator_llm=agg,
             cache=cache,
             meta_repo=meta_repo,
             clock=clock,
@@ -387,36 +373,44 @@ class TestAnalyzeOne:
         )
         assert refreshed.sentiment_score == pytest.approx(0.1)
         assert len(search.calls) == 2
+        assert len(agg.calls) == 2
 
-    def test_invalid_json_then_valid_passes_after_retry(
+    def test_invalid_summariser_json_then_valid_passes_after_retry(
         self,
         cache: ParquetSentimentCache,
         meta_repo: _FakeMetaRepo,
     ) -> None:
-        search = _ScriptedSearchLLM([
+        # Search returns valid analyst text once; aggregator emits garbage
+        # then valid JSON — the service must retry the summarise step
+        # without re-running the (expensive) web-search.
+        search = _ScriptedSearchLLM([_RESEARCH_TEXT_MAOTAI])
+        agg = _ScriptedAggregatorLLM([
             "not json at all",
             json.dumps(_maotai_payload()),
         ])
         svc = NewsSentimentService(
             search_llm=search,
-            aggregator_llm=_ScriptedAggregatorLLM(["{}"]),
+            aggregator_llm=agg,
             cache=cache,
             meta_repo=meta_repo,
             clock=FrozenClock(_NOW),
         )
         result = svc.analyze_one("600519", days=30, asof=_TODAY)
         assert result.code == "600519"
-        assert len(search.calls) == 2
+        assert result.result == _RESEARCH_TEXT_MAOTAI
+        assert len(search.calls) == 1
+        assert len(agg.calls) == 2
 
-    def test_two_consecutive_failures_raise_llm_failed(
+    def test_two_consecutive_summariser_failures_raise_llm_failed(
         self,
         cache: ParquetSentimentCache,
         meta_repo: _FakeMetaRepo,
     ) -> None:
-        search = _ScriptedSearchLLM(["garbage", "still garbage"])
+        search = _ScriptedSearchLLM([_RESEARCH_TEXT_MAOTAI])
+        agg = _ScriptedAggregatorLLM(["garbage", "still garbage"])
         svc = NewsSentimentService(
             search_llm=search,
-            aggregator_llm=_ScriptedAggregatorLLM(["{}"]),
+            aggregator_llm=agg,
             cache=cache,
             meta_repo=meta_repo,
             clock=FrozenClock(_NOW),
@@ -433,13 +427,15 @@ class TestAnalyzeMany:
         cache: ParquetSentimentCache,
         meta_repo: _FakeMetaRepo,
     ) -> None:
-        # Two-stock fan-out; each stock gets its own search response.
-        search = _ScriptedSearchLLM(
-            [json.dumps(_maotai_payload()), json.dumps(_wuliangye_payload())]
-        )
-        agg = _ScriptedAggregatorLLM(
-            [json.dumps(_cluster_payload()), json.dumps(_market_payload())]
-        )
+        # Each stock consumes 1 search + 1 aggregator (summarise);
+        # afterwards aggregator handles cluster + market_synth.
+        search = _ScriptedSearchLLM([_RESEARCH_TEXT_MAOTAI, _RESEARCH_TEXT_WULIANGYE])
+        agg = _ScriptedAggregatorLLM([
+            json.dumps(_maotai_payload()),
+            json.dumps(_wuliangye_payload()),
+            json.dumps(_cluster_payload()),
+            json.dumps(_market_payload()),
+        ])
         svc = NewsSentimentService(
             search_llm=search,
             aggregator_llm=agg,
@@ -470,10 +466,12 @@ class TestAnalyzeMany:
         cache: ParquetSentimentCache,
         meta_repo: _FakeMetaRepo,
     ) -> None:
-        search = _ScriptedSearchLLM([json.dumps(_maotai_payload())])
-        agg = _ScriptedAggregatorLLM(
-            [json.dumps(_cluster_payload()), json.dumps(_market_payload())]
-        )
+        search = _ScriptedSearchLLM([_RESEARCH_TEXT_MAOTAI])
+        agg = _ScriptedAggregatorLLM([
+            json.dumps(_maotai_payload()),
+            json.dumps(_cluster_payload()),
+            json.dumps(_market_payload()),
+        ])
         svc = NewsSentimentService(
             search_llm=search,
             aggregator_llm=agg,
@@ -494,11 +492,11 @@ class TestAnalyzeMany:
         cache: ParquetSentimentCache,
         meta_repo: _FakeMetaRepo,
     ) -> None:
-        # Repo lacks both codes; analyze_one will raise STOCK_NOT_FOUND
-        # for each, all per-stock work fails.
+        # Repo lacks every requested code; every analyze_one raises
+        # STOCK_NOT_FOUND, no per-stock payloads survive.
         empty_repo = _FakeMetaRepo([make_meta("999998")])
         svc = NewsSentimentService(
-            search_llm=_ScriptedSearchLLM(["{}"]),
+            search_llm=_ScriptedSearchLLM(["never read"]),
             aggregator_llm=_ScriptedAggregatorLLM(["{}"]),
             cache=cache,
             meta_repo=empty_repo,
@@ -514,12 +512,13 @@ class TestAnalyzeMany:
         cache: ParquetSentimentCache,
         meta_repo: _FakeMetaRepo,
     ) -> None:
-        search = _ScriptedSearchLLM(
-            [json.dumps(_maotai_payload()), json.dumps(_wuliangye_payload())]
-        )
-        agg = _ScriptedAggregatorLLM(
-            [json.dumps(_cluster_payload()), json.dumps(_market_payload())]
-        )
+        search = _ScriptedSearchLLM([_RESEARCH_TEXT_MAOTAI, _RESEARCH_TEXT_WULIANGYE])
+        agg = _ScriptedAggregatorLLM([
+            json.dumps(_maotai_payload()),
+            json.dumps(_wuliangye_payload()),
+            json.dumps(_cluster_payload()),
+            json.dumps(_market_payload()),
+        ])
         svc = NewsSentimentService(
             search_llm=search,
             aggregator_llm=agg,
@@ -533,7 +532,7 @@ class TestAnalyzeMany:
 
         # Reordered codes — same canonical key, must hit market cache and
         # not call any LLM.
-        search2 = _ScriptedSearchLLM([json.dumps(_maotai_payload(score=-0.9))])
+        search2 = _ScriptedSearchLLM(["unused"])
         agg2 = _ScriptedAggregatorLLM(["{}"])
         svc2 = NewsSentimentService(
             search_llm=search2,

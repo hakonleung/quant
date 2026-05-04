@@ -17,6 +17,8 @@ from quant_core.errors import QuantError
 if TYPE_CHECKING:
     from openai import OpenAI
 
+    from quant_io.llm.providers import WebSearchKind
+
 
 _DEFAULT_TIMEOUT_SEC: Final[float] = 60.0
 
@@ -24,7 +26,7 @@ _DEFAULT_TIMEOUT_SEC: Final[float] = 60.0
 class OpenAiCompatibleLlmClient:
     """JSON-output chat client for any OpenAI-compatible endpoint."""
 
-    __slots__ = ("_client", "_model", "_provider")
+    __slots__ = ("_client", "_model", "_provider", "_web_search_kind")
 
     def __init__(
         self,
@@ -35,9 +37,11 @@ class OpenAiCompatibleLlmClient:
         api_key: str,
         timeout_sec: float = _DEFAULT_TIMEOUT_SEC,
         client: OpenAI | None = None,
+        web_search_kind: WebSearchKind = "moonshot_tool",
     ) -> None:
         self._provider = provider_name
         self._model = model
+        self._web_search_kind = web_search_kind
         if client is not None:
             # Test override — caller wired a stub OpenAI-shaped client.
             self._client = client
@@ -65,17 +69,25 @@ class OpenAiCompatibleLlmClient:
         user: str,
         max_searches: int,
     ) -> str:
-        """Drive a Kimi ``$web_search`` tool loop and return the final reply.
+        """Run a single research turn against the configured web-search
+        backend and return the assistant's reply as plain text.
 
-        The tool surface is the Moonshot extension: the model receives a
-        ``builtin_function`` descriptor named ``$web_search``; whenever it
-        emits ``tool_calls`` we echo those calls back as ``role="tool"``
-        messages whose content is the verbatim ``arguments`` string (the
-        platform performs the search server-side and folds the result into
-        the next assistant turn). We stop when ``finish_reason="stop"``
-        or when ``max_searches`` is exhausted — in the latter case the
-        loop runs one more turn with a stop directive so the model wraps
-        up its analysis on what it already has.
+        Two backends are supported, selected by ``web_search_kind`` at
+        construction time:
+
+        * ``moonshot_tool`` — Kimi ``$web_search`` builtin_function tool
+          loop. The model emits ``tool_calls``; we echo them back as
+          ``role="tool"`` messages whose content is the verbatim
+          ``arguments`` string (Moonshot performs the search server-side
+          and folds results into the next assistant turn). Loop stops on
+          ``finish_reason="stop"`` or when ``max_searches`` is exhausted.
+        * ``dashscope_extra_body`` — DashScope (Qwen) single chat call
+          with ``extra_body={"enable_search": True}``; the platform
+          handles search transparently. ``max_searches`` is ignored on
+          this path (DashScope does not expose a per-call budget).
+
+        The reply is *plain analyst text*, not JSON — caller is expected
+        to feed it through a downstream summariser.
         """
         if max_searches <= 0:
             raise QuantError(
@@ -83,6 +95,45 @@ class OpenAiCompatibleLlmClient:
                 "max_searches must be a positive integer",
                 {"max_searches": max_searches},
             )
+        if self._web_search_kind == "dashscope_extra_body":
+            return self._complete_with_dashscope_search(system=system, user=user)
+        return self._complete_with_moonshot_tool_loop(
+            system=system, user=user, max_searches=max_searches
+        )
+
+    def _complete_with_dashscope_search(self, *, system: str, user: str) -> str:
+        try:
+            response = self._client.with_options(timeout=240.0).chat.completions.create(
+                model=self._model,
+                messages=[
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": user},
+                ],
+                extra_body={"enable_search": True},
+            )
+        except Exception as exc:
+            raise QuantError(
+                "LLM_FAILED",
+                f"{self._provider}: {type(exc).__name__}: {exc}",
+                {"source": self._provider, "exc_type": type(exc).__name__},
+            ) from exc
+        choices = getattr(response, "choices", None)
+        if not choices:
+            raise QuantError(
+                "LLM_FAILED",
+                f"{self._provider}: response has no choices",
+                {"source": self._provider},
+            )
+        message = getattr(choices[0], "message", None)
+        return self._extract_text(message, getattr(choices[0], "finish_reason", None))
+
+    def _complete_with_moonshot_tool_loop(
+        self,
+        *,
+        system: str,
+        user: str,
+        max_searches: int,
+    ) -> str:
         messages: list[dict[str, object]] = [
             {"role": "system", "content": system},
             {"role": "user", "content": user},
@@ -91,8 +142,6 @@ class OpenAiCompatibleLlmClient:
             {"type": "builtin_function", "function": {"name": "$web_search"}}
         ]
         searches_used = 0
-        # Hard cap on the number of model turns: each search needs one
-        # round-trip + we allow one final wrap-up turn beyond the budget.
         max_turns = max_searches * 2 + 4
         for _ in range(max_turns):
             choice = self._call_chat(messages=messages, tools=tools)
@@ -133,14 +182,11 @@ class OpenAiCompatibleLlmClient:
             # Each web_search round can take 30-90s on a deep query (the
             # platform performs the search server-side); a 240s ceiling
             # gives us headroom over the 60s default used by complete_json.
-            response = self._client.with_options(
-                timeout=240.0
-            ).chat.completions.create(  # type: ignore[call-overload]
+            response = self._client.with_options(timeout=240.0).chat.completions.create(
                 model=self._model,
                 temperature=0.6,
-                response_format={"type": "json_object"},
-                tools=tools,
-                messages=messages,
+                tools=tools,  # type: ignore[arg-type]
+                messages=messages,  # type: ignore[arg-type]
                 extra_body={"thinking": {"type": "disabled"}},
             )
         except Exception as exc:

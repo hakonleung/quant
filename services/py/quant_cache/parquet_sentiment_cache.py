@@ -561,6 +561,7 @@ def _stock_from_dict(raw: Any) -> StockSentiment:
         sentiment_score=float(raw["sentiment_score"]),
         fetched_at=raw["fetched_at"],
         schema_version=int(raw.get("schema_version", SCHEMA_VERSION)),
+        result=str(raw.get("result", "")),
         core_drivers=tuple(_insight_from_dict(i) for i in raw.get("core_drivers", [])),
         m_and_a=tuple(_insight_from_dict(i) for i in raw.get("m_and_a", [])),
         hot_themes=tuple(_theme_tag_from_dict(t) for t in raw.get("hot_themes", [])),

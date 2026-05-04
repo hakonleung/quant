@@ -36,22 +36,22 @@ class LLMClient(Protocol):
 
 @runtime_checkable
 class WebSearchLLMClient(Protocol):
-    """LLM client that can drive a multi-round ``$web_search`` tool loop.
+    """LLM client that runs an analyst-style research turn against a
+    web-search-enabled backend and returns the reply as plain text.
 
-    Concrete implementation: Kimi (Moonshot) ``builtin_function`` named
-    ``$web_search``. The adapter is responsible for:
+    Two transports are supported behind the port:
 
-    * passing the builtin-function tool descriptor to the model,
-    * echoing every ``tool_calls`` chunk back in until the model returns
-      ``finish_reason="stop"``,
-    * counting the search invocations against ``max_searches`` and
-      stopping early if exceeded (the model is then asked to finalise
-      based on what it already retrieved),
-    * returning the final assistant reply as raw JSON text.
+    * Moonshot (Kimi) ``$web_search`` ``builtin_function`` tool loop —
+      the adapter echoes every ``tool_calls`` chunk back as
+      ``role="tool"`` until ``finish_reason="stop"``, capping invocations
+      at ``max_searches``.
+    * DashScope (Qwen) — single chat call with
+      ``extra_body={"enable_search": True}``; ``max_searches`` is ignored
+      because the platform does not expose a per-call budget.
 
-    The port is deliberately kept narrow so business code does not bind to
-    the OpenAI tool-call schema; adapters can swap in another vendor with
-    the same surface."""
+    Both return *plain analyst text*, not JSON. Callers are expected to
+    feed the reply through a downstream summariser (e.g. a flash-tier
+    JSON-output model) when structured fields are required."""
 
     @property
     def name(self) -> str:
@@ -64,17 +64,17 @@ class WebSearchLLMClient(Protocol):
         user: str,
         max_searches: int,
     ) -> str:
-        """Run the tool loop and return the final JSON-shaped reply.
+        """Run one research turn and return the assistant's plain-text reply.
 
         Args:
-            system: System prompt.
-            user: User prompt.
-            max_searches: Hard upper bound on ``$web_search`` invocations
-                for this single call. Once exceeded, the adapter asks the
-                model to wrap up rather than letting it search forever.
+            system: System prompt (analyst persona).
+            user: User prompt (research brief).
+            max_searches: Upper bound on backend search invocations.
+                Honoured by the Moonshot tool-loop transport; ignored on
+                DashScope where the platform manages its own budget.
 
         Returns:
-            The raw assistant content. Caller parses + validates.
+            The model's plain-text reply.
 
         Raises:
             QuantError: ``LLM_FAILED`` for transport / quota / schema /
