@@ -45,6 +45,8 @@ services/py/quant_core/generated/
 data/_*/
 # Sentiment cache is rebuilt on demand via NewsSentimentService — never source-tracked.
 data/sentiment/
+# Watch tasks + universe — file-backed runtime state owned by WatchTaskStore (W-0).
+apps/api/data/
 
 # Test output
 coverage/

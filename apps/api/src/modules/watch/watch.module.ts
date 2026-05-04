@@ -11,6 +11,7 @@
 
 import { Module } from '@nestjs/common';
 import { FlightClient } from '../../adapters/flight/flight-client.js';
+import { StockMetaModule } from '../stock-meta/stock-meta.module.js';
 import { WATCH_QUOTE_PORT } from './domain/watch-port.js';
 import { FlightWatchAdapter, WATCH_FLIGHT_CLIENT } from './flight-watch.adapter.js';
 import { SlackWebhookWatchNotifier, WATCH_NOTIFIER, type WatchNotifier } from './watch-notifier.js';
@@ -24,6 +25,7 @@ const DEFAULT_FLIGHT_TARGET = '127.0.0.1:8815';
 const DEFAULT_DATA_DIR = './data/watch';
 
 @Module({
+  imports: [StockMetaModule],
   controllers: [WatchController],
   providers: [
     {

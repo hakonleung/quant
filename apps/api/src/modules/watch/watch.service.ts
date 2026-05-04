@@ -6,7 +6,14 @@
  */
 
 import { Inject, Injectable } from '@nestjs/common';
-import { newTraceId, QuantError, type StockBasic, type WatchTask } from '@quant/shared';
+import {
+  newTraceId,
+  QuantError,
+  type StockBasic,
+  type WatchMarket,
+  type WatchTask,
+} from '@quant/shared';
+import { StockMetaService } from '../stock-meta/stock-meta.service.js';
 import type { WatchTaskCreate, WatchTaskPatch } from './dto/watch.dto.js';
 import { WatchTaskStore } from './watch-task.store.js';
 import { WatchUniverseStore } from './watch-universe.store.js';
@@ -18,6 +25,7 @@ export class WatchService {
     @Inject(WatchTaskStore) private readonly tasks: WatchTaskStore,
     @Inject(WatchUniverseStore) private readonly universe: WatchUniverseStore,
     @Inject(WATCH_QUOTE_PORT) private readonly port: WatchQuotePort,
+    @Inject(StockMetaService) private readonly stockMeta: StockMetaService,
   ) {}
 
   list(): readonly WatchTask[] {
@@ -98,5 +106,44 @@ export class WatchService {
     const rows = await this.port.refreshUniverse(market, traceId);
     await this.universe.replace(market, rows);
     return rows;
+  }
+
+  /**
+   * Resolve `(market, code)` to a `StockBasic` so the frontend can
+   * confirm a ticker exists before posting a task. Throws
+   * `WATCH_CODE_NOT_FOUND` (404) when the code is absent from the
+   * source of truth for that market — A-share via stock-meta,
+   * HK/US via the on-disk universe cache.
+   */
+  async lookup(market: WatchMarket, code: string): Promise<StockBasic> {
+    if (market === 'a') return this.lookupA(code);
+    return this.lookupHkUs(market, code);
+  }
+
+  private async lookupA(code: string): Promise<StockBasic> {
+    const traceId = newTraceId();
+    try {
+      const meta = await this.stockMeta.get(code, traceId);
+      return { market: 'a', code: meta.code, name: meta.name };
+    } catch (err) {
+      if (err instanceof QuantError && err.code === 'STOCK_NOT_FOUND') {
+        throw new QuantError('WATCH_CODE_NOT_FOUND', `a-share code ${code} not found`, {
+          market: 'a',
+          code,
+        });
+      }
+      throw err;
+    }
+  }
+
+  private async lookupHkUs(market: 'hk' | 'us', code: string): Promise<StockBasic> {
+    const rows = await this.universe.load(market);
+    const hit = rows.find((r) => r.code === code);
+    if (hit !== undefined) return hit;
+    throw new QuantError(
+      'WATCH_CODE_NOT_FOUND',
+      `${market}-code ${code} not in cached universe; try POST /api/watch/universe/refresh`,
+      { market, code },
+    );
   }
 }
