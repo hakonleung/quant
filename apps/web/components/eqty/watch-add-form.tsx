@@ -78,6 +78,8 @@ function buildDraft(s: AddFormState): WatchTaskCreate {
     s.kind === 'pct'
       ? { kind: 'pct', baseline: s.baseline, thresholdPct: s.thresholdPct }
       : { kind: 'abs', op: s.op, thresholdPrice: s.thresholdPrice };
+  // Defaulted fields (remaining / notifySlack / enabled) are filled
+  // by the zod schema; we only ship the required surface here.
   return WatchTaskCreateSchema.parse({
     market: s.market,
     code,
@@ -85,7 +87,7 @@ function buildDraft(s: AddFormState): WatchTaskCreate {
     conditions: [condition],
     intervalSec: Number(s.intervalSec),
     pushIntervalSec: Number(s.pushIntervalSec),
-  } satisfies WatchTaskCreate);
+  });
 }
 
 interface AddFormProps {
