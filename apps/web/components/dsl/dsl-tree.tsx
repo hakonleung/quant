@@ -15,6 +15,7 @@ import { Box, Text } from '@chakra-ui/react';
 import type {
   DslPredicate,
   DslScalar,
+  RankSpecView,
   ScreenPlanAst,
   UniverseExpr,
   UniversePlanAst,
@@ -34,9 +35,10 @@ import {
 interface PlanProps {
   readonly screenPlan: ScreenPlanAst;
   readonly universePlan: UniversePlanAst | null;
+  readonly rank?: RankSpecView | null;
 }
 
-export function DslTree({ screenPlan, universePlan }: PlanProps): React.ReactElement {
+export function DslTree({ screenPlan, universePlan, rank }: PlanProps): React.ReactElement {
   return (
     <Box fontFamily="mono" fontSize="11px" color="ink2" lineHeight="1.7">
       {universePlan !== null && (
@@ -47,6 +49,28 @@ export function DslTree({ screenPlan, universePlan }: PlanProps): React.ReactEle
       <Section title="SCREEN" asof={screenPlan.asof}>
         <PredicateNode node={screenPlan.expr} depth={0} />
       </Section>
+      {rank != null && <RankSection rank={rank} />}
+    </Box>
+  );
+}
+
+function RankSection({ rank }: { rank: RankSpecView }): React.ReactElement {
+  return (
+    <Box mb="8px">
+      <Box
+        fontFamily="mono"
+        fontSize="9px"
+        letterSpacing="0.18em"
+        color="ink3"
+        fontWeight="700"
+        mb="4px"
+      >
+        RANK · {rank.order}
+        {rank.topN !== null ? ` · top ${rank.topN}` : ''}
+      </Box>
+      <Box pl="12px">
+        <ScalarNode node={rank.metric} />
+      </Box>
     </Box>
   );
 }

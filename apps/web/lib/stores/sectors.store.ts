@@ -10,7 +10,7 @@
 
 'use client';
 
-import type { ScreenPlanAst, UniversePlanAst } from '@quant/shared';
+import type { RankSpecView, ScreenPlanAst, UniversePlanAst } from '@quant/shared';
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 
@@ -49,6 +49,8 @@ export interface Sector {
   readonly screenPlan?: ScreenPlanAst;
   /** Parsed universe-plan AST; `null` means no universe filter. */
   readonly universePlan?: UniversePlanAst | null;
+  /** Optional rank/top-N spec emitted by the NL translator. */
+  readonly rank?: RankSpecView | null;
 }
 
 interface SectorsState {

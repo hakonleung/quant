@@ -206,12 +206,22 @@ export const ScreenMatchSchema = z
   .strict();
 export type ScreenMatchView = z.infer<typeof ScreenMatchSchema>;
 
+export const RankSpecSchema = z
+  .object({
+    metric: DslScalarSchema,
+    order: z.enum(['asc', 'desc']),
+    topN: z.number().int().nonnegative().nullable(),
+  })
+  .strict();
+export type RankSpecView = z.infer<typeof RankSpecSchema>;
+
 export const NlScreenResultSchema = z
   .object({
     nl: z.string(),
     asof: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
     screenPlan: ScreenPlanAstSchema,
     universePlan: UniversePlanAstSchema.nullable(),
+    rank: RankSpecSchema.nullable(),
     matches: z.array(ScreenMatchSchema),
     planSignature: z.string(),
   })

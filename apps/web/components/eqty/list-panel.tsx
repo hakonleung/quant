@@ -78,10 +78,7 @@ export function ListPanel(): React.ReactElement {
   const sectors = useSectorsStore((s) => s.sectors);
   const upsert = useSectorsStore((s) => s.upsert);
   const blacklist = useBlacklistStore((s) => s.entries);
-  const blacklistSet = useMemo(
-    () => new Set(blacklist.map((b) => b.code)),
-    [blacklist],
-  );
+  const blacklistSet = useMemo(() => new Set(blacklist.map((b) => b.code)), [blacklist]);
 
   const { data, isLoading, error } = useStockList();
   const universe = data ?? [];
@@ -179,8 +176,7 @@ export function ListPanel(): React.ReactElement {
   useEffect(() => {
     if (!uiHydrated) return;
     if (sortedRows.length === 0) return;
-    const stillVisible =
-      focusCode !== null && sortedRows.some((r) => r.code === focusCode);
+    const stillVisible = focusCode !== null && sortedRows.some((r) => r.code === focusCode);
     if (stillVisible) return;
     setFocusCode(sortedRows[0]!.code);
   }, [uiHydrated, sortedRows, focusCode, setFocusCode]);
@@ -636,7 +632,11 @@ function DynamicHeader({ sector }: { sector: Sector }): React.ReactElement {
           maxH="220px"
           overflow="auto"
         >
-          <DslTree screenPlan={sector.screenPlan} universePlan={sector.universePlan ?? null} />
+          <DslTree
+            screenPlan={sector.screenPlan}
+            universePlan={sector.universePlan ?? null}
+            rank={sector.rank ?? null}
+          />
         </Box>
       )}
     </Flex>
@@ -788,14 +788,7 @@ function makeAppliedColumn(
     case 'peTtm':
       return derivedColumn('peTtm', 'PE-TTM', 90, snapshotByCode, (d) => d.pe_ttm, 'ratio');
     case 'peDynamic':
-      return derivedColumn(
-        'peDynamic',
-        'PE动态',
-        90,
-        snapshotByCode,
-        (d) => d.pe_dynamic,
-        'ratio',
-      );
+      return derivedColumn('peDynamic', 'PE动态', 90, snapshotByCode, (d) => d.pe_dynamic, 'ratio');
     case 'pb':
       return derivedColumn('pb', 'PB', 70, snapshotByCode, (d) => d.pb, 'ratio');
     case 'peg':

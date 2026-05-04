@@ -97,6 +97,7 @@ export function NewSectorDialog({ open, onClose }: Props): React.ReactElement | 
       evidence,
       screenPlan: preview.screenPlan,
       universePlan: preview.universePlan,
+      rank: preview.rank,
     };
     upsert(s);
     setActiveSector(id);
@@ -151,9 +152,7 @@ export function NewSectorDialog({ open, onClose }: Props): React.ReactElement | 
           onCancel={closeAndReset}
           onSave={tab === 'user' ? saveUser : saveDynamic}
           canSave={
-            tab === 'user'
-              ? title.trim().length > 0
-              : title.trim().length > 0 && preview !== null
+            tab === 'user' ? title.trim().length > 0 : title.trim().length > 0 && preview !== null
           }
           saveLabel={tab === 'user' ? 'CREATE' : 'SAVE'}
         />
@@ -174,10 +173,22 @@ function Header({ onClose }: { onClose: () => void }): React.ReactElement {
       bg="panel3"
       flexShrink={0}
     >
-      <Text fontFamily="mono" fontSize="11px" color="accent" fontWeight="700" letterSpacing="0.18em">
+      <Text
+        fontFamily="mono"
+        fontSize="11px"
+        color="accent"
+        fontWeight="700"
+        letterSpacing="0.18em"
+      >
         002
       </Text>
-      <Text fontFamily="mono" fontSize="11px" color="ink2" letterSpacing="0.18em" textTransform="uppercase">
+      <Text
+        fontFamily="mono"
+        fontSize="11px"
+        color="ink2"
+        letterSpacing="0.18em"
+        textTransform="uppercase"
+      >
         new sector
       </Text>
       <Box
@@ -361,11 +372,28 @@ function DynamicForm({
       )}
       {preview !== null && (
         <Flex direction="column" gap="8px">
-          <Text fontFamily="mono" fontSize="10px" color="ink3" letterSpacing="0.16em" textTransform="uppercase">
+          <Text
+            fontFamily="mono"
+            fontSize="10px"
+            color="ink3"
+            letterSpacing="0.16em"
+            textTransform="uppercase"
+          >
             // preview · {preview.matches.length} hit(s)
           </Text>
-          <Box maxH="220px" overflow="auto" borderWidth="1px" borderColor="line" p="10px" bg="panel3">
-            <DslTree screenPlan={preview.screenPlan} universePlan={preview.universePlan} />
+          <Box
+            maxH="220px"
+            overflow="auto"
+            borderWidth="1px"
+            borderColor="line"
+            p="10px"
+            bg="panel3"
+          >
+            <DslTree
+              screenPlan={preview.screenPlan}
+              universePlan={preview.universePlan}
+              rank={preview.rank}
+            />
           </Box>
           <Box maxH="160px" overflow="auto" borderWidth="1px" borderColor="line">
             <MatchPreviewList matches={preview.matches.slice(0, 50)} />
@@ -376,7 +404,11 @@ function DynamicForm({
   );
 }
 
-function MatchPreviewList({ matches }: { matches: readonly ScreenMatchView[] }): React.ReactElement {
+function MatchPreviewList({
+  matches,
+}: {
+  matches: readonly ScreenMatchView[];
+}): React.ReactElement {
   if (matches.length === 0) {
     return (
       <Text px="10px" py="10px" fontFamily="mono" fontSize="11px" color="ink3">
@@ -412,7 +444,13 @@ function MatchPreviewList({ matches }: { matches: readonly ScreenMatchView[] }):
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }): React.ReactElement {
+function Field({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}): React.ReactElement {
   return (
     <Flex direction="column" gap="4px">
       <Text fontFamily="mono" fontSize="9px" color="ink3" letterSpacing="0.18em" fontWeight="700">

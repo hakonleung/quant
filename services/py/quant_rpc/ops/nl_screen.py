@@ -63,6 +63,7 @@ if TYPE_CHECKING:
 
     from quant_core.domain.types.screen import (
         Predicate,
+        RankSpec,
         Scalar,
         ScreenPlan,
     )
@@ -227,6 +228,16 @@ def _universe_plan_to_jsonable(plan: UniversePlan | None) -> dict[str, object] |
     return {"asof": plan.asof.isoformat(), "expr": _universe_expr_to_jsonable(plan.expr)}
 
 
+def _rank_to_jsonable(rank: RankSpec | None) -> dict[str, object] | None:
+    if rank is None:
+        return None
+    return {
+        "metric": _scalar_to_jsonable(rank.metric),
+        "order": rank.order,
+        "topN": rank.top_n,
+    }
+
+
 # ---------------------------------------------------------------------------
 # handler
 # ---------------------------------------------------------------------------
@@ -270,12 +281,14 @@ class NlScreenHandler:
             universe = self._universe_service.filter_codes(universe_plan)
         else:
             universe = [m.code for m in self._meta_repo.list_all()]
-        result = self._screen_service.execute(screen_plan, universe)
+        rank = translation.rank
+        result = self._screen_service.execute(screen_plan, universe, rank=rank)
         payload: dict[str, object] = {
             "nl": nl,
             "asof": asof.isoformat(),
             "screenPlan": _screen_plan_to_jsonable(screen_plan),
             "universePlan": _universe_plan_to_jsonable(universe_plan),
+            "rank": _rank_to_jsonable(rank),
             "matches": [
                 {"code": m.code, "evidence": _normalise(asdict(m))["evidence"]}
                 for m in result.matches
