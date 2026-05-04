@@ -18,19 +18,52 @@ Schema notes (post-refactor):
       the cache only stores currently-listed stocks (``list_status="L"``
       at the source level), so a delisting drops the row at the next sync
       rather than flipping a flag.
-    - ``float_pct`` (``float_share / total_share``) replaces the raw share
-      counts: it's the only ratio business code actually uses, and it
-      survives stock splits without an adj_factor column.
+    - ``float_pct`` (``float_share / total_share``) is a derived ratio kept
+      on the row for backwards compat with the screening evaluator. M3+
+      adds the structural counts (``total_share``, ``float_share``) so the
+      ratio can be re-computed when share-restructuring data lands.
+    - **M3 enrichment** adds quarterly financials and balance-sheet
+      structurals so price-derived metrics (PE/PB/PEG/市值/毛利率) can be
+      computed at request time without persisting derivative ratios that
+      would drift with every price tick. See
+      ``quant_core.domain.pure.derive_metrics`` for the formulas.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from datetime import date, datetime
     from decimal import Decimal
+
+
+@dataclass(frozen=True, slots=True)
+class QuarterlyFinancials:
+    """One reporting-period snapshot of a stock's income-statement line items.
+
+    Stored alongside :class:`StockMeta` as a tuple of up to 8, ordered
+    oldest → newest. Any field is ``None`` when the source didn't expose
+    it — for example ``stock_yjbb_em`` returns net_profit + revenue but
+    never 扣非 / 营业成本; those land later from the per-stock
+    ``stock_financial_abstract_ths`` enricher.
+
+    Encoded into Parquet as a single JSON-string column (see
+    ``quant_cache.stock_meta_schema``); the Python codec round-trips
+    through this dataclass to keep the schema flat across arrow bindings.
+    """
+
+    period: date
+    """Reporting period — quarter-end date, e.g. ``date(2025, 9, 30)``."""
+    revenue: Decimal | None
+    """Operating revenue (营业总收入) in CNY."""
+    operating_cost: Decimal | None
+    """Operating cost (营业成本) in CNY. Required for gross-margin TTM."""
+    net_profit: Decimal | None
+    """Net profit attributable to shareholders (归母净利润) in CNY."""
+    net_profit_excl_nr: Decimal | None
+    """Net profit excluding non-recurring items (扣非归母净利润) in CNY."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -54,3 +87,16 @@ class StockMeta:
     sources that don't expose it (e.g. AKShare bulk listing)."""
     updated_at: datetime
     """When this snapshot was written into the local cache (UTC)."""
+    # ---- M3 financial enrichment (default ``None`` / empty for legacy rows).
+    total_share: Decimal | None = None
+    """Total share count (总股本) in shares. ``None`` until enriched."""
+    float_share: Decimal | None = None
+    """Free-float share count (流通股本) in shares. ``None`` until enriched."""
+    net_assets: Decimal | None = None
+    """Latest period 归母净资产 (CNY). Used for the PB derived metric."""
+    net_assets_period: date | None = None
+    """Reporting period the ``net_assets`` snapshot belongs to."""
+    quarterlies: tuple[QuarterlyFinancials, ...] = field(default_factory=tuple)
+    """Up to 8 quarters of financials, ordered oldest → newest."""
+    financials_updated_at: datetime | None = None
+    """Last time the financials track populated this row (UTC)."""

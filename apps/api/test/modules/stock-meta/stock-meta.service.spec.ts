@@ -1,4 +1,4 @@
-import { QuantError, type StockMetaDto } from '@quant/shared';
+import { QuantError, type StockMetaDto, type StockSnapshotDto } from '@quant/shared';
 import { StockMetaService } from '../../../src/modules/stock-meta/stock-meta.service.js';
 import type { StockMetaPort } from '../../../src/modules/stock-meta/domain/stock-meta-port.js';
 
@@ -10,6 +10,12 @@ const SAMPLE: StockMetaDto = {
   list_date: '2001-08-27',
   float_pct: '1',
   updated_at: '2026-05-01T00:00:00+00:00',
+  total_share: null,
+  float_share: null,
+  net_assets: null,
+  net_assets_period: null,
+  quarterlies: [],
+  financials_updated_at: null,
 };
 
 class FakePort implements StockMetaPort {
@@ -40,6 +46,28 @@ class FakePort implements StockMetaPort {
   async listAll(traceId: string): Promise<readonly StockMetaDto[]> {
     this.traceIds.push(traceId);
     return Promise.resolve(Object.values(this.byCode).sort((a, b) => a.code.localeCompare(b.code)));
+  }
+
+  async listSnapshots(
+    codes: readonly string[],
+    traceId: string,
+  ): Promise<readonly StockSnapshotDto[]> {
+    this.traceIds.push(traceId);
+    const baseDerived = {
+      mkt_cap: null,
+      float_mkt_cap: null,
+      pe_ttm: null,
+      pe_dynamic: null,
+      pb: null,
+      peg: null,
+      gross_margin_ttm: null,
+    };
+    return Promise.resolve(
+      codes
+        .map((c) => this.byCode[c])
+        .filter((m): m is StockMetaDto => m !== undefined)
+        .map((meta) => ({ meta, price: null, asof: null, derived: baseDerived })),
+    );
   }
 }
 

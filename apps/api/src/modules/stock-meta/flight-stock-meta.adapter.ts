@@ -11,9 +11,10 @@
  */
 
 import { Inject, Injectable } from '@nestjs/common';
-import type { StockMetaDto } from '@quant/shared';
+import type { StockMetaDto, StockSnapshotDto } from '@quant/shared';
 import { FlightClient } from '../../adapters/flight/flight-client.js';
 import { arrowTableToStockMetaDtos } from './domain/arrow-mapper.js';
+import { arrowTableToStockSnapshotDtos } from './domain/snapshot-arrow-mapper.js';
 import type { StockMetaPort } from './domain/stock-meta-port.js';
 
 export const FLIGHT_CLIENT = Symbol('FLIGHT_CLIENT');
@@ -48,5 +49,17 @@ export class FlightStockMetaAdapter implements StockMetaPort {
   async listAll(traceId: string): Promise<readonly StockMetaDto[]> {
     const result = await this.flight.doGet('list_stock_meta_all', {}, { traceId });
     return arrowTableToStockMetaDtos(result.value);
+  }
+
+  async listSnapshots(
+    codes: readonly string[],
+    traceId: string,
+  ): Promise<readonly StockSnapshotDto[]> {
+    const result = await this.flight.doGet(
+      'list_stock_snapshots',
+      { codes: [...codes] },
+      { traceId },
+    );
+    return arrowTableToStockSnapshotDtos(result.value);
   }
 }

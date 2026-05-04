@@ -1,6 +1,12 @@
 'use client';
 
-import type { KlineBar, MarketSentiment, Sentiment, StockMetaDto } from '@quant/shared';
+import type {
+  KlineBar,
+  MarketSentiment,
+  Sentiment,
+  StockMetaDto,
+  StockSnapshotDto,
+} from '@quant/shared';
 import {
   useMutation,
   useQuery,
@@ -18,6 +24,7 @@ import {
   getStockMeta,
   listKline,
   listKlineBulk,
+  listStockSnapshots,
   type KlineBulkResponse,
 } from '../api/endpoints.js';
 
@@ -105,6 +112,43 @@ export function useKlineBulk(
       isLoading: query.isLoading || query.isFetching,
       readyCount: byCode.size,
     };
+  }, [query.data, query.isLoading, query.isFetching]);
+}
+
+export interface SnapshotsState {
+  readonly byCode: ReadonlyMap<string, StockSnapshotDto>;
+  readonly isLoading: boolean;
+}
+
+export interface UseStockSnapshotsOptions {
+  readonly enabled?: boolean;
+}
+
+/**
+ * meta + price-derived metrics for the given codes. Stays gated off until
+ * the caller has at least one applied column that needs the snapshot
+ * fetch (`appliedNeedsSnapshot(applied)`); the empty-codes case stays a
+ * no-op. Cache key is canonical (sorted + de-duped) so re-orderings
+ * share state with the bulk-kline pattern.
+ */
+export function useStockSnapshots(
+  codes: readonly string[],
+  opts: UseStockSnapshotsOptions = {},
+): SnapshotsState {
+  const keyCodes = useMemo(() => [...new Set(codes)].sort(), [codes]);
+  const enabled = (opts.enabled ?? true) && keyCodes.length > 0;
+  const query = useQuery<readonly StockSnapshotDto[]>({
+    queryKey: ['stock.snapshots', keyCodes.join(',')] as const,
+    queryFn: () => listStockSnapshots(keyCodes).then((rows) => [...rows]),
+    enabled,
+    staleTime: 60 * 60 * 1000,
+  });
+  return useMemo(() => {
+    const byCode = new Map<string, StockSnapshotDto>();
+    if (query.data !== undefined) {
+      for (const row of query.data) byCode.set(row.meta.code, row);
+    }
+    return { byCode, isLoading: query.isLoading || query.isFetching };
   }, [query.data, query.isLoading, query.isFetching]);
 }
 

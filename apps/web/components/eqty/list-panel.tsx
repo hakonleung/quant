@@ -14,18 +14,25 @@
  */
 
 import { Box, Button, Flex, Input, Text, Textarea } from '@chakra-ui/react';
-import type { KlineBar, StockMetaDto } from '@quant/shared';
+import type { KlineBar, StockMetaDto, StockSnapshotDto } from '@quant/shared';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
+import {
+  appliedNeedsSnapshot,
+  getColumnSpec,
+  type ColumnKey,
+} from '../../lib/eqty/columns.catalog.js';
 import { Feat } from '../../lib/eqty/feat.js';
 import { deriveStats, type StockStats } from '../../lib/fp/stock-stats.js';
-import { useKlineBulk } from '../../lib/hooks/use-eqty-data.js';
+import { useKlineBulk, useStockSnapshots } from '../../lib/hooks/use-eqty-data.js';
 import { useNlScreen } from '../../lib/hooks/use-nl-screen.js';
 import { useStockList } from '../../lib/hooks/use-stock-list.js';
 import { useBlacklistStore } from '../../lib/stores/blacklist.store.js';
 import { useSectorsStore, type Sector } from '../../lib/stores/sectors.store.js';
+import { useSettingsStore } from '../../lib/stores/settings.store.js';
 import { ALL_SECTOR_ID, useUiStore } from '../../lib/stores/ui.store.js';
+import { ColumnManagerDialog } from './column-manager-dialog.js';
 import { DslTree } from '../dsl/dsl-tree.js';
 import { Pane } from '../shell/pane.js';
 
@@ -153,7 +160,15 @@ export function ListPanel(): React.ReactElement {
     return arr;
   }, [filteredRows, sort]);
 
-  const columns: readonly ColumnDef[] = useMemo(() => buildColumns(evidenceKeys), [evidenceKeys]);
+  const appliedColumns = useSettingsStore((s) => s.appliedColumns);
+  const snapshots = useStockSnapshots(codes, {
+    enabled: appliedNeedsSnapshot(appliedColumns),
+  });
+  const [columnDialogOpen, setColumnDialogOpen] = useState(false);
+  const columns: readonly ColumnDef[] = useMemo(
+    () => buildColumns(appliedColumns, evidenceKeys, snapshots.byCode),
+    [appliedColumns, evidenceKeys, snapshots.byCode],
+  );
 
   // Auto-default focus to the first visible row of the active sector.
   // Fires when (a) nothing is focused yet, or (b) the persisted focus
@@ -182,12 +197,32 @@ export function ListPanel(): React.ReactElement {
     ) : isLoading ? (
       <Text>loading…</Text>
     ) : (
-      <Text>
-        {focusCode === null ? '— no selection' : `▎ ${focusCode}`} · {sortedRows.length} rows
-        {klineBatch.isLoading
-          ? ` · stats ${String(klineBatch.readyCount)}/${String(codes.length)}`
-          : ''}
-      </Text>
+      <Flex gap="10px" align="center">
+        <Text>
+          {focusCode === null ? '— no selection' : `▎ ${focusCode}`} · {sortedRows.length} rows
+          {klineBatch.isLoading
+            ? ` · stats ${String(klineBatch.readyCount)}/${String(codes.length)}`
+            : ''}
+          {snapshots.isLoading ? ' · derived…' : ''}
+        </Text>
+        <Box
+          as="button"
+          aria-label="manage columns"
+          title="manage columns"
+          onClick={(): void => {
+            setColumnDialogOpen(true);
+          }}
+          color="ink3"
+          fontFamily="mono"
+          fontSize="14px"
+          lineHeight="1"
+          px="4px"
+          cursor="pointer"
+          _hover={{ color: 'accent' }}
+        >
+          ⚙
+        </Box>
+      </Flex>
     );
 
   return (
@@ -230,6 +265,12 @@ export function ListPanel(): React.ReactElement {
           }
         />
       </Flex>
+      <ColumnManagerDialog
+        open={columnDialogOpen}
+        onClose={(): void => {
+          setColumnDialogOpen(false);
+        }}
+      />
     </Pane>
   );
 }
@@ -623,78 +664,24 @@ interface ColumnDef {
   readonly sortValue: (row: ListRow) => number | string | null;
 }
 
-function buildColumns(evidenceKeys: readonly string[]): readonly ColumnDef[] {
-  const base: ColumnDef[] = [
-    {
-      key: 'name',
-      label: 'CODE',
-      w: STICKY_COL_WIDTH,
-      align: 'left',
-      sticky: true,
-      render: (r) => (
-        <Box>
-          <Text fontFamily="mono" fontSize="12px" color="ink" fontWeight="600">
-            {r.name}
-          </Text>
-          <Text fontFamily="mono" fontSize="10px" color="ink3" letterSpacing="0.06em">
-            {r.code}
-          </Text>
-        </Box>
-      ),
-      sortValue: (r) => r.name,
-    },
-    {
-      key: 'price',
-      label: 'PRICE',
-      w: 90,
-      align: 'right',
-      render: (r) => <PriceCell pct={r.chgPct} price={r.statsReady ? r.price : null} />,
-      sortValue: (r) => (r.statsReady ? r.price : null),
-    },
-    {
-      key: 'chgPct',
-      label: 'CHG%',
-      w: 90,
-      align: 'right',
-      render: (r) => <ChgPctCell value={r.chgPct} />,
-      sortValue: (r) => r.chgPct,
-    },
-    {
-      key: 'turnoverRate',
-      label: '换手',
-      w: 90,
-      align: 'right',
-      render: (r) => <PctCell value={r.turnoverRate} />,
-      sortValue: (r) => r.turnoverRate,
-    },
-    {
-      key: 'turnover',
-      label: '成交额',
-      w: 110,
-      align: 'right',
-      render: (r) => <CnyCell value={r.turnover} />,
-      sortValue: (r) => r.turnover,
-    },
-    {
-      key: 'consecUp',
-      label: '连涨',
-      w: 70,
-      align: 'right',
-      render: (r) => (
-        <Text
-          fontFamily="mono"
-          fontSize="11px"
-          color={r.statsReady && r.consecUpDays > 0 ? 'up' : 'ink3'}
-        >
-          {r.statsReady ? `${String(r.consecUpDays)}d` : '—'}
-        </Text>
-      ),
-      sortValue: (r) => r.consecUpDays,
-    },
-  ];
+function buildColumns(
+  applied: readonly ColumnKey[],
+  evidenceKeys: readonly string[],
+  snapshotByCode: ReadonlyMap<string, StockSnapshotDto>,
+): readonly ColumnDef[] {
+  const out: ColumnDef[] = [];
+  // CODE is always first + sticky regardless of user preference; the
+  // dialog hides the toggle for it. We still render it from the catalog
+  // entry so styling stays single-sourced.
+  out.push(makeCodeColumn());
+  for (const key of applied) {
+    if (key === 'name') continue;
+    const def = makeAppliedColumn(key, snapshotByCode);
+    if (def !== null) out.push(def);
+  }
   for (const k of evidenceKeys) {
     const kind = evidenceColumnKind(k);
-    base.push({
+    out.push({
       key: `ev:${k}`,
       label: k.toUpperCase(),
       w: 130,
@@ -703,7 +690,169 @@ function buildColumns(evidenceKeys: readonly string[]): readonly ColumnDef[] {
       sortValue: (r) => evidenceSortKey(r[k]),
     });
   }
-  return base;
+  return out;
+}
+
+function makeCodeColumn(): ColumnDef {
+  return {
+    key: 'name',
+    label: 'CODE',
+    w: STICKY_COL_WIDTH,
+    align: 'left',
+    sticky: true,
+    render: (r) => (
+      <Box>
+        <Text fontFamily="mono" fontSize="12px" color="ink" fontWeight="600">
+          {r.name}
+        </Text>
+        <Text fontFamily="mono" fontSize="10px" color="ink3" letterSpacing="0.06em">
+          {r.code}
+        </Text>
+      </Box>
+    ),
+    sortValue: (r) => r.name,
+  };
+}
+
+function makeAppliedColumn(
+  key: ColumnKey,
+  snapshotByCode: ReadonlyMap<string, StockSnapshotDto>,
+): ColumnDef | null {
+  switch (key) {
+    case 'name':
+      return null; // handled by makeCodeColumn
+    case 'price':
+      return {
+        key: 'price',
+        label: 'PRICE',
+        w: 90,
+        align: 'right',
+        render: (r) => <PriceCell pct={r.chgPct} price={r.statsReady ? r.price : null} />,
+        sortValue: (r) => (r.statsReady ? r.price : null),
+      };
+    case 'chgPct':
+      return {
+        key: 'chgPct',
+        label: 'CHG%',
+        w: 90,
+        align: 'right',
+        render: (r) => <ChgPctCell value={r.chgPct} />,
+        sortValue: (r) => r.chgPct,
+      };
+    case 'turnoverRate':
+      return {
+        key: 'turnoverRate',
+        label: '换手',
+        w: 90,
+        align: 'right',
+        render: (r) => <PctCell value={r.turnoverRate} />,
+        sortValue: (r) => r.turnoverRate,
+      };
+    case 'turnover':
+      return {
+        key: 'turnover',
+        label: '成交额',
+        w: 110,
+        align: 'right',
+        render: (r) => <CnyCell value={r.turnover} />,
+        sortValue: (r) => r.turnover,
+      };
+    case 'consecUp':
+      return {
+        key: 'consecUp',
+        label: '连涨',
+        w: 70,
+        align: 'right',
+        render: (r) => (
+          <Text
+            fontFamily="mono"
+            fontSize="11px"
+            color={r.statsReady && r.consecUpDays > 0 ? 'up' : 'ink3'}
+          >
+            {r.statsReady ? `${String(r.consecUpDays)}d` : '—'}
+          </Text>
+        ),
+        sortValue: (r) => r.consecUpDays,
+      };
+    case 'mktCap':
+      return derivedColumn('mktCap', '总市值', 110, snapshotByCode, (d) => d.mkt_cap, 'cny');
+    case 'floatMktCap':
+      return derivedColumn(
+        'floatMktCap',
+        '流通市值',
+        110,
+        snapshotByCode,
+        (d) => d.float_mkt_cap,
+        'cny',
+      );
+    case 'peTtm':
+      return derivedColumn('peTtm', 'PE-TTM', 90, snapshotByCode, (d) => d.pe_ttm, 'ratio');
+    case 'peDynamic':
+      return derivedColumn(
+        'peDynamic',
+        'PE动态',
+        90,
+        snapshotByCode,
+        (d) => d.pe_dynamic,
+        'ratio',
+      );
+    case 'pb':
+      return derivedColumn('pb', 'PB', 70, snapshotByCode, (d) => d.pb, 'ratio');
+    case 'peg':
+      return derivedColumn('peg', 'PEG', 70, snapshotByCode, (d) => d.peg, 'ratio');
+    case 'grossMargin':
+      return derivedColumn(
+        'grossMargin',
+        '毛利率',
+        90,
+        snapshotByCode,
+        (d) => d.gross_margin_ttm,
+        'pct',
+      );
+  }
+}
+
+function derivedColumn(
+  key: ColumnKey,
+  label: string,
+  w: number,
+  snapshotByCode: ReadonlyMap<string, StockSnapshotDto>,
+  pick: (d: StockSnapshotDto['derived']) => string | null,
+  format: 'cny' | 'ratio' | 'pct',
+): ColumnDef {
+  const sortValue = (code: string): number | null => {
+    const snap = snapshotByCode.get(code);
+    if (snap === undefined) return null;
+    const raw = pick(snap.derived);
+    if (raw === null) return null;
+    const n = Number(raw);
+    return Number.isFinite(n) ? n : null;
+  };
+  const spec = getColumnSpec(key);
+  return {
+    key: spec.key,
+    label,
+    w,
+    align: 'right',
+    render: (r) => {
+      const v = sortValue(r.code);
+      if (v === null) {
+        return (
+          <Text fontFamily="mono" fontSize="11px" color="ink3">
+            —
+          </Text>
+        );
+      }
+      if (format === 'cny') return <CnyCell value={v} />;
+      if (format === 'pct') return <ChgPctCell value={v} />;
+      return (
+        <Text fontFamily="mono" fontSize="11px" color="ink2">
+          {v.toFixed(2)}
+        </Text>
+      );
+    },
+    sortValue: (r) => sortValue(r.code),
+  };
 }
 
 type EvidenceColumnKind = 'cny' | 'chgPct' | 'raw';

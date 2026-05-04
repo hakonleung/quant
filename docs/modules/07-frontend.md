@@ -46,14 +46,49 @@ app/
 
 ## 4. 功能详述
 
-### 4.1 传统股票列表 `stocks/`
+### 4.1 传统股票列表 `stocks/`（E-1）
 
-- 数据：一次性从 NestJS 拉全市场轻量 meta（code/name/industry/market），用 react-query `staleTime: 1h`。
+- 数据：一次性从 NestJS 拉全市场轻量 meta（code/name/industry/market），用 react-query `staleTime: 1h`。派生指标列触发时按 sector/可见 codes 调 `useStockSnapshots`，与 meta 同 cache key。
 - 表格：`@tanstack/react-virtual` 虚拟滚动（≥ 5000 行无卡顿）。
 - 表头排序：列点击切 `asc/desc/none`，状态写 URL `?sort=...`。
 - 搜索：输入框（debounce 200ms）匹配 `code` 前缀 + `name` 模糊；命中走前端筛选，不打后端。
 - 行操作：右键菜单 `加入板块 / 加入黑名单 / 复制代码`。
 - 黑名单股票默认隐藏（设置可开启"显示但置灰"）。
+
+#### 4.1.1 动态列管理（M3）
+
+E-1 list 的列**不再硬编码**，而由"列目录 + 用户偏好"组合渲染。Header 增加 `⚙` 按钮打开 `<ColumnManagerDialog>`。
+
+**列目录**（`apps/web/lib/eqty/columns.catalog.ts`，纯类型）：
+
+```ts
+export type ColumnKey =
+  | 'name' | 'price' | 'chgPct' | 'turnoverRate' | 'turnover' | 'consecUp'
+  | 'mktCap' | 'floatMktCap' | 'peTtm' | 'peDynamic' | 'pb' | 'peg' | 'grossMargin';
+
+export interface ColumnSpec {
+  readonly key: ColumnKey;
+  readonly label: string;
+  readonly group: 'core' | 'derived';
+  readonly defaultApplied: boolean;
+  readonly source: 'meta' | 'kline' | 'snapshot';   // 决定从哪个 hook 取值
+}
+```
+
+**渲染顺序**：`appliedColumns(顺序敏感) → evidenceColumns(动态评估列, 始终在末尾)`。
+evidence 列**不**进列管理 dialog —— 它跟 sector 绑死，由数据源决定。dialog 顶部用一行 hint 说明这一规则。
+
+**dialog 行为**：
+
+- 左半：已应用列（顺序敏感），每行 `× 删除` + `↑ ↓` 改顺序（v1 不引拖拽库；reorder 用上下按钮，每次相邻互换）
+- 右半：未应用列（catalog ∖ applied），点 `+` 加到末尾
+- 底部 `取消 / 保存`；保存才 commit 到 store
+
+**持久化**：扩展 `settings.store.ts`，新增 `appliedColumns: readonly ColumnKey[]`，沿用 IndexedDB `settings` object store，`version` 由 1 升 2。迁移：旧版本的用户拿到 catalog 中 `defaultApplied=true` 的子集（顺序按 catalog 出现顺序）。
+
+**与 sector 切换的关系**：列偏好是**全局**的，不随 sector 变化；evidence 列则跟 sector 走。这与 §6 的 "用户配置走 Zustand persist + IndexedDB" 边界一致。
+
+**性能**：派生列依赖 `useStockSnapshots(codes)`；当 applied 中无任何 `source: 'snapshot'` 列时**不发请求**，避免对 ALL sector（5500 codes）触发不必要的批量调用。
 
 ### 4.2 个股详情 `stocks/[code]`
 
@@ -129,6 +164,7 @@ app/
 | `<PatternMatchPanel>` | `components/pattern-match-panel.tsx`  | Pattern match 抽屉                          |
 | `<SectorList>`        | `components/sector-list.tsx`          | 多选板块列表 + 合并按钮                     |
 | `<NLDslEditor>`       | `components/nl-dsl-editor.tsx`        | 动态板块语句编辑（终端风格）                |
+| `<ColumnManagerDialog>` | `components/eqty/column-manager-dialog.tsx` | E-1 列管理（已应用 / 未应用，排序）  |
 | `<SentimentReport>`   | `components/sentiment-report.tsx`     | 七字段渲染 + evidence                       |
 | `<SlackPushDialog>`   | `components/slack-push-dialog.tsx`    | RHF + zod 表单                              |
 | `<TerminalInput>`     | `components/terminal/input.tsx`       | 终端输入                                    |

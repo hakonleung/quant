@@ -8,7 +8,11 @@
  */
 
 import { Inject, Injectable } from '@nestjs/common';
-import { QuantError, type StockMetaDto } from '@quant/shared';
+import {
+  QuantError,
+  type StockMetaDto,
+  type StockSnapshotDto,
+} from '@quant/shared';
 import { STOCK_META_PORT, type StockMetaPort } from './domain/stock-meta-port.js';
 
 @Injectable()
@@ -37,5 +41,13 @@ export class StockMetaService {
 
   async listAll(traceId: string): Promise<readonly StockMetaDto[]> {
     return this.port.listAll(traceId);
+  }
+
+  async listSnapshots(
+    codes: readonly string[],
+    traceId: string,
+  ): Promise<readonly StockSnapshotDto[]> {
+    if (codes.length === 0) return [];
+    return this.port.listSnapshots(codes, traceId);
   }
 }
