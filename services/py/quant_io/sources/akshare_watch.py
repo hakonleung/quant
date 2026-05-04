@@ -16,7 +16,7 @@ to a warn log without taking down the whole tick.
 
 from __future__ import annotations
 
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 from typing import TYPE_CHECKING, Final, Protocol, cast, runtime_checkable
 
@@ -44,7 +44,7 @@ class _AkshareGateway(Protocol):
     def stock_bid_ask_em(self, symbol: str) -> object: ...
     def stock_hk_hist_min_em(self, symbol: str, period: str) -> object: ...
     def stock_hk_daily(self, symbol: str) -> object: ...
-    def stock_us_hist_min_em(self, symbol: str, period: str) -> object: ...
+    def stock_us_hist_min_em(self, symbol: str, start_date: str, end_date: str) -> object: ...
     def stock_us_daily(self, symbol: str) -> object: ...
     def stock_hk_spot_em(self) -> object: ...
     def stock_us_spot_em(self) -> object: ...
@@ -56,11 +56,9 @@ def _to_records(raw: object, *, label: str) -> list[dict[str, object]]:
     if callable(to_dict):
         records = to_dict("records")
         if isinstance(records, list):
-            return [
-                cast(dict[str, object], r) for r in records if isinstance(r, dict)
-            ]
+            return [cast("dict[str, object]", r) for r in records if isinstance(r, dict)]
     if isinstance(raw, list):
-        return [cast(dict[str, object], r) for r in raw if isinstance(r, dict)]
+        return [cast("dict[str, object]", r) for r in raw if isinstance(r, dict)]
     raise QuantError(
         "WATCH_QUOTE_UPSTREAM_FAIL",
         f"{_NAME}: {label} returned unsupported container: {type(raw).__name__}",
@@ -98,7 +96,7 @@ class AKShareWatchSource:
                 f"{_NAME}: akshare not installed",
                 {"reason": "import_failed"},
             )
-        return cast(_AkshareGateway, self._ak)
+        return cast("_AkshareGateway", self._ak)
 
     def fetch_one(self, market: WatchMarket, code: str) -> SpotQuote:
         if market == "a":
@@ -117,7 +115,7 @@ class AKShareWatchSource:
         ak = self._require_ak()
         try:
             raw = ak.stock_bid_ask_em(symbol=code)
-        except Exception as exc:  # noqa: BLE001 — adapter boundary
+        except Exception as exc:
             raise QuantError(
                 "WATCH_QUOTE_UPSTREAM_FAIL",
                 f"{_NAME}: stock_bid_ask_em({code}) failed: {exc!r}",
@@ -131,14 +129,14 @@ class AKShareWatchSource:
             day_high=_to_decimal(kv.get("最高"), label="day_high"),
             day_low=_to_decimal(kv.get("最低"), label="day_low"),
             prev_close=_to_decimal(kv.get("昨收"), label="prev_close"),
-            ts=datetime.now(timezone.utc),
+            ts=datetime.now(UTC),
         )
 
     def _fetch_hk(self, code: str) -> SpotQuote:
         ak = self._require_ak()
         try:
             raw = ak.stock_hk_hist_min_em(symbol=code, period="1")
-        except Exception as exc:  # noqa: BLE001 — adapter boundary
+        except Exception as exc:
             raise QuantError(
                 "WATCH_QUOTE_UPSTREAM_FAIL",
                 f"{_NAME}: stock_hk_hist_min_em({code}) failed: {exc!r}",
@@ -156,14 +154,30 @@ class AKShareWatchSource:
             day_high=hi,
             day_low=lo,
             prev_close=prev_close,
-            ts=datetime.now(timezone.utc),
+            ts=datetime.now(UTC),
         )
 
     def _fetch_us(self, code: str) -> SpotQuote:
         ak = self._require_ak()
+        # Unlike the HK variant, ``stock_us_hist_min_em`` does NOT accept a
+        # ``period`` kwarg (TypeError if passed). It also returns ALL minute
+        # bars of the requested window — without a bound, that's the entire
+        # available history. We only need session-level last/high/low, so a
+        # 90-minute trailing window is plenty to cover the most recent bar
+        # plus a buffer for early-tick delays.
+        end = datetime.now(UTC)
+        start = end - timedelta(minutes=90)
+        # akshare expects naive local-clock strings (the upstream API is in
+        # ET) but the endpoint is forgiving about timezone — UTC stamps work
+        # because we only use the bars' relative ordering.
+        fmt = "%Y-%m-%d %H:%M:%S"
         try:
-            raw = ak.stock_us_hist_min_em(symbol=code, period="1")
-        except Exception as exc:  # noqa: BLE001 — adapter boundary
+            raw = ak.stock_us_hist_min_em(
+                symbol=code,
+                start_date=start.strftime(fmt),
+                end_date=end.strftime(fmt),
+            )
+        except Exception as exc:
             raise QuantError(
                 "WATCH_QUOTE_UPSTREAM_FAIL",
                 f"{_NAME}: stock_us_hist_min_em({code}) failed: {exc!r}",
@@ -181,21 +195,21 @@ class AKShareWatchSource:
             day_high=hi,
             day_low=lo,
             prev_close=prev_close,
-            ts=datetime.now(timezone.utc),
+            ts=datetime.now(UTC),
         )
 
     def _cached_prev_close(
         self,
         key: tuple[str, str],
-        fetch: "_DailyFetch",
+        fetch: _DailyFetch,
     ) -> Decimal:
-        today = datetime.now(timezone.utc).date()
+        today = datetime.now(UTC).date()
         cached = self._prev_close_cache.get(key)
         if cached is not None and cached[0] == today:
             return cached[1]
         try:
             raw = fetch()
-        except Exception as exc:  # noqa: BLE001 — adapter boundary
+        except Exception as exc:
             raise QuantError(
                 "WATCH_QUOTE_UPSTREAM_FAIL",
                 f"{_NAME}: prev_close fetch failed for {key}: {exc!r}",
