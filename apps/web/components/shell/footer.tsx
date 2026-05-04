@@ -9,18 +9,24 @@
  *
  *   1. SSE   — live | connecting | lost
  *   2. IDB   — local-storage backend identifier
- *   3. meta  — `inFlight/pending` (omitted when both are 0)
- *   4. kline — `inFlight/pending` (omitted when both are 0)
+ *   3. meta  — `inFlight/pending` (always visible; 0/0 when idle)
+ *   4. kline — `inFlight/pending`
  *
- * Body carries the wall clock and additional debug info.
+ * Body carries the wall clock and the most recent scan trigger info.
+ *
+ * Manual scan triggers are **fire-and-forget**: clicking META / KLINE
+ * posts to `/api/orchestration/scan`, the gateway returns 202 Accepted
+ * within a few ms, and progress shows up via the SSE stream's pending
+ * counters. The button itself flashes briefly on submit; long-running
+ * work surfaces in the queue capsule, not the button.
  */
 
 import { Box, Flex, Text } from '@chakra-ui/react';
 import {
-  ScanResultSchema,
+  ScanAcceptedSchema,
   type QueueSnapshotEntry,
+  type ScanAccepted,
   type ScanKind,
-  type ScanResult,
 } from '@quant/shared';
 import { useEffect, useState } from 'react';
 
@@ -111,13 +117,11 @@ function QueueCapsule({
   queue: QueueSnapshotEntry | null;
   scan: ManualScan;
 }): React.ReactElement {
-  // The capsule label is itself the trigger — click `META` / `KLINE`
-  // to fire that kind's scan. Renders a dim "·" when the queue has no
-  // pending/in-flight work, the live counter otherwise.
-  const idle = queue === null || (queue.inFlight === 0 && queue.pending === 0);
-  const counterColor =
-    queue === null ? 'term.ink3' : queue.paused ? 'term.amber' : 'term.red';
-  const labelColor = scan.pending ? 'term.amber' : 'term.green';
+  const counterColor = queue === null ? 'term.ink3' : queue.paused ? 'term.amber' : 'term.red';
+  // The label flashes amber for one second after a successful submit
+  // so the user gets immediate feedback even though the network
+  // round-trip is < 10ms; sustained activity shows up in the counter.
+  const labelColor = scan.flashing ? 'term.amber' : 'term.green';
   return (
     <Flex
       as="button"
@@ -128,23 +132,16 @@ function QueueCapsule({
       gap="5px"
       whiteSpace="nowrap"
       bg="transparent"
-      cursor={scan.pending ? 'wait' : 'pointer'}
-      opacity={scan.pending ? 0.6 : 1}
-      _hover={scan.pending ? {} : { color: 'term.green' }}
+      cursor="pointer"
+      _hover={{ color: 'term.green' }}
       title={`trigger ${code} scan now`}
     >
       <Text color={labelColor} fontWeight="700" letterSpacing="0.18em">
         {code}
       </Text>
-      {idle ? (
-        <Text as="span" color="term.ink3">
-          ·
-        </Text>
-      ) : (
-        <Text as="span" color={counterColor} fontWeight="700">
-          {String(queue?.inFlight ?? 0)}/{String(queue?.pending ?? 0)}
-        </Text>
-      )}
+      <Text as="span" color={counterColor} fontWeight="700">
+        {String(queue?.inFlight ?? 0)}/{String(queue?.pending ?? 0)}
+      </Text>
     </Flex>
   );
 }
@@ -156,9 +153,6 @@ function ScanReadout({
   label: string;
   scan: ManualScan;
 }): React.ReactElement | null {
-  if (scan.pending) {
-    return <Text color="term.amber">// {label}: scanning…</Text>;
-  }
   if (scan.error !== null) {
     return (
       <Text color="term.red">
@@ -167,48 +161,56 @@ function ScanReadout({
     );
   }
   if (scan.last === null) return null;
-  const enqueued =
-    label === 'meta' ? scan.last.metaEnqueued : scan.last.klineEnqueued;
   return (
     <Text color="term.ink3">
-      // {label}: {scan.last.startedAt.slice(11, 19)} +{String(enqueued)} ·{' '}
-      {String(scan.last.elapsedMs)}ms
+      // {label}: triggered {scan.last.startedAt.slice(11, 19)}
+      {scan.last.started ? '' : ' (coalesced)'}
     </Text>
   );
 }
 
 interface ManualScan {
   readonly run: () => void;
-  readonly pending: boolean;
-  readonly last: ScanResult | null;
+  /** True for ~1s after a successful submit; gives the button a flash. */
+  readonly flashing: boolean;
+  readonly last: ScanAccepted | null;
   readonly error: string | null;
 }
 
+const FLASH_MS = 1000;
+
 function useManualScan(kind: ScanKind): ManualScan {
-  const [pending, setPending] = useState(false);
-  const [last, setLast] = useState<ScanResult | null>(null);
+  const [last, setLast] = useState<ScanAccepted | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [flashing, setFlashing] = useState(false);
+
+  useEffect(() => {
+    if (!flashing) return;
+    const t = setTimeout(() => {
+      setFlashing(false);
+    }, FLASH_MS);
+    return (): void => {
+      clearTimeout(t);
+    };
+  }, [flashing, last]);
+
   const run = (): void => {
-    if (pending) return;
-    setPending(true);
     setError(null);
     fetch(`/api/orchestration/scan?kind=${kind}`, { method: 'POST' })
       .then(async (r) => {
         const raw: unknown = await r.json();
         if (!r.ok) throw new Error(`HTTP ${String(r.status)}`);
-        return ScanResultSchema.parse(raw);
+        return ScanAcceptedSchema.parse(raw);
       })
       .then((res) => {
         setLast(res);
+        setFlashing(true);
       })
       .catch((e: unknown) => {
         setError(e instanceof Error ? e.message : String(e));
-      })
-      .finally(() => {
-        setPending(false);
       });
   };
-  return { run, pending, last, error };
+  return { run, flashing, last, error };
 }
 
 function useClock(): string {

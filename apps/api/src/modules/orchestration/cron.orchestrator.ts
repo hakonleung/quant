@@ -20,7 +20,12 @@
  */
 
 import { Inject, Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
-import { newTraceId, type ScanKind, type ScanResult } from '@quant/shared';
+import {
+  newTraceId,
+  type ScanAccepted,
+  type ScanKind,
+  type ScanResult,
+} from '@quant/shared';
 import { CacheInspector } from './cache-inspector.js';
 import { KLINE_QUEUE, META_QUEUE } from './flight.token.js';
 import type { InMemoryQueue } from './domain/in-memory-queue.js';
@@ -91,6 +96,10 @@ export class CronOrchestrator implements OnModuleInit, OnModuleDestroy {
   /**
    * Run a scan of the given kind, coalescing with any in-flight one of
    * the same kind. `'all'` runs both meta and kline in parallel.
+   *
+   * Returns the in-flight Promise — used by the daily timer + tests.
+   * The HTTP endpoint goes through {@link fireScan} instead so the
+   * client doesn't have to wait the full 10–60s for bulk + per-stock.
    */
   triggerScan(kind: ScanKind): Promise<ScanResult> {
     const existing = this.inFlight[kind];
@@ -100,6 +109,28 @@ export class CronOrchestrator implements OnModuleInit, OnModuleDestroy {
     });
     this.inFlight[kind] = p;
     return p;
+  }
+
+  /**
+   * Fire-and-forget variant for the manual-trigger HTTP endpoint.
+   *
+   * Returns a {@link ScanAccepted} synchronously: the in-flight Promise
+   * is detached so the request returns in <10ms even when the scan
+   * itself takes minutes (bulk financials Flight RPC + per-stock
+   * enrichment queue). Errors are logged through the orchestrator's
+   * normal `logScanFailure` path so they show up in the gateway log
+   * and not as unhandled promise rejections.
+   */
+  fireScan(kind: ScanKind): ScanAccepted {
+    const startedAt = new Date().toISOString();
+    const traceId = newTraceId();
+    const wasInflight = this.inFlight[kind] !== undefined;
+    // Kick the work off; we don't await. If the kind already has one
+    // in flight, `triggerScan` returns it as-is (still detached).
+    void this.triggerScan(kind).catch((err: unknown) => {
+      this.logScanFailure('manual', err);
+    });
+    return { kind, traceId, startedAt, started: !wasInflight };
   }
 
   private scheduleNextDaily(): void {

@@ -12,13 +12,13 @@
  * the orchestration module owns.
  */
 
-import { Controller, Get, Inject, Post, Query, Sse } from '@nestjs/common';
+import { Controller, Get, HttpCode, HttpStatus, Inject, Post, Query, Sse } from '@nestjs/common';
 import {
   ScanKindSchema,
   type QueueSnapshot,
   type QueueSnapshotEntry,
+  type ScanAccepted,
   type ScanKind,
-  type ScanResult,
 } from '@quant/shared';
 import { Observable, interval, map, startWith } from 'rxjs';
 
@@ -57,17 +57,19 @@ export class QueueStatusController {
   }
 
   /**
-   * Manual trigger for the meta and/or kline scan. Coalesces per-kind
-   * via {@link CronOrchestrator.triggerScan}, so spam-clicking from
-   * the UI cannot stampede the inspector. `?kind=meta|kline` runs only
-   * that side; default `'all'` runs both in parallel.
+   * Fire-and-forget manual trigger for the meta / kline / all scan.
+   * Returns 202 Accepted with a {@link ScanAccepted} envelope as soon
+   * as the scan is kicked off — the client tracks progress via the
+   * SSE queue stream instead of holding the request open. Coalesces
+   * per-kind so spam-clicks share one in-flight scan.
    */
   @Post('scan')
-  async manualScan(
+  @HttpCode(HttpStatus.ACCEPTED)
+  manualScan(
     @Query('kind', new ZodValidationPipe(ScanKindSchema.default('all')))
     kind: ScanKind,
-  ): Promise<ScanResult> {
-    return this.cron.triggerScan(kind);
+  ): ScanAccepted {
+    return this.cron.fireScan(kind);
   }
 
   private makeSnapshot(): QueueSnapshot {

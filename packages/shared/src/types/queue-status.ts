@@ -40,11 +40,34 @@ export const ScanKindSchema = z.enum(['meta', 'kline', 'all']);
 export type ScanKind = z.infer<typeof ScanKindSchema>;
 
 /**
- * Result of a manual or scheduled cron scan
- * (`POST /api/orchestration/scan`). Reports how many jobs landed on
- * each queue after dedup; existing in-flight or pending jobs with the
- * same id are not re-counted. The `kind` field echoes the trigger; for
- * `'meta'` `klineEnqueued` is always 0, and vice-versa.
+ * Acknowledgement for a fire-and-forget scan trigger
+ * (`POST /api/orchestration/scan`). The actual scan runs in the
+ * background — bulk financials sync alone is a 10–15s Flight RPC
+ * and the per-stock follow-up enrichment can take minutes. Clients
+ * observe progress via the queue SSE stream and the meta/kline
+ * counter capsules in the footer; they do **not** await this call.
+ */
+export const ScanAcceptedSchema = z
+  .object({
+    kind: ScanKindSchema,
+    traceId: z.string().min(1),
+    startedAt: z.string().datetime({ offset: true }),
+    /**
+     * `true` when this call started a fresh scan; `false` when it
+     * coalesced with one already in flight for the same kind. Either
+     * way the SSE stream is the single source of truth for progress.
+     */
+    started: z.boolean(),
+  })
+  .strict();
+
+export type ScanAccepted = z.infer<typeof ScanAcceptedSchema>;
+
+/**
+ * Internal post-scan summary, produced by `CronOrchestrator.triggerScan`
+ * for log lines and tests. **Not** part of the HTTP contract anymore —
+ * the manual-trigger endpoint returns a {@link ScanAccepted} immediately;
+ * progress lives in the SSE stream.
  */
 export const ScanResultSchema = z
   .object({
