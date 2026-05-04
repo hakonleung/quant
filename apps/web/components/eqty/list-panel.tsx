@@ -508,6 +508,7 @@ function DynamicHeader({ sector }: { sector: Sector }): React.ReactElement {
             evidence: matchesToEvidenceMap(data.matches),
             screenPlan: data.screenPlan,
             universePlan: data.universePlan,
+            rank: data.rank,
           });
           setEditing(false);
         },
