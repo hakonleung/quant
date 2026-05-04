@@ -10,16 +10,13 @@ import { newTraceId, QuantError, type StockBasic, type WatchTask } from '@quant/
 import type { WatchTaskCreate, WatchTaskPatch } from './dto/watch.dto.js';
 import { WatchTaskStore } from './watch-task.store.js';
 import { WatchUniverseStore } from './watch-universe.store.js';
-import {
-  WATCH_QUOTE_PORT,
-  type WatchQuotePort,
-} from './domain/watch-port.js';
+import { WATCH_QUOTE_PORT, type WatchQuotePort } from './domain/watch-port.js';
 
 @Injectable()
 export class WatchService {
   constructor(
-    private readonly tasks: WatchTaskStore,
-    private readonly universe: WatchUniverseStore,
+    @Inject(WatchTaskStore) private readonly tasks: WatchTaskStore,
+    @Inject(WatchUniverseStore) private readonly universe: WatchUniverseStore,
     @Inject(WATCH_QUOTE_PORT) private readonly port: WatchQuotePort,
   ) {}
 
