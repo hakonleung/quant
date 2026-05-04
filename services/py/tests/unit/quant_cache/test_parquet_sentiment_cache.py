@@ -15,7 +15,6 @@ import pyarrow.parquet as pq
 import pytest
 from quant_cache.parquet_sentiment_cache import ParquetSentimentCache
 from quant_core.domain.types.sentiment import (
-    Evidence,
     Insight,
     MarketSentiment,
     MarketTrend,
@@ -42,14 +41,6 @@ def _stock(
     asof: date = _ASOF,
     window_days: int = 30,
 ) -> StockSentiment:
-    evidence = (
-        Evidence(
-            source_type="research",
-            quoted_text="批价企稳",
-            url="https://example.com/r/1",
-            published_at=date(2026, 4, 30),
-        ),
-    )
     return StockSentiment(
         code=code,
         asof=asof,
@@ -62,7 +53,6 @@ def _stock(
                 direction="positive",
                 confidence=0.8,
                 is_rumor=False,
-                evidence=evidence,
             ),
         ),
         hot_themes=(
@@ -70,7 +60,6 @@ def _stock(
                 label="高端白酒",
                 relevance=0.9,
                 rationale="行业龙头",
-                evidence=evidence,
             ),
         ),
         research_targets=(

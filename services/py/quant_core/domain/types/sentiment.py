@@ -21,14 +21,15 @@ if TYPE_CHECKING:
     from decimal import Decimal
 
 
-SCHEMA_VERSION: Final[int] = 3
+SCHEMA_VERSION: Final[int] = 4
 """Bump on any breaking change to the dataclasses below; the cache adapter
 treats older payloads as expired."""
 
 
 SourceType = Literal["research", "news", "xueqiu", "guba", "industry"]
-"""Origin of an :class:`Evidence` record. Mirrors the five source classes
-the system prompt instructs the LLM to cover (§3.2)."""
+"""The five source classes the analyst pass is expected to cover (§3.2).
+Used in :attr:`StockSentiment.coverage_gaps` to mark which classes the
+LLM did not manage to touch in a given run."""
 
 Direction = Literal["positive", "negative", "neutral"]
 
@@ -68,22 +69,6 @@ StyleSignalName = Literal[
 
 
 @dataclass(frozen=True, slots=True)
-class Evidence:
-    """A single quoted fragment + URL backing a claim.
-
-    Every load-bearing field on a sentiment payload (drivers, themes, price
-    signals, research targets) MUST point at one or more :class:`Evidence`
-    records. Empty-evidence claims are dropped by the LLM-output mapper so
-    they never reach the cache or the UI.
-    """
-
-    source_type: SourceType
-    quoted_text: str
-    url: str
-    published_at: date | None = None
-
-
-@dataclass(frozen=True, slots=True)
 class Insight:
     """A one-sentence claim with direction, confidence and rumor flag."""
 
@@ -91,7 +76,6 @@ class Insight:
     direction: Direction
     confidence: float
     is_rumor: bool
-    evidence: tuple[Evidence, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -105,7 +89,6 @@ class ThemeTag:
     label: str
     relevance: float
     rationale: str
-    evidence: tuple[Evidence, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -125,7 +108,6 @@ class PriceSignal:
     product: str
     change: PriceChange
     horizon: PriceHorizon
-    evidence: tuple[Evidence, ...] = ()
     magnitude: str | None = None
 
 
@@ -156,7 +138,6 @@ class CompetitorInfo:
     threat_level: ThreatLevel
     note: str
     """One-sentence description of overlap, technical gap, customer share."""
-    evidence: tuple[Evidence, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -173,7 +154,6 @@ class CompetitiveLandscape:
     competitors: tuple[CompetitorInfo, ...] = ()
     moats: tuple[str, ...] = ()
     risks: tuple[str, ...] = ()
-    evidence: tuple[Evidence, ...] = ()
     market_share_pct: float | None = None
 
 
@@ -222,7 +202,6 @@ class ThemeCluster:
     heat_score: float
     trend: ThemeTrend
     summary: str
-    top_evidence: tuple[Evidence, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -232,7 +211,6 @@ class StyleSignal:
     name: StyleSignalName
     confidence: float
     rationale: str
-    supporting_evidence: tuple[Evidence, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
