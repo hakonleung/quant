@@ -59,6 +59,9 @@ importers:
       apache-arrow:
         specifier: ^21.1.0
         version: 21.1.0
+      decimal.js:
+        specifier: ^10.6.0
+        version: 10.6.0
       reflect-metadata:
         specifier: ^0.2.2
         version: 0.2.2
@@ -187,6 +190,9 @@ importers:
 
   packages/shared:
     dependencies:
+      decimal.js:
+        specifier: ^10.4.3
+        version: 10.6.0
       zod:
         specifier: ^3.24.1
         version: 3.25.76

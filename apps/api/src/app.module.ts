@@ -7,6 +7,7 @@ import { PatternModule } from './modules/pattern/pattern.module.js';
 import { ScreenModule } from './modules/screen/screen.module.js';
 import { SentimentModule } from './modules/sentiment/sentiment.module.js';
 import { StockMetaModule } from './modules/stock-meta/stock-meta.module.js';
+import { WatchModule } from './modules/watch/watch.module.js';
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { StockMetaModule } from './modules/stock-meta/stock-meta.module.js';
     SentimentModule,
     ScreenModule,
     PatternModule,
+    WatchModule,
   ],
   controllers: [HealthController],
   providers: [TraceMiddleware],

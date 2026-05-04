@@ -29,6 +29,7 @@ import { SectorSentimentPanel } from '../eqty/sector-sentiment-panel.js';
 import { SectorsPanel } from '../eqty/sectors-panel.js';
 import { SlackPushPanel } from '../eqty/slack-push-panel.js';
 import { StdoutPanel } from '../eqty/stdout-panel.js';
+import { WatchPanel } from '../eqty/watch-panel.js';
 
 export function EqtyModule(): React.ReactElement {
   const code = useUiStore((s) => s.focusCode);
@@ -81,6 +82,7 @@ export function EqtyModule(): React.ReactElement {
             />
           </>
         )}
+        <WatchPanel />
       </Column>
     </Flex>
   );

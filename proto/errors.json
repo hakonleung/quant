@@ -37,6 +37,12 @@
       "description": "K-line cache missing for the requested symbol/range."
     },
     {
+      "name": "WATCH_CODE_NOT_FOUND",
+      "number": 103,
+      "http": 404,
+      "description": "Watch universe (HK/US) does not contain the requested code."
+    },
+    {
       "name": "DSL_INVALID",
       "number": 200,
       "http": 400,
@@ -61,6 +67,12 @@
       "description": "Requested universe exceeds the configured cap."
     },
     {
+      "name": "WATCH_TASK_CONFLICT",
+      "number": 204,
+      "http": 409,
+      "description": "Watch task with the same (market, code) already exists."
+    },
+    {
       "name": "PATTERN_REFERENCE_LOOKAHEAD",
       "number": 300,
       "http": 400,
@@ -77,6 +89,12 @@
       "number": 401,
       "http": 503,
       "description": "External data source returned rate-limit error."
+    },
+    {
+      "name": "WATCH_QUOTE_UPSTREAM_FAIL",
+      "number": 402,
+      "http": 502,
+      "description": "Realtime watch quote upstream (akshare) call failed or returned malformed data."
     },
     {
       "name": "LLM_FAILED",
