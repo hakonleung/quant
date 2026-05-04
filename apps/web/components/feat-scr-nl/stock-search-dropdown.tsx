@@ -5,7 +5,7 @@
  *
  * Rendered into a portal at the document root with `position: fixed`
  * anchored to the input's bounding rect — escapes the parent
- * `<Pane overflow="hidden">` clipping, which would otherwise hide the
+ * `<FeatView overflow="hidden">` clipping, which would otherwise hide the
  * suggestions when the search lives inside a Pane (e.g. the W-0 add
  * form).
  */

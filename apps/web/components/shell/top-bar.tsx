@@ -17,18 +17,18 @@
 
 import { Box, Flex, HStack, Text } from '@chakra-ui/react';
 
-import { SysConfigPane } from './sys-config-pane.js';
-import { SysStatPane } from './sys-stat-pane.js';
+import { FeatSysCfg } from "../feat-sys-cfg/feat-sys-cfg.js";
+import { FeatSysStat } from "../feat-sys-stat/feat-sys-stat.js";
 
 export function TopBar(): React.ReactElement {
   return (
     <Flex minH="42px" bg="panel" borderBottomWidth="2px" borderBottomColor="accent" align="stretch">
       <Brand />
       <Box flex="1" minW={0} display="flex" alignItems="stretch">
-        <SysStatPane />
+        <FeatSysStat />
       </Box>
       <Box w="220px" flex="0 0 auto" display="flex" alignItems="stretch">
-        <SysConfigPane />
+        <FeatSysCfg />
       </Box>
     </Flex>
   );

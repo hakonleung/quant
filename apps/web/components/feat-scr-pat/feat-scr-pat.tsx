@@ -21,10 +21,10 @@ import { useKline } from '../../lib/hooks/use-eqty-data.js';
 import { useLayoutStore } from '../../lib/stores/layout.store.js';
 import { useSectorsStore } from '../../lib/stores/sectors.store.js';
 import { ALL_SECTOR_ID, useUiStore } from '../../lib/stores/ui.store.js';
-import { Pane } from '../shell/pane.js';
-import { PaneAction, PaneHeaderRight, PaneStatus } from '../shell/pane-header.js';
+import { FeatView } from "../feat-view/feat-view.js";
+import { FeatViewAction, FeatViewHeaderRight, FeatViewStatus } from "../feat-view/feat-view-header.js";
 
-export function PatternMatchPanel(): React.ReactElement {
+export function FeatScrPat(): React.ReactElement {
   const range = useUiStore((s) => s.chartRange);
   const setChartRange = useUiStore((s) => s.setChartRange);
   const activeSectorId = useUiStore((s) => s.activeSectorId);
@@ -34,13 +34,13 @@ export function PatternMatchPanel(): React.ReactElement {
   // When the user selects a range on E-0 we expand this pane out of the
   // minimized state so FIND is visible and clickable without an extra
   // restore step.
-  const paneMode = useLayoutStore((s) => s.paneMode[Feat.ScreenPattern]);
-  const setPaneMode = useLayoutStore((s) => s.setPaneMode);
+  const featViewMode = useLayoutStore((s) => s.featViewMode[Feat.ScreenPattern]);
+  const setFeatViewMode = useLayoutStore((s) => s.setFeatViewMode);
   useEffect(() => {
-    if (range !== null && paneMode === 'minimized') {
-      setPaneMode(Feat.ScreenPattern, 'normal');
+    if (range !== null && featViewMode === 'minimized') {
+      setFeatViewMode(Feat.ScreenPattern, 'normal');
     }
-  }, [range, paneMode, setPaneMode]);
+  }, [range, featViewMode, setFeatViewMode]);
 
   const universe: readonly string[] =
     activeSectorId === ALL_SECTOR_ID || sector === null ? [] : sector.codes;
@@ -74,10 +74,10 @@ export function PatternMatchPanel(): React.ReactElement {
         : 'idle';
 
   const right = (
-    <PaneHeaderRight>
-      <PaneStatus tone={tone} blink={mutation.isPending} />
+    <FeatViewHeaderRight>
+      <FeatViewStatus tone={tone} blink={mutation.isPending} />
       {range !== null && (
-        <PaneAction
+        <FeatViewAction
           title="clear range"
           onClick={(): void => {
             setChartRange(null);
@@ -86,9 +86,9 @@ export function PatternMatchPanel(): React.ReactElement {
           tone="danger"
         >
           ×
-        </PaneAction>
+        </FeatViewAction>
       )}
-      <PaneAction
+      <FeatViewAction
         title={range === null ? 'no range selected' : 'find similar'}
         onClick={onFind}
         busy={mutation.isPending}
@@ -96,12 +96,12 @@ export function PatternMatchPanel(): React.ReactElement {
         tone="accent"
       >
         ⌕
-      </PaneAction>
-    </PaneHeaderRight>
+      </FeatViewAction>
+    </FeatViewHeaderRight>
   );
 
   return (
-    <Pane feat={Feat.ScreenPattern} right={right}>
+    <FeatView feat={Feat.ScreenPattern} right={right}>
       <Box flex="1" overflow="auto" bg="panel">
         {mutation.data === undefined ? (
           <Empty hint={range === null ? 'no reference range' : 'press FIND to scan'} />
@@ -111,7 +111,7 @@ export function PatternMatchPanel(): React.ReactElement {
           mutation.data.matches.map((m) => <MatchRow key={`${m.code}-${m.startDate}`} match={m} />)
         )}
       </Box>
-    </Pane>
+    </FeatView>
   );
 }
 

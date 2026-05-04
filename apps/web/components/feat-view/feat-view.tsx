@@ -5,11 +5,11 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { flushSync } from 'react-dom';
 
 import { FEAT_CONFIG_MAP, type Feat } from '../../lib/eqty/feat.js';
-import { useLayoutStore, type PaneMode } from '../../lib/stores/layout.store.js';
+import { useLayoutStore, type FeatViewMode } from '../../lib/stores/layout.store.js';
 
 const TRANSITION_MS = 280;
 
-interface PaneProps {
+interface FeatViewProps {
   readonly feat: Feat;
   /** Custom title slot — when present takes the whole title position. */
   readonly titleSlot?: ReactNode;
@@ -17,7 +17,7 @@ interface PaneProps {
   readonly children: ReactNode;
 }
 
-export function Pane({ feat, titleSlot, right, children }: PaneProps): React.ReactElement {
+export function FeatView({ feat, titleSlot, right, children }: FeatViewProps): React.ReactElement {
   const config = FEAT_CONFIG_MAP[feat];
   const cyber = config.cyber ?? false;
   const gridArea = config.gridArea;
@@ -25,12 +25,12 @@ export function Pane({ feat, titleSlot, right, children }: PaneProps): React.Rea
 
   // Persisted mode keyed by feat id — survives reloads. Missing entries
   // fall back to the static `defaultMinimized` flag in feat config.
-  const persistedMode = useLayoutStore((s) => s.paneMode[feat]);
-  const setPersistedMode = useLayoutStore((s) => s.setPaneMode);
-  const mode: PaneMode =
+  const persistedMode = useLayoutStore((s) => s.featViewMode[feat]);
+  const setPersistedMode = useLayoutStore((s) => s.setFeatViewMode);
+  const mode: FeatViewMode =
     persistedMode ?? (config.defaultMinimized === true ? 'minimized' : 'normal');
   const setMode = useCallback(
-    (m: PaneMode): void => {
+    (m: FeatViewMode): void => {
       setPersistedMode(feat, m);
     },
     [feat, setPersistedMode],
@@ -158,7 +158,7 @@ export function Pane({ feat, titleSlot, right, children }: PaneProps): React.Rea
       _before={corners._before as never}
       _after={corners._after as never}
     >
-      <PaneHeader
+      <FeatViewHeader
         id={feat}
         titleSlot={titleSlot}
         right={right}
@@ -223,19 +223,19 @@ function cornerStyle(corner: 'tl' | 'br', cyber: boolean): Record<string, unknow
   return { ...base, bottom: '-1px', right: '-1px', borderBottomWidth: '1px', borderRightWidth: '1px' };
 }
 
-interface HeaderProps {
+interface FeatViewHeaderProps {
   readonly id: string;
   readonly titleSlot?: ReactNode;
   readonly right?: ReactNode;
   readonly cyber: boolean;
-  readonly mode: PaneMode;
+  readonly mode: FeatViewMode;
   readonly onMinimize: () => void;
   readonly onRestore: () => void;
   readonly onFullscreen: () => void;
   readonly onExitFullscreen: () => void;
 }
 
-function PaneHeader({
+function FeatViewHeader({
   id,
   titleSlot,
   right,
@@ -245,7 +245,7 @@ function PaneHeader({
   onRestore,
   onFullscreen,
   onExitFullscreen,
-}: HeaderProps): React.ReactElement {
+}: FeatViewHeaderProps): React.ReactElement {
   return (
     <Flex
       align="center"
@@ -293,7 +293,7 @@ function PaneHeader({
         color={cyber ? 'term.ink3' : 'ink3'}
         flexShrink={0}
       >
-        <PaneControls
+        <FeatViewControls
           cyber={cyber}
           mode={mode}
           onMinimize={onMinimize}
@@ -306,23 +306,23 @@ function PaneHeader({
   );
 }
 
-interface ControlsProps {
+interface FeatViewControlsProps {
   readonly cyber: boolean;
-  readonly mode: PaneMode;
+  readonly mode: FeatViewMode;
   readonly onMinimize: () => void;
   readonly onRestore: () => void;
   readonly onFullscreen: () => void;
   readonly onExitFullscreen: () => void;
 }
 
-function PaneControls({
+function FeatViewControls({
   cyber,
   mode,
   onMinimize,
   onRestore,
   onFullscreen,
   onExitFullscreen,
-}: ControlsProps): React.ReactElement {
+}: FeatViewControlsProps): React.ReactElement {
   return (
     <HStack gap="2px">
       {mode === 'minimized' ? (

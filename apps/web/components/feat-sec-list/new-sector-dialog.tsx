@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * Modal for the SectorsPanel `+ NEW` action. Two flavours share a
+ * Modal for the FeatSecList `+ NEW` action. Two flavours share a
  * single shell:
  *   - **User sector** — title only; saves an empty basket the user
  *     fills in later from the list view.

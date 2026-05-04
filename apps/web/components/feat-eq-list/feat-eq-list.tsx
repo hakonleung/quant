@@ -32,11 +32,11 @@ import { useBlacklistStore } from '../../lib/stores/blacklist.store.js';
 import { useSectorsStore, type Sector } from '../../lib/stores/sectors.store.js';
 import { useSettingsStore } from '../../lib/stores/settings.store.js';
 import { ALL_SECTOR_ID, useUiStore } from '../../lib/stores/ui.store.js';
-import { SearchPane } from './stock-command-bar.js';
+import { FeatScrNl } from "../feat-scr-nl/feat-scr-nl.js";
 import { DslTree } from '../dsl/dsl-tree.js';
-import { Pane } from '../shell/pane.js';
+import { FeatView } from "../feat-view/feat-view.js";
 import { ConfirmCancelled, useConfirm } from '../../lib/hooks/use-confirm.js';
-import { PaneHeaderRight, PaneStatus } from '../shell/pane-header.js';
+import { FeatViewHeaderRight, FeatViewStatus } from "../feat-view/feat-view-header.js";
 
 /**
  * Row payload — flat record so dynamic sectors literally see
@@ -73,7 +73,7 @@ interface SortState {
 
 const STICKY_COL_WIDTH = 130;
 
-export function ListPanel(): React.ReactElement {
+export function FeatEqList(): React.ReactElement {
   const activeSectorId = useUiStore((s) => s.activeSectorId);
   const setFocusCode = useUiStore((s) => s.setFocusCode);
   const focusCode = useUiStore((s) => s.focusCode);
@@ -236,13 +236,13 @@ export function ListPanel(): React.ReactElement {
         ? 'amber'
         : 'green';
   const right = (
-    <PaneHeaderRight>
-      <PaneStatus tone={listTone} blink={isLoading || klineBatch.isLoading} />
-    </PaneHeaderRight>
+    <FeatViewHeaderRight>
+      <FeatViewStatus tone={listTone} blink={isLoading || klineBatch.isLoading} />
+    </FeatViewHeaderRight>
   );
 
   return (
-    <Pane
+    <FeatView
       feat={Feat.EquityList}
       titleSlot={
         <EditableTitle
@@ -286,7 +286,7 @@ export function ListPanel(): React.ReactElement {
         />
       </Flex>
       {confirmComp}
-    </Pane>
+    </FeatView>
   );
 }
 
@@ -508,7 +508,7 @@ function UserSectorHeader({
 }): React.ReactElement {
   return (
     <Box flexShrink={0}>
-      <SearchPane
+      <FeatScrNl
         marketFilter="a"
         onPick={(s): void => {
           onAdd(s.code);

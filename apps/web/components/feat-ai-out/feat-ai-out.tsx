@@ -6,9 +6,9 @@ import { useEffect } from 'react';
 
 import { Feat } from '../../lib/eqty/feat.js';
 import { useAnalyzeSentiment, useSentiment } from '../../lib/hooks/use-eqty-data.js';
-import { MarkdownPreviewer } from '../modules/markdown-previewer.js';
-import { Pane } from '../shell/pane.js';
-import { PaneAction, PaneHeaderRight, PaneStatus } from '../shell/pane-header.js';
+import { FeatAiMd } from "../feat-ai-md/feat-ai-md.js";
+import { FeatView } from "../feat-view/feat-view.js";
+import { FeatViewAction, FeatViewHeaderRight, FeatViewStatus } from "../feat-view/feat-view-header.js";
 
 interface Props {
   readonly code: string;
@@ -17,7 +17,7 @@ interface Props {
   readonly onResult?: (s: Sentiment) => void;
 }
 
-export function StdoutPanel({ code, onResult }: Props): React.ReactElement {
+export function FeatAiOut({ code, onResult }: Props): React.ReactElement {
   const cached = useSentiment(code);
   const analyze = useAnalyzeSentiment(code);
   const sentiment = cached.data ?? null;
@@ -54,20 +54,20 @@ export function StdoutPanel({ code, onResult }: Props): React.ReactElement {
   const markdownSource = sentiment?.result ?? '';
 
   return (
-    <Pane
+    <FeatView
       feat={Feat.AIOut}
       right={
-        <PaneHeaderRight>
-          <PaneStatus tone={tone} blink={analyze.isPending} />
-          <PaneAction
+        <FeatViewHeaderRight>
+          <FeatViewStatus tone={tone} blink={analyze.isPending} />
+          <FeatViewAction
             title="fetch sentiment"
             onClick={onFetch}
             busy={analyze.isPending}
             tone="accent"
           >
             ⟳
-          </PaneAction>
-        </PaneHeaderRight>
+          </FeatViewAction>
+        </FeatViewHeaderRight>
       }
     >
       <Flex direction="column" h="100%" minH={0}>
@@ -117,8 +117,8 @@ export function StdoutPanel({ code, onResult }: Props): React.ReactElement {
         {/* A-2: collapsed by default — header-only line under the stdout
             stream. Click the restore (▢) control in its header to expand
             and read the verbatim analyst write-up. */}
-        <MarkdownPreviewer source={markdownSource} />
+        <FeatAiMd source={markdownSource} />
       </Flex>
-    </Pane>
+    </FeatView>
   );
 }

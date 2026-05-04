@@ -9,7 +9,7 @@
  * tables, lists and code blocks pick up the mono palette so the result
  * reads like the rest of the workbench.
  *
- * The first consumer is A-0 (`StdoutPanel`) flipping into preview mode
+ * The first consumer is A-0 (`FeatAiOut`) flipping into preview mode
  * to render `Sentiment.result` (the verbatim analyst write-up returned
  * by the web-search pass). The component itself does not know about
  * sentiment; pass any markdown text in.
@@ -21,7 +21,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
 import { Feat } from '../../lib/eqty/feat.js';
-import { Pane } from '../shell/pane.js';
+import { FeatView } from "../feat-view/feat-view.js";
 
 interface MarkdownPreviewerProps {
   /** Markdown source. Empty string renders the idle hint. */
@@ -37,13 +37,13 @@ const PROSE_TEXT_STYLE = {
   lineHeight: '1.7',
 } as const;
 
-export function MarkdownPreviewer({
+export function FeatAiMd({
   source,
   headerRight,
 }: MarkdownPreviewerProps): React.ReactElement {
   const trimmed = source.trim();
   return (
-    <Pane feat={Feat.AIMd} {...(headerRight !== undefined ? { right: headerRight } : {})}>
+    <FeatView feat={Feat.AIMd} {...(headerRight !== undefined ? { right: headerRight } : {})}>
       <Box
         position="relative"
         px="18px"
@@ -75,7 +75,7 @@ export function MarkdownPreviewer({
           </Box>
         )}
       </Box>
-    </Pane>
+    </FeatView>
   );
 }
 

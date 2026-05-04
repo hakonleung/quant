@@ -27,7 +27,7 @@ import type { KlineBar, StockMetaDto } from '@quant/shared';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { Feat } from '../../lib/eqty/feat.js';
-import { PaneAction, PaneHeaderRight } from '../shell/pane-header.js';
+import { FeatViewAction, FeatViewHeaderRight } from "../feat-view/feat-view-header.js";
 import {
   clampViewport,
   DEFAULT_VIEWPORT,
@@ -44,8 +44,8 @@ import { useKline, useStockMetaQuery, useStockSnapshots } from '../../lib/hooks/
 import { useBlacklistStore } from '../../lib/stores/blacklist.store.js';
 import { useUiStore } from '../../lib/stores/ui.store.js';
 import { palette } from '../../lib/theme/tokens.js';
-import { Pane } from '../shell/pane.js';
-import { AddToSectorDialog } from './add-to-sector-dialog.js';
+import { FeatView } from "../feat-view/feat-view.js";
+import { AddToSectorDialog } from "../feat-sec-list/add-to-sector-dialog.js";
 
 // Render space — height fixed; width fills container via SVG width=100%.
 const PRICE_H = 240;
@@ -68,7 +68,7 @@ interface Props {
   readonly code: string;
 }
 
-export function ChartPanel({ code }: Props): React.ReactElement {
+export function FeatEqChart({ code }: Props): React.ReactElement {
   const { data, isLoading } = useKline(code, '250D');
   const meta = useStockMetaQuery(code);
   const stockName = meta.data?.name ?? '';
@@ -144,7 +144,7 @@ export function ChartPanel({ code }: Props): React.ReactElement {
   const daysAgo = focusIdx === null ? null : bars.length - 1 - focusIdx;
 
   return (
-    <Pane
+    <FeatView
       feat={Feat.EquityChart}
       right={
         <ChartHeaderRight
@@ -198,7 +198,7 @@ export function ChartPanel({ code }: Props): React.ReactElement {
           setShowAddDialog(false);
         }}
       />
-    </Pane>
+    </FeatView>
   );
 }
 
@@ -814,19 +814,19 @@ function ChartHeaderRight({
     <Flex align="center" gap="8px">
       <Text>{code}</Text>
       {stockName !== '' && <Text>{stockName}</Text>}
-      <PaneHeaderRight>
-        <PaneAction title="add to sector" onClick={onAddToSector} tone="accent">
+      <FeatViewHeaderRight>
+        <FeatViewAction title="add to sector" onClick={onAddToSector} tone="accent">
           ★
-        </PaneAction>
-        <PaneAction
+        </FeatViewAction>
+        <FeatViewAction
           title={alreadyBlacklisted ? 'already blacklisted' : 'blacklist'}
           onClick={onBlacklist}
           disabled={alreadyBlacklisted}
           tone="danger"
         >
           ⊘
-        </PaneAction>
-      </PaneHeaderRight>
+        </FeatViewAction>
+      </FeatViewHeaderRight>
       {confirmComp}
     </Flex>
   );

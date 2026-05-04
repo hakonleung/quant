@@ -9,8 +9,8 @@ import { useKlineBulk, useMarketSentiment } from '../../lib/hooks/use-eqty-data.
 import { useStockList } from '../../lib/hooks/use-stock-list.js';
 import { useSectorsStore, type Sector } from '../../lib/stores/sectors.store.js';
 import { ALL_SECTOR_ID, useUiStore } from '../../lib/stores/ui.store.js';
-import { Pane } from '../shell/pane.js';
-import { PaneAction, PaneHeaderRight } from '../shell/pane-header.js';
+import { FeatView } from "../feat-view/feat-view.js";
+import { FeatViewAction, FeatViewHeaderRight } from "../feat-view/feat-view-header.js";
 import { NewSectorDialog } from './new-sector-dialog.js';
 
 /**
@@ -21,7 +21,7 @@ import { NewSectorDialog } from './new-sector-dialog.js';
  */
 export const ANALYZE_MAX_CODES = 50;
 
-export function SectorsPanel(): React.ReactElement {
+export function FeatSecList(): React.ReactElement {
   const sectors = useSectorsStore((s) => s.sectors);
   const removeSector = useSectorsStore((s) => s.remove);
   const activeSectorId = useUiStore((s) => s.activeSectorId);
@@ -98,11 +98,11 @@ export function SectorsPanel(): React.ReactElement {
   }, [klineBatch.byCode]);
 
   return (
-    <Pane
+    <FeatView
       feat={Feat.SectorList}
       right={
-        <PaneHeaderRight>
-          <PaneAction
+        <FeatViewHeaderRight>
+          <FeatViewAction
             title="new sector"
             tone="accent"
             onClick={(): void => {
@@ -110,8 +110,8 @@ export function SectorsPanel(): React.ReactElement {
             }}
           >
             +
-          </PaneAction>
-        </PaneHeaderRight>
+          </FeatViewAction>
+        </FeatViewHeaderRight>
       }
     >
       <Flex direction="column" h="100%">
@@ -172,7 +172,7 @@ export function SectorsPanel(): React.ReactElement {
         }}
       />
       {confirmComp}
-    </Pane>
+    </FeatView>
   );
 }
 

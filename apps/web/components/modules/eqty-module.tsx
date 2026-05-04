@@ -22,14 +22,14 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 
 import { LAYOUT_LIMITS, useLayoutStore } from '../../lib/stores/layout.store.js';
 import { useUiStore } from '../../lib/stores/ui.store.js';
-import { ChartPanel } from '../eqty/chart-panel.js';
-import { ListPanel } from '../eqty/list-panel.js';
-import { PatternMatchPanel } from '../eqty/pattern-match-panel.js';
-import { SectorSentimentPanel } from '../eqty/sector-sentiment-panel.js';
-import { SectorsPanel } from '../eqty/sectors-panel.js';
-import { SlackPushPanel } from '../eqty/slack-push-panel.js';
-import { StdoutPanel } from '../eqty/stdout-panel.js';
-import { WatchPanel } from '../eqty/watch-panel.js';
+import { FeatEqChart } from "../feat-eq-chart/feat-eq-chart.js";
+import { FeatEqList } from "../feat-eq-list/feat-eq-list.js";
+import { FeatScrPat } from "../feat-scr-pat/feat-scr-pat.js";
+import { FeatAiHist } from "../feat-ai-hist/feat-ai-hist.js";
+import { FeatSecList } from "../feat-sec-list/feat-sec-list.js";
+import { FeatSysPush } from "../feat-sys-push/feat-sys-push.js";
+import { FeatAiOut } from "../feat-ai-out/feat-ai-out.js";
+import { FeatWatchLive } from "../feat-watch-live/feat-watch-live.js";
 
 export function EqtyModule(): React.ReactElement {
   const code = useUiStore((s) => s.focusCode);
@@ -42,7 +42,7 @@ export function EqtyModule(): React.ReactElement {
   return (
     <Flex h="100%" gap="0" bg="line" align="stretch">
       <Column width={`${String(leftWidth)}px`}>
-        <SectorsPanel />
+        <FeatSecList />
       </Column>
       <Divider
         side="left"
@@ -53,13 +53,13 @@ export function EqtyModule(): React.ReactElement {
         max={LAYOUT_LIMITS.leftMax}
       />
       <Column flex="1">
-        <ListPanel />
+        <FeatEqList />
         {/* 101 chart sits directly above 105 pattern-match — pattern
             match operates on a range selected from the chart, so the
             two related surfaces are stacked together in the middle
             column. */}
-        {code !== null && <ChartPanel code={code} />}
-        <PatternMatchPanel />
+        {code !== null && <FeatEqChart code={code} />}
+        <FeatScrPat />
       </Column>
       <Divider
         side="right"
@@ -71,18 +71,18 @@ export function EqtyModule(): React.ReactElement {
         max={LAYOUT_LIMITS.rightMax}
       />
       <Column width={`${String(rightWidth)}px`}>
-        <SectorSentimentPanel />
+        <FeatAiHist />
         {code !== null && (
           <>
-            <StdoutPanel code={code} onResult={setSentiment} />
-            <SlackPushPanel
+            <FeatAiOut code={code} onResult={setSentiment} />
+            <FeatSysPush
               code={code}
               sentimentScore={sentiment?.score ?? null}
               theme={sentiment?.theme ?? null}
             />
           </>
         )}
-        <WatchPanel />
+        <FeatWatchLive />
       </Column>
     </Flex>
   );

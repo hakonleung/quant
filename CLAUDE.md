@@ -208,6 +208,13 @@ config/                         # @nestjs/config + zod 校验
 - UI 状态用 Zustand（轻）；表单 `react-hook-form` + zod。
 - 业务逻辑禁止写在组件里，抽到 `lib/` 纯函数。
 
+#### Feat 组件强制规约
+
+- **Feat = pane 级别的功能单元**，命名空间为 `[MODULE].[FEATURE]`（见 `apps/web/lib/eqty/feat.ts`）。
+- 每个 Feat 在 `apps/web/components/` 下有独立目录 `feat-<module>-<feature>/`（kebab-case，如 `feat-sys-stat/`、`feat-eq-chart/`）；目录主组件文件与目录同名（`feat-sys-stat.tsx`），导出函数命名为 `Feat<Module><Feature>`（如 `FeatSysStat`）。Feat 私有的子组件 / 对话框 / 表单放在同一目录下。
+- **所有 Feat 组件的根节点必须使用 `<FeatView feat={Feat.X}>` 包裹**（来自 `components/feat-view/feat-view.tsx`）。`FeatView` 统一负责 pane chrome、`featViewMode`（normal / minimized / fullscreen）持久化、overlay / 默认最小化等行为。直接渲染裸 DOM 或自行实现 pane 外壳的 Feat 组件一律拒收。
+- `feat-view/` 下的 `FeatView`、`FeatViewStatus`、`FeatViewAction`、`FeatViewHeaderRight` 是唯一被允许跨 Feat 共享的 pane 原语；其它 Feat 之间不得互相 import 私有子组件，需要复用就抽到 `packages/ui/` 或 `apps/web/lib/`。
+
 ### 2.5.1 类型与纯函数 = 核心资产（强制）
 
 **类型定义和纯函数是项目的核心资产，必须独立维护、与框架解耦、随时可被其它模块/服务复用。**

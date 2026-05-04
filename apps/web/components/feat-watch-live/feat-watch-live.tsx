@@ -15,8 +15,8 @@ import { z } from 'zod';
 
 import { Feat } from '../../lib/eqty/feat.js';
 import { ConfirmCancelled, useConfirm } from '../../lib/hooks/use-confirm.js';
-import { Pane } from '../shell/pane.js';
-import { PaneAction, PaneHeaderRight, PaneStatus } from '../shell/pane-header.js';
+import { FeatView } from "../feat-view/feat-view.js";
+import { FeatViewAction, FeatViewHeaderRight, FeatViewStatus } from "../feat-view/feat-view-header.js";
 import { WatchAddForm } from './watch-add-form.js';
 
 const TaskListSchema = z.array(WatchTaskSchema);
@@ -63,7 +63,7 @@ function useWatchStream(): StreamState {
   return state;
 }
 
-export function WatchPanel(): React.ReactElement {
+export function FeatWatchLive(): React.ReactElement {
   const state = useWatchStream();
   const [adding, setAdding] = useState(false);
   const tasks = state.kind === 'open' ? state.tasks : [];
@@ -85,12 +85,12 @@ export function WatchPanel(): React.ReactElement {
     });
 
   return (
-    <Pane
+    <FeatView
       feat={Feat.WatchLive}
       right={
-        <PaneHeaderRight>
-          <PaneStatus tone={state.kind === 'open' ? 'green' : state.kind === 'error' ? 'red' : 'idle'} />
-          <PaneAction
+        <FeatViewHeaderRight>
+          <FeatViewStatus tone={state.kind === 'open' ? 'green' : state.kind === 'error' ? 'red' : 'idle'} />
+          <FeatViewAction
             title={adding ? 'cancel' : 'add watch'}
             tone={adding ? 'danger' : 'accent'}
             onClick={(): void => {
@@ -98,8 +98,8 @@ export function WatchPanel(): React.ReactElement {
             }}
           >
             {adding ? '×' : '+'}
-          </PaneAction>
-        </PaneHeaderRight>
+          </FeatViewAction>
+        </FeatViewHeaderRight>
       }
     >
       <PanelBody
@@ -112,7 +112,7 @@ export function WatchPanel(): React.ReactElement {
         requestDelete={requestDelete}
       />
       {confirmComp}
-    </Pane>
+    </FeatView>
   );
 }
 

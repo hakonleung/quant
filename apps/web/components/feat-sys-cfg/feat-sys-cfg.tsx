@@ -19,8 +19,8 @@ import { useState } from 'react';
 
 import { Feat } from '../../lib/eqty/feat.js';
 import { useBlacklistStore } from '../../lib/stores/blacklist.store.js';
-import { ColumnManager } from '../eqty/column-manager.js';
-import { Pane } from './pane.js';
+import { ColumnManager } from "../feat-eq-list/column-manager.js";
+import { FeatView } from "../feat-view/feat-view.js";
 
 type Section = 'columns' | 'blacklist';
 
@@ -32,11 +32,11 @@ const SECTIONS: ReadonlyArray<{
   { id: 'blacklist', label: 'blacklist' },
 ];
 
-export function SysConfigPane(): React.ReactElement {
+export function FeatSysCfg(): React.ReactElement {
   const [section, setSection] = useState<Section>('columns');
 
   return (
-    <Pane feat={Feat.SysCfg}>
+    <FeatView feat={Feat.SysCfg}>
       <Flex
         h="420px"
         maxH="60vh"
@@ -52,7 +52,7 @@ export function SysConfigPane(): React.ReactElement {
           {section === 'blacklist' && <BlacklistView />}
         </Box>
       </Flex>
-    </Pane>
+    </FeatView>
   );
 }
 

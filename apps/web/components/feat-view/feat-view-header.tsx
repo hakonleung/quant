@@ -1,24 +1,24 @@
 'use client';
 
 /**
- * Shared header-right primitives used by every Pane:
+ * Shared header-right primitives used by every FeatView:
  *
- *   <PaneStatus tone="green" /> · <PaneAction onClick title>⟳</PaneAction>
+ *   <FeatViewStatus tone="green" /> · <FeatViewAction onClick title>⟳</FeatViewAction>
  *
- * `PaneStatus` renders only the colored bullet — no text label —
+ * `FeatViewStatus` renders only the colored bullet — no text label —
  * because the status word ("ready", "idle", "cached") is redundant
  * with the bullet color and clutters the 30px header.
  *
- * `PaneAction` is the single icon-button shape. The icon glyph is
+ * `FeatViewAction` is the single icon-button shape. The icon glyph is
  * scaled up so it stays legible inside the cyber pane chrome.
  */
 
 import { Box, Flex } from '@chakra-ui/react';
 import type { ReactNode } from 'react';
 
-export type PaneStatusTone = 'green' | 'amber' | 'red' | 'idle' | 'accent';
+export type FeatViewStatusTone = 'green' | 'amber' | 'red' | 'idle' | 'accent';
 
-const TONE_TO_COLOR: Readonly<Record<PaneStatusTone, string>> = {
+const TONE_TO_COLOR: Readonly<Record<FeatViewStatusTone, string>> = {
   green: 'term.green',
   amber: 'term.amber',
   red: 'term.red',
@@ -26,7 +26,7 @@ const TONE_TO_COLOR: Readonly<Record<PaneStatusTone, string>> = {
   accent: 'accent',
 };
 
-const TONE_TO_GLYPH: Readonly<Record<PaneStatusTone, string>> = {
+const TONE_TO_GLYPH: Readonly<Record<FeatViewStatusTone, string>> = {
   green: '●',
   amber: '●',
   red: '✘',
@@ -34,12 +34,12 @@ const TONE_TO_GLYPH: Readonly<Record<PaneStatusTone, string>> = {
   accent: '●',
 };
 
-interface PaneStatusProps {
-  readonly tone: PaneStatusTone;
+interface FeatViewStatusProps {
+  readonly tone: FeatViewStatusTone;
   readonly blink?: boolean;
 }
 
-export function PaneStatus({ tone, blink = false }: PaneStatusProps): React.ReactElement {
+export function FeatViewStatus({ tone, blink = false }: FeatViewStatusProps): React.ReactElement {
   return (
     <Box
       as="span"
@@ -55,7 +55,7 @@ export function PaneStatus({ tone, blink = false }: PaneStatusProps): React.Reac
   );
 }
 
-interface PaneActionProps {
+interface FeatViewActionProps {
   readonly title: string;
   readonly onClick: () => void;
   readonly disabled?: boolean;
@@ -64,14 +64,14 @@ interface PaneActionProps {
   readonly children: ReactNode;
 }
 
-export function PaneAction({
+export function FeatViewAction({
   title,
   onClick,
   disabled = false,
   busy = false,
   tone = 'default',
   children,
-}: PaneActionProps): React.ReactElement {
+}: FeatViewActionProps): React.ReactElement {
   const color =
     tone === 'accent' ? 'accent' : tone === 'danger' ? 'term.red' : 'term.ink2';
   const hoverColor =
@@ -106,16 +106,16 @@ export function PaneAction({
   );
 }
 
-interface PaneHeaderRightProps {
+interface FeatViewHeaderRightProps {
   readonly children: ReactNode;
 }
 
 /**
  * Standard horizontal layout for the right slot — status pellets first
  * (already paint in their order), then action buttons. Use it as the
- * direct value of `<Pane right={...}>`.
+ * direct value of `<FeatView right={...}>`.
  */
-export function PaneHeaderRight({ children }: PaneHeaderRightProps): React.ReactElement {
+export function FeatViewHeaderRight({ children }: FeatViewHeaderRightProps): React.ReactElement {
   return (
     <Flex gap="6px" align="center">
       {children}

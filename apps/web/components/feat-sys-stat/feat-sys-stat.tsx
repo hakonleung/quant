@@ -38,9 +38,9 @@ import { useEffect, useRef, useState } from 'react';
 
 import { Feat } from '../../lib/eqty/feat.js';
 import { useQueueStream } from '../../lib/hooks/use-queue-stream.js';
-import { Pane } from './pane.js';
+import { FeatView } from "../feat-view/feat-view.js";
 
-export function SysStatPane(): React.ReactElement {
+export function FeatSysStat(): React.ReactElement {
   const stream = useQueueStream();
   const now = useClock();
   const metaScan = useManualScan('meta');
@@ -57,7 +57,7 @@ export function SysStatPane(): React.ReactElement {
   const kline = queues.find((q) => q.name === 'kline') ?? null;
 
   return (
-    <Pane
+    <FeatView
       feat={Feat.SysStat}
       right={
         <Flex gap="14px" align="center" fontFamily="mono" fontSize="10px" letterSpacing="0.14em">
@@ -116,7 +116,7 @@ export function SysStatPane(): React.ReactElement {
           </Text>
         </Flex>
       </Box>
-    </Pane>
+    </FeatView>
   );
 }
 

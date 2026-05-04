@@ -7,8 +7,8 @@ import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 
 import { Feat } from '../../lib/eqty/feat.js';
-import { Pane } from '../shell/pane.js';
-import { PaneStatus } from '../shell/pane-header.js';
+import { FeatView } from "../feat-view/feat-view.js";
+import { FeatViewStatus } from "../feat-view/feat-view-header.js";
 
 const SlackPushSchema = z
   .object({
@@ -25,7 +25,7 @@ interface Props {
   readonly theme: string | null;
 }
 
-export function SlackPushPanel({ code, sentimentScore, theme }: Props): React.ReactElement {
+export function FeatSysPush({ code, sentimentScore, theme }: Props): React.ReactElement {
   const form = useForm<SlackPushForm>({
     resolver: zodResolver(SlackPushSchema),
     defaultValues: { channel: '#quant-signals', note: '' },
@@ -37,7 +37,7 @@ export function SlackPushPanel({ code, sentimentScore, theme }: Props): React.Re
       : `${code} · sent ${sentimentScore.toFixed(2)}${theme === null ? '' : ` · 题材[${theme}]`}`;
 
   return (
-    <Pane feat={Feat.SysPush} right={<PaneStatus tone="green" />}>
+    <FeatView feat={Feat.SysPush} right={<FeatViewStatus tone="green" />}>
       <Box
         as="form"
         position="relative"
@@ -100,7 +100,7 @@ export function SlackPushPanel({ code, sentimentScore, theme }: Props): React.Re
           ▶ PUSH
         </CyberButton>
       </Flex>
-    </Pane>
+    </FeatView>
   );
 }
 

@@ -23,7 +23,7 @@ import { useState } from 'react';
 import { z } from 'zod';
 
 import type { UniverseStock } from '../../lib/hooks/use-stock-universe.js';
-import { SearchPane } from './stock-command-bar.js';
+import { FeatScrNl } from "../feat-scr-nl/feat-scr-nl.js";
 import { TermSelect } from './term-select.js';
 
 const KindSchema = z.enum(['pct', 'abs']);
@@ -207,7 +207,7 @@ function PickRow({ state, setState }: RowProps): React.ReactElement {
   };
   return (
     <Box>
-      <SearchPane onPick={onPick} />
+      <FeatScrNl onPick={onPick} />
       {state.picked.length === 0 ? (
         <Text mt="4px" fontSize="11px" color="term.ink3">
           search and pick one or more stocks · same condition applies to all

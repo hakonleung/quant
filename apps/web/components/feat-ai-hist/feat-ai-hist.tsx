@@ -16,11 +16,11 @@ import { ConfirmCancelled, useConfirm } from '../../lib/hooks/use-confirm.js';
 import { useAnalyzeMany, useMarketSentiment } from '../../lib/hooks/use-eqty-data.js';
 import { useSectorsStore } from '../../lib/stores/sectors.store.js';
 import { ALL_SECTOR_ID, useUiStore } from '../../lib/stores/ui.store.js';
-import { Pane } from '../shell/pane.js';
-import { PaneAction, PaneHeaderRight, PaneStatus } from '../shell/pane-header.js';
-import { ANALYZE_MAX_CODES } from './sectors-panel.js';
+import { FeatView } from "../feat-view/feat-view.js";
+import { FeatViewAction, FeatViewHeaderRight, FeatViewStatus } from "../feat-view/feat-view-header.js";
+import { ANALYZE_MAX_CODES } from "../feat-sec-list/feat-sec-list.js";
 
-export function SectorSentimentPanel(): React.ReactElement | null {
+export function FeatAiHist(): React.ReactElement | null {
   const activeSectorId = useUiStore((s) => s.activeSectorId);
   const sectors = useSectorsStore((s) => s.sectors);
   const sector = sectors.find((s) => s.id === activeSectorId) ?? null;
@@ -100,12 +100,12 @@ export function SectorSentimentPanel(): React.ReactElement | null {
         ];
 
   return (
-    <Pane
+    <FeatView
       feat={Feat.AIHist}
       right={
-        <PaneHeaderRight>
-          <PaneStatus tone={tone} blink={analyze.isPending} />
-          <PaneAction
+        <FeatViewHeaderRight>
+          <FeatViewStatus tone={tone} blink={analyze.isPending} />
+          <FeatViewAction
             title={
               tooLarge
                 ? `too many members (${String(codes.length)} > ${String(ANALYZE_MAX_CODES)})`
@@ -117,8 +117,8 @@ export function SectorSentimentPanel(): React.ReactElement | null {
             tone="accent"
           >
             ⟳
-          </PaneAction>
-        </PaneHeaderRight>
+          </FeatViewAction>
+        </FeatViewHeaderRight>
       }
     >
       <Box
@@ -143,6 +143,6 @@ export function SectorSentimentPanel(): React.ReactElement | null {
         ))}
       </Box>
       {confirmComp}
-    </Pane>
+    </FeatView>
   );
 }

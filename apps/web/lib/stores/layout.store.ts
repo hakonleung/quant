@@ -1,11 +1,11 @@
 /**
- * Persisted EQTY workbench layout — pane mode (normal/minimized/
+ * Persisted EQTY workbench layout — feat-view mode (normal/minimized/
  * fullscreen) and side-column widths. Survives reloads via the IDB
  * adapter so the user's pinned layout is recovered on revisit.
  *
- * Pane mode is keyed by `Feat` id; the store falls back to the
+ * Mode is keyed by `Feat` id; the store falls back to the
  * `defaultMinimized` config flag for keys it has never seen, so adding
- * a new pane in `feat.ts` does not require migrating saved state.
+ * a new feat in `feat.ts` does not require migrating saved state.
  */
 
 'use client';
@@ -15,7 +15,7 @@ import { createJSONStorage, persist } from 'zustand/middleware';
 
 import { idbStorage } from './idb-storage.js';
 
-export type PaneMode = 'normal' | 'minimized' | 'fullscreen';
+export type FeatViewMode = 'normal' | 'minimized' | 'fullscreen';
 
 const LEFT_DEFAULT = 280;
 const RIGHT_DEFAULT = 480;
@@ -32,11 +32,11 @@ export const LAYOUT_LIMITS = {
 } as const;
 
 interface LayoutState {
-  /** Per-feat saved mode. Missing keys fall back to feat config. */
-  readonly paneMode: Readonly<Record<string, PaneMode>>;
+  /** Per-feat saved view mode. Missing keys fall back to feat config. */
+  readonly featViewMode: Readonly<Record<string, FeatViewMode>>;
   readonly leftWidth: number;
   readonly rightWidth: number;
-  setPaneMode(feat: string, mode: PaneMode): void;
+  setFeatViewMode(feat: string, mode: FeatViewMode): void;
   setLeftWidth(px: number): void;
   setRightWidth(px: number): void;
 }
@@ -44,11 +44,11 @@ interface LayoutState {
 export const useLayoutStore = create<LayoutState>()(
   persist(
     (set) => ({
-      paneMode: {},
+      featViewMode: {},
       leftWidth: LEFT_DEFAULT,
       rightWidth: RIGHT_DEFAULT,
-      setPaneMode: (feat, mode) => {
-        set((state) => ({ paneMode: { ...state.paneMode, [feat]: mode } }));
+      setFeatViewMode: (feat, mode) => {
+        set((state) => ({ featViewMode: { ...state.featViewMode, [feat]: mode } }));
       },
       setLeftWidth: (px) => {
         set({ leftWidth: clamp(px, LEFT_MIN, LEFT_MAX) });
@@ -60,7 +60,7 @@ export const useLayoutStore = create<LayoutState>()(
     {
       name: 'eqty-layout',
       storage: createJSONStorage(() => idbStorage('layout')),
-      version: 1,
+      version: 2,
     },
   ),
 );

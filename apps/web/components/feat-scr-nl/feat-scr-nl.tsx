@@ -16,8 +16,8 @@ import React, { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 
 
 import { Feat } from '../../lib/eqty/feat.js';
 import { useStockUniverse, type UniverseStock } from '../../lib/hooks/use-stock-universe.js';
-import { Pane } from '../shell/pane.js';
-import { PaneStatus } from '../shell/pane-header.js';
+import { FeatView } from "../feat-view/feat-view.js";
+import { FeatViewStatus } from "../feat-view/feat-view-header.js";
 import { SearchDropdown } from './stock-search-dropdown.js';
 
 const SOFT_RESULT_CAP = 200;
@@ -44,7 +44,7 @@ export interface StockCommandBarProps {
  * Note: both instances share `Feat.ScreenNL` layout state on purpose —
  * v0 doesn't multiplex pane storage by location.
  */
-export function SearchPane({
+export function FeatScrNl({
   marketFilter,
   onPick,
   rightSlot,
@@ -54,12 +54,12 @@ export function SearchPane({
   readonly rightSlot?: React.ReactNode;
 }): React.ReactElement {
   return (
-    <Pane feat={Feat.ScreenNL} right={rightSlot ?? <PaneStatus tone="green" />}>
+    <FeatView feat={Feat.ScreenNL} right={rightSlot ?? <FeatViewStatus tone="green" />}>
       <StockCommandBar
         {...(marketFilter !== undefined ? { marketFilter } : {})}
         onPick={onPick}
       />
-    </Pane>
+    </FeatView>
   );
 }
 
