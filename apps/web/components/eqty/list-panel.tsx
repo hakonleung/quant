@@ -32,12 +32,11 @@ import { useBlacklistStore } from '../../lib/stores/blacklist.store.js';
 import { useSectorsStore, type Sector } from '../../lib/stores/sectors.store.js';
 import { useSettingsStore } from '../../lib/stores/settings.store.js';
 import { ALL_SECTOR_ID, useUiStore } from '../../lib/stores/ui.store.js';
-import { ColumnManagerDialog } from './column-manager-dialog.js';
 import { SearchPane } from './stock-command-bar.js';
 import { DslTree } from '../dsl/dsl-tree.js';
 import { Pane } from '../shell/pane.js';
 import { ConfirmCancelled, useConfirm } from '../../lib/hooks/use-confirm.js';
-import { PaneAction, PaneHeaderRight, PaneStatus } from '../shell/pane-header.js';
+import { PaneHeaderRight, PaneStatus } from '../shell/pane-header.js';
 
 /**
  * Row payload — flat record so dynamic sectors literally see
@@ -165,7 +164,6 @@ export function ListPanel(): React.ReactElement {
   const snapshots = useStockSnapshots(codes, {
     enabled: appliedNeedsSnapshot(appliedColumns),
   });
-  const [columnDialogOpen, setColumnDialogOpen] = useState(false);
   const columns: readonly ColumnDef[] = useMemo(
     () => buildColumns(appliedColumns, evidenceKeys, snapshots.byCode),
     [appliedColumns, evidenceKeys, snapshots.byCode],
@@ -240,14 +238,6 @@ export function ListPanel(): React.ReactElement {
   const right = (
     <PaneHeaderRight>
       <PaneStatus tone={listTone} blink={isLoading || klineBatch.isLoading} />
-      <PaneAction
-        title="manage columns"
-        onClick={(): void => {
-          setColumnDialogOpen(true);
-        }}
-      >
-        ⚙
-      </PaneAction>
     </PaneHeaderRight>
   );
 
@@ -295,12 +285,6 @@ export function ListPanel(): React.ReactElement {
           }
         />
       </Flex>
-      <ColumnManagerDialog
-        open={columnDialogOpen}
-        onClose={(): void => {
-          setColumnDialogOpen(false);
-        }}
-      />
       {confirmComp}
     </Pane>
   );

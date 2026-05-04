@@ -7,7 +7,6 @@ import { Feat } from '../../lib/eqty/feat.js';
 import { ConfirmCancelled, useConfirm } from '../../lib/hooks/use-confirm.js';
 import { useKlineBulk, useMarketSentiment } from '../../lib/hooks/use-eqty-data.js';
 import { useStockList } from '../../lib/hooks/use-stock-list.js';
-import { useBlacklistStore } from '../../lib/stores/blacklist.store.js';
 import { useSectorsStore, type Sector } from '../../lib/stores/sectors.store.js';
 import { ALL_SECTOR_ID, useUiStore } from '../../lib/stores/ui.store.js';
 import { Pane } from '../shell/pane.js';
@@ -27,7 +26,6 @@ export function SectorsPanel(): React.ReactElement {
   const removeSector = useSectorsStore((s) => s.remove);
   const activeSectorId = useUiStore((s) => s.activeSectorId);
   const setActiveSector = useUiStore((s) => s.setActiveSector);
-  const blacklist = useBlacklistStore((s) => s.entries);
   const universe = useStockList();
   const [dialogOpen, setDialogOpen] = useState(false);
   const { guard, comp: confirmComp } = useConfirm();
@@ -165,38 +163,6 @@ export function SectorsPanel(): React.ReactElement {
               />
             ))
           )}
-        </Box>
-        <Box flex="0 0 auto">
-          <Pane feat={Feat.SectorBlack}>
-            <Box overflow="auto" maxH="160px">
-              {blacklist.length === 0 ? (
-                <Empty>no blacklisted stocks</Empty>
-              ) : (
-                blacklist.map((b) => (
-                  <Flex
-                    key={b.code}
-                    align="center"
-                    gap="8px"
-                    px="10px"
-                    py="6px"
-                    borderBottomWidth="1px"
-                    borderColor="line2"
-                    fontSize="11px"
-                    _hover={{ bg: 'hover' }}
-                  >
-                    <Box>
-                      <Text fontFamily="mono" fontSize="11px" color="ink" fontWeight="500" letterSpacing="0.04em">
-                        {b.code} {b.name}
-                      </Text>
-                      <Text fontFamily="mono" fontSize="9px" color="ink3" letterSpacing="0.14em" mt="1px">
-                        added {b.addedAt}
-                      </Text>
-                    </Box>
-                  </Flex>
-                ))
-              )}
-            </Box>
-          </Pane>
         </Box>
       </Flex>
       <NewSectorDialog

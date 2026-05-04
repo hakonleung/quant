@@ -1,7 +1,7 @@
 'use client';
 
 import { Box, Flex, HStack, Text } from '@chakra-ui/react';
-import { useCallback, useEffect, useRef, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { flushSync } from 'react-dom';
 
 import { FEAT_CONFIG_MAP, type Feat } from '../../lib/eqty/feat.js';
@@ -21,6 +21,7 @@ export function Pane({ feat, titleSlot, right, children }: PaneProps): React.Rea
   const config = FEAT_CONFIG_MAP[feat];
   const cyber = config.cyber ?? false;
   const gridArea = config.gridArea;
+  const bodyOverlay = config.bodyOverlay ?? false;
 
   // Persisted mode keyed by feat id — survives reloads. Missing entries
   // fall back to the static `defaultMinimized` flag in feat config.
@@ -122,10 +123,21 @@ export function Pane({ feat, titleSlot, right, children }: PaneProps): React.Rea
 
   const isFullscreen = mode === 'fullscreen';
   const isMinimized = mode === 'minimized';
+  // In overlay mode the inline body collapses to nothing — the floating
+  // dropdown takes over. Treating overlay-normal like minimized for
+  // outer sizing keeps the host (e.g. the topbar) from reflowing when
+  // the pane is restored.
+  const overlayActive = bodyOverlay && !isMinimized && !isFullscreen;
+  const inlineCollapsed = isMinimized || overlayActive;
+  // Body overlay panes lose the max-height-collapse animation, so we
+  // just unmount their children when minimized — keeps query
+  // subscriptions / event listeners off when the user has put the pane
+  // away.
+  const renderInlineBody = !overlayActive && !(bodyOverlay && isMinimized);
 
   // Body collapses by max-height transition; explicit ceiling keeps the
   // animation smooth even when content is taller than the viewport.
-  const bodyMaxH = isMinimized ? '0px' : '4000px';
+  const bodyMaxH = inlineCollapsed ? '0px' : '4000px';
 
   const paneBox = (
     <Box
@@ -133,11 +145,11 @@ export function Pane({ feat, titleSlot, right, children }: PaneProps): React.Rea
       bg={cyber ? 'term.panel' : 'panel'}
       color={cyber ? 'term.ink2' : 'ink'}
       position={isFullscreen ? 'fixed' : 'relative'}
-      flex={isFullscreen ? undefined : isMinimized ? '0 0 auto' : '1 1 0'}
+      flex={isFullscreen ? undefined : inlineCollapsed ? '0 0 auto' : '1 1 0'}
       minH={0}
       display="flex"
       flexDirection="column"
-      overflow="hidden"
+      overflow={overlayActive ? 'visible' : 'hidden'}
       style={
         isFullscreen
           ? { top: 0, left: 0, width: '100vw', height: '100vh', zIndex: 1000 }
@@ -157,18 +169,24 @@ export function Pane({ feat, titleSlot, right, children }: PaneProps): React.Rea
         onFullscreen={goFullscreen}
         onExitFullscreen={exitFullscreen}
       />
-      <Box
-        flex={isMinimized ? '0 0 auto' : '1'}
-        minH={0}
-        overflow="hidden"
-        style={{
-          maxHeight: bodyMaxH,
-          opacity: isMinimized ? 0 : 1,
-          transition: `max-height ${TRANSITION_MS}ms ease, opacity ${TRANSITION_MS}ms ease`,
-        }}
-      >
-        {children}
-      </Box>
+      {overlayActive ? (
+        <OverlayBody anchorRef={paneRef} cyber={cyber} onDismiss={minimize}>
+          {children}
+        </OverlayBody>
+      ) : renderInlineBody ? (
+        <Box
+          flex={isMinimized ? '0 0 auto' : '1'}
+          minH={0}
+          overflow="hidden"
+          style={{
+            maxHeight: bodyMaxH,
+            opacity: isMinimized ? 0 : 1,
+            transition: `max-height ${TRANSITION_MS}ms ease, opacity ${TRANSITION_MS}ms ease`,
+          }}
+        >
+          {children}
+        </Box>
+      ) : null}
     </Box>
   );
 
@@ -334,6 +352,108 @@ interface CtlButtonProps {
   readonly label: string;
   readonly onClick: () => void;
   readonly children: ReactNode;
+}
+
+interface OverlayBodyProps {
+  readonly anchorRef: React.RefObject<HTMLDivElement>;
+  readonly cyber: boolean;
+  readonly onDismiss: () => void;
+  readonly children: ReactNode;
+}
+
+interface OverlayRect {
+  readonly top: number;
+  readonly left: number;
+  readonly width: number;
+}
+
+/**
+ * Floating dropdown anchored under the pane's outer rect. Used by panes
+ * that live in narrow chrome (top-bar) where there is no inline space
+ * for an expanded body. Closes on outside click or Esc.
+ */
+function OverlayBody({
+  anchorRef,
+  cyber,
+  onDismiss,
+  children,
+}: OverlayBodyProps): React.ReactElement | null {
+  const [rect, setRect] = useState<OverlayRect | null>(null);
+  const overlayRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const node = anchorRef.current;
+    if (node === null) return;
+    const update = (): void => {
+      const r = node.getBoundingClientRect();
+      const margin = 8;
+      // Prefer wider than the anchor so settings forms breathe; clamp
+      // to viewport so a host that itself overflows (eg. a topbar
+      // narrower than brand+pane) doesn't push the body off-screen.
+      const target = Math.max(r.width, 480);
+      const width = Math.min(target, window.innerWidth - margin * 2);
+      const desiredLeft = r.right - width;
+      const left = Math.min(
+        Math.max(desiredLeft, margin),
+        window.innerWidth - width - margin,
+      );
+      setRect({ top: r.bottom, left, width });
+    };
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(node);
+    window.addEventListener('resize', update);
+    window.addEventListener('scroll', update, true);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener('resize', update);
+      window.removeEventListener('scroll', update, true);
+    };
+  }, [anchorRef]);
+
+  useEffect(() => {
+    const onDocDown = (e: MouseEvent): void => {
+      const ov = overlayRef.current;
+      const an = anchorRef.current;
+      const t = e.target;
+      if (!(t instanceof Node)) return;
+      if (ov?.contains(t) === true) return;
+      if (an?.contains(t) === true) return;
+      onDismiss();
+    };
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') onDismiss();
+    };
+    document.addEventListener('mousedown', onDocDown);
+    window.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDocDown);
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [anchorRef, onDismiss]);
+
+  if (rect === null) return null;
+  return (
+    <Box
+      ref={overlayRef}
+      position="fixed"
+      style={{
+        top: `${String(rect.top)}px`,
+        left: `${String(rect.left)}px`,
+        width: `${String(rect.width)}px`,
+        zIndex: 1100,
+      }}
+      maxH="60vh"
+      overflow="auto"
+      bg={cyber ? 'term.panel' : 'panel'}
+      color={cyber ? 'term.ink2' : 'ink'}
+      borderWidth="1px"
+      borderColor={cyber ? 'term.line' : 'line'}
+      boxShadow="0 14px 48px rgba(0,0,0,0.55)"
+    >
+      {children}
+    </Box>
+  );
 }
 
 function CtlButton({ cyber, label, onClick, children }: CtlButtonProps): React.ReactElement {
