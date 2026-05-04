@@ -56,7 +56,13 @@ _NL_TO_DSL_SYSTEM_PROMPT_TEMPLATE: Final[str] = """\
   4. 默认使用 ``close_qfq``（前复权）；仅当用户明确说"不复权"时才用 ``close``。
   5. 涉及 ST / 北交所 / 上市天数 / 行业的条件归 ``universe_plan``，**不要**
      塞进 ``screen_plan``。
-  6. Top-N / 排序（"前 N"、"排序"）放在 ``rank``，**不要**放进 predicate。
+  6. Top-N / 排序：**只要**用户提到"前 N"、"取前 N"、"排前 N"、"按...排序"、
+     "按...排名"、"...前 N 只"、"sort/rank/top" 等任一表述，**必须**输出顶层
+     ``rank`` 字段；**绝不**丢弃，**绝不**塞进 predicate。``metric`` 用产生
+     该排序值的 Scalar（如"近 N 日涨幅"→``period_return(N)``、"成交额"→
+     ``field amount``、"换手率"→``field turnover_rate``）；``order`` 默认
+     ``desc``（"前 N"通常是从高到低），用户明确说"最低/最少"时才用 ``asc``；
+     ``top_n`` 必须填用户给的整数。
   7. **绝不**编造未定义的 op 或字段。Schema 是封闭的。以下示例是**绝不**
      允许出现的：``add`` / ``sub`` / ``div``（标量算术只支持 ``scale`` 一种
      形式：另一标量乘以一个常数因子，见下方"X 高于 Y 的 K%"示例）、
@@ -162,6 +168,25 @@ Rank 形态：
         {{"op": "not_starts_with", "left": {{"field": "code"}},     "right": {{"const": "8"}}}},
         {{"op": "not_starts_with", "left": {{"field": "code"}},     "right": {{"const": "4"}}}},
         {{"op": "not_starts_with", "left": {{"field": "code"}},     "right": {{"const": "920"}}}}
+      ]
+    }}
+  }},
+  "rank": {{
+    "metric": {{"period_return": {{"days": 10}}}},
+    "order": "desc",
+    "top_n": 20
+  }}
+}}
+
+[Q] 换手率大于2%, 成交额大于4亿, 近10日涨幅前20只排序
+[A] {{
+  "screen_plan": {{
+    "asof": "{asof}",
+    "expr": {{
+      "op": "and",
+      "args": [
+        {{"op": "gt", "left": {{"field": "turnover_rate"}}, "right": {{"const": 0.02}}}},
+        {{"op": "gt", "left": {{"field": "amount"}},         "right": {{"const": 400000000}}}}
       ]
     }}
   }},
