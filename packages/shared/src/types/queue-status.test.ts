@@ -49,13 +49,24 @@ describe('QueueSnapshotSchema', () => {
         { name: 'meta', pending: 1, inFlight: 0, paused: false },
         { name: 'kline', pending: 3, inFlight: 2, paused: true },
       ],
+      activeScans: [],
     });
     expect(ok.queues).toHaveLength(2);
+    expect(ok.activeScans).toEqual([]);
+  });
+
+  it('accepts a snapshot with active scans', () => {
+    const ok = QueueSnapshotSchema.parse({
+      ts: '2026-05-03T08:00:00.000Z',
+      queues: [],
+      activeScans: ['meta'],
+    });
+    expect(ok.activeScans).toEqual(['meta']);
   });
 
   it('rejects naive timestamps without offset', () => {
     expect(() =>
-      QueueSnapshotSchema.parse({ ts: '2026-05-03 08:00:00', queues: [] }),
+      QueueSnapshotSchema.parse({ ts: '2026-05-03 08:00:00', queues: [], activeScans: [] }),
     ).toThrow();
   });
 });

@@ -21,15 +21,6 @@ export const QueueSnapshotEntrySchema = z
 
 export type QueueSnapshotEntry = z.infer<typeof QueueSnapshotEntrySchema>;
 
-export const QueueSnapshotSchema = z
-  .object({
-    ts: z.string().datetime({ offset: true }),
-    queues: z.array(QueueSnapshotEntrySchema),
-  })
-  .strict();
-
-export type QueueSnapshot = z.infer<typeof QueueSnapshotSchema>;
-
 /**
  * Selector for {@link ScanResultSchema} requests. Manual triggers split
  * the meta and kline scans so a slow akshare kline pull doesn't gate
@@ -38,6 +29,24 @@ export type QueueSnapshot = z.infer<typeof QueueSnapshotSchema>;
  */
 export const ScanKindSchema = z.enum(['meta', 'kline', 'all']);
 export type ScanKind = z.infer<typeof ScanKindSchema>;
+
+export const QueueSnapshotSchema = z
+  .object({
+    ts: z.string().datetime({ offset: true }),
+    queues: z.array(QueueSnapshotEntrySchema),
+    /**
+     * Scan kinds currently in flight (bulk sync RPC + inspector calls
+     * count as in-flight even though they don't go through the job
+     * queue). Empty array when nothing is running. Lets the UI render
+     * a "scanning" indicator next to the queue capsule for the 10-60s
+     * window where bulk_sync_financials is running but no jobs are
+     * queued yet.
+     */
+    activeScans: z.array(ScanKindSchema),
+  })
+  .strict();
+
+export type QueueSnapshot = z.infer<typeof QueueSnapshotSchema>;
 
 /**
  * Acknowledgement for a fire-and-forget scan trigger
