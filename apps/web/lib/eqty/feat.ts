@@ -24,6 +24,7 @@ export const Feat = {
   // A: ai
   Insight: 'A-0',
   Insights: 'A-1',
+  Markdown: 'A-2',
 
   // S: system
   Status: 'S-0',
@@ -55,6 +56,7 @@ export const FEAT_CONFIG_MAP: Readonly<Record<Feat, FeatConfig>> = {
 
   [Feat.Insight]: { title: () => 'insight', gridArea: 'CBOT' },
   [Feat.Insights]: { title: () => 'insights', gridArea: 'R1' },
+  [Feat.Markdown]: { title: () => 'markdown', defaultMinimized: true },
 
   [Feat.Status]: {
     title: () => 'status',

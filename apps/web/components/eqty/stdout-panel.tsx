@@ -6,6 +6,7 @@ import { useEffect } from 'react';
 
 import { Feat } from '../../lib/eqty/feat.js';
 import { useAnalyzeSentiment, useSentiment } from '../../lib/hooks/use-eqty-data.js';
+import { MarkdownPreviewer } from '../modules/markdown-previewer.js';
 import { Pane } from '../shell/pane.js';
 
 interface Props {
@@ -51,6 +52,8 @@ export function StdoutPanel({ code, onResult }: Props): React.ReactElement {
     <Text color="prompt">● cached</Text>
   );
 
+  const markdownSource = sentiment?.result ?? '';
+
   return (
     <Pane
       feat={Feat.Insight}
@@ -77,48 +80,55 @@ export function StdoutPanel({ code, onResult }: Props): React.ReactElement {
         </Flex>
       }
     >
-      <Box
-        position="relative"
-        px="18px"
-        py="14px"
-        bg="term.panel"
-        color="term.ink2"
-        fontFamily="mono"
-        fontSize="12px"
-        lineHeight="1.7"
-        h="100%"
-        overflow="auto"
-        _after={{
-          content: '""',
-          position: 'absolute',
-          inset: 0,
-          pointerEvents: 'none',
-          background:
-            'repeating-linear-gradient(to bottom, rgba(255,255,255,0.012) 0 1px, transparent 1px 3px)',
-        }}
-      >
-        {lines.map((line, i) => (
-          <Flex key={i} gap="10px" position="relative" zIndex={1}>
-            <Text color="term.ink3" minW="34px" textAlign="right" userSelect="none" fontSize="11px">
-              {String(i + 1).padStart(3, '0')}
+      <Flex direction="column" h="100%" minH={0}>
+        <Box
+          position="relative"
+          px="18px"
+          py="14px"
+          bg="term.panel"
+          color="term.ink2"
+          fontFamily="mono"
+          fontSize="12px"
+          lineHeight="1.7"
+          flex="1"
+          minH={0}
+          overflow="auto"
+          _after={{
+            content: '""',
+            position: 'absolute',
+            inset: 0,
+            pointerEvents: 'none',
+            background:
+              'repeating-linear-gradient(to bottom, rgba(255,255,255,0.012) 0 1px, transparent 1px 3px)',
+          }}
+        >
+          {lines.map((line, i) => (
+            <Flex key={i} gap="10px" position="relative" zIndex={1}>
+              <Text color="term.ink3" minW="34px" textAlign="right" userSelect="none" fontSize="11px">
+                {String(i + 1).padStart(3, '0')}
+              </Text>
+              <Text color="term.ink2">{line}</Text>
+            </Flex>
+          ))}
+          <Flex gap="10px" position="relative" zIndex={1}>
+            <Text color="term.ink3" minW="34px" textAlign="right" fontSize="11px">
+              {String(lines.length + 1).padStart(3, '0')}
             </Text>
-            <Text color="term.ink2">{line}</Text>
+            <Text>
+              <Box as="span" color="term.green">
+                $
+              </Box>{' '}
+              <Box as="span" className="blink" color="term.green">
+                ▌
+              </Box>
+            </Text>
           </Flex>
-        ))}
-        <Flex gap="10px" position="relative" zIndex={1}>
-          <Text color="term.ink3" minW="34px" textAlign="right" fontSize="11px">
-            {String(lines.length + 1).padStart(3, '0')}
-          </Text>
-          <Text>
-            <Box as="span" color="term.green">
-              $
-            </Box>{' '}
-            <Box as="span" className="blink" color="term.green">
-              ▌
-            </Box>
-          </Text>
-        </Flex>
-      </Box>
+        </Box>
+        {/* A-2: collapsed by default — header-only line under the stdout
+            stream. Click the restore (▢) control in its header to expand
+            and read the verbatim analyst write-up. */}
+        <MarkdownPreviewer source={markdownSource} />
+      </Flex>
     </Pane>
   );
 }

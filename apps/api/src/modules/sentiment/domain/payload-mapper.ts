@@ -76,6 +76,7 @@ export function mapStockSentimentToView(raw: unknown): Sentiment {
   const rumor = rumorSource ?? '';
 
   const rawLog = synthesizeRawLog(raw, { score, topTheme, topDriver, targetUpside });
+  const result = asStr(raw['result']);
 
   return SentimentSchema.parse({
     code,
@@ -86,6 +87,7 @@ export function mapStockSentimentToView(raw: unknown): Sentiment {
     rumor,
     cachedAt,
     rawLog,
+    result,
   });
 }
 
@@ -159,7 +161,7 @@ function synthesizeRawLog(
   view: { readonly score: number; readonly topTheme: string; readonly topDriver: string; readonly targetUpside: number },
 ): readonly string[] {
   const lines: string[] = [];
-  lines.push(`▎ source  kimi.web_search · ${String(asArr(raw['core_drivers']).length)} drivers`);
+  lines.push(`▎ source  qwen.web_search → flash.summarise · ${String(asArr(raw['core_drivers']).length)} drivers`);
   if (view.topTheme.length > 0) lines.push(`▎ theme   ${view.topTheme}`);
   if (view.topDriver.length > 0) lines.push(`▎ driver  ${view.topDriver}`);
   if (view.targetUpside !== 0) lines.push(`▎ target  ${view.targetUpside.toFixed(2)}%`);
