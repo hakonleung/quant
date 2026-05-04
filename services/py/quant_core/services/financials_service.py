@@ -120,21 +120,33 @@ class FinancialsService:
         self,
         *,
         max_age_days: int = 7,
-        require_full_8q: bool = False,
     ) -> list[str]:
-        """Codes whose financials track is missing or stale.
+        """Codes that need a per-stock slow-path enrich pass.
 
-        Stale = ``financials_updated_at`` absent, older than
-        ``max_age_days`` days, or (when ``require_full_8q``) fewer than
-        8 quarters present. Used by the cron + manual-trigger inspector
-        to enqueue the per-stock slow path; the bulk refresh is global
-        and isn't gated by this list.
+        The per-stock track owns ``total_share`` / ``float_share`` /
+        ``operating_cost`` / ``net_profit_excl_nr`` — none of which the
+        bulk source can fill. So "stale" here is **field-completeness
+        first, watermark second**:
+
+        - ``total_share`` is None → never enriched
+        - any of the last 4 quarterlies has ``operating_cost`` None →
+          毛利率 cannot be derived
+        - ``financials_updated_at`` is None or older than
+          ``max_age_days`` → regular refresh
+
+        Without this rule the first bulk run would set
+        ``financials_updated_at = now()`` on every row, then the same
+        scan's stale-list would come back empty and per-stock enrich
+        would never fire on a fresh cache.
         """
         items = self._repo.list_all()
         out: list[str] = []
         cutoff = self._clock.now()
         for m in items:
-            if require_full_8q and len(m.quarterlies) < 8:
+            if m.total_share is None:
+                out.append(m.code)
+                continue
+            if _missing_operating_cost(m):
                 out.append(m.code)
                 continue
             if m.financials_updated_at is None:
@@ -285,6 +297,17 @@ def _recompute_float_pct(
 
 def _format_codes(codes: Sequence[str]) -> str:  # pragma: no cover — debug helper
     return ",".join(codes[:8]) + ("…" if len(codes) > 8 else "")
+
+
+def _missing_operating_cost(meta: StockMeta) -> bool:
+    """Whether the per-stock enricher still owes ``operating_cost`` for
+    any of the last 4 quarterlies. We cap at 4 because TTM gross-margin
+    only reads the most recent year — older holes don't gate the
+    derived metric.
+    """
+    if not meta.quarterlies:
+        return False  # No quarterlies at all → bulk owes them, not per-stock.
+    return any(q.operating_cost is None for q in meta.quarterlies[-4:])
 
 
 __all__ = ["FinancialsBulkReport", "FinancialsService", "_format_codes"]

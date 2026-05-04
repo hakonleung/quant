@@ -307,11 +307,89 @@ class TestEnrichOne:
 
 
 class TestFindStale:
+    """Codes the per-stock enricher should pick up.
+
+    Field-completeness drives the list before the watermark — see
+    ``find_stale_financials`` docstring for the rationale.
+    """
+
+    def _full_quarter(self) -> QuarterlyFinancials:
+        return QuarterlyFinancials(
+            period=date(2025, 9, 30),
+            revenue=Decimal("100"),
+            operating_cost=Decimal("40"),
+            net_profit=Decimal("30"),
+            net_profit_excl_nr=Decimal("28"),
+        )
+
+    def test_missing_total_share_is_stale(self) -> None:
+        # Even with a fresh watermark, missing total_share → stale.
+        m = _meta(
+            code="000001",
+            total_share=None,
+            financials_updated_at=datetime(2026, 5, 1, tzinfo=UTC),
+            quarterlies=(self._full_quarter(),),
+        )
+        repo = _FakeRepo([m])
+        svc = FinancialsService(
+            repo=repo,
+            clock=_FixedClock(datetime(2026, 5, 1, tzinfo=UTC)),
+            bulk=_FakeBulk({}),
+            enricher=_FakeEnricher({}),
+        )
+        assert svc.find_stale_financials() == ["000001"]
+
+    def test_missing_operating_cost_in_recent_4q_is_stale(self) -> None:
+        partial = QuarterlyFinancials(
+            period=date(2025, 9, 30),
+            revenue=Decimal("100"),
+            operating_cost=None,
+            net_profit=Decimal("30"),
+            net_profit_excl_nr=None,
+        )
+        m = _meta(
+            code="000001",
+            total_share=Decimal("1000"),
+            financials_updated_at=datetime(2026, 5, 1, tzinfo=UTC),
+            quarterlies=(partial,),
+        )
+        repo = _FakeRepo([m])
+        svc = FinancialsService(
+            repo=repo,
+            clock=_FixedClock(datetime(2026, 5, 1, tzinfo=UTC)),
+            bulk=_FakeBulk({}),
+            enricher=_FakeEnricher({}),
+        )
+        assert svc.find_stale_financials() == ["000001"]
+
+    def test_complete_and_fresh_is_not_stale(self) -> None:
+        m = _meta(
+            code="000001",
+            total_share=Decimal("1000"),
+            float_share=Decimal("800"),
+            financials_updated_at=datetime(2026, 5, 1, tzinfo=UTC),
+            quarterlies=(self._full_quarter(),),
+        )
+        repo = _FakeRepo([m])
+        svc = FinancialsService(
+            repo=repo,
+            clock=_FixedClock(datetime(2026, 5, 1, tzinfo=UTC)),
+            bulk=_FakeBulk({}),
+            enricher=_FakeEnricher({}),
+        )
+        assert svc.find_stale_financials() == []
+
     def test_lists_codes_without_watermark(self) -> None:
-        a = _meta(code="000001")
+        a = _meta(
+            code="000001",
+            total_share=Decimal("1000"),
+            quarterlies=(self._full_quarter(),),
+        )
         b = _meta(
             code="000002",
+            total_share=Decimal("1000"),
             financials_updated_at=datetime(2026, 5, 1, tzinfo=UTC),
+            quarterlies=(self._full_quarter(),),
         )
         repo = _FakeRepo([a, b])
         svc = FinancialsService(
@@ -325,11 +403,15 @@ class TestFindStale:
     def test_lists_codes_older_than_max_age(self) -> None:
         old = _meta(
             code="000001",
+            total_share=Decimal("1000"),
             financials_updated_at=datetime(2026, 4, 1, tzinfo=UTC),
+            quarterlies=(self._full_quarter(),),
         )
         fresh = _meta(
             code="000002",
+            total_share=Decimal("1000"),
             financials_updated_at=datetime(2026, 4, 30, tzinfo=UTC),
+            quarterlies=(self._full_quarter(),),
         )
         repo = _FakeRepo([old, fresh])
         svc = FinancialsService(

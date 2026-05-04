@@ -125,6 +125,9 @@ export class CronOrchestrator implements OnModuleInit, OnModuleDestroy {
     const startedAt = new Date().toISOString();
     const traceId = newTraceId();
     const wasInflight = this.inFlight[kind] !== undefined;
+    this.logger.log(
+      `manual_scan_fired kind=${kind} traceId=${traceId} coalesced=${String(wasInflight)}`,
+    );
     // Kick the work off; we don't await. If the kind already has one
     // in flight, `triggerScan` returns it as-is (still detached).
     void this.triggerScan(kind).catch((err: unknown) => {
@@ -193,20 +196,22 @@ export class CronOrchestrator implements OnModuleInit, OnModuleDestroy {
   }
 
   private async scanMeta(traceId: string): Promise<number> {
+    this.logger.log(`scan_meta_start traceId=${traceId}`);
     // Bulk financials first — one Flight call covers 8 quarters of the
     // whole market, so it's the cheapest path to lift every meta row's
     // ``revenue`` / ``net_profit`` watermark before we decide which
     // codes still need the slow per-stock track.
     const bulk = await this.inspector.syncBulkFinancials(traceId);
-    if (bulk.updated > 0) {
-      this.logger.log(
-        `bulk_financials traceId=${traceId} fetched=${String(bulk.fetched)} updated=${String(bulk.updated)}`,
-      );
-    }
+    this.logger.log(
+      `bulk_financials_done traceId=${traceId} fetched=${String(bulk.fetched)} updated=${String(bulk.updated)}`,
+    );
     const [incomplete, staleFinancials] = await Promise.all([
       this.inspector.findIncompleteMeta(traceId),
       this.inspector.findStaleFinancials(traceId),
     ]);
+    this.logger.log(
+      `scan_meta_inspected traceId=${traceId} incomplete=${String(incomplete.length)} stale_financials=${String(staleFinancials.length)}`,
+    );
     let total = 0;
     total += this.metaQueue.addBulk(
       incomplete.map((code) => ({
