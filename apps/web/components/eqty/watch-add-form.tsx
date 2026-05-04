@@ -23,6 +23,8 @@ import {
 import { useState, type ChangeEvent } from 'react';
 import { z } from 'zod';
 
+import { LookupStatus, useStockLookup } from './use-watch-lookup.js';
+
 const KindSchema = z.enum(['pct', 'abs']);
 type Kind = z.infer<typeof KindSchema>;
 const OpSchema = z.enum(['gte', 'lte']);
@@ -106,21 +108,31 @@ async function postDraft(state: AddFormState): Promise<string | null> {
   return `${String(res.status)} ${body.slice(0, 160)}`;
 }
 
+/**
+ * Auto-fill the name from the resolved stock when the user left it blank.
+ * Keeps the form's submit closure short.
+ */
+function applyResolvedName(
+  state: AddFormState,
+  lookup: ReturnType<typeof useStockLookup>,
+): AddFormState {
+  if (lookup.kind !== 'found' || state.name.trim() !== '') return state;
+  return { ...state, name: lookup.stock.name };
+}
+
 export function WatchAddForm({ onClose }: AddFormProps): React.ReactElement {
   const [state, setState] = useState<AddFormState>(INITIAL_STATE);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const lookup = useStockLookup(state.market, state.code);
 
   const submit = async (): Promise<void> => {
     setBusy(true);
     setErr(null);
     try {
-      const failure = await postDraft(state);
-      if (failure !== null) {
-        setErr(failure);
-        return;
-      }
-      onClose();
+      const failure = await postDraft(applyResolvedName(state, lookup));
+      if (failure !== null) setErr(failure);
+      else onClose();
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));
     } finally {
@@ -138,12 +150,13 @@ export function WatchAddForm({ onClose }: AddFormProps): React.ReactElement {
       color="term.ink2"
     >
       <IdentityRow state={state} setState={setState} />
+      <LookupStatus lookup={lookup} />
       <ConditionRow state={state} setState={setState} />
       <SubmitRow
         state={state}
         setState={setState}
         busy={busy}
-        canSubmit={state.code.trim() !== ''}
+        canSubmit={lookup.kind === 'found'}
         onSubmit={(): void => {
           void submit();
         }}

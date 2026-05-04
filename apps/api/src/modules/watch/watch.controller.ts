@@ -88,6 +88,19 @@ export class WatchController {
     return this.service.getUniverse(query.market);
   }
 
+  /**
+   * Resolve `(market, code)` → `StockBasic`. Used by the frontend to
+   * confirm a ticker before posting a task; 404 means the code is not
+   * in the source of truth (stock-meta for A, on-disk universe for
+   * HK / US).
+   */
+  @Get('lookup')
+  async lookup(
+    @Query(new ZodValidationPipe(WatchTaskParamsSchema)) query: WatchTaskParams,
+  ): Promise<StockBasic> {
+    return this.service.lookup(query.market, query.code);
+  }
+
   @Post('universe/refresh')
   async refresh(@Query(universePipe) query: UniverseQuery): Promise<readonly StockBasic[]> {
     return this.service.refreshUniverse(query.market);
