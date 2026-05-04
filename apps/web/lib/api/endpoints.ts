@@ -11,18 +11,25 @@ import {
   KlineBarSchema,
   MarketSentimentSchema,
   NlScreenResultSchema,
+  NlToDslResultSchema,
   PatternFindSimilarResponseSchema,
+  ScreenRunResultSchema,
   SentimentSchema,
   StockMetaDtoSchema,
   StockSnapshotDtoSchema,
   type KlineBar,
   type MarketSentiment,
   type NlScreenResult,
+  type NlToDslResult,
   type PatternFindSimilarRequest,
   type PatternFindSimilarResponse,
+  type RankSpecView,
+  type ScreenPlanAst,
+  type ScreenRunResult,
   type Sentiment,
   type StockMetaDto,
   type StockSnapshotDto,
+  type UniversePlanAst,
 } from '@quant/shared';
 import { z } from 'zod';
 
@@ -143,6 +150,31 @@ export async function runNlScreen(
     asof === undefined ? { nl } : { nl, asof },
     (raw) => NlScreenResultSchema.parse(raw),
   );
+}
+
+/** Translate NL → AST without executing the screen. */
+export async function nlToDsl(nl: string, asof?: string): Promise<NlToDslResult> {
+  return apiPost(
+    `/api/screen/nl2dsl`,
+    asof === undefined ? { nl } : { nl, asof },
+    (raw) => NlToDslResultSchema.parse(raw),
+  );
+}
+
+/** Execute an AST against the K-line cache (no LLM call). */
+export async function runScreen(args: {
+  readonly screenPlan: ScreenPlanAst;
+  readonly universePlan?: UniversePlanAst | null;
+  readonly rank?: RankSpecView | null;
+}): Promise<ScreenRunResult> {
+  const body: Record<string, unknown> = { screenPlan: args.screenPlan };
+  if (args.universePlan !== undefined && args.universePlan !== null) {
+    body['universePlan'] = args.universePlan;
+  }
+  if (args.rank !== undefined && args.rank !== null) {
+    body['rank'] = args.rank;
+  }
+  return apiPost(`/api/screen/run`, body, (raw) => ScreenRunResultSchema.parse(raw));
 }
 
 export async function findSimilarPatterns(

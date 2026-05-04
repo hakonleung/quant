@@ -51,6 +51,7 @@ from quant_rpc.handlers import HandlerRegistry
 from quant_rpc.ops.kline import ListKlineWatermarksHandler, SyncKlineForCodeHandler
 from quant_rpc.ops.kline_read import ListKlineBulkLastNHandler, ListKlineForCodeHandler
 from quant_rpc.ops.nl_screen import NlScreenHandler
+from quant_rpc.ops.screen_ops import NlToDslHandler, ScreenRunHandler
 from quant_rpc.ops.pattern import FindSimilarPatternsHandler
 from quant_rpc.ops.trading_calendar import GetLatestTradeDayHandler
 from quant_rpc.ops.sentiment import (
@@ -199,6 +200,18 @@ def main() -> int:
             universe_service=universe_service,
             meta_repo=meta_repo,
             clock=clock,
+        )
+    )
+    # Decoupled twins: expose translation and execution as independent
+    # ops. The frontend orchestrates the two through the BFF — see
+    # apps/web/lib/hooks/use-nl-screen.ts. ``nl_screen`` is kept for
+    # back-compat callers that want one round-trip.
+    registry.register(NlToDslHandler(translator=nl_translator, clock=clock))
+    registry.register(
+        ScreenRunHandler(
+            screen_service=screen_service,
+            universe_service=universe_service,
+            meta_repo=meta_repo,
         )
     )
 

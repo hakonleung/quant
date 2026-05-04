@@ -227,3 +227,31 @@ export const NlScreenResultSchema = z
   })
   .strict();
 export type NlScreenResult = z.infer<typeof NlScreenResultSchema>;
+
+/**
+ * Output of `POST /api/screen/nl2dsl` — translation only, no matches.
+ * Decoupled from execution so a downstream caller can present the AST
+ * for review/edit before paying the screen-execution cost.
+ */
+export const NlToDslResultSchema = z
+  .object({
+    nl: z.string(),
+    asof: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    screenPlan: ScreenPlanAstSchema,
+    universePlan: UniversePlanAstSchema.nullable(),
+    rank: RankSpecSchema.nullable(),
+  })
+  .strict();
+export type NlToDslResult = z.infer<typeof NlToDslResultSchema>;
+
+/**
+ * Output of `POST /api/screen/run` — execute a (possibly edited) AST.
+ * Carries no NL/AST echoes since the caller already has them.
+ */
+export const ScreenRunResultSchema = z
+  .object({
+    matches: z.array(ScreenMatchSchema),
+    planSignature: z.string(),
+  })
+  .strict();
+export type ScreenRunResult = z.infer<typeof ScreenRunResultSchema>;
