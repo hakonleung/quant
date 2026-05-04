@@ -23,15 +23,9 @@ import { decimalQuoteFromDto } from './domain/decimal-mapper.js';
 import { evaluate } from './domain/evaluate.js';
 import { buildPayload } from './domain/format.js';
 import { isMarketOpen } from './domain/market-hours.js';
-import {
-  WATCH_QUOTE_PORT,
-  type WatchQuotePort,
-} from './domain/watch-port.js';
+import { WATCH_QUOTE_PORT, type WatchQuotePort } from './domain/watch-port.js';
 import { WatchTaskStore } from './watch-task.store.js';
-import {
-  WATCH_NOTIFIER,
-  type WatchNotifier,
-} from './watch-notifier.js';
+import { WATCH_NOTIFIER, type WatchNotifier } from './watch-notifier.js';
 
 const MASTER_TICK_MS = 5_000;
 
@@ -43,7 +37,7 @@ export class WatchScheduler implements OnModuleInit, OnModuleDestroy {
   private tickInFlight: Promise<void> | null = null;
 
   constructor(
-    private readonly store: WatchTaskStore,
+    @Inject(WatchTaskStore) private readonly store: WatchTaskStore,
     @Inject(WATCH_QUOTE_PORT) private readonly port: WatchQuotePort,
     @Inject(WATCH_NOTIFIER) private readonly notifier: WatchNotifier,
   ) {}
@@ -130,10 +124,7 @@ export class WatchScheduler implements OnModuleInit, OnModuleDestroy {
       // Throttle: only push if pushIntervalSec elapsed since lastPushAt.
       if (t.lastPushAt !== null) {
         const lastPushMs = Date.parse(t.lastPushAt);
-        if (
-          !Number.isNaN(lastPushMs) &&
-          nowMs < lastPushMs + t.pushIntervalSec * 1000
-        ) {
+        if (!Number.isNaN(lastPushMs) && nowMs < lastPushMs + t.pushIntervalSec * 1000) {
           return updated;
         }
       }

@@ -10,12 +10,7 @@
 
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { z } from 'zod';
-import {
-  WatchTaskSchema,
-  watchTaskKey,
-  type WatchMarket,
-  type WatchTask,
-} from '@quant/shared';
+import { WatchTaskSchema, watchTaskKey, type WatchMarket, type WatchTask } from '@quant/shared';
 import { atomicWriteJson, readJsonOr } from './domain/atomic-json.js';
 
 export const WATCH_DATA_DIR = Symbol('WATCH_DATA_DIR');
@@ -46,9 +41,7 @@ export class WatchTaskStore {
       const raw = await readJsonOr<unknown>(this.tasksFile, []);
       const parsed = TasksFileSchema.safeParse(raw);
       if (!parsed.success) {
-        this.logger.warn(
-          `tasks.json failed validation, starting empty: ${parsed.error.message}`,
-        );
+        this.logger.warn(`tasks.json failed validation, starting empty: ${parsed.error.message}`);
         this.loaded = true;
         return;
       }

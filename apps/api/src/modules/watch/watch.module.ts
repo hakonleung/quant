@@ -12,15 +12,8 @@
 import { Module } from '@nestjs/common';
 import { FlightClient } from '../../adapters/flight/flight-client.js';
 import { WATCH_QUOTE_PORT } from './domain/watch-port.js';
-import {
-  FlightWatchAdapter,
-  WATCH_FLIGHT_CLIENT,
-} from './flight-watch.adapter.js';
-import {
-  SlackWebhookWatchNotifier,
-  WATCH_NOTIFIER,
-  type WatchNotifier,
-} from './watch-notifier.js';
+import { FlightWatchAdapter, WATCH_FLIGHT_CLIENT } from './flight-watch.adapter.js';
+import { SlackWebhookWatchNotifier, WATCH_NOTIFIER, type WatchNotifier } from './watch-notifier.js';
 import { WATCH_DATA_DIR, WatchTaskStore } from './watch-task.store.js';
 import { WatchUniverseStore } from './watch-universe.store.js';
 import { WatchController } from './watch.controller.js';
@@ -47,9 +40,7 @@ const DEFAULT_DATA_DIR = './data/watch';
     {
       provide: WATCH_NOTIFIER,
       useFactory: (): WatchNotifier =>
-        new SlackWebhookWatchNotifier(
-          process.env['QUANT_WATCH_SLACK_WEBHOOK'] ?? null,
-        ),
+        new SlackWebhookWatchNotifier(process.env['QUANT_WATCH_SLACK_WEBHOOK'] ?? null),
     },
     { provide: WATCH_QUOTE_PORT, useClass: FlightWatchAdapter },
     WatchTaskStore,

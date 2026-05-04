@@ -37,9 +37,7 @@ export class SlackWebhookWatchNotifier implements WatchNotifier {
         body: JSON.stringify({ text }),
       });
       if (!res.ok) {
-        this.logger.warn(
-          `slack_webhook_non_2xx status=${String(res.status)} trace_id=${traceId}`,
-        );
+        this.logger.warn(`slack_webhook_non_2xx status=${String(res.status)} trace_id=${traceId}`);
       }
     } catch (err) {
       this.logger.warn(`slack_webhook_failed trace_id=${traceId} err=${String(err)}`);

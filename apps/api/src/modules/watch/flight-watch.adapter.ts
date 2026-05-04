@@ -44,11 +44,7 @@ export class FlightWatchAdapter implements WatchQuotePort {
   constructor(@Inject(WATCH_FLIGHT_CLIENT) private readonly flight: FlightClient) {}
 
   async fetchOne(market: WatchMarket, code: string, traceId: string): Promise<SpotQuote> {
-    const result = await this.flight.doGet(
-      'watch.quote_one',
-      { market, code },
-      { traceId },
-    );
+    const result = await this.flight.doGet('watch.quote_one', { market, code }, { traceId });
     const rows = arrowRowsToObjects(result.value);
     if (rows.length === 0) {
       // The handler raises on upstream failure, so an empty table is a
@@ -70,15 +66,8 @@ export class FlightWatchAdapter implements WatchQuotePort {
     });
   }
 
-  async refreshUniverse(
-    market: 'hk' | 'us',
-    traceId: string,
-  ): Promise<readonly StockBasic[]> {
-    const result = await this.flight.doGet(
-      'watch.universe_refresh',
-      { market },
-      { traceId },
-    );
+  async refreshUniverse(market: 'hk' | 'us', traceId: string): Promise<readonly StockBasic[]> {
+    const result = await this.flight.doGet('watch.universe_refresh', { market }, { traceId });
     const rows = arrowRowsToObjects(result.value);
     return rows.map((row) =>
       StockBasicSchema.parse({
