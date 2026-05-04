@@ -33,13 +33,13 @@ if TYPE_CHECKING:
     from quant_io.llm.openai_compatible import OpenAiCompatibleLlmClient
 
 
-WebSearchKind = Literal["moonshot_tool", "dashscope_extra_body"]
+WebSearchKind = Literal["moonshot_tool", "qwen_extra_body"]
 """How the provider exposes web search:
 
 * ``moonshot_tool``: Kimi-style ``$web_search`` builtin_function tool loop.
-* ``dashscope_extra_body``: DashScope (Qwen) — single chat call with
-  ``extra_body={"enable_search": True}``; the platform folds search results
-  into the assistant reply transparently.
+* ``qwen_extra_body``: Qwen (Alibaba DashScope OpenAI-compatible endpoint)
+  — single chat call with ``extra_body={"enable_search": True}``; the
+  platform folds search results into the assistant reply transparently.
 """
 
 
@@ -69,13 +69,16 @@ class LlmProviderConfig:
 
 LLM_PROVIDERS: Final[tuple[LlmProviderConfig, ...]] = (
     LlmProviderConfig(
-        provider="dashscope",
+        provider="qwen",
         model_pro="qwen-plus",
         model_flash="qwen-turbo",
         is_pro_web_search=True,
-        web_search_kind="dashscope_extra_body",
+        web_search_kind="qwen_extra_body",
+        # OpenAI-compatible endpoint hosted on Alibaba DashScope; the
+        # hostname is fixed by the vendor and unrelated to the local
+        # provider identifier above.
         base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
-        api_key_env="DASHSCOPE_API_KEY",
+        api_key_env="QWEN_API_KEY",
     ),
     LlmProviderConfig(
         provider="deepseek",

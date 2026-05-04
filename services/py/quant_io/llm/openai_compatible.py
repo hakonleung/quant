@@ -81,10 +81,11 @@ class OpenAiCompatibleLlmClient:
           ``arguments`` string (Moonshot performs the search server-side
           and folds results into the next assistant turn). Loop stops on
           ``finish_reason="stop"`` or when ``max_searches`` is exhausted.
-        * ``dashscope_extra_body`` — DashScope (Qwen) single chat call
-          with ``extra_body={"enable_search": True}``; the platform
-          handles search transparently. ``max_searches`` is ignored on
-          this path (DashScope does not expose a per-call budget).
+        * ``qwen_extra_body`` — Qwen (Alibaba DashScope OpenAI-compatible
+          endpoint) single chat call with
+          ``extra_body={"enable_search": True}``; the platform handles
+          search transparently. ``max_searches`` is ignored on this path
+          (the endpoint does not expose a per-call budget).
 
         The reply is *plain analyst text*, not JSON — caller is expected
         to feed it through a downstream summariser.
@@ -95,13 +96,13 @@ class OpenAiCompatibleLlmClient:
                 "max_searches must be a positive integer",
                 {"max_searches": max_searches},
             )
-        if self._web_search_kind == "dashscope_extra_body":
-            return self._complete_with_dashscope_search(system=system, user=user)
+        if self._web_search_kind == "qwen_extra_body":
+            return self._complete_with_qwen_search(system=system, user=user)
         return self._complete_with_moonshot_tool_loop(
             system=system, user=user, max_searches=max_searches
         )
 
-    def _complete_with_dashscope_search(self, *, system: str, user: str) -> str:
+    def _complete_with_qwen_search(self, *, system: str, user: str) -> str:
         try:
             response = self._client.with_options(timeout=240.0).chat.completions.create(
                 model=self._model,

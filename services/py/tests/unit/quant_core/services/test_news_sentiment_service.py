@@ -264,10 +264,10 @@ class TestAnalyzeOne:
         assert result.sentiment_score == pytest.approx(0.6)
         # Step-1 plain-text reply preserved verbatim.
         assert result.result == _RESEARCH_TEXT_MAOTAI
-        # Step-2 flash summariser populated structured fields without
-        # requiring evidence.
+        # Step-2 flash summariser populated structured fields directly
+        # from the analyst write-up — no per-claim evidence carried.
         assert len(result.core_drivers) == 1
-        assert result.core_drivers[0].evidence == ()
+        assert result.core_drivers[0].summary == "高端白酒动销改善"
         assert result.hot_themes[0].label == "高端白酒"
         assert result.research_targets[0].broker == "中金"
         assert str(result.research_targets[0].target_upside_pct) == "25.0"

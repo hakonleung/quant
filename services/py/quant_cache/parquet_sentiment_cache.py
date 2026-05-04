@@ -46,7 +46,6 @@ from quant_core.domain.types.sentiment import (
     SCHEMA_VERSION,
     CompetitiveLandscape,
     CompetitorInfo,
-    Evidence,
     IndustryTrend,
     Insight,
     MarketSentiment,
@@ -434,26 +433,6 @@ def _denormalise(obj: Any) -> Any:
     return obj
 
 
-def _evidence_from_dict(raw: Any) -> Evidence:
-    raw = _denormalise(raw)
-    if not isinstance(raw, dict):
-        raise ValueError("evidence must be an object")
-    return Evidence(
-        source_type=raw["source_type"],
-        quoted_text=raw["quoted_text"],
-        url=raw["url"],
-        published_at=raw.get("published_at"),
-    )
-
-
-def _evidence_tuple(raw: Any) -> tuple[Evidence, ...]:
-    if raw is None:
-        return ()
-    if not isinstance(raw, list):
-        raise ValueError("evidence list must be an array")
-    return tuple(_evidence_from_dict(e) for e in raw)
-
-
 def _insight_from_dict(raw: Any) -> Insight:
     raw = _denormalise(raw)
     if not isinstance(raw, dict):
@@ -463,7 +442,6 @@ def _insight_from_dict(raw: Any) -> Insight:
         direction=raw["direction"],
         confidence=float(raw["confidence"]),
         is_rumor=bool(raw["is_rumor"]),
-        evidence=_evidence_tuple(raw.get("evidence")),
     )
 
 
@@ -475,7 +453,6 @@ def _theme_tag_from_dict(raw: Any) -> ThemeTag:
         label=raw["label"],
         relevance=float(raw["relevance"]),
         rationale=raw["rationale"],
-        evidence=_evidence_tuple(raw.get("evidence")),
     )
 
 
@@ -499,7 +476,6 @@ def _price_signal_from_dict(raw: Any) -> PriceSignal:
         product=raw["product"],
         change=raw["change"],
         horizon=raw["horizon"],
-        evidence=_evidence_tuple(raw.get("evidence")),
         magnitude=raw.get("magnitude"),
     )
 
@@ -528,7 +504,6 @@ def _competitor_info_from_dict(raw: Any) -> CompetitorInfo:
         relation=raw["relation"],
         threat_level=raw["threat_level"],
         note=raw["note"],
-        evidence=_evidence_tuple(raw.get("evidence")),
     )
 
 
@@ -545,7 +520,6 @@ def _competitive_landscape_from_dict(raw: Any) -> CompetitiveLandscape | None:
         competitors=tuple(_competitor_info_from_dict(c) for c in raw.get("competitors", [])),
         moats=tuple(raw.get("moats", [])),
         risks=tuple(raw.get("risks", [])),
-        evidence=_evidence_tuple(raw.get("evidence")),
         market_share_pct=float(share) if isinstance(share, (int, float)) else None,
     )
 
@@ -586,7 +560,6 @@ def _theme_cluster_from_dict(raw: Any) -> ThemeCluster:
         heat_score=float(raw["heat_score"]),
         trend=raw["trend"],
         summary=raw["summary"],
-        top_evidence=_evidence_tuple(raw.get("top_evidence")),
     )
 
 
@@ -598,7 +571,6 @@ def _style_signal_from_dict(raw: Any) -> StyleSignal:
         name=raw["name"],
         confidence=float(raw["confidence"]),
         rationale=raw["rationale"],
-        supporting_evidence=_evidence_tuple(raw.get("supporting_evidence")),
     )
 
 

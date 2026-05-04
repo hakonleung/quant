@@ -30,7 +30,6 @@ from quant_core.domain.types.sentiment import (
     CompetitiveLandscape,
     CompetitorInfo,
     CompetitorRelation,
-    Evidence,
     IndustryDirection,
     IndustryTrend,
     Insight,
@@ -535,7 +534,6 @@ def _iter_insights(raw: object) -> list[Insight]:
     for entry in raw:
         if not isinstance(entry, dict):
             continue
-        evidence = _build_evidence_list(entry.get("evidence"))
         direction = entry.get("direction")
         if direction not in _DIRECTIONS:
             continue
@@ -551,7 +549,6 @@ def _iter_insights(raw: object) -> list[Insight]:
                 direction=direction,
                 confidence=confidence,
                 is_rumor=bool(entry.get("is_rumor", False)),
-                evidence=evidence,
             )
         )
     return out
@@ -564,7 +561,6 @@ def _iter_themes(raw: object) -> list[ThemeTag]:
     for entry in raw:
         if not isinstance(entry, dict):
             continue
-        evidence = _build_evidence_list(entry.get("evidence"))
         relevance = _coerce_unit_float(entry.get("relevance"))
         if relevance is None:
             continue
@@ -579,7 +575,6 @@ def _iter_themes(raw: object) -> list[ThemeTag]:
                 label=label.strip(),
                 relevance=relevance,
                 rationale=rationale,
-                evidence=evidence,
             )
         )
     out.sort(key=lambda t: t.relevance, reverse=True)
@@ -618,7 +613,6 @@ def _iter_price_signals(raw: object) -> list[PriceSignal]:
     for entry in raw:
         if not isinstance(entry, dict):
             continue
-        evidence = _build_evidence_list(entry.get("evidence"))
         change = entry.get("change")
         horizon = entry.get("horizon")
         product = entry.get("product")
@@ -634,7 +628,6 @@ def _iter_price_signals(raw: object) -> list[PriceSignal]:
                 product=product.strip(),
                 change=change,
                 horizon=horizon,
-                evidence=evidence,
                 magnitude=magnitude,
             )
         )
@@ -689,7 +682,6 @@ def _build_competitive_landscape(raw: object) -> CompetitiveLandscape | None:
         if isinstance(risks_raw, list)
         else ()
     )
-    evidence = _build_evidence_list(raw.get("evidence"))
     share_raw = raw.get("market_share_pct")
     share: float | None
     if isinstance(share_raw, (int, float)) and not isinstance(share_raw, bool):
@@ -702,7 +694,6 @@ def _build_competitive_landscape(raw: object) -> CompetitiveLandscape | None:
         competitors=competitors,
         moats=moats,
         risks=risks,
-        evidence=evidence,
         market_share_pct=share,
     )
 
@@ -725,14 +716,12 @@ def _iter_competitors(raw: object) -> tuple[CompetitorInfo, ...]:
             continue
         note_raw = entry.get("note")
         note = note_raw.strip() if isinstance(note_raw, str) else ""
-        evidence = _build_evidence_list(entry.get("evidence"))
         out.append(
             CompetitorInfo(
                 name=name.strip(),
                 relation=cast("CompetitorRelation", relation_raw),
                 threat_level=cast("ThreatLevel", threat_raw),
                 note=note,
-                evidence=evidence,
             )
         )
     return tuple(out)
@@ -752,33 +741,6 @@ def _iter_strings(raw: object) -> list[str]:
     if not isinstance(raw, list):
         return []
     return [s for s in raw if isinstance(s, str)]
-
-
-def _build_evidence_list(raw: object) -> tuple[Evidence, ...]:
-    if not isinstance(raw, list):
-        return ()
-    out: list[Evidence] = []
-    for entry in raw:
-        if not isinstance(entry, dict):
-            continue
-        source_type = entry.get("source_type")
-        quoted_text = entry.get("quoted_text")
-        url = entry.get("url")
-        if source_type not in _SOURCE_TYPES:
-            continue
-        if not isinstance(quoted_text, str) or not quoted_text.strip():
-            continue
-        if not isinstance(url, str) or not url.strip():
-            continue
-        out.append(
-            Evidence(
-                source_type=cast("SourceType", source_type),
-                quoted_text=quoted_text.strip(),
-                url=url.strip(),
-                published_at=_coerce_date(entry.get("published_at")),
-            )
-        )
-    return tuple(out)
 
 
 def _coerce_unit_float(raw: object) -> float | None:
@@ -854,14 +816,6 @@ def _build_theme_cluster(
     )
     summary_raw = raw.get("summary")
     summary = summary_raw if isinstance(summary_raw, str) else ""
-    top_evidence: list[Evidence] = []
-    for code in members:
-        stock = per_stock[code]
-        for tag in stock.hot_themes:
-            if tag.label == label or tag.label.lower() == label.lower():
-                top_evidence.extend(tag.evidence)
-                break
-    # Cap at 3 to keep the payload small.
     return ThemeCluster(
         theme_label=label.strip(),
         member_codes=members,
@@ -869,7 +823,6 @@ def _build_theme_cluster(
         heat_score=heat,
         trend=trend,
         summary=summary,
-        top_evidence=tuple(top_evidence[:3]),
     )
 
 
@@ -883,15 +836,13 @@ def _fallback_clusters(
     still sees something coherent even if the LLM melt-down lost us the
     deduplication step.
     """
+    del per_stock  # signature kept for the failure-path symmetry only
     by_label: dict[str, list[tuple[str, ThemeTag]]] = {}
     for code, tag in memberships:
         by_label.setdefault(tag.label, []).append((code, tag))
     out: list[ThemeCluster] = []
     for label, entries in by_label.items():
         members = tuple(c for c, _ in entries)
-        evidence_pool: list[Evidence] = []
-        for _, tag in entries:
-            evidence_pool.extend(tag.evidence)
         out.append(
             ThemeCluster(
                 theme_label=label,
@@ -900,7 +851,6 @@ def _fallback_clusters(
                 heat_score=float(len(members)),
                 trend="stable",
                 summary="",
-                top_evidence=tuple(evidence_pool[:3]),
             )
         )
     out.sort(key=lambda c: c.heat_score, reverse=True)
