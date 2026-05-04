@@ -20,8 +20,10 @@
 from quant_core.prompts.news_sentiment import (
     build_cluster_system_prompt,
     build_market_synth_system_prompt,
-    build_stock_system_prompt,
-    build_stock_user_prompt,
+    build_stock_search_system_prompt,
+    build_stock_search_user_prompt,
+    build_stock_summarize_system_prompt,
+    build_stock_summarize_user_prompt,
 )
 from quant_core.prompts.nl_to_dsl import build_nl_to_dsl_system_prompt
 
@@ -29,6 +31,8 @@ __all__ = [
     "build_cluster_system_prompt",
     "build_market_synth_system_prompt",
     "build_nl_to_dsl_system_prompt",
-    "build_stock_system_prompt",
-    "build_stock_user_prompt",
+    "build_stock_search_system_prompt",
+    "build_stock_search_user_prompt",
+    "build_stock_summarize_system_prompt",
+    "build_stock_summarize_user_prompt",
 ]

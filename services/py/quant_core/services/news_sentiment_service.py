@@ -53,8 +53,10 @@ from quant_core.errors import QuantError
 from quant_core.prompts import (
     build_cluster_system_prompt,
     build_market_synth_system_prompt,
-    build_stock_system_prompt,
-    build_stock_user_prompt,
+    build_stock_search_system_prompt,
+    build_stock_search_user_prompt,
+    build_stock_summarize_system_prompt,
+    build_stock_summarize_user_prompt,
 )
 
 if TYPE_CHECKING:
@@ -296,15 +298,43 @@ class NewsSentimentService:
         asof: date_cls,
         days: int,
     ) -> StockSentiment:
-        system = build_stock_system_prompt()
-        user = build_stock_user_prompt(meta=meta, asof=asof, days=days)
+        """Two-step pipeline: web-search analyst pass → flash summariser.
+
+        1. ``search_llm.complete_with_web_search`` returns plain analyst
+           text; the verbatim reply is preserved on
+           ``StockSentiment.result``.
+        2. ``aggregator_llm.complete_json`` (flash model) reads that text
+           and emits structured fields (drivers / themes / etc.) with no
+           per-claim evidence requirement — the analyst pass already
+           produced the source-attributed write-up.
+        """
+        research_text = self._search_llm.complete_with_web_search(
+            system=build_stock_search_system_prompt(),
+            user=build_stock_search_user_prompt(meta=meta, asof=asof, days=days),
+            max_searches=self._config.max_searches_per_stock,
+        )
+        return self._summarise_research_text(
+            research_text=research_text,
+            meta=meta,
+            asof=asof,
+            days=days,
+        )
+
+    def _summarise_research_text(
+        self,
+        *,
+        research_text: str,
+        meta: StockMeta,
+        asof: date_cls,
+        days: int,
+    ) -> StockSentiment:
+        system = build_stock_summarize_system_prompt()
+        user = build_stock_summarize_user_prompt(
+            meta=meta, asof=asof, days=days, research_text=research_text
+        )
         last_error: str | None = None
         for attempt in range(2):
-            raw = self._search_llm.complete_with_web_search(
-                system=system,
-                user=user,
-                max_searches=self._config.max_searches_per_stock,
-            )
+            raw = self._aggregator_llm.complete_json(system=system, user=user)
             try:
                 payload = _parse_json_object(raw)
                 return _build_stock_sentiment(
@@ -313,6 +343,7 @@ class NewsSentimentService:
                     asof=asof,
                     window_days=days,
                     fetched_at=self._clock.now(),
+                    result=research_text,
                 )
             except QuantError as exc:
                 last_error = f"{exc.code}: {exc}"
@@ -331,7 +362,7 @@ class NewsSentimentService:
                 )
         raise QuantError(
             "LLM_FAILED",
-            f"could not parse Kimi web_search output for {meta.code}: {last_error}",
+            f"could not summarise research text for {meta.code}: {last_error}",
             {"code": meta.code, "last_error": last_error or ""},
         )
 
@@ -469,6 +500,7 @@ def _build_stock_sentiment(
     asof: date_cls,
     window_days: int,
     fetched_at: datetime,
+    result: str = "",
 ) -> StockSentiment:
     sentiment_score = payload.get("sentiment_score")
     if not isinstance(sentiment_score, (int, float)):
@@ -482,6 +514,7 @@ def _build_stock_sentiment(
         sentiment_score=score,
         fetched_at=fetched_at,
         schema_version=SCHEMA_VERSION,
+        result=result,
         core_drivers=tuple(_iter_insights(payload.get("core_drivers"))),
         m_and_a=tuple(_iter_insights(payload.get("m_and_a"))),
         hot_themes=tuple(_iter_themes(payload.get("hot_themes"))),
@@ -503,8 +536,6 @@ def _iter_insights(raw: object) -> list[Insight]:
         if not isinstance(entry, dict):
             continue
         evidence = _build_evidence_list(entry.get("evidence"))
-        if not evidence:
-            continue
         direction = entry.get("direction")
         if direction not in _DIRECTIONS:
             continue
@@ -534,8 +565,6 @@ def _iter_themes(raw: object) -> list[ThemeTag]:
         if not isinstance(entry, dict):
             continue
         evidence = _build_evidence_list(entry.get("evidence"))
-        if not evidence:
-            continue
         relevance = _coerce_unit_float(entry.get("relevance"))
         if relevance is None:
             continue
@@ -590,8 +619,6 @@ def _iter_price_signals(raw: object) -> list[PriceSignal]:
         if not isinstance(entry, dict):
             continue
         evidence = _build_evidence_list(entry.get("evidence"))
-        if not evidence:
-            continue
         change = entry.get("change")
         horizon = entry.get("horizon")
         product = entry.get("product")
@@ -663,9 +690,6 @@ def _build_competitive_landscape(raw: object) -> CompetitiveLandscape | None:
         else ()
     )
     evidence = _build_evidence_list(raw.get("evidence"))
-    if not evidence:
-        # Hard rule #7: empty evidence drops the whole landscape.
-        return None
     share_raw = raw.get("market_share_pct")
     share: float | None
     if isinstance(share_raw, (int, float)) and not isinstance(share_raw, bool):
@@ -702,8 +726,6 @@ def _iter_competitors(raw: object) -> tuple[CompetitorInfo, ...]:
         note_raw = entry.get("note")
         note = note_raw.strip() if isinstance(note_raw, str) else ""
         evidence = _build_evidence_list(entry.get("evidence"))
-        if not evidence:
-            continue
         out.append(
             CompetitorInfo(
                 name=name.strip(),
