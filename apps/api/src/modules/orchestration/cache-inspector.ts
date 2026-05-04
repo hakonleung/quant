@@ -28,6 +28,66 @@ export class CacheInspector {
     return rows.filter((r) => r.industries === '').map((r) => r.code);
   }
 
+  /**
+   * Codes whose financials track is missing or stale (>7 days).
+   * Authoritative answer comes from the python service so the watermark
+   * (`financials_updated_at` etc.) stays single-sourced; the inspector
+   * just relays.
+   */
+  async findStaleFinancials(traceId: string): Promise<readonly string[]> {
+    try {
+      const result = await this.flight.doGet(
+        'find_stale_financials',
+        { max_age_days: 7 },
+        { traceId },
+      );
+      const out: string[] = [];
+      const table = result.value;
+      for (let i = 0; i < table.numRows; i++) {
+        const proxy = table.get(i);
+        if (proxy === null) continue;
+        const raw = proxy.toJSON() as { code: unknown };
+        if (typeof raw.code === 'string') out.push(raw.code);
+      }
+      return out;
+    } catch (err) {
+      this.logger.warn(
+        `find_stale_financials failed: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      return [];
+    }
+  }
+
+  /**
+   * Synchronous bulk financials sync (8 quarters of `stock_yjbb_em` ⇒
+   * one Flight call). Returns the python service's report so the cron
+   * can include the counts in its scan summary; never throws — a
+   * py-flight failure is logged and surfaced as `(0, 0)` so the rest
+   * of the scan can still progress.
+   */
+  async syncBulkFinancials(traceId: string): Promise<{
+    readonly fetched: number;
+    readonly updated: number;
+  }> {
+    try {
+      const result = await this.flight.doGet('bulk_sync_financials', {}, { traceId });
+      const table = result.value;
+      if (table.numRows === 0) return { fetched: 0, updated: 0 };
+      const proxy = table.get(0);
+      if (proxy === null) return { fetched: 0, updated: 0 };
+      const raw = proxy.toJSON() as { fetched_codes?: unknown; updated_codes?: unknown };
+      return {
+        fetched: typeof raw.fetched_codes === 'number' ? raw.fetched_codes : 0,
+        updated: typeof raw.updated_codes === 'number' ? raw.updated_codes : 0,
+      };
+    } catch (err) {
+      this.logger.warn(
+        `bulk_sync_financials failed: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      return { fetched: 0, updated: 0 };
+    }
+  }
+
   async findStaleKline(traceId: string): Promise<readonly string[]> {
     const [watermarks, latestTradeDay] = await Promise.all([
       this.flight.doGet('list_kline_watermarks', {}, { traceId }),

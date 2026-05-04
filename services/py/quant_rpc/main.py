@@ -35,8 +35,13 @@ from quant_core.services.screen_service import ScreenService
 from quant_core.services.source_chain import SourceChain
 from quant_core.services.stock_meta_service import StockMetaService
 from quant_core.services.stock_meta_sync_service import StockMetaSyncService
+from quant_core.services.financials_service import FinancialsService
 from quant_core.services.universe_screen_service import UniverseScreenService
 from quant_io.llm.providers import build_llm_client
+from quant_io.sources.akshare_financials import (
+    AKShareFinancialsBulkSource,
+    AKShareFinancialsPerStockEnricher,
+)
 from quant_io.sources.akshare_kline import AKShareKlineSource
 from quant_io.sources.akshare_stock_meta import AKShareStockMetaSource
 
@@ -51,6 +56,11 @@ from quant_rpc.ops.sentiment import (
     AnalyzeOneStockSentimentHandler,
     GetCachedMarketSentimentHandler,
     GetCachedStockSentimentHandler,
+)
+from quant_rpc.ops.financials import (
+    BulkSyncFinancialsHandler,
+    EnrichFinancialsForCodeHandler,
+    FindStaleFinancialsHandler,
 )
 from quant_rpc.ops.stock_snapshot import ListStockSnapshotsHandler
 from quant_rpc.ops.stock_meta import (
@@ -114,6 +124,12 @@ def main() -> int:
     kline_service = KlineService(kline_source, kline_repo, clock)
     screen_service = ScreenService(kline_repo)
     universe_service = UniverseScreenService(meta_repo)
+    financials_service = FinancialsService(
+        repo=meta_repo,
+        clock=clock,
+        bulk=AKShareFinancialsBulkSource(),
+        enricher=AKShareFinancialsPerStockEnricher(),
+    )
 
     # NL→DSL translator shares the aggregator LLM (cheap tier when
     # available). Without API keys we degrade the same way sentiment
@@ -150,6 +166,9 @@ def main() -> int:
     registry.register(ListByIndustryHandler(meta_service))
     registry.register(ListAllHandler(meta_service))
     registry.register(ListStockSnapshotsHandler(meta_service, kline_service))
+    registry.register(BulkSyncFinancialsHandler(financials_service))
+    registry.register(EnrichFinancialsForCodeHandler(financials_service))
+    registry.register(FindStaleFinancialsHandler(financials_service))
     registry.register(CheckSourcesHandler(sync_service))
     registry.register(SyncFullHandler(sync_service))
     registry.register(EnrichOneHandler(sync_service))

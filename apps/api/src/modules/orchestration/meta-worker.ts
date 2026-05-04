@@ -30,14 +30,28 @@ export class MetaWorker implements JobProcessor<MetaJob> {
 
   async process(job: JobEnvelope<MetaJob>, queue: ReQueue<MetaJob>): Promise<void> {
     try {
-      if (job.data.kind === 'enrich') {
-        await this.flight.doGet(
-          'enrich_stock_meta_for_code',
-          { code: job.data.code },
-          { traceId: job.data.traceId },
-        );
-      } else {
-        await this.flight.doGet('sync_stock_meta_full', {}, { traceId: job.data.traceId });
+      switch (job.data.kind) {
+        case 'enrich':
+          await this.flight.doGet(
+            'enrich_stock_meta_for_code',
+            { code: job.data.code },
+            { traceId: job.data.traceId },
+          );
+          break;
+        case 'enrich-financials':
+          await this.flight.doGet(
+            'enrich_financials_for_code',
+            { code: job.data.code },
+            { traceId: job.data.traceId },
+          );
+          break;
+        case 'full_sync':
+          await this.flight.doGet(
+            'sync_stock_meta_full',
+            {},
+            { traceId: job.data.traceId },
+          );
+          break;
       }
     } catch (err) {
       if (err instanceof QuantError && TRANSIENT.has(err.code)) {

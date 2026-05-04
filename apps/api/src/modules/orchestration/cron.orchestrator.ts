@@ -162,13 +162,34 @@ export class CronOrchestrator implements OnModuleInit, OnModuleDestroy {
   }
 
   private async scanMeta(traceId: string): Promise<number> {
-    const incomplete = await this.inspector.findIncompleteMeta(traceId);
-    return this.metaQueue.addBulk(
+    // Bulk financials first — one Flight call covers 8 quarters of the
+    // whole market, so it's the cheapest path to lift every meta row's
+    // ``revenue`` / ``net_profit`` watermark before we decide which
+    // codes still need the slow per-stock track.
+    const bulk = await this.inspector.syncBulkFinancials(traceId);
+    if (bulk.updated > 0) {
+      this.logger.log(
+        `bulk_financials traceId=${traceId} fetched=${String(bulk.fetched)} updated=${String(bulk.updated)}`,
+      );
+    }
+    const [incomplete, staleFinancials] = await Promise.all([
+      this.inspector.findIncompleteMeta(traceId),
+      this.inspector.findStaleFinancials(traceId),
+    ]);
+    let total = 0;
+    total += this.metaQueue.addBulk(
       incomplete.map((code) => ({
         data: { kind: 'enrich' as const, code, traceId },
         options: { id: `enrich:${code}` },
       })),
     );
+    total += this.metaQueue.addBulk(
+      staleFinancials.map((code) => ({
+        data: { kind: 'enrich-financials' as const, code, traceId },
+        options: { id: `enrich-financials:${code}` },
+      })),
+    );
+    return total;
   }
 
   private async scanKline(traceId: string): Promise<number> {

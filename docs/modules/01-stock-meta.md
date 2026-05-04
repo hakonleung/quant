@@ -204,12 +204,16 @@ data/meta/
 
 ### 5.3 财报轨（quarterly financials）
 
-- 触发：cron 每天 15:15 BJT 跑一次 bulk；编排层 `inspector.findStaleFinancials` 把"财报位"未新鲜的 code 进 enrich 队列做慢补齐
-- 流程：
-  1. **bulk**：8 季度 `stock_yjbb_em` → 一次性更新 `quarterlies.{revenue, net_profit}` 与 `net_assets`（来自 `每股净资产 × total_share`，缺 total_share 时跳过净资产更新）
-  2. **per-stock**：`stock_financial_abstract_ths` → 补 `operating_cost` 与 `net_profit_excl_nr`；`stock_individual_info_em` → 补 `total_share` / `float_share`
-- 写时机：bulk 阶段无论是否拿全字段都覆盖 `quarterlies` 的 `revenue` / `net_profit`；per-stock 阶段是 partial merge（只动它能填的字段）
+- 触发：cron 每天 15:15 BJT 自动跑（与 META scan kind 合并）；手动通过 `POST /api/orchestration/scan?kind=meta` 立即触发
+- 调度顺序（实现于 `CronOrchestrator.scanMeta`）：
+  1. **bulk**：1 个 Flight RPC `bulk_sync_financials` → Python `FinancialsService.bulk_refresh` → 9 个 `stock_yjbb_em` 调用 → 一次性更新所有 code 的 `quarterlies.{revenue, net_profit}` 与 `net_assets`（来自 `每股净资产 * total_share`，缺 total_share 时跳过净资产更新）
+  2. **incomplete meta**：`findIncompleteMeta` → 缺行业的 code 进 enrich 队列（与原有 XQ 增强一致）
+  3. **stale financials**：`findStaleFinancials` (max_age=7d) → 进 enrich-financials 队列；MetaWorker 调 `enrich_financials_for_code` Flight op，串行 (concurrency=1)
+- 写时机：
+  - bulk 阶段对每个 code 做 partial merge —— `revenue` / `net_profit` 覆盖式更新（最新数为准），但 `operating_cost` / `net_profit_excl_nr` 保留前次 per-stock 阶段的值（防止每天 cron 把扣非清空）
+  - per-stock 阶段也是 partial merge —— 仅动它能填的字段（总股本 / 流通股 / 营业成本 / 扣非）
 - watermark：`financials_updated_at` 同时充当 7 天去抖；同一 trading day 内多次 scan 不重复发 RPC
+- YTD → 单季换算：`stock_yjbb_em` 返回的是**累计** YTD 值（Q2 = H1, Q3 = 9M, Q4 = 全年），bulk source 内置 `_ytd_to_single_quarter` 在同一会计年度内做减法得到单季 revenue / net_profit；跨年不减（Q1 直接保留 YTD = 单季）。回归测试见 `tests/unit/quant_io/sources/test_akshare_financials.py`。
 
 ### 5.4 数据源 fallback
 

@@ -7,6 +7,7 @@
 
 export type MetaJob =
   | { readonly kind: 'enrich'; readonly code: string; readonly traceId: string }
+  | { readonly kind: 'enrich-financials'; readonly code: string; readonly traceId: string }
   | { readonly kind: 'full_sync'; readonly traceId: string };
 
 export type KlineJob =
