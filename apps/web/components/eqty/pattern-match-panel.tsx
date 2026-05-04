@@ -13,10 +13,12 @@
 import { Box, Button, Flex, Text } from '@chakra-ui/react';
 import type { KlineBar, PatternFindSimilarResponse, PatternMatch } from '@quant/shared';
 import { useMutation } from '@tanstack/react-query';
+import { useEffect } from 'react';
 
 import { Feat } from '../../lib/eqty/feat.js';
 import { findSimilarPatterns } from '../../lib/api/endpoints.js';
 import { useKline } from '../../lib/hooks/use-eqty-data.js';
+import { useLayoutStore } from '../../lib/stores/layout.store.js';
 import { useSectorsStore } from '../../lib/stores/sectors.store.js';
 import { ALL_SECTOR_ID, useUiStore } from '../../lib/stores/ui.store.js';
 import { Pane } from '../shell/pane.js';
@@ -27,6 +29,17 @@ export function PatternMatchPanel(): React.ReactElement {
   const activeSectorId = useUiStore((s) => s.activeSectorId);
   const sectors = useSectorsStore((s) => s.sectors);
   const sector = sectors.find((s) => s.id === activeSectorId) ?? null;
+
+  // When the user selects a range on E-0 we expand this pane out of the
+  // minimized state so FIND is visible and clickable without an extra
+  // restore step.
+  const paneMode = useLayoutStore((s) => s.paneMode[Feat.Pattern]);
+  const setPaneMode = useLayoutStore((s) => s.setPaneMode);
+  useEffect(() => {
+    if (range !== null && paneMode === 'minimized') {
+      setPaneMode(Feat.Pattern, 'normal');
+    }
+  }, [range, paneMode, setPaneMode]);
 
   const universe: readonly string[] =
     activeSectorId === ALL_SECTOR_ID || sector === null ? [] : sector.codes;
