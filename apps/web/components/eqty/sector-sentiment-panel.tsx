@@ -32,11 +32,7 @@ export function SectorSentimentPanel(): React.ReactElement | null {
   const tooLarge = codes.length > ANALYZE_MAX_CODES;
 
   const sectorLabel =
-    sector === null
-      ? '(no sector selected)'
-      : activeSectorId === ALL_SECTOR_ID
-        ? 'All'
-        : sector.name;
+    sector === null ? '-' : activeSectorId === ALL_SECTOR_ID ? 'All' : sector.name;
 
   const onFetch = (): void => {
     if (codes.length === 0 || analyze.isPending || tooLarge) return;

@@ -202,13 +202,18 @@ class AKShareWatchSource:
                 {"market": key[0], "code": key[1]},
             ) from exc
         records = _to_records(raw, label=f"daily:{key[0]}:{key[1]}")
-        if len(records) < 2:
+        if not records:
             raise QuantError(
                 "WATCH_QUOTE_UPSTREAM_FAIL",
-                f"{_NAME}: not enough daily rows for {key}",
+                f"{_NAME}: empty daily frame for {key}",
                 {"market": key[0], "code": key[1]},
             )
-        row = records[-2]
+        # `stock_{hk,us}_daily` returns completed sessions only — the running
+        # intraday bar is not appended. So the last row is the previous
+        # trading day's close. (Earlier code took records[-2] on the
+        # assumption that today's row was present — that's wrong: it skipped
+        # one day back, so prev_close drifted to D-2 close.)
+        row = records[-1]
         prev_close = _to_decimal(row.get("close", row.get("收盘")), label="prev_close")
         self._prev_close_cache[key] = (today, prev_close)
         return prev_close

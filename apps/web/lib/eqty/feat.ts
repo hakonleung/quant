@@ -54,7 +54,7 @@ export const FEAT_CONFIG_MAP: Readonly<Record<Feat, FeatConfig>> = {
   [Feat.Pattern]: { title: () => 'pattern', defaultMinimized: true },
 
   [Feat.Insight]: { title: () => 'insight', gridArea: 'CBOT' },
-  [Feat.Insights]: { title: () => 'insight.s', gridArea: 'R1' },
+  [Feat.Insights]: { title: () => 'insights', gridArea: 'R1' },
 
   [Feat.Status]: {
     title: () => 'status',

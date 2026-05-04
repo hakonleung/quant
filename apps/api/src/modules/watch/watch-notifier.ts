@@ -10,6 +10,7 @@
  */
 
 import { Injectable, Logger } from '@nestjs/common';
+import { ProxyAgent, fetch as undiciFetch, type Dispatcher } from 'undici';
 
 export interface WatchNotifier {
   send(text: string, traceId: string): Promise<void>;
@@ -17,9 +18,22 @@ export interface WatchNotifier {
 
 export const WATCH_NOTIFIER = Symbol('WATCH_NOTIFIER');
 
+/**
+ * Pick up `HTTPS_PROXY` / `HTTP_PROXY` from the environment so dev
+ * machines behind a forward proxy (common in CN networks) can reach
+ * `hooks.slack.com`. Node's global `fetch` does NOT honor these env
+ * vars by default — undici's `ProxyAgent` does.
+ */
+function buildDispatcher(): Dispatcher | null {
+  const proxy = process.env['HTTPS_PROXY'] ?? process.env['HTTP_PROXY'] ?? null;
+  if (proxy === null || proxy === '') return null;
+  return new ProxyAgent(proxy);
+}
+
 @Injectable()
 export class SlackWebhookWatchNotifier implements WatchNotifier {
   private readonly logger = new Logger(SlackWebhookWatchNotifier.name);
+  private readonly dispatcher: Dispatcher | null = buildDispatcher();
 
   constructor(private readonly webhookUrl: string | null) {}
 
@@ -31,10 +45,11 @@ export class SlackWebhookWatchNotifier implements WatchNotifier {
       return;
     }
     try {
-      const res = await fetch(this.webhookUrl, {
+      const res = await undiciFetch(this.webhookUrl, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ text }),
+        ...(this.dispatcher !== null ? { dispatcher: this.dispatcher } : {}),
       });
       if (!res.ok) {
         this.logger.warn(`slack_webhook_non_2xx status=${String(res.status)} trace_id=${traceId}`);

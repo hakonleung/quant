@@ -45,8 +45,11 @@ services/py/quant_core/generated/
 data/_*/
 # Sentiment cache is rebuilt on demand via NewsSentimentService — never source-tracked.
 data/sentiment/
-# Watch tasks + universe — file-backed runtime state owned by WatchTaskStore (W-0).
+# Watch state (W-0): tasks.json is mutable runtime state. universe_{hk,us}.json
+# under data/watch IS source-tracked — fresh clones get the lookup tables
+# without an akshare round-trip.
 apps/api/data/
+data/watch/tasks.json
 
 # Test output
 coverage/

@@ -22,7 +22,10 @@ import { WatchScheduler } from './watch.scheduler.js';
 import { WatchService } from './watch.service.js';
 
 const DEFAULT_FLIGHT_TARGET = '127.0.0.1:8815';
-const DEFAULT_DATA_DIR = './data/watch';
+// Repo-root `data/watch` (Nest cwd is `apps/api`, so two-up).
+// HK/US universe JSON lives here and is checked into git so a fresh
+// clone has the lookup tables ready without an akshare round-trip.
+const DEFAULT_DATA_DIR = '../../data/watch';
 
 @Module({
   imports: [StockMetaModule],
@@ -41,8 +44,14 @@ const DEFAULT_DATA_DIR = './data/watch';
     },
     {
       provide: WATCH_NOTIFIER,
-      useFactory: (): WatchNotifier =>
-        new SlackWebhookWatchNotifier(process.env['QUANT_WATCH_SLACK_WEBHOOK'] ?? null),
+      useFactory: (): WatchNotifier => {
+        // Prefer the watch-specific override; fall back to the
+        // project-wide `SLACK_WEBHOOK_URL` (the same one §08
+        // NotificationService uses) so a single .env entry powers both.
+        const url =
+          process.env['QUANT_WATCH_SLACK_WEBHOOK'] ?? process.env['SLACK_WEBHOOK_URL'] ?? null;
+        return new SlackWebhookWatchNotifier(url);
+      },
     },
     { provide: WATCH_QUOTE_PORT, useClass: FlightWatchAdapter },
     WatchTaskStore,

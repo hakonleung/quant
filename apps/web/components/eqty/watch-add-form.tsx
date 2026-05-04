@@ -4,6 +4,10 @@
  * Inline add-form for the Watch pane (`docs/modules/W-0-watch.md` §11.1
  * — `<WatchEditor/>` row, minimal v0).
  *
+ * Reuses the M-0 `<StockCommandBar/>` for ticker selection: the user
+ * searches across A / HK / US in-browser; picking a row fills market /
+ * code / name on the draft. No server-side `/lookup` round-trip.
+ *
  * Single-condition flow only (one pct or abs); multi-condition AST
  * editor is a follow-up. POSTs to `/api/watch` and lets the parent
  * close the form on success — the SSE stream pushes the new task into
@@ -12,32 +16,37 @@
 
 import { Box, Button, Flex, Input, Text } from '@chakra-ui/react';
 import {
-  WatchBaselineSchema,
-  WatchMarketSchema,
   WatchTaskCreateSchema,
   type WatchBaseline,
   type WatchCondition,
   type WatchMarket,
   type WatchTaskCreate,
 } from '@quant/shared';
-import { useState, type ChangeEvent } from 'react';
+import { useState } from 'react';
 import { z } from 'zod';
 
-import { LookupStatus, useStockLookup } from './use-watch-lookup.js';
+import { SearchPane } from './stock-command-bar.js';
+import { TermSelect } from './term-select.js';
 
 const KindSchema = z.enum(['pct', 'abs']);
 type Kind = z.infer<typeof KindSchema>;
 const OpSchema = z.enum(['gte', 'lte']);
 type Op = z.infer<typeof OpSchema>;
 
-const SELECT_STYLE: React.CSSProperties = {
-  background: 'transparent',
-  color: 'inherit',
-  border: '1px solid currentColor',
-  padding: '2px 4px',
-  fontFamily: 'monospace',
-  fontSize: 12,
-};
+const KIND_ITEMS = [
+  { label: 'pct', value: 'pct' as const },
+  { label: 'abs', value: 'abs' as const },
+];
+const BASELINE_ITEMS = [
+  { label: 'prev_close', value: 'prev_close' as const },
+  { label: 'day_high', value: 'day_high' as const },
+  { label: 'day_low', value: 'day_low' as const },
+];
+const OP_ITEMS = [
+  { label: '≥', value: 'gte' as const },
+  { label: '≤', value: 'lte' as const },
+];
+
 const INPUT_STYLE = {
   bg: 'term.bg' as const,
   borderColor: 'term.line' as const,
@@ -49,7 +58,7 @@ const INPUT_STYLE = {
 };
 
 interface AddFormState {
-  readonly market: WatchMarket;
+  readonly market: WatchMarket | null;
   readonly code: string;
   readonly name: string;
   readonly kind: Kind;
@@ -62,7 +71,7 @@ interface AddFormState {
 }
 
 const INITIAL_STATE: AddFormState = {
-  market: 'a',
+  market: null,
   code: '',
   name: '',
   kind: 'pct',
@@ -75,17 +84,17 @@ const INITIAL_STATE: AddFormState = {
 };
 
 function buildDraft(s: AddFormState): WatchTaskCreate {
-  const code = s.code.trim();
+  if (s.market === null) {
+    throw new Error('pick a stock first');
+  }
   const condition: WatchCondition =
     s.kind === 'pct'
       ? { kind: 'pct', baseline: s.baseline, thresholdPct: s.thresholdPct }
       : { kind: 'abs', op: s.op, thresholdPrice: s.thresholdPrice };
-  // Defaulted fields (remaining / notifySlack / enabled) are filled
-  // by the zod schema; we only ship the required surface here.
   return WatchTaskCreateSchema.parse({
     market: s.market,
-    code,
-    name: s.name.trim() || code,
+    code: s.code,
+    name: s.name,
     conditions: [condition],
     intervalSec: Number(s.intervalSec),
     pushIntervalSec: Number(s.pushIntervalSec),
@@ -108,29 +117,16 @@ async function postDraft(state: AddFormState): Promise<string | null> {
   return `${String(res.status)} ${body.slice(0, 160)}`;
 }
 
-/**
- * Auto-fill the name from the resolved stock when the user left it blank.
- * Keeps the form's submit closure short.
- */
-function applyResolvedName(
-  state: AddFormState,
-  lookup: ReturnType<typeof useStockLookup>,
-): AddFormState {
-  if (lookup.kind !== 'found' || state.name.trim() !== '') return state;
-  return { ...state, name: lookup.stock.name };
-}
-
 export function WatchAddForm({ onClose }: AddFormProps): React.ReactElement {
   const [state, setState] = useState<AddFormState>(INITIAL_STATE);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const lookup = useStockLookup(state.market, state.code);
 
   const submit = async (): Promise<void> => {
     setBusy(true);
     setErr(null);
     try {
-      const failure = await postDraft(applyResolvedName(state, lookup));
+      const failure = await postDraft(state);
       if (failure !== null) setErr(failure);
       else onClose();
     } catch (e) {
@@ -150,13 +146,12 @@ export function WatchAddForm({ onClose }: AddFormProps): React.ReactElement {
       color="term.ink2"
     >
       <IdentityRow state={state} setState={setState} />
-      <LookupStatus lookup={lookup} />
       <ConditionRow state={state} setState={setState} />
       <SubmitRow
         state={state}
         setState={setState}
         busy={busy}
-        canSubmit={lookup.kind === 'found'}
+        canSubmit={state.market !== null && state.code !== ''}
         onSubmit={(): void => {
           void submit();
         }}
@@ -177,57 +172,36 @@ interface RowProps {
 
 function IdentityRow({ state, setState }: RowProps): React.ReactElement {
   return (
-    <Flex gap="6px" wrap="wrap" align="center">
-      <select
-        value={state.market}
-        onChange={(e: ChangeEvent<HTMLSelectElement>): void => {
-          const v = WatchMarketSchema.parse(e.target.value);
-          setState((s) => ({ ...s, market: v }));
-        }}
-        style={SELECT_STYLE}
-      >
-        <option value="a">a</option>
-        <option value="hk">hk</option>
-        <option value="us">us</option>
-      </select>
-      <Input
-        {...INPUT_STYLE}
-        w="100px"
-        placeholder="code"
-        value={state.code}
-        onChange={(e): void => {
-          const v = e.target.value;
-          setState((s) => ({ ...s, code: v }));
+    <Box>
+      <SearchPane
+        onPick={(s): void => {
+          setState((prev) => ({ ...prev, market: s.market, code: s.code, name: s.name }));
         }}
       />
-      <Input
-        {...INPUT_STYLE}
-        w="120px"
-        placeholder="name (opt)"
-        value={state.name}
-        onChange={(e): void => {
-          const v = e.target.value;
-          setState((s) => ({ ...s, name: v }));
-        }}
-      />
-    </Flex>
+      {state.market !== null && state.code !== '' ? (
+        <Text mt="4px" fontSize="11px" color="term.green">
+          ✓ [{state.market}] {state.code} · {state.name}
+        </Text>
+      ) : (
+        <Text mt="4px" fontSize="11px" color="term.ink3">
+          pick a stock to continue
+        </Text>
+      )}
+    </Box>
   );
 }
 
 function ConditionRow({ state, setState }: RowProps): React.ReactElement {
   return (
     <Flex gap="6px" wrap="wrap" align="center" mt="6px">
-      <select
+      <TermSelect<Kind>
         value={state.kind}
-        onChange={(e): void => {
-          const v = KindSchema.parse(e.target.value);
+        items={KIND_ITEMS}
+        width="76px"
+        onChange={(v): void => {
           setState((s) => ({ ...s, kind: v }));
         }}
-        style={SELECT_STYLE}
-      >
-        <option value="pct">pct</option>
-        <option value="abs">abs</option>
-      </select>
+      />
       {state.kind === 'pct' ? (
         <PctFields state={state} setState={setState} />
       ) : (
@@ -240,18 +214,14 @@ function ConditionRow({ state, setState }: RowProps): React.ReactElement {
 function PctFields({ state, setState }: RowProps): React.ReactElement {
   return (
     <>
-      <select
+      <TermSelect<WatchBaseline>
         value={state.baseline}
-        onChange={(e): void => {
-          const v = WatchBaselineSchema.parse(e.target.value);
+        items={BASELINE_ITEMS}
+        width="130px"
+        onChange={(v): void => {
           setState((s) => ({ ...s, baseline: v }));
         }}
-        style={SELECT_STYLE}
-      >
-        <option value="prev_close">prev_close</option>
-        <option value="day_high">day_high</option>
-        <option value="day_low">day_low</option>
-      </select>
+      />
       <Input
         {...INPUT_STYLE}
         w="60px"
@@ -269,17 +239,14 @@ function PctFields({ state, setState }: RowProps): React.ReactElement {
 function AbsFields({ state, setState }: RowProps): React.ReactElement {
   return (
     <>
-      <select
+      <TermSelect<Op>
         value={state.op}
-        onChange={(e): void => {
-          const v = OpSchema.parse(e.target.value);
+        items={OP_ITEMS}
+        width="76px"
+        onChange={(v): void => {
           setState((s) => ({ ...s, op: v }));
         }}
-        style={SELECT_STYLE}
-      >
-        <option value="gte">≥</option>
-        <option value="lte">≤</option>
-      </select>
+      />
       <Input
         {...INPUT_STYLE}
         w="80px"

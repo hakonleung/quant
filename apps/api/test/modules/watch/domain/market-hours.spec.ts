@@ -54,9 +54,10 @@ describe('isMarketOpen HK', () => {
   it('lunch break closed', () => {
     expect(isMarketOpen('hk', bjt(2026, 5, 4, 12, 30))).toBe(false);
   });
-  it('open until just before 16:00', () => {
-    expect(isMarketOpen('hk', bjt(2026, 5, 4, 15, 59))).toBe(true);
-    expect(isMarketOpen('hk', bjt(2026, 5, 4, 16, 0))).toBe(false);
+  // Afternoon close temporarily extended to 17:00 BJT (see HK_WINDOWS).
+  it('open until just before 17:00', () => {
+    expect(isMarketOpen('hk', bjt(2026, 5, 4, 16, 59))).toBe(true);
+    expect(isMarketOpen('hk', bjt(2026, 5, 4, 17, 0))).toBe(false);
   });
 });
 
