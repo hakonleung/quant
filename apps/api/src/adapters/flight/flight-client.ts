@@ -85,7 +85,19 @@ export class FlightClient {
     // that the constructor exists). CLAUDE.md §1.2 bans single `as`
     // assertions, but this is the documented grpc-js + proto-loader bridge
     // — there is no runtime way to recover the typed surface.
-    const client = new FlightService(target, creds);
+    //
+    // Default `grpc.max_receive_message_length` is 4 MB; the meta arrow
+    // table now carries 8-quarter financials per code (5500 × ~1KB) and
+    // crosses that ceiling once the parquet has been populated. Bump
+    // both directions to 64 MB so list_stock_meta_all + the snapshot
+    // bulk endpoints stop tripping `RESOURCE_EXHAUSTED`. Flight DoGet
+    // splits payload into chunks but the per-message ceiling still
+    // applies to each FlightData frame.
+    const channelOptions = {
+      'grpc.max_receive_message_length': 64 * 1024 * 1024,
+      'grpc.max_send_message_length': 64 * 1024 * 1024,
+    };
+    const client = new FlightService(target, creds, channelOptions);
     if (typeof (client as unknown as Record<string, unknown>)['GetFlightInfo'] !== 'function') {
       throw new Error('FlightService client missing GetFlightInfo');
     }
