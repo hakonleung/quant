@@ -53,6 +53,13 @@ export const SentimentSchema = z
     rumor: z.string(),
     cachedAt: z.string().datetime({ offset: true }),
     rawLog: z.array(z.string()),
+    /**
+     * Verbatim plain-text analyst write-up from the web-search step
+     * (Python `StockSentiment.result`). Empty string when the cached
+     * payload predates the two-step pipeline. The A-2 markdown
+     * previewer renders this directly.
+     */
+    result: z.string(),
   })
   .strict();
 export type Sentiment = z.infer<typeof SentimentSchema>;
