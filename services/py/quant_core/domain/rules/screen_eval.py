@@ -26,6 +26,7 @@ from quant_core.domain.types.screen import (
     ForAll,
     Logical,
     PeriodReturn,
+    Scale,
 )
 from quant_core.errors import QuantError
 
@@ -129,6 +130,11 @@ def _eval_scalar(rows: Sequence[Mapping[str, object]], node: Scalar) -> object:
         return _eval_aggregate(rows, node)
     if isinstance(node, PeriodReturn):
         return _eval_period_return(rows, node)
+    if isinstance(node, Scale):
+        inner = _eval_scalar(rows, node.inner)
+        if inner is _NA:
+            return _NA
+        return _to_decimal(inner) * node.factor
     raise QuantError("EVALUATION_FAILED", f"unhandled Scalar: {type(node).__name__}")
 
 

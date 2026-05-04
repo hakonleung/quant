@@ -11,7 +11,9 @@ v1 scope (RFC §13 narrows out cross-section / fundamentals):
 * Compare: ``gt`` / ``lt`` / ``gte`` / ``lte`` / ``eq`` / ``neq``
 * Window assertions: ``for_all`` / ``exists`` / ``consecutive``
 * Scalars: ``Field`` / ``Aggregate`` (mean/sum/min/max/count) /
-  ``PeriodReturn`` / ``Const``. ``Indicator`` is collapsed into
+  ``PeriodReturn`` / ``Const`` / ``Scale`` (multiply a Scalar by a
+  constant ``factor`` — supports "X 高于 Y 的 K%" without opening
+  general arithmetic). ``Indicator`` is collapsed into
   ``Field("ma{period}")`` for the four standard windows; non-standard
   periods are deferred (RFC §4.3 calls it out as a 95% case).
 """
@@ -76,7 +78,13 @@ class PeriodReturn:
     days: int
 
 
-Scalar = Field | Const | Aggregate | PeriodReturn
+@dataclass(frozen=True, slots=True)
+class Scale:
+    inner: Scalar
+    factor: Decimal
+
+
+Scalar = Field | Const | Aggregate | PeriodReturn | Scale
 
 
 @dataclass(frozen=True, slots=True)

@@ -26,6 +26,7 @@ from quant_core.domain.types.screen import (
     PeriodReturn,
     Predicate,
     Scalar,
+    Scale,
     ScreenPlan,
 )
 from quant_core.errors import QuantError
@@ -131,6 +132,8 @@ def _parse_scalar(raw: object, path: str) -> Scalar:
     # ``agg`` / ``indicator`` also use ``field`` as a sub-key, so the
     # discriminator key (``agg`` / ``indicator`` / ``period_return`` /
     # ``const``) takes priority.
+    if "scale" in raw:
+        return _parse_scale(raw["scale"], path)
     if "agg" in raw:
         return _parse_aggregate(raw, path)
     if "indicator" in raw:
@@ -144,7 +147,7 @@ def _parse_scalar(raw: object, path: str) -> Scalar:
         if not isinstance(name, str) or name not in FIELD_NAMES:
             raise _invalid(path, f"unknown field {name!r}")
         return Field(field=name)
-    raise _invalid(path, "scalar must be one of: field/const/agg/period_return/indicator")
+    raise _invalid(path, "scalar must be one of: field/const/agg/period_return/indicator/scale")
 
 
 def _parse_aggregate(raw: Mapping[str, object], path: str) -> Aggregate:
@@ -170,6 +173,29 @@ def _parse_period_return(raw: object, path: str) -> PeriodReturn:
     if not isinstance(days, int) or days <= 0:
         raise _invalid(path, "period_return.days must be a positive int")
     return PeriodReturn(days=days)
+
+
+def _parse_scale(raw: object, path: str) -> Scale:
+    """Parse a ``Scale`` scalar: ``{"scale": {"inner": <Scalar>, "factor": <number>}}``.
+
+    ``factor`` must be a positive Decimal. We forbid 0 and negatives because
+    every present use case (price-vs-rolling-max ratios) has factor > 0,
+    and a zero factor collapses ``Scale`` to ``Const(0)`` (already
+    expressible). Re-check this when a real signed-multiplier use case
+    shows up.
+    """
+    if not isinstance(raw, dict):
+        raise _invalid(path, "scale must be an object with 'inner' and 'factor'")
+    inner_raw = raw.get("inner")
+    if inner_raw is None:
+        raise _invalid(path, "scale requires 'inner' scalar")
+    inner = _parse_scalar(inner_raw, f"{path}/inner")
+    if "factor" not in raw:
+        raise _invalid(path, "scale requires 'factor'")
+    factor = _parse_decimal(raw["factor"], f"{path}/factor")
+    if factor <= 0:
+        raise _invalid(f"{path}/factor", f"scale.factor must be > 0, got {factor}")
+    return Scale(inner=inner, factor=factor)
 
 
 def _parse_indicator(raw: Mapping[str, object], path: str) -> Field:

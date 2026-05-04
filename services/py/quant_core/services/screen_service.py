@@ -30,6 +30,7 @@ from quant_core.domain.types.screen import (
     Logical,
     PeriodReturn,
     RankSpec,
+    Scale,
     ScreenMatch,
     ScreenResult,
 )
@@ -153,6 +154,8 @@ def _rank_summary(rank: RankSpec | None) -> tuple[set[str], int]:
         return {rank.metric.field}, rank.metric.days
     if isinstance(rank.metric, PeriodReturn):
         return {"close_qfq"}, rank.metric.days + 1
+    if isinstance(rank.metric, Scale):
+        return _rank_summary(RankSpec(metric=rank.metric.inner, order=rank.order, top_n=rank.top_n))
     raise QuantError("DSL_INVALID", f"unsupported rank metric: {type(rank.metric).__name__}")
 
 
@@ -312,6 +315,11 @@ def _scalar_label(scalar: Scalar) -> str | None:
         return f"{scalar.agg}_{scalar.field}_{scalar.days}d"
     if isinstance(scalar, PeriodReturn):
         return f"period_return_{scalar.days}d"
+    if isinstance(scalar, Scale):
+        inner_label = _scalar_label(scalar.inner)
+        if inner_label is None:
+            return None
+        return f"{inner_label}_x{scalar.factor}"
     return None
 
 
@@ -371,4 +379,6 @@ def _scalar_to_jsonable(node: Scalar) -> dict[str, object]:
         return {"agg": node.agg, "field": node.field, "window": {"days": node.days}}
     if isinstance(node, PeriodReturn):
         return {"period_return": {"days": node.days}}
+    if isinstance(node, Scale):
+        return {"scale": {"inner": _scalar_to_jsonable(node.inner), "factor": str(node.factor)}}
     raise QuantError("DSL_INVALID", f"cannot serialise scalar: {type(node).__name__}")

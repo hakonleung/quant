@@ -58,10 +58,12 @@ _NL_TO_DSL_SYSTEM_PROMPT_TEMPLATE: Final[str] = """\
      塞进 ``screen_plan``。
   6. Top-N / 排序（"前 N"、"排序"）放在 ``rank``，**不要**放进 predicate。
   7. **绝不**编造未定义的 op 或字段。Schema 是封闭的。以下示例是**绝不**
-     允许出现的：``mul`` / ``div`` / ``add`` / ``sub``（不支持标量算术）、
-     ``between``（用 ``and(gte, lte)``）、predicate 内嵌的 ``rank``（用
-     顶层 ``rank``）、``pe`` / ``market_cap`` / ``circ_mv`` / ``listing_age``
-     （用 ``listed_days``）、``last_n``（用窗口聚合替代）。
+     允许出现的：``add`` / ``sub`` / ``div``（标量算术只支持 ``scale`` 一种
+     形式：另一标量乘以一个常数因子，见下方"X 高于 Y 的 K%"示例）、
+     ``mul`` 单独写法（请用 ``scale``）、``between``（用 ``and(gte, lte)``）、
+     predicate 内嵌的 ``rank``（用顶层 ``rank``）、``pe`` / ``market_cap``
+     / ``circ_mv`` / ``listing_age``（用 ``listed_days``）、``last_n``（用
+     窗口聚合替代）。
   8. 即使措辞松散，也要尽可能映射到封闭 Schema，**不要**随便丢弃条件。
      看上去不支持但实际可表达的例子：
        * ``介于 a 到 b 之间``         → ``and(gte a, lte b)``
@@ -69,10 +71,12 @@ _NL_TO_DSL_SYSTEM_PROMPT_TEMPLATE: Final[str] = """\
        * ``连续 N 天 X``               → ``consecutive min_len=N`` predicate X
        * ``全部 / 每天 / 都 X``        → ``for_all`` 窗口 predicate X
        * ``X 高于 Y 的 N%`` 当 N=100   → ``gt(X, Y)``（100% 是恒等）
+       * ``X 高于 Y 的 K%`` 当 K!=100   → ``gt(X, scale(inner=Y, factor=K/100))``
+                                          （K 写成小数，如 90% → 0.9）
        * ``突破 N 日新高``             → ``gt(close_qfq, max-agg over N)``
+       * ``股价高于 N 月最高价的 K%``  → ``gt(close_qfq, scale(max-agg(high_qfq, N*20d), K/100))``
      **只有**在确实没有合法 DSL 形式时才丢弃；以下场景**必须**丢弃 + 在
      ``warnings`` 中说明（且也只有这些场景，其它情况都要再想想）：
-       * ``股价高于 N 月最高价的 K%`` 当 K != 100  —— 需要标量乘法
        * ``流通市值 / 总市值 / 市值``    —— 没有市值字段
        * ``市盈率 / PE / PB / ROE``      —— 没有基本面字段
        * ``RSI / MACD / KDJ / BOLL``     —— 只有 ma5/ma10/ma20/ma60
@@ -98,7 +102,8 @@ K 线 op：
   标量：{{field: ...}}、{{const: <number>}}、
         {{agg: mean|sum|min|max|count, field: ..., window: {{days: N}}}}、
         {{period_return: {{days: N}}}}、
-        {{indicator: "ma", field: ..., period: 5|10|20|60}}
+        {{indicator: "ma", field: ..., period: 5|10|20|60}}、
+        {{scale: {{inner: <Scalar>, factor: <number>}}}}（inner 的求值结果乘以 factor 常量；factor>0）
 
 Universe op：
   逻辑：and / or / not
@@ -164,6 +169,23 @@ Rank 形态：
     "metric": {{"period_return": {{"days": 10}}}},
     "order": "desc",
     "top_n": 20
+  }}
+}}
+
+[Q] 股价高于3个月最高价的90%
+[A] {{
+  "screen_plan": {{
+    "asof": "{asof}",
+    "expr": {{
+      "op": "gt",
+      "left":  {{"field": "close_qfq"}},
+      "right": {{
+        "scale": {{
+          "inner": {{"agg": "max", "field": "high_qfq", "window": {{"days": 60}}}},
+          "factor": 0.9
+        }}
+      }}
+    }}
   }}
 }}
 """

@@ -19,6 +19,7 @@ from quant_core.domain.types.screen import (
     ForAll,
     Logical,
     PeriodReturn,
+    Scale,
 )
 
 if TYPE_CHECKING:
@@ -74,4 +75,6 @@ def _scalar(node: Scalar, cols: set[str]) -> int:
     if isinstance(node, PeriodReturn):
         cols.add("close_qfq")
         return node.days + 1  # need asof and (asof - days)
+    if isinstance(node, Scale):
+        return _scalar(node.inner, cols)
     raise AssertionError(f"unreachable Scalar node: {type(node).__name__}")

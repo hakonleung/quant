@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import date
+from decimal import Decimal
 
 import pytest
 from quant_core.domain.rules.screen_parse import parse_plan, parse_predicate
@@ -16,6 +17,7 @@ from quant_core.domain.types.screen import (
     ForAll,
     Logical,
     PeriodReturn,
+    Scale,
 )
 from quant_core.errors import QuantError
 
@@ -185,6 +187,84 @@ def test_parse_exists_window() -> None:
     )
     assert isinstance(pred, Exists)
     assert pred.days == 3
+
+
+@pytest.mark.unit
+def test_parse_scale_wraps_aggregate() -> None:
+    pred = parse_predicate(
+        {
+            "op": "gt",
+            "left": {"field": "close_qfq"},
+            "right": {
+                "scale": {
+                    "inner": {"agg": "max", "field": "high_qfq", "window": {"days": 60}},
+                    "factor": 0.9,
+                }
+            },
+        },
+        "/expr",
+    )
+    assert isinstance(pred, Compare)
+    assert isinstance(pred.right, Scale)
+    assert pred.right.factor == Decimal("0.9")
+    assert isinstance(pred.right.inner, Aggregate)
+    assert pred.right.inner.agg == "max"
+    assert pred.right.inner.field == "high_qfq"
+    assert pred.right.inner.days == 60
+
+
+@pytest.mark.unit
+def test_parse_scale_nested() -> None:
+    pred = parse_predicate(
+        {
+            "op": "gt",
+            "left": {"field": "close_qfq"},
+            "right": {
+                "scale": {
+                    "inner": {
+                        "scale": {
+                            "inner": {"field": "ma20"},
+                            "factor": 0.5,
+                        }
+                    },
+                    "factor": 0.5,
+                }
+            },
+        },
+        "/expr",
+    )
+    assert isinstance(pred, Compare)
+    outer = pred.right
+    assert isinstance(outer, Scale)
+    assert outer.factor == Decimal("0.5")
+    assert isinstance(outer.inner, Scale)
+    assert outer.inner.factor == Decimal("0.5")
+    assert isinstance(outer.inner.inner, Field)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("scale_raw", "fragment"),
+    [
+        ({"inner": {"field": "close_qfq"}}, "factor"),  # missing factor
+        ({"factor": 0.9}, "inner"),  # missing inner
+        ({"inner": {"field": "close_qfq"}, "factor": 0}, "must be > 0"),
+        ({"inner": {"field": "close_qfq"}, "factor": -0.1}, "must be > 0"),
+        ({"inner": {"field": "close_qfq"}, "factor": "abc"}, "Decimal"),
+        ({"inner": {"field": "ZZZ"}, "factor": 0.9}, "unknown field"),
+        ("not-a-dict", "object"),
+    ],
+)
+def test_parse_scale_invalid(scale_raw: object, fragment: str) -> None:
+    with pytest.raises(QuantError, match=fragment):
+        parse_predicate(
+            {
+                "op": "gt",
+                "left": {"field": "close_qfq"},
+                "right": {"scale": scale_raw},
+            },
+            "/expr",
+        )
 
 
 @pytest.mark.unit

@@ -29,11 +29,8 @@ from typing import TYPE_CHECKING, Final
 from quant_core.domain.rules.screen_parse import parse_plan
 from quant_core.domain.rules.universe_parse import parse_universe_plan
 from quant_core.domain.types.screen import (
-    Aggregate,
-    Const,
-    Field,
-    PeriodReturn,
     RankSpec,
+    Scalar,
 )
 from quant_core.errors import QuantError
 from quant_core.prompts import build_nl_to_dsl_system_prompt
@@ -206,9 +203,8 @@ def _parse_rank(raw: object) -> RankSpec | None:
     return RankSpec(metric=metric, order=order_raw, top_n=top_n_raw)
 
 
-def _parse_rank_metric(raw: dict[str, object]) -> Field | Const | Aggregate | PeriodReturn:
+def _parse_rank_metric(raw: dict[str, object]) -> Scalar:
     """Reuse the screening parser's scalar shape for rank metrics."""
     from quant_core.domain.rules.screen_parse import parse_scalar
 
     return parse_scalar(raw, "/rank/metric")
-

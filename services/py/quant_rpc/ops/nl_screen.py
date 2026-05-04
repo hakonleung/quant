@@ -39,7 +39,6 @@ from enum import Enum
 from typing import TYPE_CHECKING, Any, Final
 
 import pyarrow as pa
-
 from quant_core.domain.types.screen import (
     Aggregate,
     Compare,
@@ -50,11 +49,11 @@ from quant_core.domain.types.screen import (
     ForAll,
     Logical,
     PeriodReturn,
+    Scale,
 )
 from quant_core.domain.types.universe_screen import (
     UniverseCompare,
     UniverseConst,
-    UniverseField,
     UniverseLogical,
 )
 from quant_core.errors import QuantError
@@ -84,7 +83,7 @@ _OP_NAME: Final[str] = "nl_screen"
 # ---------------------------------------------------------------------------
 
 
-def _require_str(args: "Mapping[str, object]", key: str) -> str:
+def _require_str(args: Mapping[str, object], key: str) -> str:
     raw = args.get(key)
     if not isinstance(raw, str) or not raw:
         raise QuantError(
@@ -95,7 +94,7 @@ def _require_str(args: "Mapping[str, object]", key: str) -> str:
     return raw
 
 
-def _opt_iso_date(args: "Mapping[str, object]", key: str) -> date_cls | None:
+def _opt_iso_date(args: Mapping[str, object], key: str) -> date_cls | None:
     raw = args.get(key)
     if raw is None or raw == "":
         return None
@@ -134,7 +133,7 @@ def _normalise(obj: Any) -> Any:
     return obj
 
 
-def _scalar_to_jsonable(node: "Scalar") -> dict[str, object]:
+def _scalar_to_jsonable(node: Scalar) -> dict[str, object]:
     if isinstance(node, Field):
         return {"kind": "field", "field": node.field}
     if isinstance(node, Const):
@@ -148,10 +147,16 @@ def _scalar_to_jsonable(node: "Scalar") -> dict[str, object]:
         }
     if isinstance(node, PeriodReturn):
         return {"kind": "period_return", "window": {"days": node.days}}
+    if isinstance(node, Scale):
+        return {
+            "kind": "scale",
+            "inner": _scalar_to_jsonable(node.inner),
+            "factor": str(node.factor),
+        }
     raise QuantError("DSL_INVALID", f"cannot serialise scalar: {type(node).__name__}")
 
 
-def _predicate_to_jsonable(node: "Predicate") -> dict[str, object]:
+def _predicate_to_jsonable(node: Predicate) -> dict[str, object]:
     if isinstance(node, Compare):
         return {
             "kind": "compare",
@@ -186,11 +191,11 @@ def _predicate_to_jsonable(node: "Predicate") -> dict[str, object]:
     raise QuantError("DSL_INVALID", f"cannot serialise predicate: {type(node).__name__}")
 
 
-def _screen_plan_to_jsonable(plan: "ScreenPlan") -> dict[str, object]:
+def _screen_plan_to_jsonable(plan: ScreenPlan) -> dict[str, object]:
     return {"asof": plan.asof.isoformat(), "expr": _predicate_to_jsonable(plan.expr)}
 
 
-def _universe_expr_to_jsonable(expr: "UniverseExpr") -> dict[str, object]:
+def _universe_expr_to_jsonable(expr: UniverseExpr) -> dict[str, object]:
     if isinstance(expr, UniverseCompare):
         return {
             "kind": "compare",
@@ -216,7 +221,7 @@ def _const_value(c: UniverseConst) -> object:
     return v
 
 
-def _universe_plan_to_jsonable(plan: "UniversePlan | None") -> dict[str, object] | None:
+def _universe_plan_to_jsonable(plan: UniversePlan | None) -> dict[str, object] | None:
     if plan is None:
         return None
     return {"asof": plan.asof.isoformat(), "expr": _universe_expr_to_jsonable(plan.expr)}
@@ -237,10 +242,10 @@ class NlScreenHandler:
 
     def __init__(
         self,
-        translator: "NlToDslService | None",
-        screen_service: "ScreenService",
-        universe_service: "UniverseScreenService",
-        meta_repo: "StockMetaRepo",
+        translator: NlToDslService | None,
+        screen_service: ScreenService,
+        universe_service: UniverseScreenService,
+        meta_repo: StockMetaRepo,
         clock: Any,
     ) -> None:
         self._translator = translator
@@ -249,7 +254,7 @@ class NlScreenHandler:
         self._meta_repo = meta_repo
         self._clock = clock
 
-    def execute(self, args: "Mapping[str, object]") -> pa.Table:
+    def execute(self, args: Mapping[str, object]) -> pa.Table:
         if self._translator is None:
             raise QuantError(
                 "LLM_FAILED",

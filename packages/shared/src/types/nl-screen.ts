@@ -17,14 +17,10 @@ import { z } from 'zod';
 // scalar (value) AST
 // ---------------------------------------------------------------------------
 
-export const DslFieldSchema = z
-  .object({ kind: z.literal('field'), field: z.string() })
-  .strict();
+export const DslFieldSchema = z.object({ kind: z.literal('field'), field: z.string() }).strict();
 export type DslField = z.infer<typeof DslFieldSchema>;
 
-export const DslConstSchema = z
-  .object({ kind: z.literal('const'), value: z.string() })
-  .strict();
+export const DslConstSchema = z.object({ kind: z.literal('const'), value: z.string() }).strict();
 export type DslConst = z.infer<typeof DslConstSchema>;
 
 export const DslAggregateSchema = z
@@ -45,13 +41,29 @@ export const DslPeriodReturnSchema = z
   .strict();
 export type DslPeriodReturn = z.infer<typeof DslPeriodReturnSchema>;
 
-export const DslScalarSchema: z.ZodType<DslScalar> = z.union([
-  DslFieldSchema,
-  DslConstSchema,
-  DslAggregateSchema,
-  DslPeriodReturnSchema,
-]);
-export type DslScalar = DslField | DslConst | DslAggregate | DslPeriodReturn;
+export interface DslScale {
+  readonly kind: 'scale';
+  readonly inner: DslScalar;
+  /** stringified Decimal to match `const` wire format */
+  readonly factor: string;
+}
+export type DslScalar = DslField | DslConst | DslAggregate | DslPeriodReturn | DslScale;
+
+export const DslScalarSchema: z.ZodType<DslScalar> = z.lazy(() =>
+  z.union([
+    DslFieldSchema,
+    DslConstSchema,
+    DslAggregateSchema,
+    DslPeriodReturnSchema,
+    z
+      .object({
+        kind: z.literal('scale'),
+        inner: DslScalarSchema,
+        factor: z.string(),
+      })
+      .strict(),
+  ]),
+);
 
 // ---------------------------------------------------------------------------
 // predicate AST (recursive)
@@ -83,12 +95,7 @@ export interface DslConsecutive {
   readonly min_len: number;
   readonly predicate: DslPredicate;
 }
-export type DslPredicate =
-  | DslCompare
-  | DslLogical
-  | DslForAll
-  | DslExists
-  | DslConsecutive;
+export type DslPredicate = DslCompare | DslLogical | DslForAll | DslExists | DslConsecutive;
 
 export const DslPredicateSchema: z.ZodType<DslPredicate> = z.lazy(() =>
   z.union([

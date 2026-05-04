@@ -97,6 +97,11 @@ const STRUCT_DOCS: Readonly<Record<string, DslDoc>> = {
     title: 'period_return',
     description: '指定窗口的累计收益率（基于前复权 close）。',
   },
+  scale: {
+    title: 'scale',
+    description: '将左侧标量乘以一个常量因子（用于 "X 高于 Y 的 K%" 这类比例条件）。',
+    example: 'scale(max(high_qfq, 60d), 0.9)',
+  },
 };
 
 export function describeCompareOp(op: string): DslDoc {

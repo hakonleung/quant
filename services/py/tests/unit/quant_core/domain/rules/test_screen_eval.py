@@ -162,6 +162,78 @@ def test_logical_and_or_not() -> None:
     assert evaluate_predicate(_series(["10"]), p_not) is True
 
 
+def _rows_with_high(closes: list[str], highs: list[str]) -> list[dict[str, object]]:
+    base = date(2026, 1, 1)
+    return [
+        {
+            "trade_date": base + timedelta(days=i),
+            "close_qfq": Decimal(c),
+            "high_qfq": Decimal(h),
+        }
+        for i, (c, h) in enumerate(zip(closes, highs, strict=True))
+    ]
+
+
+@pytest.mark.unit
+def test_scale_evaluates_max_times_factor() -> None:
+    rows = _rows_with_high(closes=["95", "92", "98"], highs=["80", "100", "98"])
+    # max(high_qfq over 3d) = 100; * 0.9 = 90; close=98 > 90 -> True
+    pred = parse_predicate(
+        {
+            "op": "gt",
+            "left": {"field": "close_qfq"},
+            "right": {
+                "scale": {
+                    "inner": {"agg": "max", "field": "high_qfq", "window": {"days": 3}},
+                    "factor": 0.9,
+                }
+            },
+        },
+        "/",
+    )
+    assert evaluate_predicate(rows, pred) is True
+
+
+@pytest.mark.unit
+def test_scale_compare_below_threshold() -> None:
+    rows = _rows_with_high(closes=["80", "85", "88"], highs=["100", "100", "95"])
+    # max=100, *0.9=90, close=88 < 90 -> False
+    pred = parse_predicate(
+        {
+            "op": "gt",
+            "left": {"field": "close_qfq"},
+            "right": {
+                "scale": {
+                    "inner": {"agg": "max", "field": "high_qfq", "window": {"days": 3}},
+                    "factor": 0.9,
+                }
+            },
+        },
+        "/",
+    )
+    assert evaluate_predicate(rows, pred) is False
+
+
+@pytest.mark.unit
+def test_scale_inner_na_propagates() -> None:
+    # only 2 rows but window=5 -> aggregate yields _NA -> scale yields _NA -> compare False
+    rows = _rows_with_high(closes=["95", "98"], highs=["100", "100"])
+    pred = parse_predicate(
+        {
+            "op": "gt",
+            "left": {"field": "close_qfq"},
+            "right": {
+                "scale": {
+                    "inner": {"agg": "max", "field": "high_qfq", "window": {"days": 5}},
+                    "factor": 0.9,
+                }
+            },
+        },
+        "/",
+    )
+    assert evaluate_predicate(rows, pred) is False
+
+
 @pytest.mark.unit
 def test_empty_rows_returns_false() -> None:
     pred = parse_predicate({"op": "gt", "left": {"const": 1}, "right": {"const": 0}}, "/")

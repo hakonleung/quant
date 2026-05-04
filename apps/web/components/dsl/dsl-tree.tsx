@@ -148,11 +148,7 @@ function PredicateNode({ node, depth }: PredicateProps): React.ReactElement {
 function ScalarNode({ node }: { node: DslScalar }): React.ReactElement {
   switch (node.kind) {
     case 'field':
-      return (
-        <Token doc={describeField(node.field)}>
-          {describeField(node.field).title}
-        </Token>
-      );
+      return <Token doc={describeField(node.field)}>{describeField(node.field).title}</Token>;
     case 'const':
       return (
         <Text as="span" color="violet" fontWeight="600">
@@ -169,9 +165,7 @@ function ScalarNode({ node }: { node: DslScalar }): React.ReactElement {
           <Text as="span" color="ink3">
             (
           </Text>
-          <Token doc={describeField(node.field)}>
-            {describeField(node.field).title}
-          </Token>
+          <Token doc={describeField(node.field)}>{describeField(node.field).title}</Token>
           <Text as="span" color="ink3">
             ,{' '}
           </Text>
@@ -182,24 +176,57 @@ function ScalarNode({ node }: { node: DslScalar }): React.ReactElement {
         </>
       );
     }
-    case 'period_return': {
-      const doc = describeNodeKind('period_return');
-      return (
-        <>
-          <Token doc={doc} accent>
-            period_return
-          </Token>
-          <Text as="span" color="ink3">
-            (
-          </Text>
-          <Window days={node.window.days} />
-          <Text as="span" color="ink3">
-            )
-          </Text>
-        </>
-      );
-    }
+    case 'period_return':
+      return <PeriodReturnScalar days={node.window.days} />;
+    case 'scale':
+      return <ScaleScalar node={node} />;
   }
+}
+
+function PeriodReturnScalar({ days }: { days: number }): React.ReactElement {
+  const doc = describeNodeKind('period_return');
+  return (
+    <>
+      <Token doc={doc} accent>
+        period_return
+      </Token>
+      <Text as="span" color="ink3">
+        (
+      </Text>
+      <Window days={days} />
+      <Text as="span" color="ink3">
+        )
+      </Text>
+    </>
+  );
+}
+
+function ScaleScalar({
+  node,
+}: {
+  node: Extract<DslScalar, { kind: 'scale' }>;
+}): React.ReactElement {
+  const doc = describeNodeKind('scale');
+  return (
+    <>
+      <Token doc={doc} accent>
+        scale
+      </Token>
+      <Text as="span" color="ink3">
+        (
+      </Text>
+      <ScalarNode node={node.inner} />
+      <Text as="span" color="ink3">
+        ,{' '}
+      </Text>
+      <Text as="span" color="violet" fontWeight="600">
+        {node.factor}
+      </Text>
+      <Text as="span" color="ink3">
+        )
+      </Text>
+    </>
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -229,9 +256,7 @@ function UniverseNode({ node, depth }: UniverseProps): React.ReactElement {
   }
   return (
     <Indent depth={depth}>
-      <Token doc={describeField(node.left.field)}>
-        {describeField(node.left.field).title}
-      </Token>{' '}
+      <Token doc={describeField(node.left.field)}>{describeField(node.left.field).title}</Token>{' '}
       <Token doc={describeCompareOp(node.op)} accent>
         {describeCompareOp(node.op).title}
       </Token>{' '}
@@ -246,7 +271,13 @@ function UniverseNode({ node, depth }: UniverseProps): React.ReactElement {
 // presentation primitives
 // ---------------------------------------------------------------------------
 
-function Indent({ depth, children }: { depth: number; children: React.ReactNode }): React.ReactElement {
+function Indent({
+  depth,
+  children,
+}: {
+  depth: number;
+  children: React.ReactNode;
+}): React.ReactElement {
   return (
     <Box pl={`${String(depth * 16)}px`}>
       {depth > 0 && (
