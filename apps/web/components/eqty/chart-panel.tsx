@@ -9,11 +9,14 @@
  *
  * Interaction:
  *   - Default focus = latest bar (right edge of the viewport).
- *   - Mouse-move highlights the nearest bar; hover and selection share
- *     the same label payload, the only difference is whether the focus
- *     is sticky.
- *   - Click a bar to pin selection; click the same bar again to clear.
- *   - Drag the chart body to pan; +/- buttons zoom by adjusting candle
+ *   - Mouse-move highlights the nearest bar (HOV).
+ *   - Click a bar to pin selection (SEL); click the same bar again to
+ *     clear back to HOV.
+ *   - In SEL, clicking a different bar commits a range between the two
+ *     (RANGE mode).
+ *   - In RANGE, clicking inside the range keeps it; clicking outside
+ *     clears the range back to HOV.
+ *   - Drag the chart body to pan; +/- overlay zooms by adjusting candle
  *     width.
  *
  * Header actions: blacklist (with confirm) + add-to-sector dialog.
@@ -21,10 +24,10 @@
 
 import { Box, Button, Flex, Text } from '@chakra-ui/react';
 import type { KlineBar, StockMetaDto } from '@quant/shared';
-import { Ban, Star } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { Feat } from '../../lib/eqty/feat.js';
+import { PaneAction, PaneHeaderRight } from '../shell/pane-header.js';
 import {
   clampViewport,
   DEFAULT_VIEWPORT,
@@ -76,8 +79,6 @@ export function ChartPanel({ code }: Props): React.ReactElement {
   const [hoverIdx, setHoverIdx] = useState<number | null>(null);
   const [hoverPrice, setHoverPrice] = useState<number | null>(null);
   const [showAddDialog, setShowAddDialog] = useState(false);
-  const [rangeAnchor, setRangeAnchor] = useState<number | null>(null);
-  const [rangeEnd, setRangeEnd] = useState<number | null>(null);
   const setChartRange = useUiStore((s) => s.setChartRange);
   const chartRange = useUiStore((s) => s.chartRange);
 
@@ -87,20 +88,12 @@ export function ChartPanel({ code }: Props): React.ReactElement {
     setVp(DEFAULT_VIEWPORT);
     setSelectedIdx(null);
     setHoverIdx(null);
-    setRangeAnchor(null);
-    setRangeEnd(null);
   }, [seriesKey]);
 
-  // Esc exits range-select: aborts an in-flight shift+drag, otherwise
-  // clears the currently committed range for this code.
+  // Esc clears the currently committed range for this code.
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
       if (e.key !== 'Escape') return;
-      if (rangeAnchor !== null) {
-        setRangeAnchor(null);
-        setRangeEnd(null);
-        return;
-      }
       if (chartRange !== null && chartRange.code === code) {
         setChartRange(null);
       }
@@ -109,19 +102,39 @@ export function ChartPanel({ code }: Props): React.ReactElement {
     return () => {
       window.removeEventListener('keydown', onKey);
     };
-  }, [rangeAnchor, chartRange, code, setChartRange]);
+  }, [chartRange, code, setChartRange]);
 
-  const commitRange = (a: number, b: number): void => {
-    const lo = Math.min(a, b);
-    const hi = Math.max(a, b);
-    const startBar = bars[lo];
-    const endBar = bars[hi];
-    if (startBar === undefined || endBar === undefined) return;
-    setChartRange({
-      code,
-      startDate: startBar.date,
-      endDate: endBar.date,
-    });
+  const committedRange = useMemo(
+    () =>
+      chartRange !== null && chartRange.code === code
+        ? findRangeIndices(bars, chartRange.startDate, chartRange.endDate)
+        : null,
+    [chartRange, code, bars],
+  );
+
+  const onBarClick = (idx: number): void => {
+    if (selectedIdx !== null) {
+      if (selectedIdx === idx) {
+        setSelectedIdx(null);
+        return;
+      }
+      const lo = Math.min(selectedIdx, idx);
+      const hi = Math.max(selectedIdx, idx);
+      const startBar = bars[lo];
+      const endBar = bars[hi];
+      if (startBar !== undefined && endBar !== undefined) {
+        setChartRange({ code, startDate: startBar.date, endDate: endBar.date });
+      }
+      setSelectedIdx(null);
+      return;
+    }
+    if (committedRange !== null) {
+      const inside = idx >= committedRange.start && idx <= committedRange.end;
+      if (inside) return;
+      setChartRange(null);
+      return;
+    }
+    setSelectedIdx(idx);
   };
 
   const focusIdx = selectedIdx ?? hoverIdx ?? (bars.length > 0 ? bars.length - 1 : null);
@@ -132,7 +145,7 @@ export function ChartPanel({ code }: Props): React.ReactElement {
 
   return (
     <Pane
-      feat={Feat.Equity}
+      feat={Feat.EquityChart}
       right={
         <ChartHeaderRight
           code={code}
@@ -144,64 +157,39 @@ export function ChartPanel({ code }: Props): React.ReactElement {
       }
     >
       <Flex direction="column" h="100%" minH={0}>
-      <ChartTools
-        vp={vp}
-        setVp={setVp}
-        hasRange={chartRange !== null && chartRange.code === code}
-        onClearRange={(): void => {
-          setChartRange(null);
-        }}
-      />
-      <FocusLabel
-        bar={focusBar}
-        deltaPct={deltaPct}
-        daysAgo={daysAgo}
-        selected={selectedIdx !== null}
-        hovered={selectedIdx === null && hoverIdx !== null}
-      />
-      <Box flex="1" minH={0} overflow="auto">
-      <Box position="relative" h={`${String(TOTAL_H)}px`} bg="panel">
-        {isLoading ? (
-          <Centered>loading kline…</Centered>
-        ) : bars.length === 0 ? (
-          <Centered>// no kline data</Centered>
-        ) : (
-          <ChartCanvas
-            bars={bars}
-            vp={vp}
-            setVp={setVp}
-            selectedIdx={selectedIdx}
-            setSelectedIdx={setSelectedIdx}
-            setHoverIdx={setHoverIdx}
-            hoverPrice={hoverPrice}
-            setHoverPrice={setHoverPrice}
-            focusIdx={focusIdx}
-            rangeAnchor={rangeAnchor}
-            rangeEnd={rangeEnd}
-            committedRange={
-              chartRange !== null && chartRange.code === code
-                ? findRangeIndices(bars, chartRange.startDate, chartRange.endDate)
-                : null
-            }
-            onRangeStart={(idx): void => {
-              setRangeAnchor(idx);
-              setRangeEnd(idx);
-            }}
-            onRangeMove={(idx): void => {
-              if (rangeAnchor !== null) setRangeEnd(idx);
-            }}
-            onRangeEnd={(): void => {
-              if (rangeAnchor !== null && rangeEnd !== null && rangeAnchor !== rangeEnd) {
-                commitRange(rangeAnchor, rangeEnd);
-              }
-              setRangeAnchor(null);
-              setRangeEnd(null);
-            }}
-          />
-        )}
-      </Box>
-        <FinancialsSection code={code} meta={meta.data ?? null} />
-      </Box>
+        <FocusLabel
+          bar={focusBar}
+          deltaPct={deltaPct}
+          daysAgo={daysAgo}
+          selected={selectedIdx !== null}
+          hovered={selectedIdx === null && hoverIdx !== null}
+        />
+        <Box flex="1" minH={0} overflow="auto">
+          <Box position="relative" h={`${String(TOTAL_H)}px`} bg="panel">
+            {isLoading ? (
+              <Centered>loading kline…</Centered>
+            ) : bars.length === 0 ? (
+              <Centered>// no kline data</Centered>
+            ) : (
+              <>
+                <ChartCanvas
+                  bars={bars}
+                  vp={vp}
+                  setVp={setVp}
+                  selectedIdx={selectedIdx}
+                  setHoverIdx={setHoverIdx}
+                  hoverPrice={hoverPrice}
+                  setHoverPrice={setHoverPrice}
+                  focusIdx={focusIdx}
+                  committedRange={committedRange}
+                  onBarClick={onBarClick}
+                />
+                <ZoomOverlay vp={vp} setVp={setVp} />
+              </>
+            )}
+          </Box>
+          <FinancialsSection code={code} meta={meta.data ?? null} />
+        </Box>
       </Flex>
       <AddToSectorDialog
         open={showAddDialog}
@@ -219,17 +207,12 @@ interface CanvasProps {
   readonly vp: ChartViewport;
   readonly setVp: (next: ChartViewport) => void;
   readonly selectedIdx: number | null;
-  readonly setSelectedIdx: (n: number | null) => void;
   readonly setHoverIdx: (n: number | null) => void;
   readonly hoverPrice: number | null;
   readonly setHoverPrice: (p: number | null) => void;
   readonly focusIdx: number | null;
-  readonly rangeAnchor: number | null;
-  readonly rangeEnd: number | null;
   readonly committedRange: { readonly start: number; readonly end: number } | null;
-  readonly onRangeStart: (idx: number) => void;
-  readonly onRangeMove: (idx: number) => void;
-  readonly onRangeEnd: () => void;
+  readonly onBarClick: (idx: number) => void;
 }
 
 function ChartCanvas({
@@ -237,17 +220,12 @@ function ChartCanvas({
   vp,
   setVp,
   selectedIdx,
-  setSelectedIdx,
   setHoverIdx,
   hoverPrice,
   setHoverPrice,
   focusIdx,
-  rangeAnchor,
-  rangeEnd,
   committedRange,
-  onRangeStart,
-  onRangeMove,
-  onRangeEnd,
+  onBarClick,
 }: CanvasProps): React.ReactElement {
   const wrapRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(900);
@@ -290,9 +268,6 @@ function ChartCanvas({
     startClientX: number;
     startPan: number;
     moved: boolean;
-    isRange: boolean;
-    svgLeft: number;
-    svgTop: number;
   } | null>(null);
 
   // While dragging, mouse moves outside the SVG would be lost — bind
@@ -302,28 +277,17 @@ function ChartCanvas({
     const onWinMove = (e: MouseEvent): void => {
       const drag = dragRef.current;
       if (drag === null) return;
-      if (drag.isRange) {
-        const x = e.clientX - drag.svgLeft - PRICE_AXIS_W;
-        const idx = indexAtX(x, slice, bars.length);
-        if (idx !== null) onRangeMove(idx);
-        drag.moved = true;
-        return;
-      }
       const dx = e.clientX - drag.startClientX;
       if (Math.abs(dx) > 2) drag.moved = true;
       // Pan-follows-mouse convention: dragging right slides every bar
       // to the right (older bars come into view from the left), and
-      // dragging left brings latest back toward the right edge. Pan
-      // tracks the cursor so the gesture feels "I'm grabbing the bars
-      // and sliding them with my hand".
+      // dragging left brings latest back toward the right edge.
       const nextPan = Math.max(0, drag.startPan + dx);
       setVp(clampViewport({ ...vp, panPx: nextPan }));
     };
     const onWinUp = (): void => {
-      const drag = dragRef.current;
-      if (drag === null) return;
+      if (dragRef.current === null) return;
       dragRef.current = null;
-      if (drag.isRange) onRangeEnd();
     };
     window.addEventListener('mousemove', onWinMove);
     window.addEventListener('mouseup', onWinUp);
@@ -331,34 +295,13 @@ function ChartCanvas({
       window.removeEventListener('mousemove', onWinMove);
       window.removeEventListener('mouseup', onWinUp);
     };
-  }, [vp, setVp, slice, bars.length, onRangeMove, onRangeEnd]);
+  }, [vp, setVp]);
 
   const onMouseDown = (e: React.MouseEvent<SVGSVGElement>): void => {
-    const rect = e.currentTarget.getBoundingClientRect();
-    const x = e.clientX - rect.left - PRICE_AXIS_W;
-    const y = e.clientY - rect.top;
-    if (e.shiftKey && x >= 0 && y >= 0 && y <= PRICE_H) {
-      const idx = indexAtX(x, slice, bars.length);
-      if (idx !== null) {
-        onRangeStart(idx);
-        dragRef.current = {
-          startClientX: e.clientX,
-          startPan: vp.panPx,
-          moved: false,
-          isRange: true,
-          svgLeft: rect.left,
-          svgTop: rect.top,
-        };
-        return;
-      }
-    }
     dragRef.current = {
       startClientX: e.clientX,
       startPan: vp.panPx,
       moved: false,
-      isRange: false,
-      svgLeft: rect.left,
-      svgTop: rect.top,
     };
   };
   const onMouseMove = (e: React.MouseEvent<SVGSVGElement>): void => {
@@ -376,13 +319,8 @@ function ChartCanvas({
     }
   };
   const onMouseUp = (e: React.MouseEvent<SVGSVGElement>): void => {
-    // The window listener cleared dragRef already if a real drag
-    // happened (moved=true). A click-without-drag still has dragRef
-    // set here when this fires before the window listener; either way
-    // we treat moved=true as "no click selection".
     const drag = dragRef.current;
     if (drag !== null) dragRef.current = null;
-    if (drag?.isRange === true) return; // range commit handled by window up
     if (drag?.moved === true) return;
     const rect = e.currentTarget.getBoundingClientRect();
     const x = e.clientX - rect.left - PRICE_AXIS_W;
@@ -390,7 +328,7 @@ function ChartCanvas({
     if (x < 0 || y < 0 || y > PRICE_H) return;
     const idx = indexAtX(x, slice, bars.length);
     if (idx === null) return;
-    setSelectedIdx(selectedIdx === idx ? null : idx);
+    onBarClick(idx);
   };
   const onMouseLeave = (): void => {
     setHoverIdx(null);
@@ -520,20 +458,8 @@ function ChartCanvas({
 
         {/* Plot, translated past the price axis */}
         <g transform={`translate(${String(PRICE_AXIS_W)},0)`}>
-          {/* Active drag selection overlay */}
-          {rangeAnchor !== null && rangeEnd !== null && (
-            <rect
-              x={Math.min(xForIndex(rangeAnchor), xForIndex(rangeEnd))}
-              y={0}
-              width={Math.abs(xForIndex(rangeEnd) - xForIndex(rangeAnchor)) + vp.candleW}
-              height={PRICE_H + VOL_GAP + VOL_H}
-              fill="rgba(30,98,200,0.10)"
-              stroke="rgba(30,98,200,0.55)"
-              strokeDasharray="3 3"
-            />
-          )}
           {/* Committed range overlay */}
-          {committedRange !== null && rangeAnchor === null && (
+          {committedRange !== null && (
             <rect
               x={xForIndex(committedRange.start)}
               y={0}
@@ -588,30 +514,38 @@ function ChartCanvas({
             );
           })}
 
-          {/* Focus date marker */}
-          {focusIdx !== null && bars[focusIdx] !== undefined && (
-            <g>
-              <rect
-                x={xForIndex(focusIdx) - 16}
-                y={TOTAL_H - 18}
-                width={Math.max(40, vp.candleW + 32)}
-                height={14}
-                fill={palette.light.amberBg}
-                stroke={palette.light.amber}
-              />
-              <text
-                x={xForIndex(focusIdx) + vp.candleW / 2}
-                y={TOTAL_H - 8}
-                fontSize="9"
-                fontFamily="JetBrains Mono"
-                fill={palette.light.amberDark}
-                textAnchor="middle"
-                fontWeight="700"
-              >
-                {bars[focusIdx]!.date}
-              </text>
-            </g>
-          )}
+          {/* Focus date marker — MM-DD only, centered on candle so the
+              box does not bleed onto neighboring date ticks at small
+              candle widths. */}
+          {focusIdx !== null &&
+            bars[focusIdx] !== undefined &&
+            (() => {
+              const markerW = 36;
+              const cx = xForIndex(focusIdx) + vp.candleW / 2;
+              return (
+                <g>
+                  <rect
+                    x={cx - markerW / 2}
+                    y={TOTAL_H - 18}
+                    width={markerW}
+                    height={14}
+                    fill={palette.light.amberBg}
+                    stroke={palette.light.amber}
+                  />
+                  <text
+                    x={cx}
+                    y={TOTAL_H - 8}
+                    fontSize="9"
+                    fontFamily="JetBrains Mono"
+                    fill={palette.light.amberDark}
+                    textAnchor="middle"
+                    fontWeight="700"
+                  >
+                    {bars[focusIdx]!.date.slice(5)}
+                  </text>
+                </g>
+              );
+            })()}
         </g>
 
         {/* Hover crosshair (price) */}
@@ -790,54 +724,37 @@ function Centered({ children }: { children: React.ReactNode }): React.ReactEleme
   );
 }
 
-interface ToolsProps {
+interface ZoomOverlayProps {
   readonly vp: ChartViewport;
   readonly setVp: (vp: ChartViewport) => void;
-  readonly hasRange: boolean;
-  readonly onClearRange: () => void;
 }
 
-function ChartTools({ vp, setVp, hasRange, onClearRange }: ToolsProps): React.ReactElement {
+function ZoomOverlay({ vp, setVp }: ZoomOverlayProps): React.ReactElement {
   const zoomIn = (): void => {
     setVp(clampViewport({ ...vp, candleW: Math.min(MAX_CANDLE_W, vp.candleW * 1.4) }));
   };
   const zoomOut = (): void => {
     setVp(clampViewport({ ...vp, candleW: Math.max(MIN_CANDLE_W, vp.candleW / 1.4) }));
   };
-  const resetView = (): void => {
-    setVp(DEFAULT_VIEWPORT);
-  };
-
   return (
     <Flex
-      align="center"
-      gap="6px"
-      px="12px"
-      py="6px"
-      borderBottomWidth="1px"
-      borderColor="line"
-      fontFamily="mono"
-      fontSize="10px"
-      color="ink3"
-      letterSpacing="0.14em"
+      position="absolute"
+      top="6px"
+      right="10px"
+      gap="4px"
+      zIndex={2}
+      pointerEvents="none"
     >
-      <ToolButton onClick={zoomOut} title="zoom out">
-        −
-      </ToolButton>
-      <ToolButton onClick={zoomIn} title="zoom in">
-        +
-      </ToolButton>
-      <ToolButton onClick={resetView} title="reset">
-        ⟲
-      </ToolButton>
-      <Text ml="6px" color="ink3" fontSize="10px">
-        SHIFT+DRAG → range
-      </Text>
-      {hasRange && (
-        <ToolButton onClick={onClearRange} title="clear range (Esc)">
-          × CLEAR RANGE
+      <Box pointerEvents="auto">
+        <ToolButton onClick={zoomOut} title="zoom out">
+          −
         </ToolButton>
-      )}
+      </Box>
+      <Box pointerEvents="auto">
+        <ToolButton onClick={zoomIn} title="zoom in">
+          +
+        </ToolButton>
+      </Box>
     </Flex>
   );
 }
@@ -897,57 +814,21 @@ function ChartHeaderRight({
     <Flex align="center" gap="8px">
       <Text>{code}</Text>
       {stockName !== '' && <Text>{stockName}</Text>}
-      <IconButton title="add to sector" onClick={onAddToSector} active={false}>
-        <Star size={13} strokeWidth={1.6} />
-      </IconButton>
-      <IconButton
-        title={alreadyBlacklisted ? 'already blacklisted' : 'blacklist'}
-        onClick={onBlacklist}
-        active={alreadyBlacklisted}
-        danger
-      >
-        <Ban size={13} strokeWidth={1.6} />
-      </IconButton>
+      <PaneHeaderRight>
+        <PaneAction title="add to sector" onClick={onAddToSector} tone="accent">
+          ★
+        </PaneAction>
+        <PaneAction
+          title={alreadyBlacklisted ? 'already blacklisted' : 'blacklist'}
+          onClick={onBlacklist}
+          disabled={alreadyBlacklisted}
+          tone="danger"
+        >
+          ⊘
+        </PaneAction>
+      </PaneHeaderRight>
       {confirmComp}
     </Flex>
-  );
-}
-
-interface IconButtonProps {
-  readonly children: React.ReactNode;
-  readonly onClick: () => void;
-  readonly title: string;
-  readonly active: boolean;
-  readonly danger?: boolean;
-}
-
-function IconButton({
-  children,
-  onClick,
-  title,
-  active,
-  danger = false,
-}: IconButtonProps): React.ReactElement {
-  const color = danger ? 'up' : 'accent';
-  return (
-    <Box
-      as="button"
-      onClick={onClick}
-      title={title}
-      w="20px"
-      h="20px"
-      display="grid"
-      placeItems="center"
-      fontSize="13px"
-      lineHeight="1"
-      bg="transparent"
-      color={active ? color : 'ink3'}
-      borderRadius="0"
-      cursor="pointer"
-      _hover={{ color: color }}
-    >
-      {children}
-    </Box>
   );
 }
 

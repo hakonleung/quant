@@ -14,7 +14,9 @@ import { useEffect, useRef, useState } from 'react';
 import { z } from 'zod';
 
 import { Feat } from '../../lib/eqty/feat.js';
+import { ConfirmCancelled, useConfirm } from '../../lib/hooks/use-confirm.js';
 import { Pane } from '../shell/pane.js';
+import { PaneAction, PaneHeaderRight, PaneStatus } from '../shell/pane-header.js';
 import { WatchAddForm } from './watch-add-form.js';
 
 const TaskListSchema = z.array(WatchTaskSchema);
@@ -65,24 +67,39 @@ export function WatchPanel(): React.ReactElement {
   const state = useWatchStream();
   const [adding, setAdding] = useState(false);
   const tasks = state.kind === 'open' ? state.tasks : [];
+  const { guard, comp: confirmComp } = useConfirm();
+
+  const requestDelete = (task: WatchTask): Promise<void> =>
+    guard({
+      title: 'delete watch task',
+      message: (
+        <Text fontFamily="mono" fontSize="12px" color="term.ink2" lineHeight="1.7">
+          delete watch task{' '}
+          <Text as="span" color="term.green">
+            [{task.market}] {task.code} · {task.name}
+          </Text>
+          ?
+        </Text>
+      ),
+      confirmLabel: 'DELETE',
+    });
 
   return (
     <Pane
-      feat={Feat.Watch}
+      feat={Feat.WatchLive}
       right={
-        <Flex gap="8px" align="center">
-          <Text color="term.green">● {String(tasks.length)}</Text>
-          <Button
-            size="xs"
-            variant="ghost"
-            color="term.green"
+        <PaneHeaderRight>
+          <PaneStatus tone={state.kind === 'open' ? 'green' : state.kind === 'error' ? 'red' : 'idle'} />
+          <PaneAction
+            title={adding ? 'cancel' : 'add watch'}
+            tone={adding ? 'danger' : 'accent'}
             onClick={(): void => {
               setAdding((v) => !v);
             }}
           >
-            {adding ? '×' : '+ add'}
-          </Button>
-        </Flex>
+            {adding ? '×' : '+'}
+          </PaneAction>
+        </PaneHeaderRight>
       }
     >
       <PanelBody
@@ -92,7 +109,9 @@ export function WatchPanel(): React.ReactElement {
         onCloseAdd={(): void => {
           setAdding(false);
         }}
+        requestDelete={requestDelete}
       />
+      {confirmComp}
     </Pane>
   );
 }
@@ -102,9 +121,16 @@ interface BodyProps {
   readonly tasks: readonly WatchTask[];
   readonly adding: boolean;
   readonly onCloseAdd: () => void;
+  readonly requestDelete: (task: WatchTask) => Promise<void>;
 }
 
-function PanelBody({ state, tasks, adding, onCloseAdd }: BodyProps): React.ReactElement {
+function PanelBody({
+  state,
+  tasks,
+  adding,
+  onCloseAdd,
+  requestDelete,
+}: BodyProps): React.ReactElement {
   return (
     <Box
       position="relative"
@@ -117,7 +143,7 @@ function PanelBody({ state, tasks, adding, onCloseAdd }: BodyProps): React.React
       flex="1"
     >
       {adding ? <WatchAddForm onClose={onCloseAdd} /> : null}
-      <BodyStatus state={state} tasks={tasks} />
+      <BodyStatus state={state} tasks={tasks} requestDelete={requestDelete} />
     </Box>
   );
 }
@@ -125,9 +151,11 @@ function PanelBody({ state, tasks, adding, onCloseAdd }: BodyProps): React.React
 function BodyStatus({
   state,
   tasks,
+  requestDelete,
 }: {
   readonly state: StreamState;
   readonly tasks: readonly WatchTask[];
+  readonly requestDelete: (task: WatchTask) => Promise<void>;
 }): React.ReactElement {
   if (state.kind === 'connecting') return <Text>connecting…</Text>;
   if (state.kind === 'error') {
@@ -139,7 +167,7 @@ function BodyStatus({
   return (
     <Flex direction="column" gap="6px">
       {tasks.map((t) => (
-        <Row key={`${t.market}:${t.code}`} task={t} />
+        <Row key={`${t.market}:${t.code}`} task={t} requestDelete={requestDelete} />
       ))}
     </Flex>
   );
@@ -153,11 +181,23 @@ async function deleteTask(task: WatchTask): Promise<string | null> {
   return `delete ${String(res.status)}`;
 }
 
-function Row({ task }: { readonly task: WatchTask }): React.ReactElement {
+function Row({
+  task,
+  requestDelete,
+}: {
+  readonly task: WatchTask;
+  readonly requestDelete: (task: WatchTask) => Promise<void>;
+}): React.ReactElement {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
   const onDelete = async (): Promise<void> => {
+    try {
+      await requestDelete(task);
+    } catch (e) {
+      if (e instanceof ConfirmCancelled) return;
+      throw e;
+    }
     setBusy(true);
     setErr(null);
     try {

@@ -43,7 +43,7 @@ export function MarkdownPreviewer({
 }: MarkdownPreviewerProps): React.ReactElement {
   const trimmed = source.trim();
   return (
-    <Pane feat={Feat.Markdown} {...(headerRight !== undefined ? { right: headerRight } : {})}>
+    <Pane feat={Feat.AIMd} {...(headerRight !== undefined ? { right: headerRight } : {})}>
       <Box
         position="relative"
         px="18px"

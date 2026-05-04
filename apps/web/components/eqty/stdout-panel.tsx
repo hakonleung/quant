@@ -1,6 +1,6 @@
 'use client';
 
-import { Box, Button, Flex, Text } from '@chakra-ui/react';
+import { Box, Flex, Text } from '@chakra-ui/react';
 import type { Sentiment } from '@quant/shared';
 import { useEffect } from 'react';
 
@@ -8,6 +8,7 @@ import { Feat } from '../../lib/eqty/feat.js';
 import { useAnalyzeSentiment, useSentiment } from '../../lib/hooks/use-eqty-data.js';
 import { MarkdownPreviewer } from '../modules/markdown-previewer.js';
 import { Pane } from '../shell/pane.js';
+import { PaneAction, PaneHeaderRight, PaneStatus } from '../shell/pane-header.js';
 
 interface Props {
   readonly code: string;
@@ -42,42 +43,31 @@ export function StdoutPanel({ code, onResult }: Props): React.ReactElement {
         ? sentiment.rawLog
         : [`$ sentiment.analyze_one --code ${code}`, `▎ score   ${sentiment.score.toFixed(2)}`];
 
-  const status = analyze.isPending ? (
-    <Text color="accent">● analyzing</Text>
-  ) : analyze.isError ? (
-    <Text color="up">✘ {analyze.error.message}</Text>
-  ) : sentiment === null ? (
-    <Text color="prompt">○ idle</Text>
-  ) : (
-    <Text color="prompt">● cached</Text>
-  );
+  const tone = analyze.isPending
+    ? 'amber'
+    : analyze.isError
+      ? 'red'
+      : sentiment === null
+        ? 'idle'
+        : 'green';
 
   const markdownSource = sentiment?.result ?? '';
 
   return (
     <Pane
-      feat={Feat.Insight}
+      feat={Feat.AIOut}
       right={
-        <Flex gap="8px" align="center">
-          {status}
-          <Button
-            bg="accent"
-            color="panel"
-            h="auto"
-            px="10px"
-            py="3px"
-            fontFamily="mono"
-            fontSize="10px"
-            fontWeight="600"
-            letterSpacing="0.16em"
-            borderRadius="0"
+        <PaneHeaderRight>
+          <PaneStatus tone={tone} blink={analyze.isPending} />
+          <PaneAction
+            title="fetch sentiment"
             onClick={onFetch}
-            loading={analyze.isPending}
-            _hover={{ bg: 'accentDark' }}
+            busy={analyze.isPending}
+            tone="accent"
           >
-            ⟳ FETCH
-          </Button>
-        </Flex>
+            ⟳
+          </PaneAction>
+        </PaneHeaderRight>
       }
     >
       <Flex direction="column" h="100%" minH={0}>

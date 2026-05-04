@@ -11,6 +11,7 @@ import { useBlacklistStore } from '../../lib/stores/blacklist.store.js';
 import { useSectorsStore, type Sector } from '../../lib/stores/sectors.store.js';
 import { ALL_SECTOR_ID, useUiStore } from '../../lib/stores/ui.store.js';
 import { Pane } from '../shell/pane.js';
+import { PaneAction, PaneHeaderRight } from '../shell/pane-header.js';
 import { NewSectorDialog } from './new-sector-dialog.js';
 
 /**
@@ -100,17 +101,19 @@ export function SectorsPanel(): React.ReactElement {
 
   return (
     <Pane
-      feat={Feat.Sectors}
+      feat={Feat.SectorList}
       right={
-        <Text
-          cursor="pointer"
-          _hover={{ color: 'accent' }}
-          onClick={(): void => {
-            setDialogOpen(true);
-          }}
-        >
-          + NEW
-        </Text>
+        <PaneHeaderRight>
+          <PaneAction
+            title="new sector"
+            tone="accent"
+            onClick={(): void => {
+              setDialogOpen(true);
+            }}
+          >
+            +
+          </PaneAction>
+        </PaneHeaderRight>
       }
     >
       <Flex direction="column" h="100%">
@@ -164,10 +167,7 @@ export function SectorsPanel(): React.ReactElement {
           )}
         </Box>
         <Box flex="0 0 auto">
-          <Pane
-            feat={Feat.Blacklist}
-            right={<Text>{blacklist.length}</Text>}
-          >
+          <Pane feat={Feat.SectorBlack}>
             <Box overflow="auto" maxH="160px">
               {blacklist.length === 0 ? (
                 <Empty>no blacklisted stocks</Empty>

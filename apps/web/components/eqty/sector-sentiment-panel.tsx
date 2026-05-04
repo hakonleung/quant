@@ -9,7 +9,7 @@
  * mutation behind a confirm guard (paid call).
  */
 
-import { Box, Button, Flex, Text } from '@chakra-ui/react';
+import { Box, Flex, Text } from '@chakra-ui/react';
 
 import { Feat } from '../../lib/eqty/feat.js';
 import { ConfirmCancelled, useConfirm } from '../../lib/hooks/use-confirm.js';
@@ -17,6 +17,7 @@ import { useAnalyzeMany, useMarketSentiment } from '../../lib/hooks/use-eqty-dat
 import { useSectorsStore } from '../../lib/stores/sectors.store.js';
 import { ALL_SECTOR_ID, useUiStore } from '../../lib/stores/ui.store.js';
 import { Pane } from '../shell/pane.js';
+import { PaneAction, PaneHeaderRight, PaneStatus } from '../shell/pane-header.js';
 import { ANALYZE_MAX_CODES } from './sectors-panel.js';
 
 export function SectorSentimentPanel(): React.ReactElement | null {
@@ -69,15 +70,13 @@ export function SectorSentimentPanel(): React.ReactElement | null {
       });
   };
 
-  const status = analyze.isPending ? (
-    <Text color="accent">● analyzing</Text>
-  ) : analyze.isError ? (
-    <Text color="up">✘ {analyze.error.message}</Text>
-  ) : data === null ? (
-    <Text color="prompt">○ idle</Text>
-  ) : (
-    <Text color="prompt">● cached</Text>
-  );
+  const tone = analyze.isPending
+    ? 'amber'
+    : analyze.isError
+      ? 'red'
+      : data === null
+        ? 'idle'
+        : 'green';
 
   const lines: readonly string[] =
     data === null
@@ -102,34 +101,24 @@ export function SectorSentimentPanel(): React.ReactElement | null {
 
   return (
     <Pane
-      feat={Feat.Insights}
+      feat={Feat.AIHist}
       right={
-        <Flex gap="8px" align="center">
-          <Text color="ink3">▎ {sectorLabel}</Text>
-          {status}
-          <Button
-            bg="accent"
-            color="panel"
-            h="auto"
-            px="10px"
-            py="3px"
-            fontFamily="mono"
-            fontSize="10px"
-            fontWeight="600"
-            letterSpacing="0.16em"
-            borderRadius="0"
-            onClick={onFetch}
-            loading={analyze.isPending}
-            disabled={codes.length === 0 || tooLarge}
+        <PaneHeaderRight>
+          <PaneStatus tone={tone} blink={analyze.isPending} />
+          <PaneAction
             title={
               tooLarge
                 ? `too many members (${String(codes.length)} > ${String(ANALYZE_MAX_CODES)})`
-                : undefined
+                : `analyze ${sectorLabel}`
             }
+            onClick={onFetch}
+            busy={analyze.isPending}
+            disabled={codes.length === 0 || tooLarge}
+            tone="accent"
           >
-            ⟳ FETCH
-          </Button>
-        </Flex>
+            ⟳
+          </PaneAction>
+        </PaneHeaderRight>
       }
     >
       <Box

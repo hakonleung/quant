@@ -17,6 +17,7 @@ import React, { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 
 import { Feat } from '../../lib/eqty/feat.js';
 import { useStockUniverse, type UniverseStock } from '../../lib/hooks/use-stock-universe.js';
 import { Pane } from '../shell/pane.js';
+import { PaneStatus } from '../shell/pane-header.js';
 import { SearchDropdown } from './stock-search-dropdown.js';
 
 const SOFT_RESULT_CAP = 200;
@@ -40,7 +41,7 @@ export interface StockCommandBarProps {
  * W-0 (`<WatchAddForm/>`) can drop it inline without re-implementing
  * the cyber chrome.
  *
- * Note: both instances share `Feat.Search` layout state on purpose —
+ * Note: both instances share `Feat.ScreenNL` layout state on purpose —
  * v0 doesn't multiplex pane storage by location.
  */
 export function SearchPane({
@@ -53,10 +54,7 @@ export function SearchPane({
   readonly rightSlot?: React.ReactNode;
 }): React.ReactElement {
   return (
-    <Pane
-      feat={Feat.Search}
-      right={rightSlot ?? <Text color="term.ink3">↵ FOCUS</Text>}
-    >
+    <Pane feat={Feat.ScreenNL} right={rightSlot ?? <PaneStatus tone="green" />}>
       <StockCommandBar
         {...(marketFilter !== undefined ? { marketFilter } : {})}
         onPick={onPick}

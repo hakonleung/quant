@@ -33,8 +33,11 @@ import { useSectorsStore, type Sector } from '../../lib/stores/sectors.store.js'
 import { useSettingsStore } from '../../lib/stores/settings.store.js';
 import { ALL_SECTOR_ID, useUiStore } from '../../lib/stores/ui.store.js';
 import { ColumnManagerDialog } from './column-manager-dialog.js';
+import { SearchPane } from './stock-command-bar.js';
 import { DslTree } from '../dsl/dsl-tree.js';
 import { Pane } from '../shell/pane.js';
+import { ConfirmCancelled, useConfirm } from '../../lib/hooks/use-confirm.js';
+import { PaneAction, PaneHeaderRight, PaneStatus } from '../shell/pane-header.js';
 
 /**
  * Row payload — flat record so dynamic sectors literally see
@@ -95,6 +98,7 @@ export function ListPanel(): React.ReactElement {
   const sector = sectors.find((s) => s.id === activeSectorId) ?? null;
   const isAll = activeSectorId === ALL_SECTOR_ID;
   const isDynamic = sector !== null && sector.kind === 'dynamic';
+  const isUserSector = sector !== null && sector.kind === 'user';
 
   // Codes used for both row construction and the bulk kline fetch.
   // For the synthetic "All" sector we render every meta-listed stock
@@ -142,11 +146,11 @@ export function ListPanel(): React.ReactElement {
 
   const [filter, setFilter] = useState('');
   const filteredRows: readonly ListRow[] = useMemo(() => {
-    if (isDynamic) return baseRows;
+    if (isDynamic || isUserSector) return baseRows;
     const q = filter.trim().toLowerCase();
     if (q === '') return baseRows;
     return baseRows.filter((r) => r.code.startsWith(q) || r.name.toLowerCase().includes(q));
-  }, [baseRows, filter, isDynamic]);
+  }, [baseRows, filter, isDynamic, isUserSector]);
 
   const [sort, setSort] = useState<SortState | null>(null);
   const sortedRows: readonly ListRow[] = useMemo(() => {
@@ -187,40 +191,65 @@ export function ListPanel(): React.ReactElement {
     upsert({ ...sector, name: next.trim() });
   };
 
-  const right =
-    error !== null && error !== undefined ? (
-      <Text color="up">// {(error as Error).message}</Text>
-    ) : isLoading ? (
-      <Text>loading…</Text>
-    ) : (
-      <Flex gap="10px" align="center">
-        <Text>{focusCode === null ? '— no selection' : `▎ ${focusCode}`}</Text>
-        <Text>{sortedRows.length} rows</Text>
-        {klineBatch.isLoading && (
-          <Text>
-            stats {String(klineBatch.readyCount)}/{String(codes.length)}
+  const onUserAddCode = (code: string): void => {
+    if (sector === null || sector.kind !== 'user') return;
+    if (sector.codes.includes(code)) return;
+    const nextCodes = [...sector.codes, code];
+    upsert({ ...sector, codes: nextCodes, count: nextCodes.length });
+  };
+
+  const { guard: confirmGuard, comp: confirmComp } = useConfirm();
+  const onUserRemoveCode = (code: string): void => {
+    if (sector === null || sector.kind !== 'user') return;
+    if (!sector.codes.includes(code)) return;
+    const meta = universeByCode.get(code);
+    const display = meta === undefined ? code : `${code} · ${meta.name}`;
+    confirmGuard({
+      title: 'remove from sector',
+      message: (
+        <Text fontFamily="mono" fontSize="12px" color="ink2" lineHeight="1.7">
+          remove{' '}
+          <Text as="span" color="accent">
+            {display}
+          </Text>{' '}
+          from{' '}
+          <Text as="span" color="accent">
+            {sector.name}
           </Text>
-        )}
-        {snapshots.isLoading && <Text>derived…</Text>}
-        <Box
-          as="button"
-          aria-label="manage columns"
-          title="manage columns"
-          onClick={(): void => {
-            setColumnDialogOpen(true);
-          }}
-          color="ink3"
-          fontFamily="mono"
-          fontSize="14px"
-          lineHeight="1"
-          px="4px"
-          cursor="pointer"
-          _hover={{ color: 'accent' }}
-        >
-          ⚙
-        </Box>
-      </Flex>
-    );
+          ?
+        </Text>
+      ),
+      confirmLabel: 'REMOVE',
+    })
+      .then(() => {
+        const nextCodes = sector.codes.filter((c) => c !== code);
+        upsert({ ...sector, codes: nextCodes, count: nextCodes.length });
+      })
+      .catch((e: unknown) => {
+        if (e instanceof ConfirmCancelled) return;
+        throw e;
+      });
+  };
+
+  const listTone =
+    error !== null && error !== undefined
+      ? 'red'
+      : isLoading || klineBatch.isLoading || snapshots.isLoading
+        ? 'amber'
+        : 'green';
+  const right = (
+    <PaneHeaderRight>
+      <PaneStatus tone={listTone} blink={isLoading || klineBatch.isLoading} />
+      <PaneAction
+        title="manage columns"
+        onClick={(): void => {
+          setColumnDialogOpen(true);
+        }}
+      >
+        ⚙
+      </PaneAction>
+    </PaneHeaderRight>
+  );
 
   return (
     <Pane
@@ -235,13 +264,16 @@ export function ListPanel(): React.ReactElement {
       right={right}
     >
       <Flex direction="column" h="100%" minH={0}>
-        {!isDynamic && (
+        {isAll && (
           <FilterHeader
             filter={filter}
             setFilter={setFilter}
             total={baseRows.length}
             hits={filteredRows.length}
           />
+        )}
+        {isUserSector && sector !== null && (
+          <UserSectorHeader sector={sector} onAdd={onUserAddCode} />
         )}
         {isDynamic && sector !== null && <DynamicHeader sector={sector} />}
         <ScrollGrid
@@ -253,6 +285,7 @@ export function ListPanel(): React.ReactElement {
           onRowClick={(row): void => {
             setFocusCode(row.code);
           }}
+          onRowRemove={isUserSector ? onUserRemoveCode : null}
           emptyHint={
             isAll
               ? 'universe empty (run an orchestrator sync)'
@@ -268,6 +301,7 @@ export function ListPanel(): React.ReactElement {
           setColumnDialogOpen(false);
         }}
       />
+      {confirmComp}
     </Pane>
   );
 }
@@ -479,6 +513,24 @@ function FilterHeader({
         {hits}/{total}
       </Text>
     </Flex>
+  );
+}
+
+function UserSectorHeader({
+  onAdd,
+}: {
+  sector: Sector;
+  onAdd: (code: string) => void;
+}): React.ReactElement {
+  return (
+    <Box flexShrink={0}>
+      <SearchPane
+        marketFilter="a"
+        onPick={(s): void => {
+          onAdd(s.code);
+        }}
+      />
+    </Box>
   );
 }
 
@@ -905,6 +957,7 @@ interface ScrollGridProps {
   readonly setSort: (s: SortState | null) => void;
   readonly focusedCode: string | null;
   readonly onRowClick: (row: ListRow) => void;
+  readonly onRowRemove: ((code: string) => void) | null;
   readonly emptyHint: string;
 }
 
@@ -915,6 +968,7 @@ function ScrollGrid({
   setSort,
   focusedCode,
   onRowClick,
+  onRowRemove,
   emptyHint,
 }: ScrollGridProps): React.ReactElement {
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -960,6 +1014,13 @@ function ScrollGrid({
                 onClick={(): void => {
                   onRowClick(row);
                 }}
+                onRemove={
+                  onRowRemove === null
+                    ? null
+                    : (): void => {
+                        onRowRemove(row.code);
+                      }
+                }
               />
             );
           })}
@@ -1040,9 +1101,18 @@ interface RowItemProps {
   readonly h: number;
   readonly focused: boolean;
   readonly onClick: () => void;
+  readonly onRemove: (() => void) | null;
 }
 
-function RowItem({ row, columns, top, h, focused, onClick }: RowItemProps): React.ReactElement {
+function RowItem({
+  row,
+  columns,
+  top,
+  h,
+  focused,
+  onClick,
+  onRemove,
+}: RowItemProps): React.ReactElement {
   return (
     <Box
       position="absolute"
@@ -1060,6 +1130,7 @@ function RowItem({ row, columns, top, h, focused, onClick }: RowItemProps): Reac
       cursor="pointer"
       _hover={focused ? {} : { bg: 'hover' }}
       onClick={onClick}
+      role="group"
     >
       {columns.map((c) => (
         <Box
@@ -1084,6 +1155,32 @@ function RowItem({ row, columns, top, h, focused, onClick }: RowItemProps): Reac
           {c.render(row)}
         </Box>
       ))}
+      {onRemove !== null && (
+        <Box
+          as="button"
+          aria-label={`remove ${row.code}`}
+          title="remove from sector"
+          onClick={(e: React.MouseEvent): void => {
+            e.stopPropagation();
+            onRemove();
+          }}
+          position="sticky"
+          right={0}
+          ml="auto"
+          h={`${String(h)}px`}
+          w="32px"
+          display="grid"
+          placeItems="center"
+          bg={focused ? 'accentBg' : 'panel'}
+          color="ink3"
+          fontFamily="mono"
+          fontSize="14px"
+          flexShrink={0}
+          _hover={{ color: 'down' }}
+        >
+          ×
+        </Box>
+      )}
     </Box>
   );
 }

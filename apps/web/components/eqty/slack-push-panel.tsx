@@ -8,6 +8,7 @@ import { z } from 'zod';
 
 import { Feat } from '../../lib/eqty/feat.js';
 import { Pane } from '../shell/pane.js';
+import { PaneStatus } from '../shell/pane-header.js';
 
 const SlackPushSchema = z
   .object({
@@ -36,7 +37,7 @@ export function SlackPushPanel({ code, sentimentScore, theme }: Props): React.Re
       : `${code} · sent ${sentimentScore.toFixed(2)}${theme === null ? '' : ` · 题材[${theme}]`}`;
 
   return (
-    <Pane feat={Feat.Notif} right={<Text color="term.green">● ready</Text>}>
+    <Pane feat={Feat.SysPush} right={<PaneStatus tone="green" />}>
       <Box
         as="form"
         position="relative"

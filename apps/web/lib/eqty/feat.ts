@@ -1,43 +1,49 @@
 /**
  * Catalogue of EQTY workbench panes.
  *
- * Each `Feat` is a 3-digit terminal-style id displayed in the pane
- * header (e.g. `110 PRICE CHART`). `FEAT_CONFIG_MAP` is the single
- * source of truth for static pane metadata — title, grid placement,
- * and the `cyber` skin flag — so panel components stay focused on
- * content rendering.
+ * Each `Feat` value is a `[MODULE].[FEATURE]` string displayed in the
+ * pane header (e.g. `EQ.CHART`). Module abbreviations:
+ *   - SEC    sector / collection
+ *   - EQ     equity (price chart, list)
+ *   - SCR    screening (NL search, pattern match)
+ *   - AI     LLM insight surface
+ *   - SYS    system (status, push)
+ *   - WATCH  live watch tasks
+ *
+ * `FEAT_CONFIG_MAP` is the single source of truth for static pane
+ * metadata — grid placement and the `cyber` skin flag. The header
+ * label IS the feat value, so no separate title field is needed.
  */
 
 export const Feat = {
-  // C: collection
-  Sectors: 'C-0',
-  Blacklist: 'C-9',
+  // SEC — sector / collection
+  SectorList: 'SEC.LIST',
+  SectorBlack: 'SEC.BLACK',
 
-  // E: Equity
-  Equity: 'E-0',
-  EquityList: 'E-1',
+  // EQ — equity
+  EquityChart: 'EQ.CHART',
+  EquityList: 'EQ.LIST',
 
-  // M: match
-  Search: 'M-0',
-  Pattern: 'M-1',
+  // SCR — screening
+  ScreenNL: 'SCR.NL',
+  ScreenPattern: 'SCR.PAT',
 
-  // A: ai
-  Insight: 'A-0',
-  Insights: 'A-1',
-  Markdown: 'A-2',
+  // AI — LLM surface
+  AIOut: 'AI.OUT',
+  AIHist: 'AI.HIST',
+  AIMd: 'AI.MD',
 
-  // S: system
-  Status: 'S-0',
-  Notif: 'S-1',
+  // SYS — system
+  SysStat: 'SYS.STAT',
+  SysPush: 'SYS.PUSH',
 
-  // W: watch
-  Watch: 'W-0',
+  // WATCH — live watch tasks
+  WatchLive: 'WATCH.LIVE',
 } as const;
 
 export type Feat = (typeof Feat)[keyof typeof Feat];
 
 export interface FeatConfig {
-  readonly title: () => string;
   readonly gridArea?: string;
   readonly cyber?: boolean;
   /** When true, the pane mounts in the minimized state (header only). */
@@ -45,34 +51,20 @@ export interface FeatConfig {
 }
 
 export const FEAT_CONFIG_MAP: Readonly<Record<Feat, FeatConfig>> = {
-  [Feat.Sectors]: { title: () => 'sector', gridArea: 'L' },
-  [Feat.Blacklist]: { title: () => 'blacklist', defaultMinimized: true },
+  [Feat.SectorList]: { gridArea: 'L' },
+  [Feat.SectorBlack]: { defaultMinimized: true },
 
-  [Feat.Equity]: { title: () => 'equity', gridArea: 'CMID' },
-  [Feat.EquityList]: { title: () => 'list' },
+  [Feat.EquityChart]: { gridArea: 'CMID' },
+  [Feat.EquityList]: {},
 
-  [Feat.Search]: { title: () => 'search', cyber: true },
-  [Feat.Pattern]: { title: () => 'pattern', defaultMinimized: true },
+  [Feat.ScreenNL]: { cyber: true },
+  [Feat.ScreenPattern]: { defaultMinimized: true },
 
-  [Feat.Insight]: { title: () => 'insight', gridArea: 'CBOT' },
-  [Feat.Insights]: { title: () => 'insights', gridArea: 'R1' },
-  [Feat.Markdown]: { title: () => 'markdown', defaultMinimized: true },
+  [Feat.AIOut]: { gridArea: 'CBOT' },
+  [Feat.AIHist]: { gridArea: 'R1' },
+  [Feat.AIMd]: { defaultMinimized: true },
 
-  [Feat.Status]: {
-    title: () => 'status',
-    cyber: true,
-    defaultMinimized: true,
-  },
-  [Feat.Notif]: {
-    title: () => 'slack',
-    gridArea: 'R2',
-    cyber: true,
-    defaultMinimized: true,
-  },
-  [Feat.Watch]: {
-    title: () => 'watch',
-    gridArea: 'R3',
-    cyber: true,
-    defaultMinimized: true,
-  },
+  [Feat.SysStat]: { cyber: true, defaultMinimized: true },
+  [Feat.SysPush]: { gridArea: 'R2', cyber: true, defaultMinimized: true },
+  [Feat.WatchLive]: { gridArea: 'R3', cyber: true, defaultMinimized: true },
 };

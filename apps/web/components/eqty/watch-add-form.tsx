@@ -1,17 +1,14 @@
 'use client';
 
 /**
- * Inline add-form for the Watch pane (`docs/modules/W-0-watch.md` §11.1
- * — `<WatchEditor/>` row, minimal v0).
+ * Inline add-form for the Watch pane.
  *
- * Reuses the M-0 `<StockCommandBar/>` for ticker selection: the user
- * searches across A / HK / US in-browser; picking a row fills market /
- * code / name on the draft. No server-side `/lookup` round-trip.
+ * Batch flow: user picks N stocks via the M-0 search (chips); the same
+ * condition list is applied to every picked stock — submitting POSTs
+ * one task per stock. Conditions are an editable list (≥ 1 entry) so a
+ * single task can fire on any of several thresholds.
  *
- * Single-condition flow only (one pct or abs); multi-condition AST
- * editor is a follow-up. POSTs to `/api/watch` and lets the parent
- * close the form on success — the SSE stream pushes the new task into
- * view on the next tick.
+ * v0 only POSTs sequentially via the BFF — no dedicated batch endpoint.
  */
 
 import { Box, Button, Flex, Input, Text } from '@chakra-ui/react';
@@ -25,6 +22,7 @@ import {
 import { useState } from 'react';
 import { z } from 'zod';
 
+import type { UniverseStock } from '../../lib/hooks/use-stock-universe.js';
 import { SearchPane } from './stock-command-bar.js';
 import { TermSelect } from './term-select.js';
 
@@ -57,45 +55,54 @@ const INPUT_STYLE = {
   px: '6px',
 };
 
-interface AddFormState {
-  readonly market: WatchMarket | null;
+interface PickedStock {
+  readonly market: WatchMarket;
   readonly code: string;
   readonly name: string;
+}
+
+interface ConditionDraft {
   readonly kind: Kind;
   readonly baseline: WatchBaseline;
   readonly thresholdPct: string;
   readonly op: Op;
   readonly thresholdPrice: string;
+}
+
+interface AddFormState {
+  readonly picked: readonly PickedStock[];
+  readonly conditions: readonly ConditionDraft[];
   readonly intervalSec: string;
   readonly pushIntervalSec: string;
 }
 
-const INITIAL_STATE: AddFormState = {
-  market: null,
-  code: '',
-  name: '',
+const INITIAL_CONDITION: ConditionDraft = {
   kind: 'pct',
   baseline: 'prev_close',
   thresholdPct: '5',
   op: 'gte',
   thresholdPrice: '100',
+};
+
+const INITIAL_STATE: AddFormState = {
+  picked: [],
+  conditions: [INITIAL_CONDITION],
   intervalSec: '20',
   pushIntervalSec: '300',
 };
 
-function buildDraft(s: AddFormState): WatchTaskCreate {
-  if (s.market === null) {
-    throw new Error('pick a stock first');
-  }
-  const condition: WatchCondition =
-    s.kind === 'pct'
-      ? { kind: 'pct', baseline: s.baseline, thresholdPct: s.thresholdPct }
-      : { kind: 'abs', op: s.op, thresholdPrice: s.thresholdPrice };
+function toCondition(c: ConditionDraft): WatchCondition {
+  return c.kind === 'pct'
+    ? { kind: 'pct', baseline: c.baseline, thresholdPct: c.thresholdPct }
+    : { kind: 'abs', op: c.op, thresholdPrice: c.thresholdPrice };
+}
+
+function buildDraft(s: AddFormState, stock: PickedStock): WatchTaskCreate {
   return WatchTaskCreateSchema.parse({
-    market: s.market,
-    code: s.code,
-    name: s.name,
-    conditions: [condition],
+    market: stock.market,
+    code: stock.code,
+    name: stock.name,
+    conditions: s.conditions.map(toCondition),
     intervalSec: Number(s.intervalSec),
     pushIntervalSec: Number(s.pushIntervalSec),
   });
@@ -105,8 +112,8 @@ interface AddFormProps {
   readonly onClose: () => void;
 }
 
-async function postDraft(state: AddFormState): Promise<string | null> {
-  const draft = buildDraft(state);
+async function postOne(stock: PickedStock, state: AddFormState): Promise<string | null> {
+  const draft = buildDraft(state, stock);
   const res = await fetch('/api/watch', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -114,23 +121,36 @@ async function postDraft(state: AddFormState): Promise<string | null> {
   });
   if (res.ok) return null;
   const body = await res.text();
-  return `${String(res.status)} ${body.slice(0, 160)}`;
+  return `[${stock.market}] ${stock.code} → ${String(res.status)} ${body.slice(0, 100)}`;
+}
+
+async function postBatch(state: AddFormState): Promise<readonly string[]> {
+  const errs: string[] = [];
+  for (const stock of state.picked) {
+    try {
+      const failure = await postOne(stock, state);
+      if (failure !== null) errs.push(failure);
+    } catch (e) {
+      errs.push(`[${stock.market}] ${stock.code}: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+  return errs;
 }
 
 export function WatchAddForm({ onClose }: AddFormProps): React.ReactElement {
   const [state, setState] = useState<AddFormState>(INITIAL_STATE);
   const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
+  const [errs, setErrs] = useState<readonly string[]>([]);
 
   const submit = async (): Promise<void> => {
     setBusy(true);
-    setErr(null);
+    setErrs([]);
     try {
-      const failure = await postDraft(state);
-      if (failure !== null) setErr(failure);
-      else onClose();
+      const failures = await postBatch(state);
+      if (failures.length === 0) onClose();
+      else setErrs(failures);
     } catch (e) {
-      setErr(e instanceof Error ? e.message : String(e));
+      setErrs([e instanceof Error ? e.message : String(e)]);
     } finally {
       setBusy(false);
     }
@@ -145,21 +165,25 @@ export function WatchAddForm({ onClose }: AddFormProps): React.ReactElement {
       bg="term.bgElev"
       color="term.ink2"
     >
-      <IdentityRow state={state} setState={setState} />
-      <ConditionRow state={state} setState={setState} />
+      <PickRow state={state} setState={setState} />
+      <ConditionsList state={state} setState={setState} />
       <SubmitRow
         state={state}
         setState={setState}
         busy={busy}
-        canSubmit={state.market !== null && state.code !== ''}
+        canSubmit={state.picked.length > 0 && state.conditions.length > 0}
         onSubmit={(): void => {
           void submit();
         }}
       />
-      {err !== null ? (
-        <Text mt="6px" color="term.red" fontSize="11px">
-          {err}
-        </Text>
+      {errs.length > 0 ? (
+        <Box mt="6px">
+          {errs.map((e, i) => (
+            <Text key={`err-${String(i)}`} color="term.red" fontSize="11px">
+              {e}
+            </Text>
+          ))}
+        </Box>
       ) : null}
     </Box>
   );
@@ -170,94 +194,189 @@ interface RowProps {
   readonly setState: React.Dispatch<React.SetStateAction<AddFormState>>;
 }
 
-function IdentityRow({ state, setState }: RowProps): React.ReactElement {
+function PickRow({ state, setState }: RowProps): React.ReactElement {
+  const onPick = (s: UniverseStock): void => {
+    setState((prev) => {
+      if (prev.picked.some((p) => p.market === s.market && p.code === s.code)) return prev;
+      const next: PickedStock = { market: s.market, code: s.code, name: s.name };
+      return { ...prev, picked: [...prev.picked, next] };
+    });
+  };
+  const onRemove = (idx: number): void => {
+    setState((prev) => ({ ...prev, picked: prev.picked.filter((_, i) => i !== idx) }));
+  };
   return (
     <Box>
-      <SearchPane
-        onPick={(s): void => {
-          setState((prev) => ({ ...prev, market: s.market, code: s.code, name: s.name }));
-        }}
-      />
-      {state.market !== null && state.code !== '' ? (
-        <Text mt="4px" fontSize="11px" color="term.green">
-          ✓ [{state.market}] {state.code} · {state.name}
+      <SearchPane onPick={onPick} />
+      {state.picked.length === 0 ? (
+        <Text mt="4px" fontSize="11px" color="term.ink3">
+          search and pick one or more stocks · same condition applies to all
         </Text>
       ) : (
-        <Text mt="4px" fontSize="11px" color="term.ink3">
-          pick a stock to continue
-        </Text>
+        <Flex mt="4px" gap="4px" wrap="wrap">
+          {state.picked.map((p, i) => (
+            <Flex
+              key={`${p.market}:${p.code}`}
+              align="center"
+              gap="4px"
+              px="6px"
+              py="2px"
+              border="1px solid"
+              borderColor="term.green"
+              color="term.green"
+              fontFamily="mono"
+              fontSize="11px"
+            >
+              <Text>
+                [{p.market}] {p.code} · {p.name}
+              </Text>
+              <Box
+                as="button"
+                aria-label={`remove ${p.code}`}
+                onClick={(): void => {
+                  onRemove(i);
+                }}
+                color="term.ink3"
+                _hover={{ color: 'term.red' }}
+                px="2px"
+              >
+                ×
+              </Box>
+            </Flex>
+          ))}
+        </Flex>
       )}
     </Box>
   );
 }
 
-function ConditionRow({ state, setState }: RowProps): React.ReactElement {
+function ConditionsList({ state, setState }: RowProps): React.ReactElement {
+  const onAdd = (): void => {
+    setState((prev) => ({ ...prev, conditions: [...prev.conditions, INITIAL_CONDITION] }));
+  };
+  const onRemove = (idx: number): void => {
+    setState((prev) => {
+      if (prev.conditions.length <= 1) return prev;
+      return { ...prev, conditions: prev.conditions.filter((_, i) => i !== idx) };
+    });
+  };
+  const onChange = (idx: number, next: ConditionDraft): void => {
+    setState((prev) => ({
+      ...prev,
+      conditions: prev.conditions.map((c, i) => (i === idx ? next : c)),
+    }));
+  };
   return (
-    <Flex gap="6px" wrap="wrap" align="center" mt="6px">
+    <Box mt="6px">
+      <Flex justify="space-between" align="center" mb="4px">
+        <Text fontSize="11px" color="term.ink3" letterSpacing="0.14em">
+          CONDITIONS · ANY-OF
+        </Text>
+        <Button
+          size="xs"
+          variant="ghost"
+          color="term.green"
+          onClick={onAdd}
+        >
+          + add
+        </Button>
+      </Flex>
+      <Flex direction="column" gap="4px">
+        {state.conditions.map((c, i) => (
+          <ConditionRow
+            key={`cond-${String(i)}`}
+            cond={c}
+            canRemove={state.conditions.length > 1}
+            onChange={(next): void => {
+              onChange(i, next);
+            }}
+            onRemove={(): void => {
+              onRemove(i);
+            }}
+          />
+        ))}
+      </Flex>
+    </Box>
+  );
+}
+
+interface ConditionRowProps {
+  readonly cond: ConditionDraft;
+  readonly canRemove: boolean;
+  readonly onChange: (next: ConditionDraft) => void;
+  readonly onRemove: () => void;
+}
+
+function ConditionRow({
+  cond,
+  canRemove,
+  onChange,
+  onRemove,
+}: ConditionRowProps): React.ReactElement {
+  return (
+    <Flex gap="6px" wrap="wrap" align="center">
       <TermSelect<Kind>
-        value={state.kind}
+        value={cond.kind}
         items={KIND_ITEMS}
         width="76px"
         onChange={(v): void => {
-          setState((s) => ({ ...s, kind: v }));
+          onChange({ ...cond, kind: v });
         }}
       />
-      {state.kind === 'pct' ? (
-        <PctFields state={state} setState={setState} />
+      {cond.kind === 'pct' ? (
+        <>
+          <TermSelect<WatchBaseline>
+            value={cond.baseline}
+            items={BASELINE_ITEMS}
+            width="130px"
+            onChange={(v): void => {
+              onChange({ ...cond, baseline: v });
+            }}
+          />
+          <Input
+            {...INPUT_STYLE}
+            w="60px"
+            placeholder="±%"
+            value={cond.thresholdPct}
+            onChange={(e): void => {
+              const v = e.target.value;
+              onChange({ ...cond, thresholdPct: v });
+            }}
+          />
+        </>
       ) : (
-        <AbsFields state={state} setState={setState} />
+        <>
+          <TermSelect<Op>
+            value={cond.op}
+            items={OP_ITEMS}
+            width="76px"
+            onChange={(v): void => {
+              onChange({ ...cond, op: v });
+            }}
+          />
+          <Input
+            {...INPUT_STYLE}
+            w="80px"
+            placeholder="price"
+            value={cond.thresholdPrice}
+            onChange={(e): void => {
+              const v = e.target.value;
+              onChange({ ...cond, thresholdPrice: v });
+            }}
+          />
+        </>
       )}
+      <Button
+        size="xs"
+        variant="ghost"
+        color="term.red"
+        ml="auto"
+        disabled={!canRemove}
+        onClick={onRemove}
+      >
+        ×
+      </Button>
     </Flex>
-  );
-}
-
-function PctFields({ state, setState }: RowProps): React.ReactElement {
-  return (
-    <>
-      <TermSelect<WatchBaseline>
-        value={state.baseline}
-        items={BASELINE_ITEMS}
-        width="130px"
-        onChange={(v): void => {
-          setState((s) => ({ ...s, baseline: v }));
-        }}
-      />
-      <Input
-        {...INPUT_STYLE}
-        w="60px"
-        placeholder="±%"
-        value={state.thresholdPct}
-        onChange={(e): void => {
-          const v = e.target.value;
-          setState((s) => ({ ...s, thresholdPct: v }));
-        }}
-      />
-    </>
-  );
-}
-
-function AbsFields({ state, setState }: RowProps): React.ReactElement {
-  return (
-    <>
-      <TermSelect<Op>
-        value={state.op}
-        items={OP_ITEMS}
-        width="76px"
-        onChange={(v): void => {
-          setState((s) => ({ ...s, op: v }));
-        }}
-      />
-      <Input
-        {...INPUT_STYLE}
-        w="80px"
-        placeholder="price"
-        value={state.thresholdPrice}
-        onChange={(e): void => {
-          const v = e.target.value;
-          setState((s) => ({ ...s, thresholdPrice: v }));
-        }}
-      />
-    </>
   );
 }
 
@@ -309,7 +428,7 @@ function SubmitRow({
         disabled={busy || !canSubmit}
         onClick={onSubmit}
       >
-        {busy ? '…' : 'add'}
+        {busy ? '…' : `add ${String(state.picked.length)}`}
       </Button>
     </Flex>
   );

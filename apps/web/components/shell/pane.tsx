@@ -11,17 +11,14 @@ const TRANSITION_MS = 280;
 
 interface PaneProps {
   readonly feat: Feat;
-  /** Optional override; defaults to {@link FEAT_CONFIG_MAP}.title(). */
-  readonly title?: string;
   /** Custom title slot — when present takes the whole title position. */
   readonly titleSlot?: ReactNode;
   readonly right?: ReactNode;
   readonly children: ReactNode;
 }
 
-export function Pane({ feat, title, titleSlot, right, children }: PaneProps): React.ReactElement {
+export function Pane({ feat, titleSlot, right, children }: PaneProps): React.ReactElement {
   const config = FEAT_CONFIG_MAP[feat];
-  const resolvedTitle = title ?? config.title();
   const cyber = config.cyber ?? false;
   const gridArea = config.gridArea;
 
@@ -151,7 +148,6 @@ export function Pane({ feat, title, titleSlot, right, children }: PaneProps): Re
     >
       <PaneHeader
         id={feat}
-        title={resolvedTitle}
         titleSlot={titleSlot}
         right={right}
         cyber={cyber}
@@ -211,7 +207,6 @@ function cornerStyle(corner: 'tl' | 'br', cyber: boolean): Record<string, unknow
 
 interface HeaderProps {
   readonly id: string;
-  readonly title: string;
   readonly titleSlot?: ReactNode;
   readonly right?: ReactNode;
   readonly cyber: boolean;
@@ -224,7 +219,6 @@ interface HeaderProps {
 
 function PaneHeader({
   id,
-  title,
   titleSlot,
   right,
   cyber,
@@ -256,24 +250,7 @@ function PaneHeader({
       >
         {id}
       </Text>
-      {titleSlot !== undefined ? (
-        <Box flexShrink={0}>{titleSlot}</Box>
-      ) : (
-        <Text
-          fontFamily="mono"
-          fontSize="10px"
-          letterSpacing="0.18em"
-          textTransform="uppercase"
-          fontWeight="600"
-          color={cyber ? 'term.ink2' : 'ink2'}
-          whiteSpace="nowrap"
-          overflow="hidden"
-          textOverflow="ellipsis"
-          flexShrink={0}
-        >
-          {title}
-        </Text>
-      )}
+      {titleSlot !== undefined && <Box flexShrink={0}>{titleSlot}</Box>}
       {right !== undefined && (
         <Box
           fontFamily="mono"

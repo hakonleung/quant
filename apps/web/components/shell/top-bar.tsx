@@ -1,17 +1,28 @@
 'use client';
 
-import { Box, Flex, HStack, Text } from '@chakra-ui/react';
-import React from 'react';
+/**
+ * Top bar — brand mark + SYS.STAT pane.
+ *
+ * SYS.STAT used to live at the bottom of the page; mounting it here
+ * keeps the live SSE / queue / mem / fps capsules in the user's eye
+ * line at all times. The pane itself is unchanged — see
+ * {@link ./sys-stat-pane} — only its host slot moved.
+ *
+ * The cross-market search input that used to live here (M-0 / SCR.NL)
+ * has been removed; picking is done from inside individual panes.
+ */
 
-import { useUiStore } from '../../lib/stores/ui.store.js';
-import { SearchPane } from '../eqty/stock-command-bar.js';
+import { Box, Flex, HStack, Text } from '@chakra-ui/react';
+
+import { SysStatPane } from './sys-stat-pane.js';
 
 export function TopBar(): React.ReactElement {
   return (
     <Flex minH="42px" bg="panel" borderBottomWidth="2px" borderBottomColor="accent" align="stretch">
       <Brand />
-      <Box flex="1" minW={0} />
-      <CommandBar />
+      <Box flex="1" minW={0} display="flex" alignItems="stretch">
+        <SysStatPane />
+      </Box>
     </Flex>
   );
 }
@@ -66,6 +77,7 @@ function Brand(): React.ReactElement {
       letterSpacing="0.18em"
       fontWeight="700"
       fontSize="12px"
+      flexShrink={0}
     >
       <BrandGlyph />
       <Box lineHeight="1.1">
@@ -75,28 +87,5 @@ function Brand(): React.ReactElement {
         </Text>
       </Box>
     </HStack>
-  );
-}
-
-/**
- * M-0 — top-bar fast in-memory search by `code | name | pinyin`.
- * Restricts to A-stock universe; picking a hit focuses the workbench
- * on that code.
- */
-function CommandBar(): React.ReactElement {
-  const onPick = (s: { readonly code: string }): void => {
-    useUiStore.getState().setFocusCode(s.code);
-  };
-  return (
-    <Box
-      flex="1"
-      maxW="440px"
-      minW="240px"
-      borderLeftWidth="1px"
-      borderLeftColor="line"
-      position="relative"
-    >
-      <SearchPane marketFilter="a" onPick={onPick} />
-    </Box>
   );
 }

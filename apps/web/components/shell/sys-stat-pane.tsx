@@ -1,16 +1,22 @@
 'use client';
 
 /**
- * Status pane (Feat 300, cyber skin).
+ * Status pane (SYS.STAT, cyber skin).
  *
- * The site footer slot — wrapped in a regular {@link Pane} so it
- * inherits the workbench chrome (terminal corners, minimize/fullscreen
- * toggles). Header shows four "·" capsules at a glance:
+ * Identical to the historical footer pane (terminal corners, minimize /
+ * fullscreen toggles, blinking caret in body) — only the right-slot
+ * capsule strip is extended with `MEM` (Chromium-only JS-heap usage)
+ * and `FPS` (rAF-based frame rate). The pane is now mounted next to
+ * the brand mark in {@link TopBar}, not at the bottom of the page.
+ *
+ * Capsules at a glance:
  *
  *   1. SSE   — live | connecting | lost
  *   2. IDB   — local-storage backend identifier
  *   3. meta  — `inFlight/pending` (always visible; 0/0 when idle)
  *   4. kline — `inFlight/pending`
+ *   5. MEM   — used JS-heap MB (—  on non-Chromium browsers)
+ *   6. FPS   — animation-frame rate (1Hz update window)
  *
  * Body carries the wall clock and the most recent scan trigger info.
  *
@@ -28,17 +34,19 @@ import {
   type ScanAccepted,
   type ScanKind,
 } from '@quant/shared';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { Feat } from '../../lib/eqty/feat.js';
 import { useQueueStream } from '../../lib/hooks/use-queue-stream.js';
 import { Pane } from './pane.js';
 
-export function Footer(): React.ReactElement {
+export function SysStatPane(): React.ReactElement {
   const stream = useQueueStream();
   const now = useClock();
   const metaScan = useManualScan('meta');
   const klineScan = useManualScan('kline');
+  const fps = useFps();
+  const memMb = useMemoryMb();
 
   const sseColor =
     stream.status === 'open' ? 'term.green' : stream.status === 'error' ? 'term.red' : 'term.amber';
@@ -50,7 +58,7 @@ export function Footer(): React.ReactElement {
 
   return (
     <Pane
-      feat={Feat.Status}
+      feat={Feat.SysStat}
       right={
         <Flex gap="14px" align="center" fontFamily="mono" fontSize="10px" letterSpacing="0.14em">
           <Capsule code="SSE">
@@ -75,6 +83,16 @@ export function Footer(): React.ReactElement {
             scan={klineScan}
             scanning={isScanning(stream.snapshot?.activeScans, 'kline')}
           />
+          <Capsule code="MEM">
+            <Text as="span" color={memColor(memMb)} fontWeight="700">
+              {memMb === null ? '—' : `${String(memMb)}M`}
+            </Text>
+          </Capsule>
+          <Capsule code="FPS">
+            <Text as="span" color={fpsColor(fps)} fontWeight="700">
+              {String(fps)}
+            </Text>
+          </Capsule>
         </Flex>
       }
     >
@@ -266,4 +284,84 @@ function formatNow(): string {
   const date = `${String(d.getFullYear())}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
   const time = `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
   return `${date} ${time}`;
+}
+
+/**
+ * FPS counter — counts requestAnimationFrame ticks per second. Updates
+ * once per closed window so the readout doesn't itself thrash. Returns
+ * 0 until the first window closes.
+ */
+function useFps(): number {
+  const [fps, setFps] = useState(0);
+  useEffect(() => {
+    let frames = 0;
+    let last = performance.now();
+    let raf = 0;
+    const tick = (now: number): void => {
+      frames += 1;
+      const elapsed = now - last;
+      if (elapsed >= 1000) {
+        setFps(Math.round((frames * 1000) / elapsed));
+        frames = 0;
+        last = now;
+      }
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => {
+      cancelAnimationFrame(raf);
+    };
+  }, []);
+  return fps;
+}
+
+interface PerformanceMemory {
+  readonly usedJSHeapSize: number;
+  readonly totalJSHeapSize: number;
+}
+
+interface PerformanceWithMemory extends Performance {
+  readonly memory?: PerformanceMemory;
+}
+
+/**
+ * Used JS-heap size in MiB, polled at 1Hz. Chromium-only; returns
+ * `null` on browsers without `performance.memory`.
+ */
+function useMemoryMb(): number | null {
+  const [mb, setMb] = useState<number | null>(null);
+  const supported = useRef(true);
+  useEffect(() => {
+    if (!supported.current) return;
+    const sample = (): void => {
+      const perf = performance as PerformanceWithMemory;
+      const mem = perf.memory;
+      if (mem === undefined) {
+        supported.current = false;
+        setMb(null);
+        return;
+      }
+      setMb(Math.round(mem.usedJSHeapSize / (1024 * 1024)));
+    };
+    sample();
+    const t = setInterval(sample, 1000);
+    return () => {
+      clearInterval(t);
+    };
+  }, []);
+  return mb;
+}
+
+function fpsColor(fps: number): string {
+  if (fps === 0) return 'term.ink3';
+  if (fps < 30) return 'term.red';
+  if (fps < 50) return 'term.amber';
+  return 'term.green';
+}
+
+function memColor(mb: number | null): string {
+  if (mb === null) return 'term.ink3';
+  if (mb > 800) return 'term.red';
+  if (mb > 400) return 'term.amber';
+  return 'term.green';
 }

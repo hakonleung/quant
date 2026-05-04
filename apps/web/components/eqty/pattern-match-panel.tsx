@@ -10,7 +10,7 @@
  * the existing kline cache.
  */
 
-import { Box, Button, Flex, Text } from '@chakra-ui/react';
+import { Box, Flex, Text } from '@chakra-ui/react';
 import type { KlineBar, PatternFindSimilarResponse, PatternMatch } from '@quant/shared';
 import { useMutation } from '@tanstack/react-query';
 import { useEffect } from 'react';
@@ -22,6 +22,7 @@ import { useLayoutStore } from '../../lib/stores/layout.store.js';
 import { useSectorsStore } from '../../lib/stores/sectors.store.js';
 import { ALL_SECTOR_ID, useUiStore } from '../../lib/stores/ui.store.js';
 import { Pane } from '../shell/pane.js';
+import { PaneAction, PaneHeaderRight, PaneStatus } from '../shell/pane-header.js';
 
 export function PatternMatchPanel(): React.ReactElement {
   const range = useUiStore((s) => s.chartRange);
@@ -33,11 +34,11 @@ export function PatternMatchPanel(): React.ReactElement {
   // When the user selects a range on E-0 we expand this pane out of the
   // minimized state so FIND is visible and clickable without an extra
   // restore step.
-  const paneMode = useLayoutStore((s) => s.paneMode[Feat.Pattern]);
+  const paneMode = useLayoutStore((s) => s.paneMode[Feat.ScreenPattern]);
   const setPaneMode = useLayoutStore((s) => s.setPaneMode);
   useEffect(() => {
     if (range !== null && paneMode === 'minimized') {
-      setPaneMode(Feat.Pattern, 'normal');
+      setPaneMode(Feat.ScreenPattern, 'normal');
     }
   }, [range, paneMode, setPaneMode]);
 
@@ -64,69 +65,43 @@ export function PatternMatchPanel(): React.ReactElement {
     mutation.mutate();
   };
 
-  const status = mutation.isPending ? (
-    <Text color="accent">● scanning</Text>
-  ) : mutation.isError ? (
-    <Text color="up">✘ {mutation.error.message}</Text>
-  ) : mutation.data !== undefined ? (
-    <Text color="prompt">● {String(mutation.data.matches.length)} hits</Text>
-  ) : (
-    <Text color="prompt">○ idle</Text>
-  );
+  const tone = mutation.isPending
+    ? 'amber'
+    : mutation.isError
+      ? 'red'
+      : mutation.data !== undefined
+        ? 'green'
+        : 'idle';
 
   const right = (
-    <Flex gap="8px" align="center">
-      {range === null ? (
-        <Text color="ink3">// shift-drag a range on 101 to set reference</Text>
-      ) : (
-        <Text color="ink2">
-          ▎ {range.code} {range.startDate} → {range.endDate}
-        </Text>
-      )}
-      {status}
+    <PaneHeaderRight>
+      <PaneStatus tone={tone} blink={mutation.isPending} />
       {range !== null && (
-        <Button
-          h="auto"
-          px="8px"
-          py="3px"
-          bg="panel"
-          color="ink2"
-          borderWidth="1px"
-          borderColor="line"
-          fontFamily="mono"
-          fontSize="10px"
-          letterSpacing="0.14em"
-          borderRadius="0"
+        <PaneAction
+          title="clear range"
           onClick={(): void => {
             setChartRange(null);
             mutation.reset();
           }}
+          tone="danger"
         >
-          CLEAR
-        </Button>
+          ×
+        </PaneAction>
       )}
-      <Button
-        bg="accent"
-        color="panel"
-        h="auto"
-        px="10px"
-        py="3px"
-        fontFamily="mono"
-        fontSize="10px"
-        fontWeight="600"
-        letterSpacing="0.16em"
-        borderRadius="0"
+      <PaneAction
+        title={range === null ? 'no range selected' : 'find similar'}
         onClick={onFind}
-        loading={mutation.isPending}
+        busy={mutation.isPending}
         disabled={range === null}
+        tone="accent"
       >
-        ⌕ FIND
-      </Button>
-    </Flex>
+        ⌕
+      </PaneAction>
+    </PaneHeaderRight>
   );
 
   return (
-    <Pane feat={Feat.Pattern} right={right}>
+    <Pane feat={Feat.ScreenPattern} right={right}>
       <Box flex="1" overflow="auto" bg="panel">
         {mutation.data === undefined ? (
           <Empty hint={range === null ? 'no reference range' : 'press FIND to scan'} />

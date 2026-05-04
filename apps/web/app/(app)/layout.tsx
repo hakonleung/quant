@@ -2,7 +2,6 @@ import type { ReactNode } from 'react';
 
 import { Box } from '@chakra-ui/react';
 
-import { Footer } from '../../components/shell/footer.js';
 import { TopBar } from '../../components/shell/top-bar.js';
 
 interface AppLayoutProps {
@@ -16,7 +15,6 @@ export default function AppLayout({ children }: AppLayoutProps): ReactNode {
       <Box flex="1" minH={0}>
         {children}
       </Box>
-      <Footer />
     </Box>
   );
 }
