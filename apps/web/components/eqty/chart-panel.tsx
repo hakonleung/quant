@@ -20,7 +20,7 @@
  */
 
 import { Box, Button, Flex, Text } from '@chakra-ui/react';
-import type { KlineBar } from '@quant/shared';
+import type { KlineBar, StockMetaDto } from '@quant/shared';
 import { Ban, Star } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
@@ -37,7 +37,7 @@ import {
 } from '../../lib/fp/chart-view.js';
 import { pctChangeToLatest, sparseIndices, type MaKey } from '../../lib/fp/kline-chart.js';
 import { ConfirmCancelled, useConfirm } from '../../lib/hooks/use-confirm.js';
-import { useKline, useStockMetaQuery } from '../../lib/hooks/use-eqty-data.js';
+import { useKline, useStockMetaQuery, useStockSnapshots } from '../../lib/hooks/use-eqty-data.js';
 import { useBlacklistStore } from '../../lib/stores/blacklist.store.js';
 import { useUiStore } from '../../lib/stores/ui.store.js';
 import { palette } from '../../lib/theme/tokens.js';
@@ -91,6 +91,26 @@ export function ChartPanel({ code }: Props): React.ReactElement {
     setRangeEnd(null);
   }, [seriesKey]);
 
+  // Esc exits range-select: aborts an in-flight shift+drag, otherwise
+  // clears the currently committed range for this code.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key !== 'Escape') return;
+      if (rangeAnchor !== null) {
+        setRangeAnchor(null);
+        setRangeEnd(null);
+        return;
+      }
+      if (chartRange !== null && chartRange.code === code) {
+        setChartRange(null);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [rangeAnchor, chartRange, code, setChartRange]);
+
   const commitRange = (a: number, b: number): void => {
     const lo = Math.min(a, b);
     const hi = Math.max(a, b);
@@ -123,7 +143,15 @@ export function ChartPanel({ code }: Props): React.ReactElement {
         />
       }
     >
-      <ChartTools vp={vp} setVp={setVp} />
+      <Flex direction="column" h="100%" minH={0}>
+      <ChartTools
+        vp={vp}
+        setVp={setVp}
+        hasRange={chartRange !== null && chartRange.code === code}
+        onClearRange={(): void => {
+          setChartRange(null);
+        }}
+      />
       <FocusLabel
         bar={focusBar}
         deltaPct={deltaPct}
@@ -131,6 +159,7 @@ export function ChartPanel({ code }: Props): React.ReactElement {
         selected={selectedIdx !== null}
         hovered={selectedIdx === null && hoverIdx !== null}
       />
+      <Box flex="1" minH={0} overflow="auto">
       <Box position="relative" h={`${String(TOTAL_H)}px`} bg="panel">
         {isLoading ? (
           <Centered>loading kline…</Centered>
@@ -171,6 +200,9 @@ export function ChartPanel({ code }: Props): React.ReactElement {
           />
         )}
       </Box>
+        <FinancialsSection code={code} meta={meta.data ?? null} />
+      </Box>
+      </Flex>
       <AddToSectorDialog
         open={showAddDialog}
         code={code}
@@ -761,9 +793,11 @@ function Centered({ children }: { children: React.ReactNode }): React.ReactEleme
 interface ToolsProps {
   readonly vp: ChartViewport;
   readonly setVp: (vp: ChartViewport) => void;
+  readonly hasRange: boolean;
+  readonly onClearRange: () => void;
 }
 
-function ChartTools({ vp, setVp }: ToolsProps): React.ReactElement {
+function ChartTools({ vp, setVp, hasRange, onClearRange }: ToolsProps): React.ReactElement {
   const zoomIn = (): void => {
     setVp(clampViewport({ ...vp, candleW: Math.min(MAX_CANDLE_W, vp.candleW * 1.4) }));
   };
@@ -799,6 +833,11 @@ function ChartTools({ vp, setVp }: ToolsProps): React.ReactElement {
       <Text ml="6px" color="ink3" fontSize="10px">
         SHIFT+DRAG → range
       </Text>
+      {hasRange && (
+        <ToolButton onClick={onClearRange} title="clear range (Esc)">
+          × CLEAR RANGE
+        </ToolButton>
+      )}
     </Flex>
   );
 }
@@ -856,10 +895,8 @@ function ChartHeaderRight({
 
   return (
     <Flex align="center" gap="8px">
-      <Text>
-        {code}
-        {stockName === '' ? '' : ` · ${stockName}`}
-      </Text>
+      <Text>{code}</Text>
+      {stockName !== '' && <Text>{stockName}</Text>}
       <IconButton title="add to sector" onClick={onAddToSector} active={false}>
         <Star size={13} strokeWidth={1.6} />
       </IconButton>
@@ -969,4 +1006,125 @@ function ToolButton({
       {children}
     </Button>
   );
+}
+
+interface FinancialsProps {
+  readonly code: string;
+  readonly meta: StockMetaDto | null;
+}
+
+function FinancialsSection({ code, meta }: FinancialsProps): React.ReactElement {
+  const codes = useMemo(() => [code], [code]);
+  const snapshots = useStockSnapshots(codes);
+  const snap = snapshots.byCode.get(code) ?? null;
+  const derived = snap?.derived ?? null;
+  const latestQ =
+    meta !== null && meta.quarterlies.length > 0
+      ? meta.quarterlies[meta.quarterlies.length - 1]!
+      : null;
+
+  return (
+    <Box
+      px="14px"
+      py="10px"
+      borderTopWidth="1px"
+      borderColor="line"
+      bg="panel3"
+      fontFamily="mono"
+      fontSize="11px"
+      color="ink2"
+    >
+      <Text
+        color="ink3"
+        fontSize="9px"
+        letterSpacing="0.16em"
+        textTransform="uppercase"
+        mb="6px"
+      >
+        FUNDAMENTALS
+      </Text>
+      <Box
+        display="grid"
+        gridTemplateColumns="repeat(auto-fit, minmax(120px, 1fr))"
+        gap="4px 16px"
+      >
+        <FinCell label="MKT CAP" value={fmtCny(derived?.mkt_cap ?? null)} />
+        <FinCell label="FLOAT MC" value={fmtCny(derived?.float_mkt_cap ?? null)} />
+        <FinCell label="PE TTM" value={fmtNum(derived?.pe_ttm ?? null)} />
+        <FinCell label="PE DYN" value={fmtNum(derived?.pe_dynamic ?? null)} />
+        <FinCell label="PB" value={fmtNum(derived?.pb ?? null)} />
+        <FinCell label="PEG" value={fmtNum(derived?.peg ?? null)} />
+        <FinCell label="GM TTM" value={fmtPct(derived?.gross_margin_ttm ?? null)} />
+        <FinCell label="NET ASSETS" value={fmtCny(meta?.net_assets ?? null)} />
+        <FinCell label="TOTAL SHARE" value={fmtShare(meta?.total_share ?? null)} />
+        <FinCell label="FLOAT SHARE" value={fmtShare(meta?.float_share ?? null)} />
+      </Box>
+      {latestQ !== null && (
+        <Box mt="8px" pt="6px" borderTopWidth="1px" borderColor="line2">
+          <Text color="ink3" fontSize="9px" letterSpacing="0.16em" mb="4px">
+            LATEST QUARTER {latestQ.period}
+          </Text>
+          <Box
+            display="grid"
+            gridTemplateColumns="repeat(auto-fit, minmax(140px, 1fr))"
+            gap="4px 16px"
+          >
+            <FinCell label="REVENUE" value={fmtCny(latestQ.revenue)} />
+            <FinCell label="OP COST" value={fmtCny(latestQ.operating_cost)} />
+            <FinCell label="NET PROFIT" value={fmtCny(latestQ.net_profit)} />
+            <FinCell label="NET PROFIT EXNR" value={fmtCny(latestQ.net_profit_excl_nr)} />
+          </Box>
+        </Box>
+      )}
+    </Box>
+  );
+}
+
+function FinCell({ label, value }: { label: string; value: string }): React.ReactElement {
+  return (
+    <Flex gap="6px" align="baseline">
+      <Text color="ink3" letterSpacing="0.10em" fontSize="9px" minW="64px">
+        {label}
+      </Text>
+      <Text color={value === '—' ? 'ink3' : 'ink'} fontWeight="600">
+        {value}
+      </Text>
+    </Flex>
+  );
+}
+
+function fmtCny(raw: string | null): string {
+  if (raw === null) return '—';
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return '—';
+  const yi = n / 1e8;
+  if (Math.abs(yi) >= 1) return `${yi.toFixed(2)}亿`;
+  const wan = n / 1e4;
+  if (Math.abs(wan) >= 1) return `${wan.toFixed(2)}万`;
+  return n.toFixed(2);
+}
+
+function fmtNum(raw: string | null): string {
+  if (raw === null) return '—';
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return '—';
+  return n.toFixed(2);
+}
+
+function fmtPct(raw: string | null): string {
+  if (raw === null) return '—';
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return '—';
+  return `${(n * 100).toFixed(2)}%`;
+}
+
+function fmtShare(raw: string | null): string {
+  if (raw === null) return '—';
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return '—';
+  const yi = n / 1e8;
+  if (Math.abs(yi) >= 1) return `${yi.toFixed(2)}亿股`;
+  const wan = n / 1e4;
+  if (Math.abs(wan) >= 1) return `${wan.toFixed(2)}万股`;
+  return `${n.toFixed(0)}股`;
 }

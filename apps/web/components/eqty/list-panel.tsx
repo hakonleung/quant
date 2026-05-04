@@ -194,13 +194,14 @@ export function ListPanel(): React.ReactElement {
       <Text>loading…</Text>
     ) : (
       <Flex gap="10px" align="center">
-        <Text>
-          {focusCode === null ? '— no selection' : `▎ ${focusCode}`} · {sortedRows.length} rows
-          {klineBatch.isLoading
-            ? ` · stats ${String(klineBatch.readyCount)}/${String(codes.length)}`
-            : ''}
-          {snapshots.isLoading ? ' · derived…' : ''}
-        </Text>
+        <Text>{focusCode === null ? '— no selection' : `▎ ${focusCode}`}</Text>
+        <Text>{sortedRows.length} rows</Text>
+        {klineBatch.isLoading && (
+          <Text>
+            stats {String(klineBatch.readyCount)}/{String(codes.length)}
+          </Text>
+        )}
+        {snapshots.isLoading && <Text>derived…</Text>}
         <Box
           as="button"
           aria-label="manage columns"
