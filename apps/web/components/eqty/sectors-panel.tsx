@@ -1,14 +1,10 @@
 'use client';
 
-import { Box, Button, Flex, Text } from '@chakra-ui/react';
+import { Box, Flex, Text } from '@chakra-ui/react';
 import { useMemo, useState } from 'react';
 
 import { Feat } from '../../lib/eqty/feat.js';
-import {
-  useAnalyzeMany,
-  useKlineBulk,
-  useMarketSentiment,
-} from '../../lib/hooks/use-eqty-data.js';
+import { useKlineBulk, useMarketSentiment } from '../../lib/hooks/use-eqty-data.js';
 import { useStockList } from '../../lib/hooks/use-stock-list.js';
 import { useBlacklistStore } from '../../lib/stores/blacklist.store.js';
 import { useSectorsStore, type Sector } from '../../lib/stores/sectors.store.js';
@@ -19,8 +15,8 @@ import { NewSectorDialog } from './new-sector-dialog.js';
 /**
  * Cap on members per analyze_many call. Each member fans out into a
  * web-search + LLM aggregator pass; >50 routinely runs into provider
- * rate-limits and burns minutes of paid LLM time. Surfaces in the
- * sector-row analyze button and 104 sector.sentiment FETCH.
+ * rate-limits and burns minutes of paid LLM time. Surfaces in the 104
+ * sector.sentiment FETCH guard.
  */
 export const ANALYZE_MAX_CODES = 50;
 
@@ -240,7 +236,6 @@ function SectorRow({
 }: RowProps): React.ReactElement {
   const codes = sector.codes;
   const cached = useMarketSentiment(codes);
-  const analyze = useAnalyzeMany(codes);
   const themeCount = cached.data?.themeClusters.length ?? 0;
 
   // Average chg% across members that have a fresh latest+previous bar.
@@ -257,18 +252,6 @@ function SectorRow({
     }
     return count === 0 ? null : sum / count;
   })();
-
-  // Hard cap: analyze_many burns one paid LLM call per cluster + a
-  // batched search per code, so >50 members would routinely exceed the
-  // provider rate-limit. The button stays visible but un-clickable so
-  // the user sees the gate instead of the action silently no-op'ing.
-  const tooLarge = codes.length > ANALYZE_MAX_CODES;
-
-  const onAnalyze = (e: React.MouseEvent): void => {
-    e.stopPropagation();
-    if (codes.length === 0 || analyze.isPending || tooLarge) return;
-    analyze.mutate();
-  };
 
   return (
     <Flex
@@ -301,64 +284,6 @@ function SectorRow({
           {(avgChgPct * 100).toFixed(2)}%
         </Text>
       )}
-      <AnalyzeBtn
-        onClick={onAnalyze}
-        loading={analyze.isPending}
-        empty={codes.length === 0}
-        themed={themeCount > 0}
-        tooLarge={tooLarge}
-        memberCount={codes.length}
-      />
     </Flex>
   );
 }
-
-interface AnalyzeBtnProps {
-  readonly onClick: (e: React.MouseEvent) => void;
-  readonly loading: boolean;
-  readonly empty: boolean;
-  readonly themed: boolean;
-  readonly tooLarge: boolean;
-  readonly memberCount: number;
-}
-
-function AnalyzeBtn({
-  onClick,
-  loading,
-  empty,
-  themed,
-  tooLarge,
-  memberCount,
-}: AnalyzeBtnProps): React.ReactElement {
-  const disabled = empty || tooLarge;
-  const title = empty
-    ? 'no members'
-    : tooLarge
-      ? `too many members (${String(memberCount)} > ${String(ANALYZE_MAX_CODES)}); narrow the sector first`
-      : 'analyze members';
-  return (
-    <Button
-      ml="2px"
-      h="20px"
-      px="6px"
-      bg={themed ? 'accentBg' : 'panel'}
-      color={themed ? 'accent' : 'ink3'}
-      borderWidth="1px"
-      borderColor={themed ? 'accent' : 'line'}
-      fontFamily="mono"
-      fontSize="9px"
-      letterSpacing="0.12em"
-      fontWeight="700"
-      borderRadius="0"
-      onClick={onClick}
-      loading={loading}
-      disabled={disabled}
-      _hover={disabled ? {} : { borderColor: 'accent', color: 'accent' }}
-      title={title}
-    >
-      ⌘
-    </Button>
-  );
-}
-
-
