@@ -143,6 +143,21 @@ export function ListPanel(): React.ReactElement {
 
   const columns: readonly ColumnDef[] = useMemo(() => buildColumns(evidenceKeys), [evidenceKeys]);
 
+  // Auto-default focus to the first visible row of the active sector.
+  // Fires when (a) nothing is focused yet, or (b) the persisted focus
+  // is no longer in the current sector (e.g. after a sector switch or
+  // a dynamic re-screen dropped the previous pick). Gated on store
+  // hydration so the IndexedDB-restored focusCode wins on cold start.
+  const uiHydrated = useUiHydrated();
+  useEffect(() => {
+    if (!uiHydrated) return;
+    if (sortedRows.length === 0) return;
+    const stillVisible =
+      focusCode !== null && sortedRows.some((r) => r.code === focusCode);
+    if (stillVisible) return;
+    setFocusCode(sortedRows[0]!.code);
+  }, [uiHydrated, sortedRows, focusCode, setFocusCode]);
+
   const onTitleSave = (next: string): void => {
     if (sector === null || isAll) return;
     if (next.trim().length === 0 || next === sector.name) return;
@@ -254,6 +269,18 @@ function buildRows(
  * string values into numbers for sort + format. Non-dict values
  * (arrays, scalars) pass through unchanged.
  */
+function useUiHydrated(): boolean {
+  const [hydrated, setHydrated] = useState(() => useUiStore.persist.hasHydrated());
+  useEffect(() => {
+    if (hydrated) return;
+    const unsub = useUiStore.persist.onFinishHydration(() => {
+      setHydrated(true);
+    });
+    return unsub;
+  }, [hydrated]);
+  return hydrated;
+}
+
 function flattenEvidence(
   raw: Readonly<Record<string, unknown>>,
 ): Readonly<Record<string, unknown>> {

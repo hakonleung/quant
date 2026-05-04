@@ -29,3 +29,21 @@ export const QueueSnapshotSchema = z
   .strict();
 
 export type QueueSnapshot = z.infer<typeof QueueSnapshotSchema>;
+
+/**
+ * Result of a manual or scheduled cron scan
+ * (`POST /api/orchestration/scan`). Reports how many jobs landed on
+ * each queue after dedup; existing in-flight or pending jobs with the
+ * same id are not re-counted.
+ */
+export const ScanResultSchema = z
+  .object({
+    traceId: z.string().min(1),
+    startedAt: z.string().datetime({ offset: true }),
+    elapsedMs: z.number().int().nonnegative(),
+    metaEnqueued: z.number().int().nonnegative(),
+    klineEnqueued: z.number().int().nonnegative(),
+  })
+  .strict();
+
+export type ScanResult = z.infer<typeof ScanResultSchema>;

@@ -1,15 +1,19 @@
 /**
- * Transient UI state (modules/07-frontend.md §6 — "ui.store"). Not
- * persisted: refreshes reset to the default view. v1 collapses the
- * docs' multi-route layout into a single page that swaps modules in
- * place; sectors / blacklist / settings live inside the EQTY workbench
- * itself, so only the two top-level views remain on the menu.
+ * UI selection state (modules/07-frontend.md §6 — "ui.store").
+ *
+ * `activeSectorId` and `focusCode` are persisted to IndexedDB so a
+ * page reload returns the user to the same workspace cursor. The
+ * transient bits — NL screen result and chart range — are not
+ * persisted; they reset to a clean slate on refresh.
  */
 
 'use client';
 
 import type { NlScreenResult } from '@quant/shared';
 import { create } from 'zustand';
+import { createJSONStorage, persist } from 'zustand/middleware';
+
+import { idbStorage } from './idb-storage.js';
 
 /** Synthetic sector id for the always-pinned "All" entry — no filter. */
 export const ALL_SECTOR_ID = 'all';
@@ -43,21 +47,40 @@ interface UiState {
   setChartRange(range: ChartRangeSelection | null): void;
 }
 
-export const useUiStore = create<UiState>((set) => ({
-  focusCode: null,
-  activeSectorId: ALL_SECTOR_ID,
-  nlResult: null,
-  chartRange: null,
-  setFocusCode: (code) => {
-    set({ focusCode: code, chartRange: null });
-  },
-  setActiveSector: (id) => {
-    set({ activeSectorId: id, focusCode: null, chartRange: null });
-  },
-  setNlResult: (result) => {
-    set({ nlResult: result });
-  },
-  setChartRange: (range) => {
-    set({ chartRange: range });
-  },
-}));
+export const useUiStore = create<UiState>()(
+  persist(
+    (set) => ({
+      focusCode: null,
+      activeSectorId: ALL_SECTOR_ID,
+      nlResult: null,
+      chartRange: null,
+      setFocusCode: (code) => {
+        set({ focusCode: code, chartRange: null });
+      },
+      setActiveSector: (id) => {
+        // Clear focus on sector switch so the list panel's auto-default
+        // effect can pick the first member of the new sector.
+        set({ activeSectorId: id, focusCode: null, chartRange: null });
+      },
+      setNlResult: (result) => {
+        set({ nlResult: result });
+      },
+      setChartRange: (range) => {
+        set({ chartRange: range });
+      },
+    }),
+    {
+      name: 'ui',
+      storage: createJSONStorage(() => idbStorage('ui')),
+      version: 1,
+      // Only the user's workspace cursor is persisted. NL results and
+      // chart ranges are session-scoped — re-deriving them after a
+      // refresh would require replaying server calls we don't have a
+      // cache for.
+      partialize: (state) => ({
+        activeSectorId: state.activeSectorId,
+        focusCode: state.focusCode,
+      }),
+    },
+  ),
+);

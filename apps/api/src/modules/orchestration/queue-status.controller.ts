@@ -12,10 +12,11 @@
  * the orchestration module owns.
  */
 
-import { Controller, Get, Inject, Sse } from '@nestjs/common';
-import type { QueueSnapshot, QueueSnapshotEntry } from '@quant/shared';
+import { Controller, Get, Inject, Post, Sse } from '@nestjs/common';
+import type { QueueSnapshot, QueueSnapshotEntry, ScanResult } from '@quant/shared';
 import { Observable, interval, map, startWith } from 'rxjs';
 
+import { CronOrchestrator } from './cron.orchestrator.js';
 import type { InMemoryQueue } from './domain/in-memory-queue.js';
 import type { KlineJob, MetaJob } from './domain/types.js';
 import { KLINE_QUEUE, META_QUEUE } from './flight.token.js';
@@ -26,24 +27,35 @@ interface SseChunk {
 
 const TICK_MS = 1000;
 
-@Controller('orchestration/queue')
+@Controller('orchestration')
 export class QueueStatusController {
   constructor(
     @Inject(META_QUEUE) private readonly meta: InMemoryQueue<MetaJob>,
     @Inject(KLINE_QUEUE) private readonly kline: InMemoryQueue<KlineJob>,
+    @Inject(CronOrchestrator) private readonly cron: CronOrchestrator,
   ) {}
 
-  @Get()
+  @Get('queue')
   snapshot(): QueueSnapshot {
     return this.makeSnapshot();
   }
 
-  @Sse('stream')
+  @Sse('queue/stream')
   stream(): Observable<SseChunk> {
     return interval(TICK_MS).pipe(
       startWith(0),
       map(() => ({ data: this.makeSnapshot() })),
     );
+  }
+
+  /**
+   * Manual trigger for the meta+kline scan. Coalesces with any
+   * in-flight scheduled scan via {@link CronOrchestrator.triggerScan},
+   * so spam-clicking from the UI cannot stampede the inspector.
+   */
+  @Post('scan')
+  async manualScan(): Promise<ScanResult> {
+    return this.cron.triggerScan();
   }
 
   private makeSnapshot(): QueueSnapshot {

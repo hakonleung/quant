@@ -15,8 +15,8 @@
  * Body carries the wall clock and additional debug info.
  */
 
-import { Box, Flex, Text } from '@chakra-ui/react';
-import type { QueueSnapshotEntry } from '@quant/shared';
+import { Box, Button, Flex, Text } from '@chakra-ui/react';
+import { ScanResultSchema, type QueueSnapshotEntry, type ScanResult } from '@quant/shared';
 import { useEffect, useState } from 'react';
 
 import { Feat } from '../../lib/eqty/feat.js';
@@ -26,6 +26,7 @@ import { Pane } from './pane.js';
 export function Footer(): React.ReactElement {
   const stream = useQueueStream();
   const now = useClock();
+  const scan = useManualScan();
 
   const sseColor =
     stream.status === 'open' ? 'term.green' : stream.status === 'error' ? 'term.red' : 'term.amber';
@@ -52,6 +53,29 @@ export function Footer(): React.ReactElement {
           </Capsule>
           <QueueCapsule code="meta" queue={meta} />
           <QueueCapsule code="kline" queue={kline} />
+          <Button
+            onClick={(): void => {
+              scan.run();
+            }}
+            loading={scan.pending}
+            disabled={scan.pending}
+            bg="transparent"
+            color="term.green"
+            borderWidth="1px"
+            borderColor="term.green"
+            h="auto"
+            px="8px"
+            py="2px"
+            fontFamily="mono"
+            fontSize="9px"
+            letterSpacing="0.18em"
+            fontWeight="700"
+            borderRadius="0"
+            _hover={{ bg: 'term.green', color: 'term.panel' }}
+            title="trigger meta+kline scan now"
+          >
+            ⟳ SCAN
+          </Button>
         </Flex>
       }
     >
@@ -65,9 +89,17 @@ export function Footer(): React.ReactElement {
         letterSpacing="0.14em"
         h="100%"
       >
-        <Flex gap="14px" align="center">
+        <Flex gap="14px" align="center" wrap="wrap">
           <Text color="term.ink3">$ status --watch</Text>
           <Text color="term.ink2">{now}</Text>
+          {scan.last !== null && (
+            <Text color="term.ink3">
+              // last scan {scan.last.startedAt.slice(11, 19)} · meta+
+              {String(scan.last.metaEnqueued)} kline+{String(scan.last.klineEnqueued)} ·{' '}
+              {String(scan.last.elapsedMs)}ms
+            </Text>
+          )}
+          {scan.error !== null && <Text color="term.red">// scan: {scan.error}</Text>}
           <Text as="span" className="blink" color="term.green">
             ▌
           </Text>
@@ -112,6 +144,40 @@ function QueueCapsule({
       </Text>
     </Capsule>
   );
+}
+
+interface ManualScan {
+  readonly run: () => void;
+  readonly pending: boolean;
+  readonly last: ScanResult | null;
+  readonly error: string | null;
+}
+
+function useManualScan(): ManualScan {
+  const [pending, setPending] = useState(false);
+  const [last, setLast] = useState<ScanResult | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const run = (): void => {
+    if (pending) return;
+    setPending(true);
+    setError(null);
+    fetch('/api/orchestration/scan', { method: 'POST' })
+      .then(async (r) => {
+        const raw: unknown = await r.json();
+        if (!r.ok) throw new Error(`HTTP ${String(r.status)}`);
+        return ScanResultSchema.parse(raw);
+      })
+      .then((res) => {
+        setLast(res);
+      })
+      .catch((e: unknown) => {
+        setError(e instanceof Error ? e.message : String(e));
+      })
+      .finally(() => {
+        setPending(false);
+      });
+  };
+  return { run, pending, last, error };
 }
 
 function useClock(): string {
