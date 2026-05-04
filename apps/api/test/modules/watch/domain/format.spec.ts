@@ -19,7 +19,7 @@ describe('buildPayload', () => {
       name: '浦发银行',
       market: 'a',
       quote: aQuote,
-      hits: [{ kind: 'pct', baseline: 'prev_close', thresholdPct: '2' }],
+      matched: [{ kind: 'pct', baseline: 'prev_close', thresholdPct: '2' }],
     });
     expect(out).toBe('[600000] [浦发银行] [12.34] [+2.15%] #prev_close+2%');
   });
@@ -30,7 +30,7 @@ describe('buildPayload', () => {
       name: '浦发银行',
       market: 'a',
       quote: aQuote,
-      hits: [
+      matched: [
         { kind: 'pct', baseline: 'day_high', thresholdPct: '-2' },
         { kind: 'abs', op: 'gte', thresholdPrice: '12.00' },
       ],
@@ -53,7 +53,7 @@ describe('buildPayload', () => {
       name: 'Apple',
       market: 'us',
       quote: usQuote,
-      hits: [{ kind: 'abs', op: 'lte', thresholdPrice: '125' }],
+      matched: [{ kind: 'abs', op: 'lte', thresholdPrice: '125' }],
     });
     expect(out).toMatch(/\[123\.4567]/);
   });
@@ -65,7 +65,7 @@ describe('buildPayload', () => {
       name: 'X',
       market: 'a',
       quote: q,
-      hits: [{ kind: 'abs', op: 'lte', thresholdPrice: '11.60' }],
+      matched: [{ kind: 'abs', op: 'lte', thresholdPrice: '11.60' }],
     });
     expect(out).toContain('[-4.17%]');
   });

@@ -45,13 +45,13 @@ export function buildPayload(args: {
   name: string;
   market: WatchMarket;
   quote: SpotQuoteDecimal;
-  hits: ReadonlyArray<WatchCondition>;
+  matched: ReadonlyArray<WatchCondition>;
 }): string {
-  const { code, name, market, quote, hits } = args;
+  const { code, name, market, quote, matched } = args;
   const last = formatPrice(quote.last, market);
   const changePct = quote.prevClose.gt(0)
     ? formatSignedPct(quote.last.div(quote.prevClose).minus(1).mul(100))
     : '+0.00%';
-  const conds = hits.map(renderCondition).join(', ');
+  const conds = matched.map(renderCondition).join(', ');
   return `[${code}] [${name}] [${last}] [${changePct}] #${conds}`;
 }

@@ -68,6 +68,25 @@ function nthWeekdayOfMonth(year: number, month: number, weekday: number, n: numb
   return new Date(Date.UTC(year, month, 1 + offset + (n - 1) * 7));
 }
 
+/**
+ * Stable per-market trading-day key (YYYY-MM-DD in market local time).
+ *
+ * Used by the scheduler's match→hit edge detector: two ticks count as
+ * "same trading day" iff their keys agree. We don't try to model holidays
+ * or post-midnight US sessions — the key is just a coarse calendar bucket
+ * in the market's wall-clock zone, which is sufficient for resetting the
+ * "previous tick already matched" guard at the start of each session.
+ */
+export function marketTradingDayKey(market: WatchMarket, now: Date): string {
+  const offsetMin =
+    market === 'a' || market === 'hk' ? BJT_OFFSET_MIN : isUsDst(now) ? -4 * 60 : -5 * 60;
+  const shifted = new Date(now.getTime() + offsetMin * 60_000);
+  const y = shifted.getUTCFullYear();
+  const m = String(shifted.getUTCMonth() + 1).padStart(2, '0');
+  const d = String(shifted.getUTCDate()).padStart(2, '0');
+  return `${String(y)}-${m}-${d}`;
+}
+
 export function isMarketOpen(market: WatchMarket, now: Date): boolean {
   if (market === 'a') {
     const { weekday, minute } = minutesOfDayUtc(now, BJT_OFFSET_MIN);

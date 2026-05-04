@@ -91,6 +91,20 @@ export const WatchTaskSchema = z
     createdAt: isoDateTime,
     lastTickAt: isoDateTime.nullable().default(null),
     lastPushAt: isoDateTime.nullable().default(null),
+    /**
+     * Most recent successful quote tick (regardless of match outcome).
+     * Distinct from `lastTickAt` (which also bumps on upstream failures);
+     * used by the match→hit edge detector to identify the "previous
+     * cached price sample".
+     */
+    lastSampleAt: isoDateTime.nullable().default(null),
+    /**
+     * Most recent successful tick where any condition matched. The
+     * scheduler treats `lastMatchAt === lastSampleAt` (same trading day)
+     * as "previous sample already matched" → current match is not a hit.
+     */
+    lastMatchAt: isoDateTime.nullable().default(null),
+    /** Edge-triggered hits — count of not-match → match transitions. */
     hitCount: z.number().int().min(0).default(0),
   })
   .strict();

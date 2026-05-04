@@ -22,12 +22,24 @@ import { newTraceId, type WatchTask } from '@quant/shared';
 import { decimalQuoteFromDto } from './domain/decimal-mapper.js';
 import { evaluate } from './domain/evaluate.js';
 import { buildPayload } from './domain/format.js';
-import { isMarketOpen } from './domain/market-hours.js';
+import { isMarketOpen, marketTradingDayKey } from './domain/market-hours.js';
 import { WATCH_QUOTE_PORT, type WatchQuotePort } from './domain/watch-port.js';
 import { WatchTaskStore } from './watch-task.store.js';
 import { WATCH_NOTIFIER, type WatchNotifier } from './watch-notifier.js';
 
 const MASTER_TICK_MS = 5_000;
+
+/**
+ * Did the previous successful sample (within the current trading day)
+ * already match? Used to suppress the second, third, … matches in a
+ * continuous match streak — only the leading edge is a "hit".
+ */
+function previousSampleMatched(task: WatchTask, now: Date): boolean {
+  const { lastSampleAt, lastMatchAt } = task;
+  if (lastSampleAt === null || lastMatchAt === null) return false;
+  if (lastMatchAt !== lastSampleAt) return false;
+  return marketTradingDayKey(task.market, new Date(lastSampleAt)) === marketTradingDayKey(task.market, now);
+}
 
 @Injectable()
 export class WatchScheduler implements OnModuleInit, OnModuleDestroy {
@@ -116,41 +128,52 @@ export class WatchScheduler implements OnModuleInit, OnModuleDestroy {
     }
 
     const decimalQuote = decimalQuoteFromDto(quoteDto);
-    const hits = task.conditions.filter((c) => evaluate(decimalQuote, c));
+    const matched = task.conditions.filter((c) => evaluate(decimalQuote, c));
+    // "Hit" is edge-triggered: between two adjacent successful samples,
+    // only a not-match → match transition counts. The first match of the
+    // trading day is always a hit (no prior cached sample today, or the
+    // prior sample didn't match). See `docs/modules/W-0-watch.md` §4.
+    const isHit = matched.length > 0 && !previousSampleMatched(task, now);
+    const nowIso = now.toISOString();
 
     await this.store.patch(task.market, task.code, (t) => {
-      const updated: WatchTask = { ...t, lastTickAt: now.toISOString() };
-      if (hits.length === 0) return updated;
+      const baseUpdate: WatchTask = {
+        ...t,
+        lastTickAt: nowIso,
+        lastSampleAt: nowIso,
+        ...(matched.length > 0 ? { lastMatchAt: nowIso } : {}),
+      };
+      if (!isHit) return baseUpdate;
       // Throttle: only push if pushIntervalSec elapsed since lastPushAt.
       if (t.lastPushAt !== null) {
         const lastPushMs = Date.parse(t.lastPushAt);
         if (!Number.isNaN(lastPushMs) && nowMs < lastPushMs + t.pushIntervalSec * 1000) {
-          return updated;
+          return baseUpdate;
         }
       }
       // Mutation order: bump push state synchronously; actual webhook
       // call happens after the patch completes (below).
       const nextRemaining = t.remaining === null ? null : Math.max(0, t.remaining - 1);
       return {
-        ...updated,
-        lastPushAt: now.toISOString(),
+        ...baseUpdate,
+        lastPushAt: nowIso,
         hitCount: t.hitCount + 1,
         remaining: nextRemaining,
         enabled: nextRemaining === 0 ? false : t.enabled,
       };
     });
 
-    if (hits.length > 0 && task.notifySlack) {
+    if (isHit && task.notifySlack) {
       // Re-read to confirm the patch actually pushed (could have been
       // skipped by throttle inside the closure).
       const after = this.store.get(task.market, task.code);
-      if (after !== undefined && after.lastPushAt === now.toISOString()) {
+      if (after !== undefined && after.lastPushAt === nowIso) {
         const text = buildPayload({
           code: task.code,
           name: task.name,
           market: task.market,
           quote: decimalQuote,
-          hits,
+          matched,
         });
         await this.notifier.send(text, traceId);
       }

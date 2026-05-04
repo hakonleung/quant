@@ -64,6 +64,8 @@ function task(overrides: Partial<WatchTask> = {}): WatchTask {
     createdAt: '2026-05-04T00:00:00Z',
     lastTickAt: null,
     lastPushAt: null,
+    lastSampleAt: null,
+    lastMatchAt: null,
     hitCount: 0,
     ...overrides,
   };
@@ -156,6 +158,53 @@ describe('WatchScheduler.tick', () => {
     await expect(sched.tick(TICK_TIME)).resolves.toBeUndefined();
     expect(store.get('a', '600000')?.lastTickAt).toBe(TICK_TIME.toISOString());
     expect(notifier.sent).toHaveLength(0);
+  });
+
+  it('treats two consecutive matches as one hit (edge-triggered)', async () => {
+    const dir = await tmpDir();
+    const store = new WatchTaskStore(dir);
+    await store.load();
+    await store.upsert(task());
+    const port = new FakeQuotePort();
+    port.responses.push(quote());
+    port.responses.push(quote({ ts: '2026-05-04T01:30:30Z' }));
+    const notifier = new FakeNotifier();
+    const sched = await newScheduler(store, port, notifier);
+
+    await sched.tick(TICK_TIME);
+    // Second tick 30 s later — same trading day, last sample already
+    // matched, so this MUST NOT count as a hit.
+    await sched.tick(new Date(TICK_TIME.getTime() + 30_000));
+
+    const after = store.get('a', '600000');
+    expect(after?.hitCount).toBe(1);
+    expect(notifier.sent).toHaveLength(1);
+  });
+
+  it('re-hits when match resumes after a no-match sample', async () => {
+    const dir = await tmpDir();
+    const store = new WatchTaskStore(dir);
+    await store.load();
+    // pushIntervalSec=5 so the second push isn't throttled by cadence —
+    // we're testing the edge detector, not the push throttle.
+    await store.upsert(task({ pushIntervalSec: 60 }));
+    const port = new FakeQuotePort();
+    // tick1: matches (+5%)
+    port.responses.push(quote());
+    // tick2: does NOT match (last == prevClose)
+    port.responses.push(quote({ last: '10.00', ts: '2026-05-04T01:30:30Z' }));
+    // tick3 (>60s later): matches again
+    port.responses.push(quote({ ts: '2026-05-04T01:32:00Z' }));
+    const notifier = new FakeNotifier();
+    const sched = await newScheduler(store, port, notifier);
+
+    await sched.tick(TICK_TIME);
+    await sched.tick(new Date(TICK_TIME.getTime() + 30_000));
+    await sched.tick(new Date(TICK_TIME.getTime() + 90_000));
+
+    const after = store.get('a', '600000');
+    expect(after?.hitCount).toBe(2);
+    expect(notifier.sent).toHaveLength(2);
   });
 
   it('skips tasks while market is closed', async () => {
