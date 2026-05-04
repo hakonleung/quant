@@ -28,12 +28,14 @@ export type WatchBaseline = z.infer<typeof WatchBaselineSchema>;
  *   a  → 6 digits (Shanghai/Shenzhen)
  *   hk → 4–5 digits (HKEX numeric ticker; some 1-digit raw inputs are
  *        rejected on purpose — pad them in the UI)
- *   us → 1–10 letters, optional `.` or `-` in the middle (BRK.B, RDS-A)
+ *   us → 1–10 letters, optional `.` or `-` in the middle (BRK.B, RDS-A);
+ *        also accepts the akshare/东方财富 secid prefix "<digits>."
+ *        (e.g. "105.LITE", "106.IBM") that the cached US universe emits.
  */
 const CODE_PATTERN: Readonly<Record<WatchMarket, RegExp>> = {
   a: /^\d{6}$/,
   hk: /^\d{4,5}$/,
-  us: /^[A-Za-z][A-Za-z.\-]{0,9}$/,
+  us: /^(?:\d{1,3}\.)?[A-Za-z][A-Za-z.\-]{0,9}$/,
 };
 
 export function isValidWatchCode(market: WatchMarket, code: string): boolean {
@@ -112,7 +114,7 @@ export const WatchTaskCreateSchema = z
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ['code'],
-        message: `code ${JSON.stringify(data.code)} does not match market ${data.market} (a=6 digits, hk=4–5 digits, us=letters)`,
+        message: `code ${JSON.stringify(data.code)} does not match market ${data.market} (a=6 digits, hk=4–5 digits, us=letters with optional "<digits>." secid prefix)`,
       });
     }
   });

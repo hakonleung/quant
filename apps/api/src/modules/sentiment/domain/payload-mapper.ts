@@ -62,15 +62,18 @@ export function mapStockSentimentToView(raw: unknown): Sentiment {
   const cachedAt = ensureOffsetIso(fetchedAt);
 
   const themes = asArr(raw['hot_themes']);
-  const topTheme = themes.length > 0 && isObj(themes[0]) ? asStr((themes[0] as RawObject)['label']) : '';
+  const topTheme =
+    themes.length > 0 && isObj(themes[0]) ? asStr((themes[0] as RawObject)['label']) : '';
 
   const drivers = asArr(raw['core_drivers']);
-  const topDriver = drivers.length > 0 && isObj(drivers[0]) ? asStr((drivers[0] as RawObject)['summary']) : '';
+  const topDriver =
+    drivers.length > 0 && isObj(drivers[0]) ? asStr((drivers[0] as RawObject)['summary']) : '';
 
   const research = asArr(raw['research_targets']);
-  const targetUpside = research.length > 0 && isObj(research[0])
-    ? asNum((research[0] as RawObject)['target_upside_pct'])
-    : 0;
+  const targetUpside =
+    research.length > 0 && isObj(research[0])
+      ? asNum((research[0] as RawObject)['target_upside_pct'])
+      : 0;
 
   const rumorSource = pickFirstRumor([drivers, asArr(raw['m_and_a'])]);
   const rumor = rumorSource ?? '';
@@ -123,7 +126,9 @@ export function mapMarketSentimentToView(
 
   const marketTrend = isObj(raw['market_trend']) ? raw['market_trend'] : {};
   const marketTrendSummary = asStr(marketTrend['summary']);
-  const caveats = asArr(raw['caveats']).map(asStr).filter((s) => s.length > 0);
+  const caveats = asArr(raw['caveats'])
+    .map(asStr)
+    .filter((s) => s.length > 0);
 
   return MarketSentimentSchema.parse({
     asof,
@@ -158,15 +163,22 @@ function pickFirstRumor(buckets: readonly (readonly unknown[])[]): string | null
 
 function synthesizeRawLog(
   raw: RawObject,
-  view: { readonly score: number; readonly topTheme: string; readonly topDriver: string; readonly targetUpside: number },
+  view: {
+    readonly score: number;
+    readonly topTheme: string;
+    readonly topDriver: string;
+    readonly targetUpside: number;
+  },
 ): readonly string[] {
   const lines: string[] = [];
-  lines.push(`▎ source  qwen.web_search → flash.summarise · ${String(asArr(raw['core_drivers']).length)} drivers`);
+  lines.push(`▎ source  qwen.web_search · ${String(asArr(raw['core_drivers']).length)} drivers`);
   if (view.topTheme.length > 0) lines.push(`▎ theme   ${view.topTheme}`);
   if (view.topDriver.length > 0) lines.push(`▎ driver  ${view.topDriver}`);
   if (view.targetUpside !== 0) lines.push(`▎ target  ${view.targetUpside.toFixed(2)}%`);
   lines.push(`▎ score   ${view.score.toFixed(2)} / 1.0`);
-  const caveats = asArr(raw['caveats']).map(asStr).filter((s) => s.length > 0);
+  const caveats = asArr(raw['caveats'])
+    .map(asStr)
+    .filter((s) => s.length > 0);
   for (const c of caveats) lines.push(`! ${c}`);
   return lines;
 }

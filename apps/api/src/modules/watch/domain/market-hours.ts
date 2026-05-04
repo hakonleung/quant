@@ -36,11 +36,11 @@ const A_WINDOWS: ReadonlyArray<readonly [number, number]> = [
   [13 * 60, 15 * 60],
 ];
 
-// HK afternoon close temporarily extended to 17:00 BJT (spec §5 has 16:00).
+// HK afternoon close temporarily extended to 16:10 BJT (spec §5 has 16:00).
 // TODO: revert once the upstream quote-source latency campaign closes.
 const HK_WINDOWS: ReadonlyArray<readonly [number, number]> = [
   [9 * 60 + 30, 12 * 60],
-  [13 * 60, 17 * 60],
+  [13 * 60, 16 * 60 + 10],
 ];
 
 /**
