@@ -121,6 +121,12 @@ export class CronOrchestrator implements OnModuleInit, OnModuleDestroy {
    * normal `logScanFailure` path so they show up in the gateway log
    * and not as unhandled promise rejections.
    */
+  /** Snapshot of currently in-flight scan kinds — fed into the SSE
+   *  payload so the UI can show "scanning" before any jobs queue up. */
+  activeScans(): readonly ScanKind[] {
+    return Object.keys(this.inFlight) as ScanKind[];
+  }
+
   fireScan(kind: ScanKind): ScanAccepted {
     const startedAt = new Date().toISOString();
     const traceId = newTraceId();

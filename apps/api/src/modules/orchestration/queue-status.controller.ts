@@ -76,6 +76,7 @@ export class QueueStatusController {
     return {
       ts: new Date().toISOString(),
       queues: [entry(this.meta), entry(this.kline)],
+      activeScans: [...this.cron.activeScans()],
     };
   }
 }

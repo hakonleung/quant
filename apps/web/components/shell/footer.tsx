@@ -63,8 +63,18 @@ export function Footer(): React.ReactElement {
               ●
             </Text>
           </Capsule>
-          <QueueCapsule code="meta" queue={meta} scan={metaScan} />
-          <QueueCapsule code="kline" queue={kline} scan={klineScan} />
+          <QueueCapsule
+            code="meta"
+            queue={meta}
+            scan={metaScan}
+            scanning={isScanning(stream.snapshot?.activeScans, 'meta')}
+          />
+          <QueueCapsule
+            code="kline"
+            queue={kline}
+            scan={klineScan}
+            scanning={isScanning(stream.snapshot?.activeScans, 'kline')}
+          />
         </Flex>
       }
     >
@@ -112,16 +122,19 @@ function QueueCapsule({
   code,
   queue,
   scan,
+  scanning,
 }: {
   code: string;
   queue: QueueSnapshotEntry | null;
   scan: ManualScan;
+  scanning: boolean;
 }): React.ReactElement {
   const counterColor = queue === null ? 'term.ink3' : queue.paused ? 'term.amber' : 'term.red';
-  // The label flashes amber for one second after a successful submit
-  // so the user gets immediate feedback even though the network
-  // round-trip is < 10ms; sustained activity shows up in the counter.
-  const labelColor = scan.flashing ? 'term.amber' : 'term.green';
+  // Label highlight priority: server-confirmed scanning > local 1s
+  // submit flash > idle. Server "scanning" wins because the SSE
+  // payload is the truth — even if the user landed on the page
+  // mid-scan (no recent click), they should see the indicator.
+  const labelColor = scanning || scan.flashing ? 'term.amber' : 'term.green';
   return (
     <Flex
       as="button"
@@ -134,7 +147,11 @@ function QueueCapsule({
       bg="transparent"
       cursor="pointer"
       _hover={{ color: 'term.green' }}
-      title={`trigger ${code} scan now`}
+      title={
+        scanning
+          ? `${code} scan in progress (queue may not show jobs until bulk RPC finishes)`
+          : `trigger ${code} scan now`
+      }
     >
       <Text color={labelColor} fontWeight="700" letterSpacing="0.18em">
         {code}
@@ -142,8 +159,25 @@ function QueueCapsule({
       <Text as="span" color={counterColor} fontWeight="700">
         {String(queue?.inFlight ?? 0)}/{String(queue?.pending ?? 0)}
       </Text>
+      {scanning && (
+        <Text as="span" className="blink" color="term.amber" fontWeight="700">
+          ⟳
+        </Text>
+      )}
     </Flex>
   );
+}
+
+/**
+ * Whether the SSE-reported active-scan list covers the given queue.
+ * `'all'` counts as both meta and kline since it fans out to both.
+ */
+function isScanning(
+  activeScans: readonly ScanKind[] | undefined,
+  queue: 'meta' | 'kline',
+): boolean {
+  if (activeScans === undefined) return false;
+  return activeScans.includes(queue) || activeScans.includes('all');
 }
 
 function ScanReadout({
