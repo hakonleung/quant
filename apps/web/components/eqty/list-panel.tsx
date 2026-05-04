@@ -23,6 +23,7 @@ import { deriveStats, type StockStats } from '../../lib/fp/stock-stats.js';
 import { useKlineBulk } from '../../lib/hooks/use-eqty-data.js';
 import { useNlScreen } from '../../lib/hooks/use-nl-screen.js';
 import { useStockList } from '../../lib/hooks/use-stock-list.js';
+import { useBlacklistStore } from '../../lib/stores/blacklist.store.js';
 import { useSectorsStore, type Sector } from '../../lib/stores/sectors.store.js';
 import { ALL_SECTOR_ID, useUiStore } from '../../lib/stores/ui.store.js';
 import { DslTree } from '../dsl/dsl-tree.js';
@@ -69,10 +70,18 @@ export function ListPanel(): React.ReactElement {
   const focusCode = useUiStore((s) => s.focusCode);
   const sectors = useSectorsStore((s) => s.sectors);
   const upsert = useSectorsStore((s) => s.upsert);
+  const blacklist = useBlacklistStore((s) => s.entries);
+  const blacklistSet = useMemo(
+    () => new Set(blacklist.map((b) => b.code)),
+    [blacklist],
+  );
 
   const { data, isLoading, error } = useStockList();
   const universe = data ?? [];
-  const ready = useMemo(() => universe.filter((s) => s.industries !== ''), [universe]);
+  const ready = useMemo(
+    () => universe.filter((s) => s.industries !== '' && !blacklistSet.has(s.code)),
+    [universe, blacklistSet],
+  );
   const universeByCode = useMemo(() => {
     const m = new Map<string, StockMetaDto>();
     for (const r of ready) m.set(r.code, r);
@@ -91,8 +100,11 @@ export function ListPanel(): React.ReactElement {
   const codes: readonly string[] = useMemo(() => {
     if (isAll) return ready.map((r) => r.code);
     if (sector === null) return [];
-    return sector.codes;
-  }, [isAll, sector, ready]);
+    // Sector definitions are persisted, blacklist isn't part of the
+    // sector — strip blacklisted members at render time so the user's
+    // bans apply across every sector view (user + dynamic).
+    return sector.codes.filter((c) => !blacklistSet.has(c));
+  }, [isAll, sector, ready, blacklistSet]);
   const bulkCodes: readonly string[] = isAll ? [] : codes;
   // For "All" we deliberately send [] and rely on the server to expand
   // to the full universe — force-enable the query in that mode so the

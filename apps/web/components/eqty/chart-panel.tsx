@@ -36,6 +36,7 @@ import {
   type ChartViewport,
 } from '../../lib/fp/chart-view.js';
 import { pctChangeToLatest, sparseIndices, type MaKey } from '../../lib/fp/kline-chart.js';
+import { ConfirmCancelled, useConfirm } from '../../lib/hooks/use-confirm.js';
 import { useKline, useStockMetaQuery } from '../../lib/hooks/use-eqty-data.js';
 import { useBlacklistStore } from '../../lib/stores/blacklist.store.js';
 import { useUiStore } from '../../lib/stores/ui.store.js';
@@ -816,17 +817,41 @@ function ChartHeaderRight({
   const blacklist = useBlacklistStore((s) => s.entries);
   const addBlacklist = useBlacklistStore((s) => s.add);
   const alreadyBlacklisted = blacklist.some((b) => b.code === code);
+  const { guard, comp: confirmComp } = useConfirm();
 
   const onBlacklist = (): void => {
     if (alreadyBlacklisted) return;
-    if (!confirm(`Blacklist ${code}${stockName === '' ? '' : ` (${stockName})`}?`)) return;
-    if (!confirm(`Confirm: blacklist ${code} permanently?`)) return;
-    addBlacklist({
-      code,
-      name: stockName,
-      addedAt: new Date().toISOString().slice(0, 10),
-      note: '',
-    });
+    guard({
+      title: 'blacklist stock',
+      message: (
+        <>
+          <Text fontFamily="mono" fontSize="12px" color="ink2" lineHeight="1.7">
+            blacklist{' '}
+            <Text as="span" color="accent">
+              {code}
+              {stockName === '' ? '' : ` · ${stockName}`}
+            </Text>
+            ?
+          </Text>
+          <Text fontFamily="mono" fontSize="11px" color="ink3" mt="8px">
+            // hides this stock from every list view until removed manually
+          </Text>
+        </>
+      ),
+      confirmLabel: 'BLACKLIST',
+    })
+      .then(() => {
+        addBlacklist({
+          code,
+          name: stockName,
+          addedAt: new Date().toISOString().slice(0, 10),
+          note: '',
+        });
+      })
+      .catch((e: unknown) => {
+        if (e instanceof ConfirmCancelled) return;
+        throw e;
+      });
   };
 
   return (
@@ -839,13 +864,14 @@ function ChartHeaderRight({
         <Star size={13} strokeWidth={1.6} />
       </IconButton>
       <IconButton
-        title={alreadyBlacklisted ? 'already blacklisted' : 'blacklist (double confirm)'}
+        title={alreadyBlacklisted ? 'already blacklisted' : 'blacklist'}
         onClick={onBlacklist}
         active={alreadyBlacklisted}
         danger
       >
         <Ban size={13} strokeWidth={1.6} />
       </IconButton>
+      {confirmComp}
     </Flex>
   );
 }

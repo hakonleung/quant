@@ -4,6 +4,7 @@ import { Box, Flex, Text } from '@chakra-ui/react';
 import { useMemo, useState } from 'react';
 
 import { Feat } from '../../lib/eqty/feat.js';
+import { ConfirmCancelled, useConfirm } from '../../lib/hooks/use-confirm.js';
 import { useKlineBulk, useMarketSentiment } from '../../lib/hooks/use-eqty-data.js';
 import { useStockList } from '../../lib/hooks/use-stock-list.js';
 import { useBlacklistStore } from '../../lib/stores/blacklist.store.js';
@@ -22,11 +23,45 @@ export const ANALYZE_MAX_CODES = 50;
 
 export function SectorsPanel(): React.ReactElement {
   const sectors = useSectorsStore((s) => s.sectors);
+  const removeSector = useSectorsStore((s) => s.remove);
   const activeSectorId = useUiStore((s) => s.activeSectorId);
   const setActiveSector = useUiStore((s) => s.setActiveSector);
   const blacklist = useBlacklistStore((s) => s.entries);
   const universe = useStockList();
   const [dialogOpen, setDialogOpen] = useState(false);
+  const { guard, comp: confirmComp } = useConfirm();
+
+  const onDelete = (sector: Sector): void => {
+    guard({
+      title: 'delete sector',
+      message: (
+        <>
+          <Text fontFamily="mono" fontSize="12px" color="ink2" lineHeight="1.7">
+            delete sector{' '}
+            <Text as="span" color="accent">
+              {sector.name}
+            </Text>
+            ?
+          </Text>
+          <Text fontFamily="mono" fontSize="11px" color="ink3" mt="8px">
+            // {String(sector.codes.length)} member(s) · this can&apos;t be undone
+          </Text>
+        </>
+      ),
+      confirmLabel: 'DELETE',
+    })
+      .then(() => {
+        removeSector(sector.id);
+        // Reset highlight when the deleted sector was active.
+        // setActiveSector already clears focusCode, so list-panel's
+        // auto-default picks the first row of the new (All) sector.
+        if (activeSectorId === sector.id) setActiveSector(ALL_SECTOR_ID);
+      })
+      .catch((e: unknown) => {
+        if (e instanceof ConfirmCancelled) return;
+        throw e;
+      });
+  };
 
   const userRows = sectors.filter((r) => r.kind === 'user');
   const dynRows = sectors.filter((r) => r.kind === 'dynamic');
@@ -102,6 +137,9 @@ export function SectorsPanel(): React.ReactElement {
                 onClick={(): void => {
                   setActiveSector(r.id);
                 }}
+                onDelete={(): void => {
+                  onDelete(r);
+                }}
               />
             ))
           )}
@@ -117,6 +155,9 @@ export function SectorsPanel(): React.ReactElement {
                 chgPctByCode={chgPctByCode}
                 onClick={(): void => {
                   setActiveSector(r.id);
+                }}
+                onDelete={(): void => {
+                  onDelete(r);
                 }}
               />
             ))
@@ -164,6 +205,7 @@ export function SectorsPanel(): React.ReactElement {
           setDialogOpen(false);
         }}
       />
+      {confirmComp}
     </Pane>
   );
 }
@@ -226,6 +268,8 @@ interface RowProps {
   readonly selected: boolean;
   readonly chgPctByCode: ReadonlyMap<string, number>;
   readonly onClick: () => void;
+  /** Omitted for the synthetic "All" row, which can't be deleted. */
+  readonly onDelete?: () => void;
 }
 
 function SectorRow({
@@ -233,6 +277,7 @@ function SectorRow({
   selected,
   chgPctByCode,
   onClick,
+  onDelete,
 }: RowProps): React.ReactElement {
   const codes = sector.codes;
   const cached = useMarketSentiment(codes);
@@ -283,6 +328,27 @@ function SectorRow({
           {avgChgPct >= 0 ? '+' : ''}
           {(avgChgPct * 100).toFixed(2)}%
         </Text>
+      )}
+      {onDelete !== undefined && (
+        <Box
+          as="span"
+          role="button"
+          aria-label={`delete sector ${sector.name}`}
+          onClick={(e: React.MouseEvent): void => {
+            e.stopPropagation();
+            onDelete();
+          }}
+          color="ink3"
+          cursor="pointer"
+          fontFamily="mono"
+          fontSize="14px"
+          lineHeight="1"
+          px="4px"
+          _hover={{ color: 'down' }}
+          title="delete sector"
+        >
+          ×
+        </Box>
       )}
     </Flex>
   );
