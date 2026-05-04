@@ -20,9 +20,27 @@ export type WatchMarket = z.infer<typeof WatchMarketSchema>;
 export const WatchBaselineSchema = z.enum(['prev_close', 'day_high', 'day_low']);
 export type WatchBaseline = z.infer<typeof WatchBaselineSchema>;
 
-const signedDecimal = z
-  .string()
-  .regex(/^-?\d+(\.\d+)?$/, 'expected signed decimal as string');
+/**
+ * Per-market code shape. Catches the common "I picked market=a but
+ * typed an HK code" mistake before the akshare adapter chokes on it
+ * with a confusing TypeError.
+ *
+ *   a  → 6 digits (Shanghai/Shenzhen)
+ *   hk → 4–5 digits (HKEX numeric ticker; some 1-digit raw inputs are
+ *        rejected on purpose — pad them in the UI)
+ *   us → 1–10 letters, optional `.` or `-` in the middle (BRK.B, RDS-A)
+ */
+const CODE_PATTERN: Readonly<Record<WatchMarket, RegExp>> = {
+  a: /^\d{6}$/,
+  hk: /^\d{4,5}$/,
+  us: /^[A-Za-z][A-Za-z.\-]{0,9}$/,
+};
+
+export function isValidWatchCode(market: WatchMarket, code: string): boolean {
+  return CODE_PATTERN[market].test(code);
+}
+
+const signedDecimal = z.string().regex(/^-?\d+(\.\d+)?$/, 'expected signed decimal as string');
 const positiveDecimal = z
   .string()
   .regex(/^\d+(\.\d+)?$/, 'expected non-negative decimal as string');
@@ -88,7 +106,16 @@ export const WatchTaskCreateSchema = z
     notifySlack: z.boolean().default(true),
     enabled: z.boolean().default(true),
   })
-  .strict();
+  .strict()
+  .superRefine((data, ctx) => {
+    if (!isValidWatchCode(data.market, data.code)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['code'],
+        message: `code ${JSON.stringify(data.code)} does not match market ${data.market} (a=6 digits, hk=4–5 digits, us=letters)`,
+      });
+    }
+  });
 export type WatchTaskCreate = z.infer<typeof WatchTaskCreateSchema>;
 
 export const WatchTaskPatchSchema = z
