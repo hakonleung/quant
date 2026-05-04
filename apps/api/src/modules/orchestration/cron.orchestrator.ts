@@ -101,10 +101,10 @@ export class CronOrchestrator implements OnModuleInit, OnModuleDestroy {
    * The HTTP endpoint goes through {@link fireScan} instead so the
    * client doesn't have to wait the full 10–60s for bulk + per-stock.
    */
-  triggerScan(kind: ScanKind): Promise<ScanResult> {
+  triggerScan(kind: ScanKind, traceId?: string): Promise<ScanResult> {
     const existing = this.inFlight[kind];
     if (existing !== undefined) return existing;
-    const p = this.scan(kind).finally(() => {
+    const p = this.scan(kind, traceId ?? newTraceId()).finally(() => {
       delete this.inFlight[kind];
     });
     this.inFlight[kind] = p;
@@ -130,7 +130,7 @@ export class CronOrchestrator implements OnModuleInit, OnModuleDestroy {
     );
     // Kick the work off; we don't await. If the kind already has one
     // in flight, `triggerScan` returns it as-is (still detached).
-    void this.triggerScan(kind).catch((err: unknown) => {
+    void this.triggerScan(kind, traceId).catch((err: unknown) => {
       this.logScanFailure('manual', err);
     });
     return { kind, traceId, startedAt, started: !wasInflight };
@@ -151,8 +151,7 @@ export class CronOrchestrator implements OnModuleInit, OnModuleDestroy {
     }, delay);
   }
 
-  private async scan(kind: ScanKind): Promise<ScanResult> {
-    const traceId = newTraceId();
+  private async scan(kind: ScanKind, traceId: string): Promise<ScanResult> {
     const startedAt = new Date().toISOString();
     const t0 = Date.now();
     const wantMeta = kind === 'meta' || kind === 'all';

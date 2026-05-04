@@ -22,6 +22,7 @@ and to make tests injectable with plain mappings.
 from __future__ import annotations
 
 import logging
+import time
 from datetime import date
 from decimal import Decimal, InvalidOperation
 from typing import TYPE_CHECKING, Final, Protocol, runtime_checkable
@@ -138,18 +139,36 @@ class AKShareFinancialsBulkSource:
         # Per-period frames: { code: { period: {revenue_ytd, np_ytd, eps_ba}}}.
         per_period: dict[date, dict[str, _PeriodCells]] = {}
         successes = 0
+        # Per-period progress logging — each `stock_yjbb_em` call is a
+        # blind 1-3s scrape against EastMoney; without this, a stuck
+        # call looks like the whole bulk_refresh is hung. The first
+        # log line goes out before the first call so an immediate hang
+        # is also visible.
+        _logger.info(
+            "bulk_yjbb_start periods=%s",
+            ",".join(p.isoformat() for p in periods),
+        )
         for period in periods:
+            t0 = time.monotonic()
             try:
                 raw = gw.stock_yjbb_em(date=_period_to_yjbb_arg(period))
             except Exception as exc:  # noqa: BLE001 — adapter boundary
                 _logger.warning(
-                    "yjbb_em_failed period=%s err=%s",
+                    "yjbb_em_failed period=%s elapsed_ms=%d err=%s",
                     period.isoformat(),
+                    int((time.monotonic() - t0) * 1000),
                     _short_repr(exc),
                 )
                 continue
-            per_period[period] = dict(_iter_yjbb_rows(raw))
+            cells = dict(_iter_yjbb_rows(raw))
+            per_period[period] = cells
             successes += 1
+            _logger.info(
+                "yjbb_em_ok period=%s rows=%d elapsed_ms=%d",
+                period.isoformat(),
+                len(cells),
+                int((time.monotonic() - t0) * 1000),
+            )
         if successes == 0:
             raise QuantError(
                 "SOURCE_UNAVAILABLE",
