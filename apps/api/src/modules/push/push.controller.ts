@@ -29,7 +29,10 @@ export class PushController {
     if (body.note !== undefined && body.note.trim().length > 0) {
       lines.push(`note: ${body.note}`);
     }
-    await this.notifier.send(lines.join('\n'), traceId ?? 'push-test');
+    await this.notifier.send(
+      { text: lines.join('\n'), attachments: [] },
+      traceId ?? 'push-test',
+    );
     return { ok: true, dryRun, deliveredAt: new Date().toISOString() };
   }
 }

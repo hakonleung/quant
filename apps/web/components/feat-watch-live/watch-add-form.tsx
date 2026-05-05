@@ -3,10 +3,13 @@
 /**
  * Inline add-form for the Watch pane.
  *
- * Batch flow: user picks N stocks via the M-0 search (chips); the same
- * condition list is applied to every picked stock — submitting POSTs
- * one task per stock. Conditions are an editable list (≥ 1 entry) so a
- * single task can fire on any of several thresholds.
+ * Persistent at the top of the pane: user picks N stocks via the M-0
+ * search (chips), shares one condition list across them, submits — one
+ * task per stock. On success the form resets to its initial defaults.
+ *
+ * The optional `initial` prop is used by the "override" flow: a group
+ * of existing tasks is deleted and their stocks/conditions are pushed
+ * back into this form for editing.
  *
  * v0 only POSTs sequentially via the BFF — no dedicated batch endpoint.
  */
@@ -19,11 +22,13 @@ import {
   type WatchMarket,
   type WatchTaskCreate,
 } from '@quant/shared';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { z } from 'zod';
 
 import type { UniverseStock } from '../../lib/hooks/use-stock-universe.js';
-import { FeatScrNl } from "../feat-scr-nl/feat-scr-nl.js";
+import { useStockUniverse } from '../../lib/hooks/use-stock-universe.js';
+import { useSectorsStore, type Sector } from '../../lib/stores/sectors.store.js';
+import { FeatScrNl } from '../feat-scr-nl/feat-scr-nl.js';
 import { TermSelect } from './term-select.js';
 
 const KindSchema = z.enum(['pct', 'abs']);
@@ -39,6 +44,7 @@ const BASELINE_ITEMS = [
   { label: 'prev_close', value: 'prev_close' as const },
   { label: 'day_high', value: 'day_high' as const },
   { label: 'day_low', value: 'day_low' as const },
+  { label: 'prev', value: 'prev' as const },
 ];
 const OP_ITEMS = [
   { label: '≥', value: 'gte' as const },
@@ -55,7 +61,7 @@ const INPUT_STYLE = {
   px: '6px',
 };
 
-interface PickedStock {
+export interface PickedStock {
   readonly market: WatchMarket;
   readonly code: string;
   readonly name: string;
@@ -72,8 +78,9 @@ interface ConditionDraft {
 interface AddFormState {
   readonly picked: readonly PickedStock[];
   readonly conditions: readonly ConditionDraft[];
-  readonly intervalSec: string;
-  readonly pushIntervalSec: string;
+  /** Display unit on the form is minutes; the wire format is seconds. */
+  readonly intervalMin: string;
+  readonly pushIntervalMin: string;
 }
 
 const INITIAL_CONDITION: ConditionDraft = {
@@ -87,14 +94,63 @@ const INITIAL_CONDITION: ConditionDraft = {
 const INITIAL_STATE: AddFormState = {
   picked: [],
   conditions: [INITIAL_CONDITION],
-  intervalSec: '20',
-  pushIntervalSec: '300',
+  intervalMin: '1',
+  pushIntervalMin: '5',
 };
 
+function secondsToMinuteString(secs: number): string {
+  if (secs % 60 === 0) return String(secs / 60);
+  return (secs / 60).toFixed(2);
+}
+
+function minuteStringToSeconds(min: string): number {
+  return Math.round(Number(min) * 60);
+}
+
+export interface WatchAddInitial {
+  readonly picked: readonly PickedStock[];
+  readonly conditions: readonly WatchCondition[];
+  readonly intervalSec: number;
+  readonly pushIntervalSec: number;
+}
+
+function fromCondition(c: WatchCondition): ConditionDraft {
+  if (c.kind === 'pct') {
+    return {
+      kind: 'pct',
+      baseline: c.baseline,
+      thresholdPct: c.thresholdPct,
+      op: c.op,
+      thresholdPrice: '100',
+    };
+  }
+  return {
+    kind: 'abs',
+    baseline: 'prev_close',
+    thresholdPct: '5',
+    op: c.op,
+    thresholdPrice: c.thresholdPrice,
+  };
+}
+
+function buildInitialState(initial: WatchAddInitial | undefined): AddFormState {
+  if (!initial) return INITIAL_STATE;
+  return {
+    picked: initial.picked,
+    conditions:
+      initial.conditions.length > 0
+        ? initial.conditions.map(fromCondition)
+        : [INITIAL_CONDITION],
+    intervalMin: secondsToMinuteString(initial.intervalSec),
+    pushIntervalMin: secondsToMinuteString(initial.pushIntervalSec),
+  };
+}
+
 function toCondition(c: ConditionDraft): WatchCondition {
-  return c.kind === 'pct'
-    ? { kind: 'pct', baseline: c.baseline, thresholdPct: c.thresholdPct }
-    : { kind: 'abs', op: c.op, thresholdPrice: c.thresholdPrice };
+  if (c.kind === 'pct') {
+    return { kind: 'pct', baseline: c.baseline, op: c.op, thresholdPct: c.thresholdPct };
+  }
+  return { kind: 'abs', op: c.op, thresholdPrice: c.thresholdPrice };
 }
 
 function buildDraft(s: AddFormState, stock: PickedStock): WatchTaskCreate {
@@ -103,13 +159,13 @@ function buildDraft(s: AddFormState, stock: PickedStock): WatchTaskCreate {
     code: stock.code,
     name: stock.name,
     conditions: s.conditions.map(toCondition),
-    intervalSec: Number(s.intervalSec),
-    pushIntervalSec: Number(s.pushIntervalSec),
+    intervalSec: minuteStringToSeconds(s.intervalMin),
+    pushIntervalSec: minuteStringToSeconds(s.pushIntervalMin),
   });
 }
 
 interface AddFormProps {
-  readonly onClose: () => void;
+  readonly initial?: WatchAddInitial;
 }
 
 async function postOne(stock: PickedStock, state: AddFormState): Promise<string | null> {
@@ -137,8 +193,8 @@ async function postBatch(state: AddFormState): Promise<readonly string[]> {
   return errs;
 }
 
-export function WatchAddForm({ onClose }: AddFormProps): React.ReactElement {
-  const [state, setState] = useState<AddFormState>(INITIAL_STATE);
+export function WatchAddForm({ initial }: AddFormProps): React.ReactElement {
+  const [state, setState] = useState<AddFormState>(() => buildInitialState(initial));
   const [busy, setBusy] = useState(false);
   const [errs, setErrs] = useState<readonly string[]>([]);
 
@@ -147,7 +203,7 @@ export function WatchAddForm({ onClose }: AddFormProps): React.ReactElement {
     setErrs([]);
     try {
       const failures = await postBatch(state);
-      if (failures.length === 0) onClose();
+      if (failures.length === 0) setState(INITIAL_STATE);
       else setErrs(failures);
     } catch (e) {
       setErrs([e instanceof Error ? e.message : String(e)]);
@@ -194,6 +250,57 @@ interface RowProps {
   readonly setState: React.Dispatch<React.SetStateAction<AddFormState>>;
 }
 
+interface SectorImportRowProps {
+  readonly onBatchPick: (stocks: readonly UniverseStock[]) => void;
+}
+
+function SectorImportRow({ onBatchPick }: SectorImportRowProps): React.ReactElement | null {
+  const sectors = useSectorsStore((s) => s.sectors);
+  const { data: universe } = useStockUniverse('a');
+  const codeToStock = useMemo(() => {
+    const m = new Map<string, UniverseStock>();
+    for (const s of universe) if (s.market === 'a') m.set(s.code, s);
+    return m;
+  }, [universe]);
+  const onImport = (sector: Sector): void => {
+    const stocks: UniverseStock[] = [];
+    for (const c of sector.codes) {
+      const hit = codeToStock.get(c);
+      if (hit !== undefined) stocks.push(hit);
+    }
+    if (stocks.length > 0) onBatchPick(stocks);
+  };
+  if (sectors.length === 0) return null;
+  return (
+    <Flex gap="4px" wrap="wrap" align="center" mb="6px">
+      <Text fontSize="11px" color="term.ink3" letterSpacing="0.14em" mr="2px">
+        SECTOR
+      </Text>
+      {sectors.map((sec) => (
+        <Box
+          key={sec.id}
+          as="button"
+          px="6px"
+          h="20px"
+          border="1px solid"
+          borderColor="term.line2"
+          color="term.green"
+          fontFamily="mono"
+          fontSize="11px"
+          lineHeight="18px"
+          _hover={{ bg: 'term.panel', borderColor: 'term.green' }}
+          onClick={(): void => {
+            onImport(sec);
+          }}
+          title={`import ${String(sec.codes.length)} stocks from ${sec.name}`}
+        >
+          + {sec.name} ({sec.codes.length})
+        </Box>
+      ))}
+    </Flex>
+  );
+}
+
 function PickRow({ state, setState }: RowProps): React.ReactElement {
   const onPick = (s: UniverseStock): void => {
     setState((prev) => {
@@ -220,6 +327,7 @@ function PickRow({ state, setState }: RowProps): React.ReactElement {
   };
   return (
     <Box>
+      <SectorImportRow onBatchPick={onBatchPick} />
       <FeatScrNl onPick={onPick} onBatchPick={onBatchPick} />
       {state.picked.length === 0 ? (
         <Text mt="4px" fontSize="11px" color="term.ink3">
@@ -285,12 +393,7 @@ function ConditionsList({ state, setState }: RowProps): React.ReactElement {
         <Text fontSize="11px" color="term.ink3" letterSpacing="0.14em">
           CONDITIONS · ANY-OF
         </Text>
-        <Button
-          size="xs"
-          variant="ghost"
-          color="term.green"
-          onClick={onAdd}
-        >
+        <Button size="xs" variant="ghost" color="term.green" onClick={onAdd}>
           + add
         </Button>
       </Flex>
@@ -346,6 +449,14 @@ function ConditionRow({
               onChange({ ...cond, baseline: v });
             }}
           />
+          <TermSelect<Op>
+            value={cond.op}
+            items={OP_ITEMS}
+            width="60px"
+            onChange={(v): void => {
+              onChange({ ...cond, op: v });
+            }}
+          />
           <Input
             {...INPUT_STYLE}
             w="60px"
@@ -362,7 +473,7 @@ function ConditionRow({
           <TermSelect<Op>
             value={cond.op}
             items={OP_ITEMS}
-            width="76px"
+            width="60px"
             onChange={(v): void => {
               onChange({ ...cond, op: v });
             }}
@@ -414,24 +525,30 @@ function SubmitRow({
       <Input
         {...INPUT_STYLE}
         w="60px"
-        value={state.intervalSec}
+        value={state.intervalMin}
         onChange={(e): void => {
           const v = e.target.value;
-          setState((s) => ({ ...s, intervalSec: v }));
+          setState((s) => ({ ...s, intervalMin: v }));
         }}
       />
+      <Text color="term.ink3" fontSize="11px">
+        m
+      </Text>
       <Text color="term.ink3" fontSize="11px">
         push≥
       </Text>
       <Input
         {...INPUT_STYLE}
         w="60px"
-        value={state.pushIntervalSec}
+        value={state.pushIntervalMin}
         onChange={(e): void => {
           const v = e.target.value;
-          setState((s) => ({ ...s, pushIntervalSec: v }));
+          setState((s) => ({ ...s, pushIntervalMin: v }));
         }}
       />
+      <Text color="term.ink3" fontSize="11px">
+        m
+      </Text>
       <Button
         size="xs"
         variant="outline"

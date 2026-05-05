@@ -4,13 +4,15 @@
  * Watch (W-0) pane (`docs/modules/W-0-watch.md` §11).
  *
  * Subscribes to `/api/watch/stream` (SSE, 1 Hz) for live task state.
- * Inline `+ add` toggles `<WatchAddForm/>` for the create flow; per-row
- * × deletes via the BFF and lets the next SSE tick refresh the list.
+ * The add form is permanent at the top — no toggle. The task list is
+ * grouped by condition signature (tasks with identical conditions
+ * collapse into one block); each group header has a checkbox that
+ * selects the whole group, an OVERRIDE action (visible when the group
+ * is fully selected) that pushes its stocks/conditions back into the
+ * add form, and a × that deletes the entire group.
  *
  * Body scrolls internally so a long task list never inflates the host
- * column. The header `☑` toggle drops the row list into a multi-select
- * mode (checkboxes + bulk DELETE), keeping single-row deletes available
- * by default.
+ * column. Per-row hover highlights the current task.
  */
 
 import { Box, Button, Checkbox, Flex, Text } from '@chakra-ui/react';
@@ -21,12 +23,8 @@ import { z } from 'zod';
 import { Feat } from '../../lib/eqty/feat.js';
 import { ConfirmCancelled, useConfirm } from '../../lib/hooks/use-confirm.js';
 import { FeatView } from '../feat-view/feat-view.js';
-import {
-  FeatViewAction,
-  FeatViewHeaderRight,
-  FeatViewStatus,
-} from '../feat-view/feat-view-header.js';
-import { WatchAddForm } from './watch-add-form.js';
+import { FeatViewHeaderRight, FeatViewStatus } from '../feat-view/feat-view-header.js';
+import { WatchAddForm, type PickedStock, type WatchAddInitial } from './watch-add-form.js';
 
 const TaskListSchema = z.array(WatchTaskSchema);
 
@@ -72,12 +70,54 @@ function useWatchStream(): StreamState {
 
 const taskKey = (t: Pick<WatchTask, 'market' | 'code'>): string => `${t.market}:${t.code}`;
 
+function formatMinutes(secs: number): string {
+  if (secs % 60 === 0) return `${String(secs / 60)}m`;
+  return `${(secs / 60).toFixed(2)}m`;
+}
+
+function groupKeyOf(conditions: readonly WatchCondition[]): string {
+  return JSON.stringify(conditions);
+}
+
+interface TaskGroup {
+  readonly key: string;
+  readonly conditions: readonly WatchCondition[];
+  readonly intervalSec: number;
+  readonly pushIntervalSec: number;
+  readonly tasks: readonly WatchTask[];
+}
+
+function groupTasks(tasks: readonly WatchTask[]): readonly TaskGroup[] {
+  const map = new Map<string, WatchTask[]>();
+  for (const t of tasks) {
+    const k = groupKeyOf(t.conditions);
+    const arr = map.get(k);
+    if (arr) arr.push(t);
+    else map.set(k, [t]);
+  }
+  const groups: TaskGroup[] = [];
+  for (const [k, ts] of map) {
+    const first = ts[0];
+    if (!first) continue;
+    groups.push({
+      key: k,
+      conditions: first.conditions,
+      intervalSec: first.intervalSec,
+      pushIntervalSec: first.pushIntervalSec,
+      tasks: ts,
+    });
+  }
+  return groups;
+}
+
 export function FeatWatchLive(): React.ReactElement {
   const state = useWatchStream();
-  const [adding, setAdding] = useState(false);
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
-  const [bulkBusy, setBulkBusy] = useState(false);
+  const [groupBusy, setGroupBusy] = useState<ReadonlySet<string>>(new Set());
+  const [formInitial, setFormInitial] = useState<WatchAddInitial | undefined>(undefined);
+  const [formKey, setFormKey] = useState(0);
   const tasks = state.kind === 'open' ? state.tasks : [];
+  const groups = useMemo(() => groupTasks(tasks), [tasks]);
   const { guard, comp: confirmComp } = useConfirm();
 
   // Drop selections that no longer exist (deleted upstream).
@@ -90,19 +130,46 @@ export function FeatWatchLive(): React.ReactElement {
     });
   }, [liveKeys]);
 
-  const onBulkDelete = async (): Promise<void> => {
-    const targets = tasks.filter((t) => selected.has(taskKey(t)));
-    if (targets.length === 0) return;
+  const markGroupBusy = (key: string, busy: boolean): void => {
+    setGroupBusy((prev) => {
+      const next = new Set(prev);
+      if (busy) next.add(key);
+      else next.delete(key);
+      return next;
+    });
+  };
+
+  const onToggleTask = (key: string): void => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
+  const onToggleGroup = (group: TaskGroup): void => {
+    const keys = group.tasks.map(taskKey);
+    setSelected((prev) => {
+      const allIn = keys.every((k) => prev.has(k));
+      const next = new Set(prev);
+      if (allIn) for (const k of keys) next.delete(k);
+      else for (const k of keys) next.add(k);
+      return next;
+    });
+  };
+
+  const onDeleteGroup = async (group: TaskGroup): Promise<void> => {
     try {
       await guard({
-        title: 'delete watch tasks',
+        title: 'delete group',
         message: (
           <Text fontFamily="mono" fontSize="12px" color="term.ink2" lineHeight="1.7">
             delete{' '}
             <Text as="span" color="term.red">
-              {targets.length}
+              {group.tasks.length}
             </Text>{' '}
-            watch tasks? This cannot be undone.
+            watch tasks in this group? This cannot be undone.
           </Text>
         ),
         confirmLabel: 'DELETE',
@@ -111,12 +178,42 @@ export function FeatWatchLive(): React.ReactElement {
       if (e instanceof ConfirmCancelled) return;
       throw e;
     }
-    setBulkBusy(true);
+    markGroupBusy(group.key, true);
     try {
-      await Promise.all(targets.map((t) => deleteTask(t)));
-      setSelected(new Set());
+      await Promise.all(group.tasks.map((t) => deleteTask(t)));
+      setSelected((prev) => {
+        const next = new Set(prev);
+        for (const t of group.tasks) next.delete(taskKey(t));
+        return next;
+      });
     } finally {
-      setBulkBusy(false);
+      markGroupBusy(group.key, false);
+    }
+  };
+
+  const onOverrideGroup = async (group: TaskGroup): Promise<void> => {
+    const picked: readonly PickedStock[] = group.tasks.map((t) => ({
+      market: t.market,
+      code: t.code,
+      name: t.name,
+    }));
+    markGroupBusy(group.key, true);
+    try {
+      await Promise.all(group.tasks.map((t) => deleteTask(t)));
+      setSelected((prev) => {
+        const next = new Set(prev);
+        for (const t of group.tasks) next.delete(taskKey(t));
+        return next;
+      });
+      setFormInitial({
+        picked,
+        conditions: group.conditions,
+        intervalSec: group.intervalSec,
+        pushIntervalSec: group.pushIntervalSec,
+      });
+      setFormKey((k) => k + 1);
+    } finally {
+      markGroupBusy(group.key, false);
     }
   };
 
@@ -128,209 +225,239 @@ export function FeatWatchLive(): React.ReactElement {
           <FeatViewStatus
             tone={state.kind === 'open' ? 'green' : state.kind === 'error' ? 'red' : 'idle'}
           />
-          <FeatViewAction
-            title={adding ? 'cancel' : 'add watch'}
-            tone={adding ? 'danger' : 'accent'}
-            onClick={(): void => {
-              setAdding((v) => !v);
-            }}
-          >
-            {adding ? '×' : '+'}
-          </FeatViewAction>
         </FeatViewHeaderRight>
       }
     >
-      <PanelBody
-        state={state}
-        tasks={tasks}
-        adding={adding}
-        onCloseAdd={(): void => {
-          setAdding(false);
-        }}
-        selected={selected}
-        bulkBusy={bulkBusy}
-        onToggle={(key): void => {
-          setSelected((prev) => {
-            const next = new Set(prev);
-            if (next.has(key)) next.delete(key);
-            else next.add(key);
-            return next;
-          });
-        }}
-        onSelectAll={(): void => {
-          setSelected(new Set(tasks.map(taskKey)));
-        }}
-        onClearSelection={(): void => {
-          setSelected(new Set());
-        }}
-        onBulkDelete={(): void => {
-          void onBulkDelete();
-        }}
-      />
+      <Flex
+        direction="column"
+        flex="1"
+        minH={0}
+        color="term.ink2"
+        fontFamily="mono"
+        fontSize="12px"
+        lineHeight="1.7"
+      >
+        <Box px="14px" pt="10px" flexShrink={0}>
+          {formInitial ? (
+            <WatchAddForm key={formKey} initial={formInitial} />
+          ) : (
+            <WatchAddForm key={formKey} />
+          )}
+        </Box>
+        <Box px="14px" py="8px">
+          <BodyStatus
+            state={state}
+            groups={groups}
+            selected={selected}
+            groupBusy={groupBusy}
+            onToggleTask={onToggleTask}
+            onToggleGroup={onToggleGroup}
+            onDeleteGroup={(g): void => {
+              void onDeleteGroup(g);
+            }}
+            onOverrideGroup={(g): void => {
+              void onOverrideGroup(g);
+            }}
+          />
+        </Box>
+      </Flex>
       {confirmComp}
     </FeatView>
   );
 }
 
-interface BodyProps {
-  readonly state: StreamState;
-  readonly tasks: readonly WatchTask[];
-  readonly adding: boolean;
-  readonly onCloseAdd: () => void;
-  readonly selected: ReadonlySet<string>;
-  readonly bulkBusy: boolean;
-  readonly onToggle: (key: string) => void;
-  readonly onSelectAll: () => void;
-  readonly onClearSelection: () => void;
-  readonly onBulkDelete: () => void;
-}
-
-function PanelBody(props: BodyProps): React.ReactElement {
-  const { adding, onCloseAdd, tasks, selected } = props;
-  return (
-    <Flex
-      direction="column"
-      flex="1"
-      minH={0}
-      color="term.ink2"
-      fontFamily="mono"
-      fontSize="12px"
-      lineHeight="1.7"
-    >
-      {adding ? (
-        <Box px="14px" pt="10px" flexShrink={0}>
-          <WatchAddForm onClose={onCloseAdd} />
-        </Box>
-      ) : null}
-      {tasks.length > 0 ? (
-        <SelectToolbar
-          totalCount={tasks.length}
-          selectedCount={selected.size}
-          bulkBusy={props.bulkBusy}
-          onSelectAll={props.onSelectAll}
-          onClearSelection={props.onClearSelection}
-          onBulkDelete={props.onBulkDelete}
-        />
-      ) : null}
-      <Box px="14px" py="8px">
-        <BodyStatus
-          state={props.state}
-          tasks={tasks}
-          selected={selected}
-          onToggle={props.onToggle}
-        />
-      </Box>
-    </Flex>
-  );
-}
-
-interface ToolbarProps {
-  readonly totalCount: number;
-  readonly selectedCount: number;
-  readonly bulkBusy: boolean;
-  readonly onSelectAll: () => void;
-  readonly onClearSelection: () => void;
-  readonly onBulkDelete: () => void;
-}
-
-function SelectToolbar({
-  totalCount,
-  selectedCount,
-  bulkBusy,
-  onSelectAll,
-  onClearSelection,
-  onBulkDelete,
-}: ToolbarProps): React.ReactElement {
-  const allSelected = selectedCount === totalCount && totalCount > 0;
-  return (
-    <Flex
-      align="center"
-      gap="8px"
-      px="14px"
-      py="6px"
-      borderTopWidth="1px"
-      borderBottomWidth="1px"
-      borderColor="term.line"
-      bg="term.panel"
-      flexShrink={0}
-    >
-      <Text color="term.ink3" fontSize="10px" letterSpacing="0.16em">
-        {selectedCount}/{totalCount} selected
-      </Text>
-      <Box flex="1" />
-      <Button
-        size="xs"
-        h="22px"
-        px="8px"
-        borderRadius="0"
-        borderWidth="1px"
-        borderColor="term.line2"
-        bg="transparent"
-        color="term.ink2"
-        fontFamily="mono"
-        fontSize="10px"
-        letterSpacing="0.14em"
-        onClick={allSelected ? onClearSelection : onSelectAll}
-      >
-        {allSelected ? 'CLEAR' : 'SELECT ALL'}
-      </Button>
-      <Button
-        size="xs"
-        h="22px"
-        px="10px"
-        borderRadius="0"
-        borderWidth="1px"
-        borderColor="term.red"
-        bg="transparent"
-        color="term.red"
-        fontFamily="mono"
-        fontSize="10px"
-        letterSpacing="0.14em"
-        fontWeight="700"
-        loading={bulkBusy}
-        disabled={selectedCount === 0}
-        onClick={onBulkDelete}
-        _disabled={{ opacity: 0.4, cursor: 'not-allowed' }}
-      >
-        DELETE
-      </Button>
-    </Flex>
-  );
-}
-
 interface BodyStatusProps {
   readonly state: StreamState;
-  readonly tasks: readonly WatchTask[];
+  readonly groups: readonly TaskGroup[];
   readonly selected: ReadonlySet<string>;
-  readonly onToggle: (key: string) => void;
+  readonly groupBusy: ReadonlySet<string>;
+  readonly onToggleTask: (key: string) => void;
+  readonly onToggleGroup: (group: TaskGroup) => void;
+  readonly onDeleteGroup: (group: TaskGroup) => void;
+  readonly onOverrideGroup: (group: TaskGroup) => void;
 }
 
 function BodyStatus({
   state,
-  tasks,
+  groups,
   selected,
-  onToggle,
+  groupBusy,
+  onToggleTask,
+  onToggleGroup,
+  onDeleteGroup,
+  onOverrideGroup,
 }: BodyStatusProps): React.ReactElement {
   if (state.kind === 'connecting') return <Text>connecting…</Text>;
   if (state.kind === 'error') {
     return <Text color="term.red">stream error: {state.message}</Text>;
   }
-  if (tasks.length === 0) {
-    return <Text color="term.ink3">no tasks. click + add.</Text>;
+  if (groups.length === 0) {
+    return <Text color="term.ink3">no tasks. fill the form above to add.</Text>;
   }
   return (
-    <Flex direction="column" gap="0px">
-      {tasks.map((t) => (
-        <Row
-          key={taskKey(t)}
-          task={t}
-          checked={selected.has(taskKey(t))}
-          onToggle={(): void => {
-            onToggle(taskKey(t));
-          }}
+    <Flex direction="column" gap="10px">
+      {groups.map((g) => (
+        <Group
+          key={g.key}
+          group={g}
+          selected={selected}
+          busy={groupBusy.has(g.key)}
+          onToggleTask={onToggleTask}
+          onToggleGroup={onToggleGroup}
+          onDelete={onDeleteGroup}
+          onOverride={onOverrideGroup}
         />
       ))}
     </Flex>
+  );
+}
+
+interface GroupProps {
+  readonly group: TaskGroup;
+  readonly selected: ReadonlySet<string>;
+  readonly busy: boolean;
+  readonly onToggleTask: (key: string) => void;
+  readonly onToggleGroup: (group: TaskGroup) => void;
+  readonly onDelete: (group: TaskGroup) => void;
+  readonly onOverride: (group: TaskGroup) => void;
+}
+
+function Group({
+  group,
+  selected,
+  busy,
+  onToggleTask,
+  onToggleGroup,
+  onDelete,
+  onOverride,
+}: GroupProps): React.ReactElement {
+  const taskKeys = group.tasks.map(taskKey);
+  const selectedInGroup = taskKeys.filter((k) => selected.has(k)).length;
+  const allSelected = selectedInGroup === taskKeys.length && taskKeys.length > 0;
+  const partiallySelected = selectedInGroup > 0 && !allSelected;
+  const titleLines: readonly string[] = [
+    ...group.conditions.map(formatCondition),
+    `interval: ${formatMinutes(group.intervalSec)}  push≥: ${formatMinutes(group.pushIntervalSec)}`,
+  ];
+
+  return (
+    <Box borderWidth="1px" borderColor="term.line" bg="transparent">
+      <Flex
+        align="center"
+        gap="6px"
+        px="6px"
+        py="3px"
+        bg={allSelected ? 'term.panel' : 'term.bgElev'}
+        borderBottomWidth="1px"
+        borderColor="term.line"
+        cursor="pointer"
+        _hover={{ bg: 'term.panel2' }}
+        onClick={(): void => {
+          onToggleGroup(group);
+        }}
+      >
+        <Checkbox.Root
+          checked={allSelected ? true : partiallySelected ? 'indeterminate' : false}
+          size="sm"
+          colorPalette="green"
+          flexShrink={0}
+          onClick={(e): void => {
+            e.stopPropagation();
+            onToggleGroup(group);
+          }}
+        >
+          <Checkbox.HiddenInput />
+          <Checkbox.Control />
+        </Checkbox.Root>
+        <Flex direction="column" flex="1" minW={0} gap="0">
+          {titleLines.length > 0 ? (
+            titleLines.map((line, i) => (
+              <Text
+                key={`line-${String(i)}`}
+                fontSize="10px"
+                lineHeight="1.2"
+                color="term.ink"
+                fontFamily="mono"
+                fontWeight="600"
+                whiteSpace="normal"
+                wordBreak="break-word"
+              >
+                {line}
+              </Text>
+            ))
+          ) : (
+            <Text
+              fontSize="10px"
+              lineHeight="1.2"
+              color="term.ink3"
+              fontFamily="mono"
+              fontWeight="600"
+            >
+              (no conditions)
+            </Text>
+          )}
+        </Flex>
+        <Text fontSize="10px" color="term.ink3" letterSpacing="0.14em" flexShrink={0}>
+          ×{group.tasks.length}
+        </Text>
+        {allSelected ? (
+          <Button
+            size="xs"
+            h="20px"
+            px="8px"
+            borderRadius="0"
+            borderWidth="1px"
+            borderColor="term.amber"
+            bg="transparent"
+            color="term.amber"
+            fontFamily="mono"
+            fontSize="10px"
+            letterSpacing="0.14em"
+            fontWeight="700"
+            loading={busy}
+            onClick={(e): void => {
+              e.stopPropagation();
+              onOverride(group);
+            }}
+          >
+            OVERRIDE
+          </Button>
+        ) : null}
+        <Button
+          size="xs"
+          h="20px"
+          px="8px"
+          borderRadius="0"
+          borderWidth="1px"
+          borderColor="term.red"
+          bg="transparent"
+          color="term.red"
+          fontFamily="mono"
+          fontSize="10px"
+          letterSpacing="0.14em"
+          fontWeight="700"
+          loading={busy}
+          onClick={(e): void => {
+            e.stopPropagation();
+            onDelete(group);
+          }}
+        >
+          ×
+        </Button>
+      </Flex>
+      <Flex direction="column">
+        {group.tasks.map((t) => (
+          <Row
+            key={taskKey(t)}
+            task={t}
+            checked={selected.has(taskKey(t))}
+            onToggle={(): void => {
+              onToggleTask(taskKey(t));
+            }}
+          />
+        ))}
+      </Flex>
+    </Box>
   );
 }
 
@@ -353,14 +480,14 @@ function Row({ task, checked, onToggle }: RowProps): React.ReactElement {
     <Flex
       align="center"
       gap="6px"
-      px="4px"
+      px="6px"
       py="2px"
       borderBottomWidth="1px"
       borderColor="term.line2"
       cursor="pointer"
       bg={checked ? 'term.panel' : 'transparent'}
       transition="background 120ms ease, color 120ms ease"
-      _hover={{ bg: 'term.panel' }}
+      _hover={{ bg: 'term.panel2' }}
       onClick={onToggle}
     >
       <Checkbox.Root
@@ -406,17 +533,9 @@ function RowSummary({ task }: { readonly task: WatchTask }): React.ReactElement 
         fontSize="9px"
         color={task.enabled ? 'term.ink3' : 'term.red'}
         letterSpacing="0.02em"
-        flexShrink={1}
-        minW={0}
-        overflow="hidden"
-        textOverflow="ellipsis"
-        whiteSpace="nowrap"
-        textAlign="right"
+        flexShrink={0}
       >
-        {[
-          ...task.conditions.map(formatCondition),
-          task.enabled ? `↺${String(task.pushIntervalSec)}s` : 'off',
-        ].join(', ')}
+        {task.enabled ? `↺${formatMinutes(task.pushIntervalSec)}` : 'off'}
       </Text>
       <Text fontSize="9px" color={task.hitCount > 0 ? 'term.amber' : 'term.ink3'} flexShrink={0}>
         ✦{String(task.hitCount)}
@@ -426,9 +545,9 @@ function RowSummary({ task }: { readonly task: WatchTask }): React.ReactElement 
 }
 
 function formatCondition(c: WatchCondition): string {
+  const op = c.op === 'gte' ? '≥' : '≤';
   if (c.kind === 'pct') {
-    const sign = c.thresholdPct.startsWith('-') ? '' : '+';
-    return `${c.baseline} ${sign}${c.thresholdPct}%`;
+    return `pct($, ${c.baseline}) ${op} ${c.thresholdPct}%`;
   }
-  return `price ${c.op === 'gte' ? '≥' : '≤'} ${c.thresholdPrice}`;
+  return `abs($) ${op} ${c.thresholdPrice}`;
 }

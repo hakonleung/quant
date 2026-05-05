@@ -12,8 +12,10 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ProxyAgent, fetch as undiciFetch, type Dispatcher } from 'undici';
 
+import type { SlackPayload } from './domain/format.js';
+
 export interface WatchNotifier {
-  send(text: string, traceId: string): Promise<void>;
+  send(payload: SlackPayload, traceId: string): Promise<void>;
 }
 
 export const WATCH_NOTIFIER = Symbol('WATCH_NOTIFIER');
@@ -37,18 +39,19 @@ export class SlackWebhookWatchNotifier implements WatchNotifier {
 
   constructor(private readonly webhookUrl: string | null) {}
 
-  async send(text: string, traceId: string): Promise<void> {
+  async send(payload: SlackPayload, traceId: string): Promise<void> {
     if (this.webhookUrl === null) {
       // No webhook configured — log the would-be alert so dev can still
       // observe trigger firings in the gateway log.
-      this.logger.log(`watch_alert_drylog trace_id=${traceId} ${text}`);
+      const summary = payload.text ?? JSON.stringify(payload.attachments);
+      this.logger.log(`watch_alert_drylog trace_id=${traceId} ${summary}`);
       return;
     }
     try {
       const res = await undiciFetch(this.webhookUrl, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ text }),
+        body: JSON.stringify(payload),
         ...(this.dispatcher !== null ? { dispatcher: this.dispatcher } : {}),
       });
       if (!res.ok) {

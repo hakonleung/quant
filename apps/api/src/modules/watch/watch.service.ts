@@ -58,6 +58,7 @@ export class WatchService {
       lastSampleAt: null,
       lastMatchAt: null,
       hitCount: 0,
+      lastSamplePrice: null,
     };
     await this.tasks.upsert(task, false);
     return task;

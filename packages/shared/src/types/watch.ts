@@ -17,7 +17,18 @@ import { z } from 'zod';
 export const WatchMarketSchema = z.enum(['a', 'hk', 'us']);
 export type WatchMarket = z.infer<typeof WatchMarketSchema>;
 
-export const WatchBaselineSchema = z.enum(['prev_close', 'day_high', 'day_low']);
+/**
+ * Reference price the `pct` condition compares the current price against.
+ *
+ * `prev_close` / `day_high` / `day_low` come from the quote; `prev`
+ * means "the last successful sample's `last` price within the same
+ * trading day" (cached on the task as `lastSamplePrice`). When the
+ * cached prev sample is missing or from a previous trading day, the
+ * `prev` baseline can never match. `prev`-baselined matches also
+ * bypass the not-match → match edge-trigger gate, so every step in a
+ * sustained move is reported as a hit.
+ */
+export const WatchBaselineSchema = z.enum(['prev_close', 'day_high', 'day_low', 'prev']);
 export type WatchBaseline = z.infer<typeof WatchBaselineSchema>;
 
 /**
@@ -47,10 +58,19 @@ const positiveDecimal = z
   .string()
   .regex(/^\d+(\.\d+)?$/, 'expected non-negative decimal as string');
 
+/**
+ * Comparison: `(last - baseline) / baseline` (in %) `op` `thresholdPct`.
+ *
+ * `op === 'gte'` fires when the delta meets or exceeds the threshold;
+ * `op === 'lte'` fires when the delta is at or below it. The threshold
+ * itself is signed — negative thresholds are useful when paired with
+ * `lte` to express drops (e.g. `-3% lte` ≡ "down at least 3%").
+ */
 export const WatchPctConditionSchema = z
   .object({
     kind: z.literal('pct'),
     baseline: WatchBaselineSchema,
+    op: z.enum(['gte', 'lte']),
     thresholdPct: signedDecimal.refine((v) => v !== '0' && v !== '-0' && v !== '+0', {
       message: 'thresholdPct must be non-zero',
     }),
@@ -106,6 +126,13 @@ export const WatchTaskSchema = z
     lastMatchAt: isoDateTime.nullable().default(null),
     /** Edge-triggered hits — count of not-match → match transitions. */
     hitCount: z.number().int().min(0).default(0),
+    /**
+     * Most recent successful tick's `last` price (Decimal as string).
+     * Used by `prev`-kind conditions for tick-over-tick comparison;
+     * cleared (treated as null) when `lastSampleAt` falls in a prior
+     * trading day.
+     */
+    lastSamplePrice: positiveDecimal.nullable().default(null),
   })
   .strict();
 export type WatchTask = z.infer<typeof WatchTaskSchema>;

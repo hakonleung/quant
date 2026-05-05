@@ -19,6 +19,33 @@ const TasksFileSchema = z.array(WatchTaskSchema);
 
 const MIN_FLUSH_INTERVAL_MS = 1_000;
 
+/**
+ * Pre-zod migration of `tasks.json` to the current condition shape.
+ * Pct conditions persisted before the explicit `op` field arrived
+ * inferred direction from the sign of `thresholdPct` (negative → lte,
+ * non-negative → gte); apply the same rule on load so existing user
+ * tasks parse cleanly without data loss.
+ */
+function migrateLegacyTasks(raw: unknown): unknown {
+  if (!Array.isArray(raw)) return raw;
+  return raw.map((task) => {
+    if (typeof task !== 'object' || task === null) return task;
+    const t = task as Record<string, unknown>;
+    const conds = t['conditions'];
+    if (!Array.isArray(conds)) return task;
+    const migrated = conds.map((c) => {
+      if (typeof c !== 'object' || c === null) return c;
+      const cc = c as Record<string, unknown>;
+      if (cc['kind'] !== 'pct' || cc['op'] !== undefined) return c;
+      const thr = cc['thresholdPct'];
+      const op =
+        typeof thr === 'string' && thr.trim().startsWith('-') ? 'lte' : 'gte';
+      return { ...cc, op };
+    });
+    return { ...t, conditions: migrated };
+  });
+}
+
 @Injectable()
 export class WatchTaskStore {
   private readonly logger = new Logger(WatchTaskStore.name);
@@ -39,7 +66,7 @@ export class WatchTaskStore {
     return this.withLock(async () => {
       if (this.loaded) return;
       const raw = await readJsonOr<unknown>(this.tasksFile, []);
-      const parsed = TasksFileSchema.safeParse(raw);
+      const parsed = TasksFileSchema.safeParse(migrateLegacyTasks(raw));
       if (!parsed.success) {
         this.logger.warn(`tasks.json failed validation, starting empty: ${parsed.error.message}`);
         this.loaded = true;

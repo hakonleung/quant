@@ -1,7 +1,8 @@
 /**
  * Pure trigger evaluator for Watch (`docs/modules/W-0-watch.md` §4).
  *
- * Zero IO, zero state — given a {@link SpotQuoteDecimal} and a single
+ * Zero IO, zero state — given a {@link SpotQuoteDecimal}, an optional
+ * previous-sample price (same trading day), and a single
  * {@link WatchCondition}, returns `true` iff the condition fires.
  *
  * Decimal arithmetic only: callers must convert wire-format strings to
@@ -12,7 +13,19 @@ import { Decimal } from 'decimal.js';
 import type { WatchBaseline, WatchCondition } from '@quant/shared';
 import type { SpotQuoteDecimal } from './types.js';
 
-export function pickBaseline(quote: SpotQuoteDecimal, baseline: WatchBaseline): Decimal {
+export interface EvalContext {
+  readonly quote: SpotQuoteDecimal;
+  /**
+   * Last successful sample's `last` price within the current trading
+   * day; `null` when no prior sample exists or the cached one is from
+   * a different trading day. Required input for the `prev` baseline.
+   */
+  readonly prevSamplePrice: Decimal | null;
+}
+
+type QuoteBaseline = Exclude<WatchBaseline, 'prev'>;
+
+export function pickBaseline(quote: SpotQuoteDecimal, baseline: QuoteBaseline): Decimal {
   switch (baseline) {
     case 'prev_close':
       return quote.prevClose;
@@ -23,14 +36,19 @@ export function pickBaseline(quote: SpotQuoteDecimal, baseline: WatchBaseline): 
   }
 }
 
-export function evaluate(quote: SpotQuoteDecimal, c: WatchCondition): boolean {
+function resolveBaseline(ctx: EvalContext, baseline: WatchBaseline): Decimal | null {
+  if (baseline === 'prev') return ctx.prevSamplePrice;
+  return pickBaseline(ctx.quote, baseline);
+}
+
+export function evaluate(ctx: EvalContext, c: WatchCondition): boolean {
   if (c.kind === 'pct') {
-    const base = pickBaseline(quote, c.baseline);
-    if (base.lte(0)) return false;
-    const deltaPct = quote.last.minus(base).div(base).mul(100);
+    const base = resolveBaseline(ctx, c.baseline);
+    if (base === null || base.lte(0)) return false;
+    const deltaPct = ctx.quote.last.minus(base).div(base).mul(100);
     const thr = new Decimal(c.thresholdPct);
-    return thr.gte(0) ? deltaPct.gte(thr) : deltaPct.lte(thr);
+    return c.op === 'gte' ? deltaPct.gte(thr) : deltaPct.lte(thr);
   }
   const thr = new Decimal(c.thresholdPrice);
-  return c.op === 'gte' ? quote.last.gte(thr) : quote.last.lte(thr);
+  return c.op === 'gte' ? ctx.quote.last.gte(thr) : ctx.quote.last.lte(thr);
 }
