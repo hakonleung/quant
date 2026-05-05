@@ -1,219 +1,34 @@
-# 集成 — LLM 与 Embedding 供应商（llm-providers）
+# LLM Providers
 
-## 1. 目标
+## 用途
 
-LLM 调用和向量嵌入是消息面分析与 NL→DSL 的核心依赖。必须做到：
+- NL → DSL 翻译（screen 模块）
+- 新闻舆情分析 + 主题归纳（sentiment 模块）
 
-- 多供应商可切换（deepseek / kimi / openai-compat），主路通过 env 配置
-- 强制结构化输出（schema 校验）
-- 失败重试 + 降级
-- token 计量 + 成本归账
-- 可在测试中用录制回放
+均使用 **OpenAI 兼容 API**，统一封装。
 
-## 2. 端口
+## 适配器
 
-```python
-# ports/llm.py
-class LLMPort(Protocol):
-    name: str
+| 文件 | 说明 |
+| ---- | ---- |
+| `quant_core/ports/llm_client.py` | 抽象：`chat(messages, schema?, tools?) -> Result` |
+| `quant_io/llm/openai_compatible.py` | 默认实现，支持流式 / 结构化输出 / web_search 工具 |
+| `quant_io/llm/deepseek_client.py` | DeepSeek 特化（rate limit / 工具语义微调） |
+| `quant_io/llm/providers.py` | 工厂：从 `.env` 选 provider + 构造 client |
 
-    def chat(
-        self,
-        messages: list[Message],
-        *,
-        schema: type[BaseModel] | None = None,
-        max_tokens: int = 2048,
-        temperature: float = 0.0,
-        tools: list[ToolDef] | None = None,
-        trace_id: str,
-    ) -> LLMResponse: ...
+## 已验证 provider
 
-@dataclass(frozen=True, slots=True)
-class LLMResponse:
-    content: str | BaseModel        # schema 不空时为模型实例
-    tool_calls: list[ToolCall]
-    usage: TokenUsage
-    raw: dict                       # 供调试，业务代码不应依赖
-```
+| Provider | 模型 | 用途 | 备注 |
+| -------- | ---- | ---- | ---- |
+| Kimi (Moonshot) | `kimi-k2-*` | sentiment 主路径 | 内置 web_search |
+| DeepSeek | `deepseek-chat` | NL2DSL 主路径 | 便宜稳定 |
+| Qwen / 通义 | — | 实验中（`scripts/try_qwen_search.py`） | |
 
-```python
-# ports/embedding.py
-class EmbeddingPort(Protocol):
-    name: str
-    dim: int
-    def embed(self, texts: Sequence[str], *, trace_id: str) -> NDArray[np.float32]: ...
-```
+切换通过 `.env` 中 `LLM_PROVIDER` + 对应 API key 完成；业务代码不感知。
 
-## 3. v1 适配器
+## 调用规约
 
-| 适配器            | 文件                                    | 备注                                                          |
-| ----------------- | --------------------------------------- | ------------------------------------------------------------- |
-| `DeepSeekAdapter` | `quant_io/adapters/llm/deepseek.py`     | OpenAI 兼容协议；结构化输出走 `response_format = json_schema` |
-| `KimiAdapter`     | `quant_io/adapters/llm/kimi.py`         | OpenAI 兼容协议；额外支持内置 `$web_search` 工具（见下）      |
-| `BgeM3Adapter`    | `quant_io/adapters/embedding/bge_m3.py` | 本地或外部 endpoint 二选一                                    |
-
-### 3.1 Kimi 内置 web_search
-
-Kimi 对 OpenAI 工具调用协议做了扩展，支持 `tools=[{"type": "builtin_function", "function": {"name": "$web_search"}}]`。LLM 自主在多步 reasoning 中调用，平台自动执行联网搜索并把结果回填给模型。
-
-- `KimiAdapter.chat` 在 `tools` 列表里允许传入这个 builtin function；`LLMChain` 检测到 `tool_calls` 后自动 echo 回模型，直到 `finish_reason="stop"`（与普通 function-call 流程一致）
-- 计费：每次 `$web_search` 触发按 Kimi 价目表计入 `TokenUsage.cost_usd`（adapter 内部读 response 的 `usage.search_count` 字段）
-- 仅 Kimi 提供；DeepSeek 当前没有等价工具。消息面分析模块（`docs/modules/06-sentiment-analysis.md`）将其作为硬依赖，Kimi quota 耗尽时直接抛 `SentimentUnavailable`，不做盲降级
-
-**主路与兜底由 env 配置决定**（见 §10），不在 adapter 中写死。两家供应商上线 PK 一段时间后，根据成本/质量/限流再决定主路；底层抽象保证切换零代码改动。
-
-## 4. 结构化输出
-
-强制 schema：
-
-```python
-class DSLOutput(BaseModel):
-    plan: ScreenPlan
-
-response = llm.chat(messages, schema=DSLOutput, ...)
-plan: ScreenPlan = response.content.plan   # 已是合法对象
-```
-
-实现策略（按供应商）：
-
-- DeepSeek / Kimi（OpenAI 兼容）：用 `response_format = { type: "json_schema", json_schema: { name, schema, strict: true }}`
-- 不支持 strict json_schema 的 provider：fallback 到 prompt-engineering（提示词中嵌 schema + few-shot），输出后用 pydantic 校验
-- 校验失败 → 自动重试一次，prompt 中携带 schema 错误反馈
-- 仍失败 → 抛 `LLMSchemaError`
-
-## 5. 重试与降级
-
-```python
-class LLMChain:
-    def __init__(self, providers: list[LLMPort], retry: RetryPolicy) -> None: ...
-    def chat(self, ...) -> LLMResponse: ...
-```
-
-重试规则：
-
-- `LLMTransientError`（429 / 5xx / timeout） → 退避重试
-- `LLMSchemaError` → 重试一次，把错误反馈塞进 messages
-- `LLMQuotaExhausted` → 立即降级到下一个 provider
-- `LLMContentFiltered` → 不重试，转抛领域异常
-
-## 6. 缓存
-
-**Prompt + schema → 响应** 哈希缓存。
-
-```python
-class CachingLLM(LLMPort):
-    def __init__(self, inner: LLMPort, cache: KeyValueStore, ttl_sec: int) -> None: ...
-    def chat(self, messages, schema, ...):
-        key = sha256(canonical_json(messages, schema, params))
-        if hit := cache.get(key):
-            return deserialize(hit)
-        resp = self.inner.chat(...)
-        cache.put(key, serialize(resp), ttl_sec=self.ttl_sec)
-        return resp
-```
-
-缓存策略：
-
-- `temperature=0` 时启用（默认 on）
-- `temperature>0` 不缓存
-- 默认 TTL 24h；用户可在 UI 强制 bypass
-
-## 7. 计量与成本
-
-```python
-@dataclass(frozen=True, slots=True)
-class TokenUsage:
-    input_tokens: int
-    output_tokens: int
-    cached_input_tokens: int   # provider 级 prompt cache 命中
-    cost_usd: Decimal          # 由 provider 价目表计算
-```
-
-每次调用追加到：
-
-```
-data/_audit/llm/<date>.jsonl
-{ "trace_id": "...", "provider": "deepseek", "model": "...", "node": "per_stock_drivers", "usage": {...}, "duration_ms": ... }
-```
-
-UI `/admin/llm` 展示按天/按节点的成本。
-
-## 8. 限流
-
-每个 provider 单独配置：
-
-```python
-class RateLimit:
-    requests_per_min: int
-    input_tokens_per_min: int
-    output_tokens_per_min: int
-```
-
-实现：令牌桶（`pyrate-limiter` 或自实现），超限时排队（短）或直接抛 `RateLimited`（长）。
-
-并发控制：每 provider semaphore，默认 4。
-
-## 9. 录制 / 回放（测试用）
-
-```python
-class ReplayLLM(LLMPort):
-    def __init__(self, fixture_path: Path) -> None: ...
-    def chat(self, messages, ...) -> LLMResponse:
-        key = sha256(canonical(messages, ...))
-        return self._fixtures[key]   # 缺失 → 抛 RecordedFixtureMissing
-```
-
-CI 默认用 `ReplayLLM`，fixture 由开发者用 `RecordingLLM` 包装真 LLM 跑一次后落地。
-
-`RecordingLLM`：透传 + 落 fixture。开关：`QUANT_LLM_RECORD=1`。
-
-## 10. 配置
-
-Provider 目录硬编码在 `services/py/quant_io/llm/providers.py` 的 `LLM_PROVIDERS` 元组里（base_url / 模型名 / 是否原生支持 web search / 对应的 API key env 名），列表顺序即优先级。**没有 YAML / TOML 配置文件** —— 一份 fresh checkout 只要在 `.env` 里填 key 就能跑。
-
-选择规则（见 `build_llm_client`）：
-
-1. `need_web_search=True` → 第一个 `is_pro_web_search=True` 且 env 中有 key 的 provider，用其 `model_pro`
-2. `use_flash=True` → 第一个 `model_flash` 非空且 env 中有 key 的 provider，用其 `model_flash`
-3. 其它 → 第一个 env 中有 key 的 provider，用其 `model_pro`
-
-`.env` 只放 API key；用哪个 provider 由"哪些 key 实际存在"决定：
-
-```bash
-DEEPSEEK_API_KEY=sk-...
-MOONSHOT_API_KEY=sk-...
-```
-
-新增 provider = 在 `LLM_PROVIDERS` 末尾追加一行 + 在 `.env.example` 加注释；不需要改任何 YAML。
-
-## 11. 安全
-
-- API key 走 `.env`，pydantic-settings `SecretStr` 加载
-- 日志中 mask；审计 jsonl 不写 key 值
-- prompt 中**不**含用户敏感信息（v1 单用户场景下风险可控；v2 多用户时按用户隔离 + 审计日志）
-
-## 12. 测试要求
-
-### 12.1 unit
-
-- `LLMChain`：失败切换、schema 校验失败重试、quota 立即降级
-- `CachingLLM`：相同 prompt 命中缓存、不同 schema 不命中
-- token 计费：边界（缓存命中、长输出）
-
-### 12.2 integration
-
-- `ReplayLLM` + 真实 graph：完整 sentiment 流程不调外网
-
-### 12.3 contract
-
-- `provider.chat(schema=X)` 必须返回符合 X 的对象，违反 = MAJOR
-- 录制 fixture 升级时（model 升级），主动重录 + diff 验证
-
-## 13. 风险与备注
-
-- DeepSeek 与 Kimi 都走 OpenAI 兼容协议，可共用同一个 `OpenAICompatAdapter` 基类，差异仅在 base_url + 默认 model；新增供应商成本低
-- 不同 provider 的结构化输出能力不一致（DeepSeek 支持 strict json_schema，Kimi v1 部分模型仅支持 json_object）→ adapter 内做能力探测 + fallback
-- `cached_input_tokens` 只有部分 provider 提供；缺失时记 0
-- 同一 prompt 不同 provider 输出会有差异；schema 校验是底线，UX 保持不变
-- bge-m3 模型大（~600MB），v1 默认用外部 endpoint；本地推理留 v2 备选
-- 国产模型 API 在国内访问稳定，但海外部署时延会显著增加——v2 上云时考虑 multi-region key 或在国内部署 LLM 调用代理
+- **结构化输出**：用 JSON schema（pydantic）+ 二次 `model_validate` 校验；失败重试 ≤ 2 次再抛 `LLM_BAD_OUTPUT`。
+- **超时**：请求 30s，工具调用 60s。
+- **token 上限**：在 adapter 内按模型固定，超长 prompt 截断 + 警告日志。
+- **不缓存原始 LLM 响应**：缓存发生在业务层（参见 `docs/modules/05-sentiment.md`）。

@@ -1,8 +1,14 @@
 # RFC 0002 — 增量更新与错误恢复
 
-| Status | Draft      |
+| Status | **Partially implemented**（核心模型 + 文件原子写已落地；死信 / 对账 / UI 尚未） |
 | ------ | ---------- |
 | Date   | 2026-05-01 |
+
+> **当前状态**：
+> - ✅ §3 任务分层：实现于 `apps/api/src/modules/orchestration/`（cron + 内存队列 + workers）。
+> - ✅ §6 水位、§9 锁与并发、§10 一致性：通过 `quant_cache/parquet_kline_repo.py` 的 `tempfile + os.replace + FileLock` 实现。
+> - ⚠️ §5 死信存储 / §7 对账 / §12 监控：v1 仅做了 `cache-inspector` 巡检 + 日志告警；UI 死信页与抽样对账 reconciler 暂缓。
+> - 注：原 §6.2 提到的 News 水位已废弃（项目不再维护本地新闻库）。
 
 ## 1. 背景
 

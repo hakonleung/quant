@@ -2,16 +2,16 @@
 
 面向个人投资者的量化选股工作台 — 基于 K 线技术形态 + 舆情消息面，辅助决策中短期交易。
 
-详见 [`docs/requirements.md`](docs/requirements.md) 与 [`docs/architecture.md`](docs/architecture.md)。
+详见 [`docs/architecture.md`](docs/architecture.md)。
 工程规约（最高指令）：[`CLAUDE.md`](CLAUDE.md)。
 
 ## 技术栈
 
-- **Next.js 14** (App Router) — 前端
-- **NestJS 10** — HTTP 网关 / 任务编排
-- **Python 3.11** — 计算、LangGraph、数据 IO
-- 跨进程：**Apache Arrow Flight (gRPC)** + **protobuf**
-- 缓存：**Parquet + DuckDB**（v1）
+- **Next.js 14** (App Router) + **Chakra UI 3** + **TanStack Query** — 前端
+- **NestJS 10** — HTTP 网关 / cron + 内存队列编排
+- **Python 3.11** — 计算 / 数据 IO / LLM 调用
+- 跨进程：**Apache Arrow Flight (gRPC)**
+- 缓存：**Parquet + DuckDB + 本地 KV**（v1 无 Redis、无外部 DB）
 
 ## 前置环境
 
@@ -25,27 +25,27 @@
 ## 一次性 setup
 
 ```bash
-# 安装两栈依赖
 pnpm install
 uv sync
 
-# 复制环境变量模板（不会进 git）
 cp .env.example .env
-# 然后填入 LLM / 数据源的 API key
+# 填入 LLM provider 与 API key（akshare 无需 key）
 ```
 
 ## 日常开发
 
 ```bash
-# 前端开发服务（:3000）
+# 前端 :3000
 pnpm --filter @quant/web dev
 
-# 后端开发服务（:3001）
+# 后端 :3001
 pnpm --filter @quant/api dev
 
-# Python RPC 服务（:8814 gRPC + :8815 Flight）
-uv run python -m quant_rpc.server   # 当 M4 完成后可用
+# Python Arrow Flight :8815
+uv run python -m quant_rpc
 ```
+
+或一把启动：`./scripts/dev.sh`。
 
 ## 跑测试 / 门禁
 
@@ -73,37 +73,48 @@ pnpm check
 | 7    | `mypy --strict`        | Py 类型                                 |
 | 8    | `pytest --cov`         | Py 测试 + 覆盖率（≥ 90%）               |
 
-任一步骤失败即非 0 退出。
-
 ## 仓库结构
 
 ```
 apps/
-  web/         # Next.js
-  api/         # NestJS
+  web/             Next.js（UI）
+  api/             NestJS（HTTP 网关 + cron + 内存队列）
 packages/
-  shared/      # 跨 app 共享类型 / zod / 错误（核心资产，禁 IO）
-  ui/          # React 共享组件
+  shared/          跨 app 共享类型 / zod / 错误（核心资产，禁 IO）
+  ui/              React 共享组件
 services/
-  py/          # Python compute / IO / cache / workflow / rpc
-proto/         # 跨进程契约（M2 引入）
-docs/          # 工程文档
-data/          # 本地缓存（gitignore）
+  py/
+    quant_core/    domain + services + ports + adapters
+    quant_io/      外部数据源 adapter（akshare、LLM、Slack）
+    quant_cache/   Parquet / KV 读取（DuckDB）
+    quant_rpc/     Arrow Flight server
+proto/             跨进程契约（errors.json + codegen）
+data/              本地缓存（gitignore）
+docs/              工程文档
 ```
-
-详见 [`docs/architecture.md`](docs/architecture.md)。
 
 ## 文档导航
 
-| 文件                     | 用途                                            |
-| ------------------------ | ----------------------------------------------- |
-| `CLAUDE.md`              | 工程规约（**最高指令**）                        |
-| `docs/requirements.md`   | 需求 / 用户故事 / 验收标准                      |
-| `docs/architecture.md`   | 系统总览 + 部署拓扑                             |
-| `docs/glossary.md`       | 术语表（量化 + 工程）                           |
-| `docs/modules/0x-*.md`   | 模块详细设计（7 个）                            |
-| `docs/integrations/*.md` | 集成层（缓存 / 数据源 / IPC / LangGraph / LLM） |
-| `docs/rfcs/*.md`         | 重大设计提案（DSL / 增量更新 / 内存与 IPC）     |
+| 路径                              | 内容                                    |
+| --------------------------------- | --------------------------------------- |
+| `CLAUDE.md`                       | 工程规约（**最高指令**）                |
+| `docs/architecture.md`            | 进程拓扑 + 数据流 + 部署                |
+| `docs/glossary.md`                | 术语表                                  |
+| `docs/requirements.md`            | 需求 / 用户故事                         |
+| `docs/modules/01-stock-meta.md`   | 股票元信息                              |
+| `docs/modules/02-kline.md`        | K 线 + 预计算 MA / 前复权               |
+| `docs/modules/03-screen.md`       | 选股 DSL + NL2DSL                       |
+| `docs/modules/04-pattern.md`      | 形态匹配 (DTW)                          |
+| `docs/modules/05-sentiment.md`    | 新闻舆情 (LLM web_search)               |
+| `docs/modules/06-watch.md`        | 自选盯盘                                |
+| `docs/modules/07-orchestration.md`| 后台 cron + 内存队列                    |
+| `docs/modules/08-frontend.md`     | 前端 Feat 框架                          |
+| `docs/modules/09-notifications.md`| 通知（Slack）                           |
+| `docs/integrations/data-sources.md`  | akshare 适配                         |
+| `docs/integrations/llm-providers.md` | LLM provider 抽象                    |
+| `docs/integrations/ipc-py-ts.md`     | Arrow Flight 通信                    |
+| `docs/integrations/cache-strategy.md`| 文件缓存原语 + 不变量                |
+| `docs/rfcs/`                      | 历史 RFC（DSL / 增量 / IPC 设计）       |
 
 ## 开发流程
 
@@ -111,8 +122,6 @@ data/          # 本地缓存（gitignore）
 
 1. 读相关文档，明确边界
 2. 实现（按 §1 风格 + §2 模块化）
-3. 调 `test-generator` 子代理生成测试
-4. 调 `code-reviewer` 子代理 review
-5. 交付汇报含变更清单 + 测试结果 + review 结论
-
-跳过任何一步 = 任务未完成。
+3. `test-generator` 生成测试 + `run-tests` 跑绿
+4. 必要时调 `code-reviewer`
+5. 交付汇报含变更清单 + 测试结果（+ review 结论）

@@ -1,10 +1,12 @@
 # RFC 0001 — 股票筛选 DSL
 
-| Status     | Draft      |
+| Status     | **Implemented**（v1，已在 `quant_core/domain/rules/screen_*.py` + `quant_core/domain/types/screen.py` 落地） |
 | ---------- | ---------- |
 | Author     | (待补)     |
 | Date       | 2026-05-01 |
 | Supersedes | —          |
+
+> **当前状态**：本 RFC 的 §3 节点分类、§4 语义、§6 校验、§9 NL→DSL 已实现并对外暴露（`POST /api/screen/execute` + `POST /api/screen/nl`，两路径已解耦，见 commit `ec106ac`）。§13 中 v1 不做的事项保持不变。下文保留作为权威设计。
 
 ## 1. 动机
 
