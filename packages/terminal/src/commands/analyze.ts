@@ -8,8 +8,8 @@ import type { CommandSpec } from '../registry.js';
 import { confirmPrompt } from '../widgets/confirm-prompt.js';
 import { selectableList } from '../widgets/selectable-list.js';
 import {
+  canceledResolution,
   interactive,
-  outputResolution,
   textCached,
   textErr,
   textOk,
@@ -81,7 +81,7 @@ async function analyzeOneFlow(
       kind: 'command',
       line: `analyze ${code}`,
     }),
-    onNo: () => outputResolution('cancelled', 'info'),
+    onNo: () => canceledResolution,
   });
   return interactive(widget);
 }
@@ -106,7 +106,7 @@ async function analyzeManyConfirm(
     title: `analyze sector ${label}  (${String(codes.length)} codes, paid)`,
     danger: true,
     onYes: () => ({ kind: 'command', line: `analyze sector ${label}` }),
-    onNo: () => outputResolution('cancelled', 'info'),
+    onNo: () => canceledResolution,
   });
   return interactive(widget);
 }
@@ -132,7 +132,7 @@ function guidedAnalyze(ctx: Parameters<CommandSpec['run']>[1]) {
         title: `analyze ${String(s.code)} ${String(s.name)}  (LLM, paid)`,
         danger: true,
         onYes: () => ({ kind: 'command', line: `analyze ${String(s.code)} --force` }),
-        onNo: () => outputResolution('cancelled', 'info'),
+        onNo: () => canceledResolution,
       }),
     ),
   });

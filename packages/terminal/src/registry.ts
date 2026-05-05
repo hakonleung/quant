@@ -9,7 +9,7 @@
 import type { CompletionCandidate } from './completion/completer.js';
 import type { StockIndex } from './completion/stock-index.js';
 import type { DataActionRunner } from './actions/types.js';
-import type { CommitResolution, InteractiveWidgetAny, OutputEntry } from './engine/state.js';
+import type { CommitResolution, Event, InteractiveWidgetAny, OutputEntry } from './engine/state.js';
 import type { ParsedArgv } from './engine/parse-argv.js';
 
 /* ---------- ctx & stores shim ---------- */
@@ -34,7 +34,12 @@ export interface CommandCtx {
 
 export type CommandRunOutput =
   | { readonly kind: 'text'; readonly status: OutputEntry['status']; readonly tail: { readonly body: string } }
-  | { readonly kind: 'interactive'; readonly widget: InteractiveWidgetAny };
+  | { readonly kind: 'interactive'; readonly widget: InteractiveWidgetAny }
+  /**
+   * Bypass the normal `result` event and dispatch one or more engine events
+   * directly. Used by `clear`, `clear last N`, etc.
+   */
+  | { readonly kind: 'engine'; readonly events: readonly Event[] };
 
 export interface CommandSpec {
   readonly name: string;

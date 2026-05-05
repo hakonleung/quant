@@ -24,24 +24,24 @@ describe('formPrompt — basic editing', () => {
     expect(s.values['name']).toBe('abc');
   });
 
-  it('Tab moves to next field; cycles around', () => {
+  it('Down/Up moves to next/prev field; cycles around', () => {
     let s = w.initialState;
-    let step = w.handleKey(s, k('Tab'));
+    let step = w.handleKey(s, k('Down'));
     if (step.kind === 'state') s = step.next;
     expect(s.active).toBe(1);
-    step = w.handleKey(s, k('Tab'));
+    step = w.handleKey(s, k('Down'));
     if (step.kind === 'state') s = step.next;
     expect(s.active).toBe(0);
   });
 
-  it('Up/Down cycles enum values', () => {
+  it('Left/Right cycles enum values', () => {
     let s = w.initialState;
-    let step = w.handleKey(s, k('Tab'));
+    let step = w.handleKey(s, k('Down'));
     if (step.kind === 'state') s = step.next;
-    step = w.handleKey(s, k('Down'));
+    step = w.handleKey(s, k('Right'));
     if (step.kind === 'state') s = step.next;
     expect(s.values['kind']).toBe('dynamic');
-    step = w.handleKey(s, k('Down'));
+    step = w.handleKey(s, k('Right'));
     if (step.kind === 'state') s = step.next;
     expect(s.values['kind']).toBe('user');
   });

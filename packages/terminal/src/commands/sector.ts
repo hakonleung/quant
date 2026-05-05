@@ -19,6 +19,7 @@ import { selectableList } from '../widgets/selectable-list.js';
 import {
   interactive,
   noopResolution,
+  canceledResolution,
   outputResolution,
   textErr,
   textOk,
@@ -77,7 +78,7 @@ async function runList(ctx: Parameters<CommandSpec['run']>[1]) {
             title: `analyze sector ${String(s.name)} (paid)`,
             danger: true,
             onYes: () => ({ kind: 'command', line: `analyze sector ${String(s.id)} --force` }),
-            onNo: () => outputResolution('cancelled', 'info'),
+            onNo: () => canceledResolution,
           }),
         ),
       },
@@ -89,7 +90,7 @@ async function runList(ctx: Parameters<CommandSpec['run']>[1]) {
             title: `delete sector ${String(s.name)}?`,
             danger: true,
             onYes: () => ({ kind: 'command', line: `sector rm ${String(s.id)}` }),
-            onNo: () => outputResolution('cancelled', 'info'),
+            onNo: () => canceledResolution,
           }),
         ),
       },
@@ -100,18 +101,26 @@ async function runList(ctx: Parameters<CommandSpec['run']>[1]) {
 
 async function runShow(argv: { positional: readonly string[] }, ctx: Parameters<CommandSpec['run']>[1]) {
   const idOrName = argv.positional[1];
-  if (idOrName === undefined) return textErr('usage: sector show <id|name>');
-  if (idOrName.toLowerCase() === ALL_ID) {
-    return textErr('sector ALL is synthetic and not enumerable. Use `stock find` instead.');
+  if (idOrName === undefined) return textErr('usage: sector show <id|name>   (use `all` for the full universe)');
+  const isAll = idOrName.toLowerCase() === ALL_ID;
+  let sectorName: string;
+  let codes: readonly string[];
+  if (isAll) {
+    sectorName = 'ALL';
+    codes = ctx.stockIndex.all().map((m) => m.code);
+  } else {
+    const r = await ctx.actions.run(sectorShowAction, { idOrName }, { signal: ctx.signal });
+    sectorName = r.data.name;
+    codes = r.data.codes;
   }
-  const r = await ctx.actions.run(sectorShowAction, { idOrName }, { signal: ctx.signal });
-  const sector = r.data;
+  // Snapshots for `all` could be huge; cap at the first 200 for the table.
+  const previewCodes = codes.slice(0, 200);
   const snaps = await ctx.actions.run(
     stockSnapshotsAction,
-    { codes: sector.codes },
+    { codes: previewCodes },
     { signal: ctx.signal },
   );
-  const items = sector.codes.map((code) => {
+  const items = previewCodes.map((code) => {
     const meta = ctx.stockIndex.byCode(code);
     const snap = snaps.data.find((s) => s.code === code);
     return {
@@ -121,8 +130,11 @@ async function runShow(argv: { positional: readonly string[] }, ctx: Parameters<
       pe: snap?.pe_ttm ?? 0,
     };
   });
+  const titleSuffix = codes.length > items.length
+    ? `${String(items.length)} of ${String(codes.length)} shown`
+    : `${String(items.length)} members`;
   const widget = selectableList({
-    title: `sector ${sector.name} (${String(items.length)} members)`,
+    title: `sector ${sectorName} (${titleSuffix})`,
     items,
     columns: [
       { key: 'code', header: 'CODE', max: 8 },
@@ -140,7 +152,7 @@ async function runShow(argv: { positional: readonly string[] }, ctx: Parameters<
             title: `analyze ${String(s.code)} (paid)`,
             danger: true,
             onYes: () => ({ kind: 'command', line: `analyze ${String(s.code)} --force` }),
-            onNo: () => outputResolution('cancelled', 'info'),
+            onNo: () => canceledResolution,
           }),
         ),
       },
@@ -300,7 +312,7 @@ function addUserConfirm(ctx: Parameters<CommandSpec['run']>[1], name: string, co
       void ctx.actions.run(sectorUpsertAction, { sector }, { signal: ctx.signal });
       return outputResolution(`saved user sector "${name}" (${String(codes.length)} codes)`, 'ok');
     },
-    onNo: () => outputResolution('cancelled', 'info'),
+    onNo: () => canceledResolution,
   });
 }
 
@@ -337,7 +349,7 @@ function addDynamicConfirm(ctx: Parameters<CommandSpec['run']>[1], name: string,
         'ok',
       );
     },
-    onNo: () => outputResolution('cancelled', 'info'),
+    onNo: () => canceledResolution,
   });
 }
 

@@ -4,7 +4,6 @@
  */
 
 import { ANSI, paint } from '../render/ansi.js';
-import { renderHints } from './hint-bar.js';
 import type { CommitResolution, InteractiveWidget, KeyHint, KeySpec, WidgetStep } from './types.js';
 
 export interface ConfirmConfig {
@@ -58,11 +57,7 @@ function renderBody(cfg: ConfirmConfig, state: ConfirmState, width: number): str
   const lines: string[] = [head];
   if (body.length > 0) lines.push(body);
   lines.push(`${yes}    ${no}`);
-  const hints = renderHints(buildHints(), { width });
-  if (hints.length > 0) {
-    lines.push(paint('─'.repeat(Math.max(8, Math.min(60, width))), ANSI.gray));
-    lines.push(hints);
-  }
+  void width;
   return lines.join('\n');
 }
 

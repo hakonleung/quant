@@ -2,6 +2,9 @@ import {
   watchListAction,
   watchRemoveAction,
   watchUpsertAction,
+  type WatchBaseline,
+  type WatchCondition,
+  type WatchOp,
   type WatchTask,
 } from '../actions/registry.js';
 import { ANSI, paint } from '../render/ansi.js';
@@ -10,12 +13,22 @@ import { confirmPrompt } from '../widgets/confirm-prompt.js';
 import { formPrompt } from '../widgets/form-prompt.js';
 import { selectableList } from '../widgets/selectable-list.js';
 import {
+  canceledResolution,
   interactive,
   outputResolution,
   textErr,
   textOk,
   widgetResolution,
 } from '../widgets/helpers.js';
+
+const BASELINES: readonly WatchBaseline[] = ['prev_close', 'day_high', 'day_low', 'prev'];
+const OPS: readonly WatchOp[] = ['gte', 'lte'];
+
+function currencySuffix(market: 'a' | 'hk' | 'us'): string {
+  if (market === 'us') return 'USD';
+  if (market === 'hk') return 'HKD';
+  return 'CNY';
+}
 
 export const watchCommand: CommandSpec = {
   name: 'watch',
@@ -25,36 +38,69 @@ export const watchCommand: CommandSpec = {
     const sub = argv.positional[0];
     if (sub === undefined) return textErr('watch: missing subcommand (list/add/rm)');
     if (sub === 'list') return runList(ctx);
-    if (sub === 'add') return runAdd(argv, ctx);
+    if (sub === 'add') return runAdd(ctx);
     if (sub === 'rm') return runRemove(argv, ctx);
     return textErr(`watch: unknown subcommand ${sub}`);
   },
 };
+
+function describeCondition(
+  c: WatchCondition,
+  market: 'a' | 'hk' | 'us',
+): { kind: string; base: string; op: string; value: string } {
+  if (c.kind === 'pct') {
+    return {
+      kind: 'pct',
+      base: c.baseline,
+      op: c.op === 'gte' ? '≥' : '≤',
+      value: `${c.thresholdPct}%`,
+    };
+  }
+  return {
+    kind: 'abs',
+    base: '—',
+    op: c.op === 'gte' ? '≥' : '≤',
+    value: `${c.thresholdPrice} ${currencySuffix(market)}`,
+  };
+}
 
 async function runList(ctx: Parameters<CommandSpec['run']>[1]) {
   const r = await ctx.actions.run(watchListAction, {}, { signal: ctx.signal });
   if (r.data.length === 0) {
     return textOk(paint('no watch tasks — try `watch add`', ANSI.gray));
   }
-  const items = r.data.map((t) => ({
-    market: t.market,
-    code: t.code,
-    name: t.name,
-    kind: t.kind,
-    threshold: t.kind === 'pct' ? `${String(t.thresholdPct ?? 0)}%` : String(t.thresholdPrice ?? '—'),
-    intervalSec: t.intervalSec,
-    hits: t.hitCount,
-  }));
+  const items = r.data.map((t) => {
+    const first = t.conditions[0];
+    const cond = first !== undefined
+      ? describeCondition(first, t.market)
+      : { kind: '—', base: '—', op: '—', value: '—' };
+    const more = t.conditions.length > 1 ? ` +${String(t.conditions.length - 1)}` : '';
+    return {
+      market: t.market,
+      code: t.code,
+      name: t.name,
+      kind: cond.kind,
+      base: cond.base,
+      op: cond.op,
+      value: `${cond.value}${more}`,
+      intervalMin: `${String(Math.round(t.intervalSec / 60))}min`,
+      pushMin: `${String(Math.round(t.pushIntervalSec / 60))}min`,
+      hits: t.hitCount,
+    };
+  });
   const widget = selectableList({
     title: 'watch tasks',
     items,
     columns: [
       { key: 'market', header: 'MKT', max: 4 },
       { key: 'code', header: 'CODE', max: 8 },
-      { key: 'name', header: 'NAME', max: 14 },
-      { key: 'kind', header: 'K', max: 4 },
-      { key: 'threshold', header: 'THR', max: 8, align: 'right' },
-      { key: 'intervalSec', header: 'IVL', align: 'right' },
+      { key: 'name', header: 'NAME', max: 12 },
+      { key: 'kind', header: 'KIND', max: 4 },
+      { key: 'base', header: 'BASE', max: 10 },
+      { key: 'op', header: 'OP', max: 3 },
+      { key: 'value', header: 'VALUE', max: 10, align: 'right' },
+      { key: 'intervalMin', header: 'IVL', align: 'right' },
+      { key: 'pushMin', header: 'PUSH', align: 'right' },
       { key: 'hits', header: 'HIT', align: 'right' },
     ],
     onCommit: (s) => ({ kind: 'command', line: `stock info ${String(s.code)}` }),
@@ -70,7 +116,7 @@ async function runList(ctx: Parameters<CommandSpec['run']>[1]) {
               kind: 'command',
               line: `watch rm ${String(s.market)} ${String(s.code)}`,
             }),
-            onNo: () => outputResolution('cancelled', 'info'),
+            onNo: () => canceledResolution,
           }),
         ),
       },
@@ -79,28 +125,14 @@ async function runList(ctx: Parameters<CommandSpec['run']>[1]) {
   return interactive(widget);
 }
 
-async function runAdd(argv: { positional: readonly string[]; flags: Readonly<Record<string, string | boolean>> }, ctx: Parameters<CommandSpec['run']>[1]) {
-  // Short form: `watch add --market=a --code=600519 --pct=3`
-  const market = argv.flags['market'];
-  const code = argv.flags['code'];
-  const pct = argv.flags['pct'];
-  if (typeof market === 'string' && typeof code === 'string') {
-    const meta = ctx.stockIndex.byCode(code);
-    const task: WatchTask = {
-      market: market as 'a' | 'hk' | 'us',
-      code,
-      name: meta?.name ?? code,
-      kind: 'pct',
-      thresholdPct: typeof pct === 'string' ? Number.parseFloat(pct) : 3,
-      thresholdPrice: null,
-      intervalSec: 30,
-      enabled: true,
-      hitCount: 0,
-    };
-    await ctx.actions.run(watchUpsertAction, { task }, { signal: ctx.signal });
-    return textOk(`watch task created: ${market}/${code} (pct ±${String(task.thresholdPct ?? 3)}%)`);
-  }
-  // Guided
+/**
+ * Guided `watch add` — fields aligned with the project schema:
+ *   market | code | kind | baseline | op | value | interval (min)
+ *
+ * Up/Down switches between fields; Left/Right cycles options inside the
+ * active enum field; printable chars edit text/number fields.
+ */
+function runAdd(ctx: Parameters<CommandSpec['run']>[1]) {
   return interactive(
     formPrompt({
       title: 'watch add',
@@ -119,33 +151,76 @@ async function runAdd(argv: { positional: readonly string[]; flags: Readonly<Rec
           validate: (v) => (/^\d{6}$/u.test(v) ? null : 'must be 6 digits'),
         },
         { key: 'kind', label: 'kind', kind: 'enum', options: ['pct', 'abs'], initial: 'pct' },
-        { key: 'threshold', label: 'threshold', kind: 'number', initial: '3' },
-        { key: 'intervalSec', label: 'intervalSec', kind: 'number', initial: '30' },
+        {
+          key: 'baseline',
+          label: 'baseline',
+          kind: 'enum',
+          options: [...BASELINES],
+          initial: 'prev_close',
+        },
+        { key: 'op', label: 'op', kind: 'enum', options: [...OPS], initial: 'gte' },
+        {
+          key: 'value',
+          label: 'value',
+          kind: 'number',
+          initial: '5',
+          placeholder: '% (pct) or price (abs)',
+          suffix: (v) =>
+            v['kind'] === 'abs'
+              ? currencySuffix((v['market'] ?? 'a') as 'a' | 'hk' | 'us')
+              : '%',
+        },
+        { key: 'intervalMin', label: 'interval (min)', kind: 'number', initial: '1', suffix: () => 'min' },
+        { key: 'pushMin', label: 'push (min)', kind: 'number', initial: '5', suffix: () => 'min' },
       ],
       onSubmit: (v) => {
         const meta = ctx.stockIndex.byCode(v['code'] ?? '');
         const kind = v['kind'] === 'abs' ? 'abs' : 'pct';
-        const threshold = Number.parseFloat(v['threshold'] ?? '0');
-        const intervalSec = Math.max(1, Math.floor(Number.parseFloat(v['intervalSec'] ?? '30')));
+        const value = (v['value'] ?? '').trim();
+        if (value.length === 0 || !/^-?\d+(\.\d+)?$/u.test(value)) {
+          return outputResolution('value must be a decimal number', 'err');
+        }
+        if (kind === 'abs' && Number(value) <= 0) {
+          return outputResolution('abs value must be > 0', 'err');
+        }
+        if (kind === 'pct' && Number(value) === 0) {
+          return outputResolution('pct value must be non-zero', 'err');
+        }
+        const intervalMin = Number.parseFloat(v['intervalMin'] ?? '1');
+        const intervalSec = Math.max(5, Math.round(intervalMin * 60));
+        const pushMin = Number.parseFloat(v['pushMin'] ?? '5');
+        const pushIntervalSec = Math.max(60, Math.round(pushMin * 60));
+        const op = (v['op'] === 'lte' ? 'lte' : 'gte') satisfies WatchOp;
+        const condition: WatchCondition =
+          kind === 'pct'
+            ? {
+                kind: 'pct',
+                baseline: ((BASELINES as readonly string[]).includes(v['baseline'] ?? '')
+                  ? (v['baseline'] as WatchBaseline)
+                  : 'prev_close'),
+                op,
+                thresholdPct: value,
+              }
+            : { kind: 'abs', op, thresholdPrice: value };
         const task: WatchTask = {
           market: (v['market'] ?? 'a') as 'a' | 'hk' | 'us',
           code: v['code'] ?? '',
           name: meta?.name ?? (v['code'] ?? ''),
-          kind,
-          thresholdPct: kind === 'pct' ? threshold : null,
-          thresholdPrice: kind === 'abs' ? threshold : null,
+          conditions: [condition],
           intervalSec,
+          pushIntervalSec,
           enabled: true,
           hitCount: 0,
         };
+        const desc = describeCondition(condition, task.market);
         return widgetResolution(
           confirmPrompt({
-            title: `create watch ${task.market}/${task.code} (${task.kind} ${String(threshold)})?`,
+            title: `create watch ${task.market}/${task.code} (${desc.kind} ${desc.base} ${desc.op} ${desc.value})?`,
             onYes: () => {
               void ctx.actions.run(watchUpsertAction, { task }, { signal: ctx.signal });
               return outputResolution(`watch task created: ${task.market}/${task.code}`, 'ok');
             },
-            onNo: () => outputResolution('cancelled', 'info'),
+            onNo: () => canceledResolution,
           }),
         );
       },

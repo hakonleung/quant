@@ -7,7 +7,6 @@
 
 import { ANSI, paint } from '../render/ansi.js';
 import { renderTable } from '../render/table.js';
-import { renderHints } from './hint-bar.js';
 import type {
   CommitResolution,
   InteractiveWidget,
@@ -78,13 +77,8 @@ function renderBody(cfg: PickStockLoopConfig, state: PickStockLoopState, width: 
     state.basket.length === 0
       ? paint('basket: (empty)', ANSI.gray)
       : `basket: ${state.basket.map((s) => `${s.code} ${s.name}`).join(', ')}`;
-  const hints = renderHints(buildHints(), { width, hasSelection: matches.length > 0 });
-  const lines = [head, queryLine, list, basketLine];
-  if (hints.length > 0) {
-    lines.push(paint('─'.repeat(Math.max(8, Math.min(60, width))), ANSI.gray));
-    lines.push(hints);
-  }
-  return lines.join('\n');
+  void width;
+  return [head, queryLine, list, basketLine].join('\n');
 }
 
 function snapshotBody(cfg: PickStockLoopConfig, state: PickStockLoopState): string {

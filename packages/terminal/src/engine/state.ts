@@ -79,6 +79,8 @@ export type CommitResolution =
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   | { readonly kind: 'widget'; readonly next: InteractiveWidget<any, any> }
   | { readonly kind: 'output'; readonly entry: Omit<OutputEntry, 'id' | 'kind'> }
+  /** User-initiated abort of the current interaction; collapses to "canceled". */
+  | { readonly kind: 'canceled' }
   | { readonly kind: 'noop' };
 
 export type CommitResolutionAny = CommitResolution;
@@ -147,7 +149,11 @@ export type Event =
   /** Replace the current buffer (used by Tab completion). */
   | { readonly kind: 'setBuffer'; readonly buffer: string; readonly cursor: number }
   /** Show a transient list of completion candidates beneath the prompt. */
-  | { readonly kind: 'setCandidates'; readonly candidates: readonly string[] };
+  | { readonly kind: 'setCandidates'; readonly candidates: readonly string[] }
+  /** Drop the last N "interactions" (a prompt + its trailing entries). */
+  | { readonly kind: 'clearLast'; readonly count: number }
+  /** Wipe all history (engine-level clear). */
+  | { readonly kind: 'clearAll' };
 
 /* ---------- Effects ---------- */
 

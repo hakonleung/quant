@@ -35,6 +35,7 @@ import {
   initialState,
   paint,
   reduce,
+  renderHints,
   runCommand,
   stockListAction,
   stripAnsi,
@@ -42,6 +43,7 @@ import {
   type CommandCtx,
   type Effect,
   type Event,
+  type KeyHint,
   type StockIndex,
   type TerminalState,
 } from '@quant/terminal';
@@ -49,6 +51,7 @@ import {
 import { useUiStore } from '../../lib/stores/ui.store.js';
 
 const PROMPT = paint('▸ ', ANSI.cyan);
+const SPINNER_FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'] as const;
 
 /** Per-instance render memory — what the bridge has already committed to xterm. */
 interface RenderMem {
@@ -58,6 +61,8 @@ interface RenderMem {
   footerRows: number;
   /** True while the very first paint hasn't happened yet. */
   initial: boolean;
+  /** Frame index for the running-state spinner. */
+  spinnerTick: number;
 }
 
 export interface TerminalApi {
@@ -75,8 +80,9 @@ export function useTerminal(): TerminalApi {
   const fitRef = useRef<FitAddon | null>(null);
   const indexRef = useRef<StockIndex>(EMPTY_STOCK_INDEX);
   const abortRef = useRef<AbortController | null>(null);
-  const memRef = useRef<RenderMem>({ committedHistory: 0, footerRows: 0, initial: true });
+  const memRef = useRef<RenderMem>({ committedHistory: 0, footerRows: 0, initial: true, spinnerTick: 0 });
   const paintScheduledRef = useRef<boolean>(false);
+  const spinnerTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const registry = useMemo(() => createDefaultRegistry(), []);
 
@@ -107,7 +113,12 @@ export function useTerminal(): TerminalApi {
     paintScheduledRef.current = true;
     queueMicrotask(() => {
       paintScheduledRef.current = false;
-      paintTerminal(termRef.current, stateRef.current, memRef.current);
+      paintTerminal(
+        termRef.current,
+        stateRef.current,
+        memRef.current,
+        useUiStore.getState().focusCode,
+      );
     });
   }, []);
 
@@ -130,8 +141,8 @@ export function useTerminal(): TerminalApi {
     (eff: Effect): void => {
       if (eff.kind === 'runCommand') {
         const ctx = buildCtx();
-        void runCommand(eff.line, ctx, registry).then((next: Event) => {
-          dispatch(next);
+        void runCommand(eff.line, ctx, registry).then((events: readonly Event[]) => {
+          for (const ev of events) dispatch(ev);
         });
         return;
       }
@@ -215,6 +226,7 @@ export function useTerminal(): TerminalApi {
         letterSpacing: 0,
         lineHeight: 1.15,
         cursorBlink: true,
+        cursorStyle: 'underline',
         convertEol: true,
         scrollback: 1000,
         // Bridge the cyber palette to xterm's ANSI slots so paint() output
@@ -252,6 +264,7 @@ export function useTerminal(): TerminalApi {
       } catch {
         /* host not laid out yet */
       }
+      reserveStatusRow(term);
       term.onData((data) => {
         const key = toKeySpec(data);
         if (key.special !== undefined || key.text !== undefined) {
@@ -269,10 +282,15 @@ export function useTerminal(): TerminalApi {
       });
       termRef.current = term;
       fitRef.current = fit;
-      memRef.current = { committedHistory: 0, footerRows: 0, initial: true };
+      memRef.current = { committedHistory: 0, footerRows: 0, initial: true, spinnerTick: 0 };
 
-      term.writeln(paint('QUANT//OS terminal · type `help` to get started', ANSI.gray));
-      paintTerminal(term, stateRef.current, memRef.current);
+      term.writeln(paint('qX//OS terminal · type `help` to get started', ANSI.gray));
+      paintTerminal(
+        term,
+        stateRef.current,
+        memRef.current,
+        useUiStore.getState().focusCode,
+      );
 
       void preloadIndex(indexRef);
 
@@ -282,6 +300,7 @@ export function useTerminal(): TerminalApi {
         } catch {
           /* */
         }
+        reserveStatusRow(term);
         schedulePaint();
       });
       ro.observe(host);
@@ -300,6 +319,38 @@ export function useTerminal(): TerminalApi {
 
   useEffect(() => () => unmount(), [unmount]);
 
+  // Repaint when the global focus code changes — the bottom status bar
+  // shows `FOCUS <code>` and reads from `ui.store` at paint time, so it
+  // would otherwise stay stale until the next engine event.
+  useEffect(() => {
+    const unsub = useUiStore.subscribe((s, prev) => {
+      if (s.focusCode !== prev.focusCode) schedulePaint();
+    });
+    return () => {
+      unsub();
+    };
+  }, [schedulePaint]);
+
+  // Spinner ticker — animates the running/cancelling/fetching footer.
+  useEffect(() => {
+    const animating = state.phase === 'running' || state.phase === 'cancelling';
+    if (animating && spinnerTimerRef.current === null) {
+      spinnerTimerRef.current = setInterval(() => {
+        memRef.current.spinnerTick = (memRef.current.spinnerTick + 1) % SPINNER_FRAMES.length;
+        schedulePaint();
+      }, 80);
+    } else if (!animating && spinnerTimerRef.current !== null) {
+      clearInterval(spinnerTimerRef.current);
+      spinnerTimerRef.current = null;
+    }
+    return () => {
+      if (spinnerTimerRef.current !== null) {
+        clearInterval(spinnerTimerRef.current);
+        spinnerTimerRef.current = null;
+      }
+    };
+  }, [state.phase, schedulePaint]);
+
   return useMemo<TerminalApi>(() => ({ mount, unmount, state }), [mount, unmount, state]);
 }
 
@@ -317,14 +368,28 @@ async function preloadIndex(ref: React.MutableRefObject<StockIndex>): Promise<vo
 
 /* ---------- incremental rendering ---------- */
 
-function paintTerminal(term: Terminal | null, state: TerminalState, mem: RenderMem): void {
+function paintTerminal(term: Terminal | null, state: TerminalState, mem: RenderMem, focusCode: string | null): void {
   if (term === null) return;
+
+  // History shrunk (e.g. `clear` / `clear last N` reset state.history): we
+  // can't selectively erase past `writeln`s in xterm's scrollback, so wipe
+  // the screen + scrollback and re-write what remains. Reset `initial` so
+  // the next "clear footer" branch falls through to the initial-paint path.
+  const histShrunk = state.history.length < mem.committedHistory;
+  if (histShrunk) {
+    term.clear();
+    term.write('\x1b[2J\x1b[H');
+    mem.committedHistory = 0;
+    mem.footerRows = 0;
+    mem.initial = true;
+  }
 
   // 1. Clear the previous footer in place. After the last paint the cursor
   //    sits on the LAST row of the previous footer (we don't end with \n),
   //    so we move up `footerRows - 1` rows then erase to end of screen.
-  //    On the very first paint there's no footer yet — `\r\x1b[J` is
-  //    enough to ensure we start from column 0 of a clean region.
+  //    `\x1b[J` erases everything from the cursor down — that wipes both
+  //    the active footer AND the bottom status bar, so we re-paint both
+  //    fresh below.
   if (!mem.initial && mem.footerRows > 0) {
     if (mem.footerRows > 1) {
       term.write(`\x1b[${String(mem.footerRows - 1)}A`);
@@ -342,14 +407,93 @@ function paintTerminal(term: Terminal | null, state: TerminalState, mem: RenderM
     mem.committedHistory += 1;
   }
 
-  // 3. Render the active footer and remember how tall it is.
-  const footer = renderFooter(term, state);
-  if (footer.length === 0) {
+  // 3. Render the active footer (prompt / widget body) and remember its row
+  //    count so the next paint can clear it. We re-enable the cursor before
+  //    painting so that, after a previous frame hid it (e.g. an enum field
+  //    in form-prompt), the next text-input footer shows it again. Widgets
+  //    that need it hidden append `\x1b[?25l` at the very end of their body.
+  term.write('\x1b[?25h');
+  const footer = renderFooter(term, state, mem);
+  if (footer.length > 0) {
+    term.write(footer);
+    mem.footerRows = countWrappedRows(footer, term.cols);
+  } else {
     mem.footerRows = 0;
-    return;
   }
-  term.write(footer);
-  mem.footerRows = countWrappedRows(footer, term.cols);
+
+  // 4. Pin the status bar to the absolute last row of the viewport.
+  //    DECSC (\x1b7) saves cursor, the CUP escape jumps to (rows, 1),
+  //    we erase the line and write the bar, then DECRC (\x1b8) restores
+  //    the cursor back into the active footer so typed input stays on
+  //    the prompt line. xterm.js honors both DECSC/DECRC.
+  paintStatusBar(term, state, focusCode);
+}
+
+function paintStatusBar(term: Terminal, state: TerminalState, focusCode: string | null): void {
+  const cols = term.cols;
+  const rows = term.rows;
+  if (rows < 2) return;
+  const hints = collectHints(state);
+  const status = renderStatusBar(cols, state, focusCode, hints);
+  // Truncate to one visual line so the absolute-positioned bar never wraps
+  // into the active footer above.
+  const single = clampToWidth(status, cols);
+  term.write(`\x1b7\x1b[${String(rows)};1H\x1b[2K${single}\x1b8`);
+}
+
+/**
+ * Set DECSTBM (Set Top and Bottom Margins) so the scroll region is rows
+ * 1..rows-1, leaving the very last row outside scroll. Subsequent
+ * `writeln`s and prompt typing scroll within that region only — the bar
+ * we paint at row `rows` (via absolute CUP) is never overwritten.
+ *
+ * Re-applied after every fit() because xterm resets the scroll region on
+ * resize.
+ */
+function reserveStatusRow(term: Terminal): void {
+  const rows = term.rows;
+  if (rows < 2) return;
+  // CSI <top>;<bottom>r — 1-based, inclusive on both ends.
+  term.write(`\x1b[1;${String(rows - 1)}r`);
+}
+
+function collectHints(state: TerminalState): readonly KeyHint[] {
+  if (state.phase === 'interactive' && state.active !== null) {
+    return state.active.widget.hints(state.active.state);
+  }
+  if (state.phase === 'cancelling') {
+    return [{ keys: ['Ctrl+C'], label: 'force cancel' }];
+  }
+  if (state.phase === 'running') {
+    return [{ keys: ['Ctrl+C'], label: 'cancel', danger: true }];
+  }
+  return idleHints();
+}
+
+/** Truncate a string to `cols` visible characters, preserving ANSI codes. */
+function clampToWidth(s: string, cols: number): string {
+  if (stripAnsi(s).length <= cols) return s;
+  // Walk the string keeping ANSI sequences intact, stop once the visible
+  // width hits cols-1 (leave one column free to avoid wrap on most term
+  // implementations).
+  const limit = Math.max(1, cols - 1);
+  let out = '';
+  let visible = 0;
+  let i = 0;
+  while (i < s.length && visible < limit) {
+    if (s[i] === '\x1b' && s[i + 1] === '[') {
+      const end = s.indexOf('m', i);
+      if (end >= 0) {
+        out += s.slice(i, end + 1);
+        i = end + 1;
+        continue;
+      }
+    }
+    out += s[i];
+    visible += 1;
+    i += 1;
+  }
+  return `${out}${ANSI.reset}`;
 }
 
 function writeHistoryEntry(term: Terminal, entry: TerminalState['history'][number]): void {
@@ -371,33 +515,73 @@ function writeHistoryEntry(term: Terminal, entry: TerminalState['history'][numbe
   term.writeln(paint('╰', ANSI.gray));
 }
 
-function renderFooter(term: Terminal, state: TerminalState): string {
+function renderFooter(term: Terminal, state: TerminalState, mem: RenderMem): string {
   const cols = term.cols;
+  const spin = SPINNER_FRAMES[mem.spinnerTick % SPINNER_FRAMES.length] ?? '·';
+
   if (state.phase === 'interactive' && state.active !== null) {
-    // Widgets render their own hint bar; the bridge no longer adds a copy.
     return state.active.widget.render(state.active.state, cols);
   }
   if (state.phase === 'cancelling') {
-    return paint('cancelling…', ANSI.yellow);
+    return paint(`${spin} cancelling…`, ANSI.yellow);
   }
   if (state.phase === 'running') {
-    return paint(`${PROMPT}${state.buffer}`, ANSI.dim);
+    const cmd = state.buffer.length > 0 ? state.buffer : '…';
+    return (
+      paint(`${spin} `, ANSI.brightCyan) +
+      paint(`${PROMPT}${cmd}`, ANSI.dim) +
+      paint('  fetching', ANSI.gray)
+    );
   }
   // idle
-  const tail = state.cursor < state.buffer.length
-    ? `\x1b[${String(state.buffer.length - state.cursor)}D`
-    : '';
+  const tail =
+    state.cursor < state.buffer.length
+      ? `\x1b[${String(state.buffer.length - state.cursor)}D`
+      : '';
   const promptLine = `${PROMPT}${state.buffer}${tail}`;
   if (state.candidates.length > 0) {
     const list = state.candidates
       .map((c) => paint(c, ANSI.gray))
       .join(paint(' · ', ANSI.gray));
-    // Candidates row sits ABOVE the prompt so the cursor naturally lands
-    // at the end of the prompt without needing save/restore (xterm.js does
-    // not always honor those CSI codes when wrapped).
     return `${list}\n${promptLine}`;
   }
   return promptLine;
+}
+
+function idleHints(): readonly KeyHint[] {
+  return [
+    { keys: ['Tab'], label: 'complete' },
+    { keys: ['↑', '↓'], label: 'history' },
+    { keys: ['Ctrl+L'], label: 'clear' },
+    { keys: ['help'], label: 'commands' },
+  ];
+}
+
+function renderStatusBar(
+  cols: number,
+  state: TerminalState,
+  focusCode: string | null,
+  hints: readonly KeyHint[],
+): string {
+  const left: string[] = [];
+  const phase = state.phase;
+  const dot =
+    phase === 'idle'
+      ? paint('●', ANSI.green)
+      : phase === 'cancelling'
+        ? paint('●', ANSI.yellow)
+        : paint('●', ANSI.cyan);
+  const phaseLabel =
+    phase === 'idle' ? 'READY' : phase === 'running' ? 'RUNNING' : phase === 'cancelling' ? 'CANCELLING' : 'INPUT';
+  left.push(`${dot} ${paint(phaseLabel, ANSI.gray)}`);
+  if (focusCode !== null) {
+    left.push(paint(`FOCUS ${focusCode}`, ANSI.cyan));
+  }
+  const leftStr = left.join(paint('  ·  ', ANSI.gray));
+
+  const hintStr = renderHints(hints, { width: Math.max(20, cols - 4) });
+  const sep = paint('  ·  ', ANSI.gray);
+  return hintStr.length > 0 ? `${leftStr}${sep}${hintStr.split('\n')[0] ?? ''}` : leftStr;
 }
 
 /** Count the number of physical rows a string occupies given current cols. */

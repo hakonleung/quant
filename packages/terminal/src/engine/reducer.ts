@@ -48,9 +48,41 @@ export function reduce(state: TerminalState, event: Event): ReduceResult {
       };
     case 'setCandidates':
       return { state: { ...state, candidates: event.candidates }, effects: [] };
+    case 'clearLast':
+      return handleClearLast(state, event.count);
+    case 'clearAll':
+      // Synchronous engine command — always end on idle, never linger in
+      // `running` or `cancelling`.
+      return { state: { ...state, phase: 'idle', history: [] }, effects: [] };
     default:
       return { state, effects: [] };
   }
+}
+
+/**
+ * Drop the last N "interactions". An interaction starts at a `prompt` entry
+ * and includes everything until (but not including) the next `prompt`. The
+ * tail of the buffer that contains no prompt at all (e.g. the welcome banner
+ * gets converted to entries via output) is treated as one extra interaction
+ * only if it sits to the right of every prompt.
+ */
+function handleClearLast(state: TerminalState, count: number): ReduceResult {
+  if (count <= 0 || state.history.length === 0) {
+    return { state: { ...state, phase: 'idle' }, effects: [] };
+  }
+  const promptIdx: number[] = [];
+  state.history.forEach((h, i) => {
+    if (h.kind === 'prompt') promptIdx.push(i);
+  });
+  if (promptIdx.length === 0) {
+    return { state: { ...state, phase: 'idle' }, effects: [] };
+  }
+  const drop = Math.min(count, promptIdx.length);
+  const cutFrom = promptIdx[promptIdx.length - drop] ?? state.history.length;
+  return {
+    state: { ...state, phase: 'idle', history: state.history.slice(0, cutFrom) },
+    effects: [],
+  };
 }
 
 /* ---------- key handling ---------- */
@@ -60,6 +92,10 @@ function handleKey(state: TerminalState, key: KeySpec): ReduceResult {
     return handleInteractiveKey(state, key);
   }
   if (state.phase === 'cancelling') {
+    // A second Ctrl+C in cancelling-state force-exits to idle in case the
+    // running command never honors the abort signal (synchronous engine
+    // commands don't have anything to abort).
+    if (key.special === 'CtrlC') return { state: { ...state, phase: 'idle' }, effects: [] };
     return { state, effects: [] };
   }
   if (state.phase === 'running') {
@@ -177,12 +213,26 @@ function handleKey(state: TerminalState, key: KeySpec): ReduceResult {
 function handleInteractiveKey(state: TerminalState, key: KeySpec): ReduceResult {
   if (state.active === null) return { state, effects: [] };
 
-  // Esc / Ctrl-C — uniform exit semantics
+  const session = state.active;
+
+  // Esc / Ctrl-C: give the widget a chance to consume the key first so it
+  // can back out of a sub-state (e.g. the filter mode in selectable-list)
+  // without canceling the whole interaction. If the widget reports no
+  // state change, fall through to canceling the entire turn.
   if (key.special === 'Escape' || key.special === 'CtrlC') {
+    const probe = session.widget.handleKey(session.state, key);
+    if (probe.kind === 'state' && probe.next !== session.state) {
+      return {
+        state: { ...state, active: { widget: session.widget, state: probe.next } },
+        effects: [],
+      };
+    }
+    if (probe.kind === 'cancel') {
+      return handleExitInteractive(state, 'cancel');
+    }
     return handleExitInteractive(state, 'cancel');
   }
 
-  const session = state.active;
   const step = session.widget.handleKey(session.state, key);
   switch (step.kind) {
     case 'state':
@@ -200,6 +250,27 @@ function handleInteractiveKey(state: TerminalState, key: KeySpec): ReduceResult 
         session.widget.commit !== undefined
           ? session.widget.commit(step.result)
           : { kind: 'noop' as const };
+      if (resolution.kind === 'canceled') {
+        // Treat as Esc-cancel — drop the prompt + any history of this turn,
+        // surface a single "canceled" line.
+        const trimmed = trimToLastPrompt(state.history);
+        const out: HistoryEntry = {
+          kind: 'output',
+          id: idFor(state),
+          body: 'canceled',
+          status: 'info',
+        };
+        return {
+          state: {
+            ...state,
+            phase: 'idle',
+            active: null,
+            history: [...trimmed, out],
+            nextId: state.nextId + 1,
+          },
+          effects: [],
+        };
+      }
       // Snapshot the widget into history first
       const frozen: HistoryEntry = {
         kind: 'frozen',
@@ -231,13 +302,34 @@ function handleExitInteractive(
   if (state.active === null) {
     return { state: { ...state, phase: 'idle' }, effects: [] };
   }
+  if (reason === 'cancel') {
+    // Hide the original prompt + any in-flight history of the interaction;
+    // collapse to a single "canceled" output entry.
+    const trimmed = trimToLastPrompt(state.history);
+    const out: HistoryEntry = {
+      kind: 'output',
+      id: idFor(state),
+      body: 'canceled',
+      status: 'info',
+    };
+    return {
+      state: {
+        ...state,
+        phase: 'idle',
+        active: null,
+        history: [...trimmed, out],
+        nextId: state.nextId + 1,
+      },
+      effects: [],
+    };
+  }
   const session = state.active;
   const frozen: HistoryEntry = {
     kind: 'frozen',
     id: idFor(state),
     title: session.widget.title,
     body: session.widget.snapshot(session.state),
-    status: reason === 'cancel' ? 'info' : 'ok',
+    status: 'ok',
   };
   return {
     state: {
@@ -249,6 +341,15 @@ function handleExitInteractive(
     },
     effects: [],
   };
+}
+
+function trimToLastPrompt(history: readonly HistoryEntry[]): readonly HistoryEntry[] {
+  for (let i = history.length - 1; i >= 0; i -= 1) {
+    if (history[i]?.kind === 'prompt') {
+      return history.slice(0, i);
+    }
+  }
+  return history;
 }
 
 /* ---------- submit / result / cancel ---------- */

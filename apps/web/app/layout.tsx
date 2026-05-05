@@ -7,7 +7,7 @@ interface RootLayoutProps {
 }
 
 export const metadata = {
-  title: 'QUANT//OS',
+  title: 'qX//OS',
   description: 'Local quant workbench — pro × geek',
 };
 

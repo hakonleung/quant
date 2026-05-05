@@ -222,13 +222,16 @@ describe('reducer — interactive widget', () => {
     ]);
   });
 
-  it('Esc on widget cancels with info-status frozen entry', () => {
+  it('Esc on widget collapses interaction to a single "canceled" output', () => {
     let s = reduce(initialState, { kind: 'startInteractive', widget }).state;
     s = reduce(s, special('Escape')).state;
     expect(s.phase).toBe('idle');
     const last = s.history.at(-1) as HistoryEntry;
-    expect(last.kind).toBe('frozen');
-    if (last.kind === 'frozen') expect(last.status).toBe('info');
+    expect(last.kind).toBe('output');
+    if (last.kind === 'output') {
+      expect(last.body).toBe('canceled');
+      expect(last.status).toBe('info');
+    }
   });
 
   it('CtrlC inside widget acts like Esc', () => {

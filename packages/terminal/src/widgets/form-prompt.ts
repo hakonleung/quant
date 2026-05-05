@@ -11,7 +11,6 @@
 
 import { ANSI, paint } from '../render/ansi.js';
 import { renderTable } from '../render/table.js';
-import { renderHints } from './hint-bar.js';
 import type {
   CommitResolution,
   InteractiveWidget,
@@ -41,6 +40,12 @@ export interface FormField {
   readonly search?: (query: string) => readonly SearchCandidate[];
   /** Optional zod-like validator returning an error message or null. */
   readonly validate?: (value: string) => string | null;
+  /**
+   * Optional suffix shown after the value (gray) — e.g. unit like `%`,
+   * `CNY`, `min`. Receives the full form values so the suffix can react
+   * to other fields (`abs` value's currency depends on `market`).
+   */
+  readonly suffix?: (values: FormValues) => string;
 }
 
 export type FormValues = Readonly<Record<string, string>>;
@@ -86,64 +91,98 @@ export function formPrompt(cfg: FormPromptConfig): InteractiveWidget<FormState, 
 
 function buildHints(cfg: FormPromptConfig, state: FormState): readonly KeyHint[] {
   const field = cfg.fields[state.active];
-  const hints: KeyHint[] = [
-    { keys: ['Tab'], label: 'next field' },
-    { keys: ['Shift+Tab'], label: 'prev field' },
-  ];
+  const hints: KeyHint[] = [{ keys: ['↑', '↓'], label: 'field' }];
   if (field?.kind === 'enum') {
-    hints.push({ keys: ['↑', '↓'], label: 'cycle' });
-  }
-  if (field?.kind === 'search') {
-    hints.push({ keys: ['↑', '↓'], label: 'pick' });
+    hints.push({ keys: ['←', '→'], label: 'option' });
+  } else if (field?.kind === 'search') {
+    hints.push({ keys: ['←', '→'], label: 'pick' });
     hints.push({ keys: ['type'], label: 'search' });
+  } else {
+    hints.push({ keys: ['type'], label: 'edit' });
   }
   hints.push({ keys: ['Enter'], label: field?.kind === 'search' ? 'pick / submit' : 'submit' });
   hints.push({ keys: ['Esc'], label: 'cancel' });
   return hints;
 }
 
+/** Width of the label column — labels are padded up to this many cells. */
+const LABEL_PAD = 12;
+
+/** 0-based column where this field's value/input begins on its line. */
+function valueStartCol(label: string): number {
+  // marker(1) + ' '(1) + max(label.length, LABEL_PAD)(N) + ' '(1)
+  return 1 + 1 + Math.max(label.length, LABEL_PAD) + 1;
+}
+
 function renderBody(cfg: FormPromptConfig, state: FormState, width: number): string {
   const head = paint(cfg.title, ANSI.bold, ANSI.cyan);
-  const fieldLines: string[] = [];
+  const lines: string[] = [head];
+  let activeLineIdx = -1;
+
   cfg.fields.forEach((f, i) => {
-    const active = i === state.active;
-    fieldLines.push(renderField(f, state, active));
-    if (active && f.kind === 'search' && f.search !== undefined) {
+    if (i === state.active) activeLineIdx = lines.length;
+    lines.push(renderField(f, state, i === state.active));
+    if (i === state.active && f.kind === 'search' && f.search !== undefined) {
       const matches = f.search(state.searchQuery).slice(0, SEARCH_VIEWPORT);
       if (matches.length === 0 && state.searchQuery.length > 0) {
-        fieldLines.push(`    ${paint('no matches', ANSI.gray)}`);
+        lines.push(`    ${paint('no matches', ANSI.gray)}`);
       } else if (matches.length > 0) {
         const idx = Math.min(state.searchIdx, matches.length - 1);
         const rows = matches.map((m, j) => ({ marker: j === idx ? '▸' : ' ', label: m.label }));
-        fieldLines.push(
-          renderTable(
-            rows as unknown as readonly Record<string, unknown>[],
-            [
-              { key: 'marker', header: '', max: 2 },
-              { key: 'label', header: '', max: Math.max(20, Math.min(60, width - 8)) },
-            ],
-            { header: false, highlightRow: idx, gap: 1 },
-          )
-            .split('\n')
-            .map((l) => `    ${l}`)
-            .join('\n'),
+        const table = renderTable(
+          rows as unknown as readonly Record<string, unknown>[],
+          [
+            { key: 'marker', header: '', max: 2 },
+            { key: 'label', header: '', max: Math.max(20, Math.min(60, width - 8)) },
+          ],
+          { header: false, highlightRow: idx, gap: 1 },
         );
+        // Push each table row as its own line entry so totalRows == lines.length
+        // — needed for cursor-back math below.
+        for (const l of table.split('\n')) lines.push(`    ${l}`);
       }
     }
   });
-  const lines = [head, ...fieldLines];
   if (state.error !== null) lines.push(paint(`! ${state.error}`, ANSI.red));
-  const hints = renderHints(buildHints(cfg, state), { width });
-  if (hints.length > 0) {
-    lines.push(paint('─'.repeat(Math.max(8, Math.min(60, width))), ANSI.gray));
-    lines.push(hints);
-  }
-  return lines.join('\n');
+
+  const body = lines.join('\n');
+  return body + cursorEscape(cfg, state, lines.length, activeLineIdx);
+}
+
+/**
+ * Place the cursor at the end of the active field's input position. Without
+ * this, after the body is written xterm leaves the cursor on the last row,
+ * which is jarring when typing into a `code` search or `value` number that
+ * isn't the last field. The escape moves the cursor up to the active row
+ * and across to `valueStartCol(label) + length(typed)`.
+ *
+ * For `enum` fields (which are picked with arrow keys, not typed) the
+ * cursor is hidden via DECTCEM (`\x1b[?25l`); the bridge re-enables it
+ * before painting the next text-input footer.
+ */
+function cursorEscape(
+  cfg: FormPromptConfig,
+  state: FormState,
+  totalRows: number,
+  activeLineIdx: number,
+): string {
+  if (activeLineIdx < 0) return '\x1b[?25l';
+  const field = cfg.fields[state.active];
+  if (field === undefined) return '\x1b[?25l';
+  if (field.kind === 'enum') return '\x1b[?25l';
+  const typed = field.kind === 'search' ? state.searchQuery : (state.values[field.key] ?? '');
+  const col1based = valueStartCol(field.label) + typed.length + 1;
+  const rowsUp = Math.max(0, totalRows - 1 - activeLineIdx);
+  // CSI <n>F = cursor previous line (n) and to col 1; CSI <n>G = absolute
+  // column. `\r` instead of `\x1b[0F` keeps the move within the current row
+  // when there's no row offset.
+  const upPart = rowsUp > 0 ? `\x1b[${String(rowsUp)}F` : '\r';
+  return `\x1b[?25h${upPart}\x1b[${String(col1based)}G`;
 }
 
 function renderField(field: FormField, state: FormState, active: boolean): string {
   const marker = active ? paint('▸', ANSI.cyan, ANSI.bold) : ' ';
-  const label = paint(field.label.padEnd(12), active ? ANSI.bold : ANSI.gray);
+  const label = paint(field.label.padEnd(LABEL_PAD), active ? ANSI.bold : ANSI.gray);
   const value = state.values[field.key] ?? '';
   if (field.kind === 'enum') {
     const opts = (field.options ?? []).map((o) =>
@@ -165,7 +204,9 @@ function renderField(field: FormField, state: FormState, active: boolean): strin
     value.length === 0
       ? paint(field.placeholder ?? '<empty>', ANSI.gray)
       : paint(value, active ? ANSI.bold : ANSI.white);
-  return `${marker} ${label} ${display}`;
+  const suffix =
+    field.suffix !== undefined ? paint(` ${field.suffix(state.values)}`, ANSI.gray) : '';
+  return `${marker} ${label} ${display}${suffix}`;
 }
 
 function snapshotBody(cfg: FormPromptConfig, state: FormState): string {
@@ -182,12 +223,14 @@ function handleKey(
   const field = cfg.fields[state.active];
   if (field === undefined) return { kind: 'state', next: state };
 
+  if (key.special === 'Up') return moveActive(cfg, state, -1);
+  if (key.special === 'Down') return moveActive(cfg, state, 1);
   if (key.special === 'Tab') return moveActive(cfg, state, 1);
   if (key.special === 'ShiftTab') return moveActive(cfg, state, -1);
 
   if (field.kind === 'enum') {
-    if (key.special === 'Up' || key.special === 'Down') {
-      return cycleEnum(field, state, key.special === 'Down' ? 1 : -1);
+    if (key.special === 'Left' || key.special === 'Right') {
+      return cycleEnum(field, state, key.special === 'Right' ? 1 : -1);
     }
     if (key.special === 'Enter') return submit(cfg, state);
     return { kind: 'state', next: state };
@@ -219,13 +262,13 @@ function handleSearchKey(
   key: KeySpec,
 ): WidgetStep<FormState, CommitResolution> {
   const matches = field.search?.(state.searchQuery) ?? [];
-  if (key.special === 'Up') {
+  if (key.special === 'Left') {
     return {
       kind: 'state',
       next: { ...state, searchIdx: Math.max(0, state.searchIdx - 1) },
     };
   }
-  if (key.special === 'Down') {
+  if (key.special === 'Right') {
     return {
       kind: 'state',
       next: { ...state, searchIdx: Math.min(Math.max(0, matches.length - 1), state.searchIdx + 1) },

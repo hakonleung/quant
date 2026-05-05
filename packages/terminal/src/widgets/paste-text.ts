@@ -11,7 +11,6 @@
  */
 
 import { ANSI, paint } from '../render/ansi.js';
-import { renderHints } from './hint-bar.js';
 import type {
   CommitResolution,
   InteractiveWidget,
@@ -58,11 +57,7 @@ function renderBody(cfg: PasteTextConfig, state: PasteTextState, width: number):
     ? paint(cfg.placeholder ?? '(paste or type, Ctrl+Enter to submit)', ANSI.gray)
     : state.buffer;
   const lines = [head, body];
-  const hints = renderHints(buildHints(), { width });
-  if (hints.length > 0) {
-    lines.push(paint('─'.repeat(Math.max(8, Math.min(60, width))), ANSI.gray));
-    lines.push(hints);
-  }
+  void width;
   return lines.join('\n');
 }
 

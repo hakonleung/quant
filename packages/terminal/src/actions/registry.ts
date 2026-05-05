@@ -73,14 +73,46 @@ const marketSentimentSchema = z.object({
 });
 export type MarketSentiment = z.infer<typeof marketSentimentSchema>;
 
+const watchBaselineSchema = z.enum(['prev_close', 'day_high', 'day_low', 'prev']);
+export type WatchBaseline = z.infer<typeof watchBaselineSchema>;
+
+const watchOpSchema = z.enum(['gte', 'lte']);
+export type WatchOp = z.infer<typeof watchOpSchema>;
+
+const watchPctConditionSchema = z
+  .object({
+    kind: z.literal('pct'),
+    baseline: watchBaselineSchema,
+    op: watchOpSchema,
+    /** Decimal-as-string, signed. Non-zero. */
+    thresholdPct: z.string().regex(/^-?\d+(\.\d+)?$/u),
+  })
+  .strict();
+
+const watchAbsConditionSchema = z
+  .object({
+    kind: z.literal('abs'),
+    op: watchOpSchema,
+    /** Decimal-as-string, positive. */
+    thresholdPrice: z.string().regex(/^\d+(\.\d+)?$/u),
+  })
+  .strict();
+
+const watchConditionSchema = z.discriminatedUnion('kind', [
+  watchPctConditionSchema,
+  watchAbsConditionSchema,
+]);
+export type WatchCondition = z.infer<typeof watchConditionSchema>;
+
 const watchTaskSchema = z.object({
   market: z.enum(['a', 'hk', 'us']),
   code: codeSchema,
   name: z.string(),
-  kind: z.enum(['pct', 'abs']).default('pct'),
-  thresholdPct: z.number().nullable().default(null),
-  thresholdPrice: z.number().nullable().default(null),
-  intervalSec: z.number().int().positive().default(30),
+  conditions: z.array(watchConditionSchema).min(1),
+  /** Polling interval in seconds (display unit on the form is minutes). */
+  intervalSec: z.number().int().min(5).default(60),
+  /** Min seconds between push notifications (display unit is minutes). */
+  pushIntervalSec: z.number().int().min(60).default(300),
   enabled: z.boolean().default(true),
   hitCount: z.number().int().nonnegative().default(0),
 });

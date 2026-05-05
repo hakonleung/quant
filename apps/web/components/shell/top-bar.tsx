@@ -34,45 +34,6 @@ export function TopBar(): React.ReactElement {
   );
 }
 
-function BrandGlyph(): React.ReactElement {
-  return (
-    <Box
-      position="relative"
-      w="28px"
-      h="28px"
-      borderWidth="1.5px"
-      borderColor="panel"
-      display="grid"
-      placeItems="center"
-      fontFamily="mono"
-      fontSize="14px"
-      fontWeight="700"
-    >
-      Q
-      <Box
-        position="absolute"
-        top="-3px"
-        left="-3px"
-        w="5px"
-        h="5px"
-        borderTopWidth="1.5px"
-        borderLeftWidth="1.5px"
-        borderColor="panel"
-      />
-      <Box
-        position="absolute"
-        bottom="-3px"
-        right="-3px"
-        w="5px"
-        h="5px"
-        borderBottomWidth="1.5px"
-        borderRightWidth="1.5px"
-        borderColor="panel"
-      />
-    </Box>
-  );
-}
-
 function Brand(): React.ReactElement {
   return (
     <HStack
@@ -80,15 +41,23 @@ function Brand(): React.ReactElement {
       color="panel"
       h="100%"
       px="14px"
-      gap="10px"
+      gap="6px"
       letterSpacing="0.18em"
       fontWeight="700"
       fontSize="12px"
       flexShrink={0}
     >
-      <BrandGlyph />
       <Box lineHeight="1.1">
-        <Text>QUANT//OS</Text>
+        <HStack gap="0" align="baseline">
+          <Text as="span">qX//OS</Text>
+          <Text
+            as="span"
+            ml="4px"
+            css={{ animation: 'blink 1s steps(1) infinite' }}
+          >
+            _
+          </Text>
+        </HStack>
         <Text fontSize="9px" letterSpacing="0.22em" opacity={0.85} fontWeight="500">
           v0.1 · LOCAL
         </Text>

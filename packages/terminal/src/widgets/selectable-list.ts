@@ -12,7 +12,6 @@
 import { renderTable, type ColumnSpec } from '../render/table.js';
 import { ANSI, paint } from '../render/ansi.js';
 import { visualWidth } from '../render/width.js';
-import { renderHints } from './hint-bar.js';
 import type {
   CommitResolution,
   InteractiveWidget,
@@ -89,17 +88,21 @@ function buildHints<T extends SelectableListItem>(
   const hasSelection = state.visible.length > 0;
   const hints: KeyHint[] = [];
   if (state.inFilter) {
-    hints.push({ keys: ['type'], label: 'filter', when: 'whenFilter' });
-    hints.push({ keys: ['Esc'], label: 'exit filter', when: 'whenFilter' });
+    hints.push({ keys: ['type'], label: 'filter' });
+    hints.push({ keys: ['Esc'], label: 'exit filter' });
     return hints;
   }
   hints.push({ keys: ['↑', '↓'], label: 'move' });
-  if (cfg.onCommit !== undefined) {
-    hints.push({ keys: ['Enter'], label: 'pick', when: 'whenItemSelected' });
+  if (cfg.onCommit !== undefined && hasSelection) {
+    hints.push({ keys: ['Enter'], label: 'pick' });
   }
   hints.push({ keys: ['/'], label: 'filter' });
-  for (const k of cfg.extraKeys ?? []) {
-    hints.push({ ...k.hint, when: hasSelection ? k.hint.when ?? 'whenItemSelected' : k.hint.when });
+  // Surface row-action shortcuts (d delete / a analyze / f focus / …)
+  // unconditionally when the list has rows so they always appear in the
+  // bridge's pinned status bar — the engine-side `when` filter only fires
+  // when the bridge passes hasSelection, which it can't know.
+  if (hasSelection) {
+    for (const k of cfg.extraKeys ?? []) hints.push(k.hint);
   }
   hints.push({ keys: ['Esc'], label: 'back' });
   return hints;
@@ -139,15 +142,9 @@ function renderBody<T extends SelectableListItem>(
     }
   }
 
-  const hints = renderHints(buildHints(cfg, state), {
-    width,
-    inFilter: state.inFilter,
-    hasSelection: state.visible.length > 0,
-  });
-  if (hints.length > 0) {
-    lines.push(paint('─'.repeat(Math.max(8, Math.min(80, width))), ANSI.gray));
-    lines.push(hints);
-  }
+  // Hints are rendered globally by the bridge as a status bar — widgets
+  // no longer paint their own.
+  void width;
   return lines.join('\n');
 }
 
@@ -238,6 +235,14 @@ function handleFilterKey<T extends SelectableListItem>(
 ): WidgetStep<SelectableListState<T>, CommitResolution> {
   if (key.special === 'Enter') {
     return { kind: 'state', next: { ...state, inFilter: false } };
+  }
+  if (key.special === 'Escape') {
+    // Exit filter sub-state and reset the filter — user wants to back out
+    // of typing, not to cancel the whole list interaction.
+    return {
+      kind: 'state',
+      next: { ...state, inFilter: false, filter: '', visible: cfg.items, idx: 0, scroll: 0 },
+    };
   }
   if (key.special === 'Backspace') {
     const filter = state.filter.slice(0, -1);

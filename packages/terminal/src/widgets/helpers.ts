@@ -42,3 +42,5 @@ export function outputResolution(
 }
 
 export const noopResolution: CommitResolution = { kind: 'noop' };
+
+export const canceledResolution: CommitResolution = { kind: 'canceled' };
