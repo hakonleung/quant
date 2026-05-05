@@ -43,8 +43,7 @@ export class SlackWebhookWatchNotifier implements WatchNotifier {
     if (this.webhookUrl === null) {
       // No webhook configured — log the would-be alert so dev can still
       // observe trigger firings in the gateway log.
-      const summary = payload.text ?? JSON.stringify(payload.attachments);
-      this.logger.log(`watch_alert_drylog trace_id=${traceId} ${summary}`);
+      this.logger.log(`watch_alert_drylog trace_id=${traceId} ${payload.text}`);
       return;
     }
     try {

@@ -30,7 +30,7 @@ export class PushController {
       lines.push(`note: ${body.note}`);
     }
     await this.notifier.send(
-      { text: lines.join('\n'), attachments: [] },
+      { text: lines.join('\n') },
       traceId ?? 'push-test',
     );
     return { ok: true, dryRun, deliveredAt: new Date().toISOString() };

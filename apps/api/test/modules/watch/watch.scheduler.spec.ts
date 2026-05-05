@@ -103,9 +103,7 @@ describe('WatchScheduler.tick', () => {
 
     expect(port.calls).toHaveLength(1);
     expect(notifier.sent).toHaveLength(1);
-    const header = notifier.sent[0]?.attachments[0]?.blocks[0];
-    if (header?.type !== 'header') throw new Error('expected header block');
-    expect(header.text.text).toContain('600000');
+    expect(notifier.sent[0]?.text).toContain('600000');
     const after = store.get('a', '600000');
     expect(after?.hitCount).toBe(1);
     expect(after?.lastPushAt).toBe(TICK_TIME.toISOString());
