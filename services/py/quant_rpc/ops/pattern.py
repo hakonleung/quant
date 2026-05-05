@@ -132,7 +132,12 @@ class FindSimilarPatternsHandler:
             )
 
         reference = self._service.reference_from_stock(code, start, end)
-        window_days = max(1, (end - start).days + 1)
+        # ``window_days`` must equal len(reference.closes); both the
+        # reference and candidate windows are sliced from kline rows,
+        # which are already filtered to trading days. Using calendar
+        # days here would mismatch by every weekend/holiday in the
+        # range and trip the engine's length check.
+        window_days = len(reference.closes)
         asof_end = self._clock.now().date()
 
         query = PatternQuery(
