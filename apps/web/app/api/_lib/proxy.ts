@@ -21,7 +21,7 @@ function nestBase(): string {
 }
 
 interface ProxyInit {
-  readonly method?: 'GET' | 'POST';
+  readonly method?: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH';
   readonly body?: unknown;
 }
 

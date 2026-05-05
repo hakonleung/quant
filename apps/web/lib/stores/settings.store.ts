@@ -1,37 +1,33 @@
 /**
- * User settings (modules/07-frontend.md §6.1). Persisted to IndexedDB.
- * Holds theme + Slack push config + column preferences. Server-side
- * data never lives here — that's react-query's job.
+ * User settings (theme + Slack push targets + applied columns) and the
+ * stock blacklist are bundled into one Sys.Cfg blob persisted on the
+ * backend via `PUT /api/sys-cfg`. The two Zustand stores stay separate
+ * for callers (settings vs. blacklist domains are independent) but
+ * `useSysCfgRemoteSync` reads from / writes to both as one record.
  */
 
 'use client';
 
+import type { SlackTarget, SysCfg, ThemeMode } from '@quant/shared';
+import { useEffect, useRef } from 'react';
 import { create } from 'zustand';
-import { persist, createJSONStorage } from 'zustand/middleware';
 
+import { fetchSysCfg, putSysCfg } from '../api/sys-cfg.js';
 import {
   COLUMN_KEYS,
   DEFAULT_APPLIED_COLUMNS,
   isColumnKey,
   type ColumnKey,
 } from '../eqty/columns.catalog.js';
-import { idbStorage } from './idb-storage.js';
+import { useBlacklistStore } from './blacklist.store.js';
+import { jsonEqual } from './remote-sync.js';
 
-export type ThemeMode = 'light' | 'dark';
-
-export interface SlackTarget {
-  readonly channel: string;
-  readonly webhookUrl: string;
-}
+export type { ThemeMode, SlackTarget };
 
 interface SettingsState {
   readonly theme: ThemeMode;
   readonly slackTargets: readonly SlackTarget[];
-  /**
-   * E-1 list applied columns, in render order. Persisted globally; the
-   * dynamic-sector evidence columns are appended at render time and are
-   * not part of this list.
-   */
+  /** E-1 list applied columns, in render order. */
   readonly appliedColumns: readonly ColumnKey[];
   setTheme(theme: ThemeMode): void;
   addSlackTarget(target: SlackTarget): void;
@@ -39,63 +35,118 @@ interface SettingsState {
   setAppliedColumns(keys: readonly ColumnKey[]): void;
 }
 
-export const useSettingsStore = create<SettingsState>()(
-  persist(
-    (set) => ({
-      theme: 'light',
-      slackTargets: [],
-      appliedColumns: DEFAULT_APPLIED_COLUMNS,
-      setTheme: (theme) => {
-        set({ theme });
-      },
-      addSlackTarget: (target) => {
-        set((state) => {
-          const next = state.slackTargets.filter((t) => t.channel !== target.channel);
-          return { slackTargets: [...next, target] };
+export const useSettingsStore = create<SettingsState>()((set) => ({
+  theme: 'light',
+  slackTargets: [],
+  appliedColumns: DEFAULT_APPLIED_COLUMNS,
+  setTheme: (theme) => {
+    set({ theme });
+  },
+  addSlackTarget: (target) => {
+    set((state) => {
+      const next = state.slackTargets.filter((t) => t.channel !== target.channel);
+      return { slackTargets: [...next, target] };
+    });
+  },
+  removeSlackTarget: (channel) => {
+    set((state) => ({
+      slackTargets: state.slackTargets.filter((t) => t.channel !== channel),
+    }));
+  },
+  setAppliedColumns: (keys) => {
+    const seen = new Set<ColumnKey>();
+    const cleaned: ColumnKey[] = [];
+    for (const k of keys) {
+      if (!seen.has(k) && isColumnKey(k)) {
+        seen.add(k);
+        cleaned.push(k);
+      }
+    }
+    set({ appliedColumns: cleaned });
+  },
+}));
+
+function snapshotCfg(): SysCfg {
+  const s = useSettingsStore.getState();
+  const b = useBlacklistStore.getState();
+  return {
+    theme: s.theme,
+    slackTargets: [...s.slackTargets],
+    appliedColumns: [...s.appliedColumns],
+    blacklist: [...b.entries],
+  };
+}
+
+function applyCfg(cfg: SysCfg): void {
+  const known = new Set<string>(COLUMN_KEYS);
+  const filtered: ColumnKey[] = [];
+  const seen = new Set<ColumnKey>();
+  for (const k of cfg.appliedColumns) {
+    if (known.has(k) && isColumnKey(k) && !seen.has(k)) {
+      seen.add(k);
+      filtered.push(k);
+    }
+  }
+  useSettingsStore.setState({
+    theme: cfg.theme,
+    slackTargets: cfg.slackTargets,
+    appliedColumns: filtered.length === 0 ? DEFAULT_APPLIED_COLUMNS : filtered,
+  });
+  useBlacklistStore.getState().setEntries(cfg.blacklist);
+}
+
+const DEBOUNCE_MS = 400;
+
+/**
+ * Boot hook — call once at the app shell. Loads sys-cfg from the
+ * backend and seeds both stores; afterwards any mutation in either
+ * store debounce-PUTs the combined blob.
+ */
+export function useSysCfgRemoteSync(): void {
+  const lastSentRef = useRef<SysCfg | null>(null);
+  const loadedRef = useRef(false);
+  useEffect(() => {
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+
+    void (async () => {
+      try {
+        const cfg = await fetchSysCfg();
+        if (cancelled) return;
+        applyCfg(cfg);
+        lastSentRef.current = snapshotCfg();
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.warn('sys-cfg boot fetch failed', err);
+      } finally {
+        loadedRef.current = true;
+      }
+    })();
+
+    const onChange = (): void => {
+      if (!loadedRef.current) return;
+      const next = snapshotCfg();
+      const last = lastSentRef.current;
+      if (last !== null && jsonEqual(last, next)) return;
+      lastSentRef.current = next;
+      if (timer !== null) clearTimeout(timer);
+      timer = setTimeout(() => {
+        timer = null;
+        putSysCfg(next).catch((err: unknown) => {
+          // eslint-disable-next-line no-console
+          console.warn('sys-cfg save failed', err);
         });
-      },
-      removeSlackTarget: (channel) => {
-        set((state) => ({
-          slackTargets: state.slackTargets.filter((t) => t.channel !== channel),
-        }));
-      },
-      setAppliedColumns: (keys) => {
-        // De-dup while preserving order; drop unknown keys (catalog may
-        // shrink between releases — old persisted entries become noise).
-        const seen = new Set<ColumnKey>();
-        const cleaned: ColumnKey[] = [];
-        for (const k of keys) {
-          if (!seen.has(k) && isColumnKey(k)) {
-            seen.add(k);
-            cleaned.push(k);
-          }
-        }
-        set({ appliedColumns: cleaned });
-      },
-    }),
-    {
-      name: 'settings',
-      storage: createJSONStorage(() => idbStorage('settings')),
-      version: 2,
-      // v1 → v2: legacy state has no `appliedColumns`; backfill with the
-      // catalog defaults so the user keeps the columns they had been
-      // implicitly seeing under the hard-coded layout.
-      migrate: (persistedState, version) => {
-        if (version >= 2) return persistedState;
-        const state = (persistedState ?? {}) as Record<string, unknown>;
-        return { ...state, appliedColumns: DEFAULT_APPLIED_COLUMNS };
-      },
-      // Drop columns that disappeared from the catalog after rehydration —
-      // belt-and-suspenders for users whose persisted state was written by
-      // a newer build that knew keys we no longer ship.
-      onRehydrateStorage: () => (state) => {
-        if (state === undefined) return;
-        const known = new Set<string>(COLUMN_KEYS);
-        const filtered = state.appliedColumns.filter((k) => known.has(k));
-        if (filtered.length !== state.appliedColumns.length) {
-          state.setAppliedColumns(filtered);
-        }
-      },
-    },
-  ),
-);
+      }, DEBOUNCE_MS);
+    };
+
+    const u1 = useSettingsStore.subscribe(onChange);
+    const u2 = useBlacklistStore.subscribe(onChange);
+
+    return () => {
+      cancelled = true;
+      if (timer !== null) clearTimeout(timer);
+      u1();
+      u2();
+    };
+  }, []);
+}

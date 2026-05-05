@@ -32,8 +32,17 @@ export async function apiPost<T>(
   return request('POST', path, body, parse, options);
 }
 
+export async function apiPut<T>(
+  path: string,
+  body: unknown,
+  parse: (raw: unknown) => T,
+  options: ApiOptions = {},
+): Promise<T> {
+  return request('PUT', path, body, parse, options);
+}
+
 async function request<T>(
-  method: 'GET' | 'POST',
+  method: 'GET' | 'POST' | 'PUT',
   path: string,
   body: unknown,
   parse: (raw: unknown) => T,

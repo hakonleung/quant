@@ -1,22 +1,15 @@
 /**
- * Client-side blacklist store (modules/07-frontend.md §4.4, §6).
- * Persisted to IndexedDB via the shared `idbStorage` adapter.
+ * Client-side blacklist store. Persistence rides on the Sys.Cfg blob —
+ * see `settings.store.ts` (`useSysCfgRemoteSync`) which loads / saves
+ * settings + blacklist as one backend record.
  */
 
 'use client';
 
+import type { BlacklistEntry } from '@quant/shared';
 import { create } from 'zustand';
-import { persist, createJSONStorage } from 'zustand/middleware';
 
-import { idbStorage } from './idb-storage.js';
-
-export interface BlacklistEntry {
-  readonly code: string;
-  readonly name: string;
-  /** ISO date the entry was added. */
-  readonly addedAt: string;
-  readonly note: string;
-}
+export type { BlacklistEntry };
 
 interface BlacklistState {
   readonly entries: readonly BlacklistEntry[];
@@ -25,27 +18,18 @@ interface BlacklistState {
   remove(code: string): void;
 }
 
-export const useBlacklistStore = create<BlacklistState>()(
-  persist(
-    (set) => ({
-      entries: [],
-      setEntries: (rows) => {
-        set({ entries: rows });
-      },
-      add: (entry) => {
-        set((state) => {
-          if (state.entries.some((e) => e.code === entry.code)) return state;
-          return { entries: [...state.entries, entry] };
-        });
-      },
-      remove: (code) => {
-        set((state) => ({ entries: state.entries.filter((e) => e.code !== code) }));
-      },
-    }),
-    {
-      name: 'blacklist',
-      storage: createJSONStorage(() => idbStorage('blacklist')),
-      version: 1,
-    },
-  ),
-);
+export const useBlacklistStore = create<BlacklistState>()((set) => ({
+  entries: [],
+  setEntries: (rows) => {
+    set({ entries: rows });
+  },
+  add: (entry) => {
+    set((state) => {
+      if (state.entries.some((e) => e.code === entry.code)) return state;
+      return { entries: [...state.entries, entry] };
+    });
+  },
+  remove: (code) => {
+    set((state) => ({ entries: state.entries.filter((e) => e.code !== code) }));
+  },
+}));

@@ -6,8 +6,10 @@ import { OrchestrationModule } from './modules/orchestration/orchestration.modul
 import { PatternModule } from './modules/pattern/pattern.module.js';
 import { PushModule } from './modules/push/push.module.js';
 import { ScreenModule } from './modules/screen/screen.module.js';
+import { SectorsModule } from './modules/sectors/sectors.module.js';
 import { SentimentModule } from './modules/sentiment/sentiment.module.js';
 import { StockMetaModule } from './modules/stock-meta/stock-meta.module.js';
+import { SysCfgModule } from './modules/sys-cfg/sys-cfg.module.js';
 import { WatchModule } from './modules/watch/watch.module.js';
 
 @Module({
@@ -20,6 +22,8 @@ import { WatchModule } from './modules/watch/watch.module.js';
     PatternModule,
     PushModule,
     WatchModule,
+    SectorsModule,
+    SysCfgModule,
   ],
   controllers: [HealthController],
   providers: [TraceMiddleware],

@@ -8,3 +8,5 @@ export * from './eqty.js';
 export * from './pattern.js';
 export * from './watch.js';
 export * from './push.js';
+export * from './sectors.js';
+export * from './sys-cfg.js';
