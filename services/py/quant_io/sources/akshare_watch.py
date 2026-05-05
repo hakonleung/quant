@@ -19,6 +19,7 @@ from __future__ import annotations
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 from typing import TYPE_CHECKING, Final, Protocol, cast, runtime_checkable
+from zoneinfo import ZoneInfo
 
 from quant_core.domain.types.watch import SpotQuote, StockBasic, WatchMarket
 from quant_core.errors import QuantError
@@ -30,6 +31,7 @@ if TYPE_CHECKING:
 
 
 _NAME: Final[str] = "akshare_watch"
+_ET: Final[ZoneInfo] = ZoneInfo("America/New_York")
 
 
 @runtime_checkable
@@ -165,17 +167,18 @@ class AKShareWatchSource:
         # available history. We only need session-level last/high/low, so a
         # 90-minute trailing window is plenty to cover the most recent bar
         # plus a buffer for early-tick delays.
-        end = datetime.now(UTC)
-        start = end - timedelta(minutes=90)
-        # akshare expects naive local-clock strings (the upstream API is in
-        # ET) but the endpoint is forgiving about timezone — UTC stamps work
-        # because we only use the bars' relative ordering.
+        # The upstream endpoint filters server-side using ET wall-clock
+        # (DST-aware). Passing UTC strings shifts the window 4-5h forward
+        # in ET, which during the first half of a US session lands fully
+        # in the future and yields an empty frame. Convert to ET first.
+        end_et = datetime.now(_ET)
+        start_et = end_et - timedelta(minutes=90)
         fmt = "%Y-%m-%d %H:%M:%S"
         try:
             raw = ak.stock_us_hist_min_em(
                 symbol=code,
-                start_date=start.strftime(fmt),
-                end_date=end.strftime(fmt),
+                start_date=start_et.strftime(fmt),
+                end_date=end_et.strftime(fmt),
             )
         except Exception as exc:
             raise QuantError(
