@@ -28,6 +28,7 @@ import { FeatAiHist } from "../feat-ai-hist/feat-ai-hist.js";
 import { FeatSecList } from "../feat-sec-list/feat-sec-list.js";
 import { FeatAiOut } from "../feat-ai-out/feat-ai-out.js";
 import { FeatWatchLive } from "../feat-watch-live/feat-watch-live.js";
+import { FeatTermMain } from "../feat-term-main/feat-term-main.js";
 
 export function EqtyModule(): React.ReactElement {
   const code = useUiStore((s) => s.focusCode);
@@ -71,6 +72,7 @@ export function EqtyModule(): React.ReactElement {
         <FeatAiHist />
         {code !== null && <FeatAiOut code={code} />}
         <FeatWatchLive />
+        <FeatTermMain />
       </Column>
     </Flex>
   );

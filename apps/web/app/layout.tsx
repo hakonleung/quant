@@ -24,6 +24,12 @@ export default function RootLayout({ children }: RootLayoutProps): ReactNode {
           href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap"
           rel="stylesheet"
         />
+        {/* Monaspace Neon — geek-style font for the TERM.MAIN xterm. */}
+        <link rel="preconnect" href="https://cdn.jsdelivr.net" crossOrigin="anonymous" />
+        <link
+          href="https://cdn.jsdelivr.net/npm/@fontsource/monaspace-neon@5.0.16/index.css"
+          rel="stylesheet"
+        />
         <style>{`@keyframes blink{50%{opacity:0}}`}</style>
       </head>
       <body>

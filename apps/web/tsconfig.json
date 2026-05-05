@@ -21,6 +21,9 @@
     "paths": {
       "@quant/shared": [
         "../../packages/shared/src/index.ts"
+      ],
+      "@quant/terminal": [
+        "../../packages/terminal/src/index.ts"
       ]
     },
     "allowJs": true

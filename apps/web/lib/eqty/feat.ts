@@ -39,6 +39,9 @@ export const Feat = {
 
   // WATCH — live watch tasks
   WatchLive: 'WATCH.LIVE',
+
+  // TERM — keyboard-driven command surface
+  Terminal: 'TERM.MAIN',
 } as const;
 
 export type Feat = (typeof Feat)[keyof typeof Feat];
@@ -74,4 +77,5 @@ export const FEAT_CONFIG_MAP: Readonly<Record<Feat, FeatConfig>> = {
   [Feat.SysStat]: { cyber: true, defaultMinimized: true, bodyOverlay: true },
   [Feat.SysCfg]: { cyber: true, defaultMinimized: true, bodyOverlay: true },
   [Feat.WatchLive]: { gridArea: 'R3', cyber: true, defaultMinimized: true },
+  [Feat.Terminal]: { cyber: true, defaultMinimized: true },
 };

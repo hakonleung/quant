@@ -4,8 +4,9 @@
     {
       "name": "web",
       "runtimeExecutable": "pnpm",
-      "runtimeArgs": ["-C", "apps/web", "exec", "next", "dev", "-p", "3100"],
-      "port": 3100
+      "runtimeArgs": ["-C", "apps/web", "exec", "next", "dev"],
+      "port": 3100,
+      "autoPort": true
     },
     {
       "name": "api",
