@@ -138,7 +138,12 @@ class FindSimilarPatternsHandler:
         # days here would mismatch by every weekend/holiday in the
         # range and trip the engine's length check.
         window_days = len(reference.closes)
-        asof_end = self._clock.now().date()
+        # Scan history strictly before the reference start so candidate
+        # windows can never overlap the reference itself. Using ``now``
+        # as ``asof_end`` would let the engine match the reference back
+        # to itself (distance ~0) and trips the lookahead guard
+        # whenever the user picks a recent range.
+        asof_end = start - timedelta(days=1)
 
         query = PatternQuery(
             reference=reference,
