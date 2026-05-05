@@ -35,7 +35,10 @@ import { ALL_SECTOR_ID, useUiStore } from '../../lib/stores/ui.store.js';
 import { FeatScrDsl } from "../feat-scr-dsl/feat-scr-dsl.js";
 import { FeatScrNl } from "../feat-scr-nl/feat-scr-nl.js";
 import { FeatView } from "../feat-view/feat-view.js";
+import { MonoButton } from '../ui/mono-button.js';
 import { ConfirmCancelled, useConfirm } from '../../lib/hooks/use-confirm.js';
+
+const DELETE_COL_W = 32;
 
 /**
  * Row payload — flat record so dynamic sectors literally see
@@ -816,7 +819,8 @@ function ScrollGrid({
   emptyHint,
 }: ScrollGridProps): React.ReactElement {
   const scrollRef = useRef<HTMLDivElement>(null);
-  const totalWidth = columns.reduce((acc, c) => acc + c.w, 0);
+  const removable = onRowRemove !== null;
+  const totalWidth = columns.reduce((acc, c) => acc + c.w, 0) + (removable ? DELETE_COL_W : 0);
 
   const rowVirtualizer = useVirtualizer({
     count: rows.length,
@@ -838,7 +842,7 @@ function ScrollGrid({
   return (
     <Box ref={scrollRef} flex="1" overflow="auto" position="relative">
       <Box w={`${String(totalWidth)}px`} minW="100%">
-        <ColumnHeader columns={columns} sort={sort} setSort={setSort} />
+        <ColumnHeader columns={columns} sort={sort} setSort={setSort} removable={removable} />
         <Box
           position="relative"
           h={`${String(rowVirtualizer.getTotalSize())}px`}
@@ -878,10 +882,12 @@ function ColumnHeader({
   columns,
   sort,
   setSort,
+  removable,
 }: {
   columns: readonly ColumnDef[];
   sort: SortState | null;
   setSort: (s: SortState | null) => void;
+  removable: boolean;
 }): React.ReactElement {
   return (
     <Box
@@ -894,6 +900,16 @@ function ColumnHeader({
       top={0}
       zIndex={3}
     >
+      {removable && (
+        <Box
+          w={`${String(DELETE_COL_W)}px`}
+          flexShrink={0}
+          position="sticky"
+          left={0}
+          bg="panel3"
+          zIndex={4}
+        />
+      )}
       {columns.map((c) => {
         const active = sort?.key === c.key;
         const arrow = !active ? '' : sort.dir === 'asc' ? ' ▲' : ' ▼';
@@ -924,7 +940,7 @@ function ColumnHeader({
             cursor="pointer"
             _hover={{ color: 'accent' }}
             position={c.sticky === true ? 'sticky' : 'static'}
-            left={c.sticky === true ? 0 : undefined}
+            left={c.sticky === true ? (removable ? `${String(DELETE_COL_W)}px` : 0) : undefined}
             zIndex={c.sticky === true ? 4 : 3}
             borderColor="line"
             flexShrink={0}
@@ -957,6 +973,7 @@ function RowItem({
   onClick,
   onRemove,
 }: RowItemProps): React.ReactElement {
+  const hasRemove = onRemove !== null;
   return (
     <Box
       position="absolute"
@@ -976,6 +993,28 @@ function RowItem({
       onClick={onClick}
       role="group"
     >
+      {hasRemove && (
+        <Box
+          position="sticky"
+          left={0}
+          h={`${String(h)}px`}
+          w={`${String(DELETE_COL_W)}px`}
+          display="grid"
+          placeItems="center"
+          bg={focused ? 'accentBg' : 'panel'}
+          zIndex={2}
+          flexShrink={0}
+        >
+          <MonoButton
+            icon="delete"
+            label={`remove ${row.code}`}
+            onClick={(e: React.MouseEvent<HTMLButtonElement>): void => {
+              e.stopPropagation();
+              onRemove();
+            }}
+          />
+        </Box>
+      )}
       {columns.map((c) => (
         <Box
           key={c.key}
@@ -989,7 +1028,7 @@ function RowItem({
           alignItems="center"
           justifyContent={c.align === 'right' ? 'flex-end' : 'flex-start'}
           position={c.sticky === true ? 'sticky' : 'static'}
-          left={c.sticky === true ? 0 : undefined}
+          left={c.sticky === true ? (hasRemove ? `${String(DELETE_COL_W)}px` : 0) : undefined}
           bg={c.sticky === true ? (focused ? 'accentBg' : 'panel') : 'transparent'}
           zIndex={c.sticky === true ? 1 : 0}
           borderBottomWidth={c.sticky === true ? '1px' : 0}
@@ -999,32 +1038,6 @@ function RowItem({
           {c.render(row)}
         </Box>
       ))}
-      {onRemove !== null && (
-        <Box
-          as="button"
-          aria-label={`remove ${row.code}`}
-          title="remove from sector"
-          onClick={(e: React.MouseEvent): void => {
-            e.stopPropagation();
-            onRemove();
-          }}
-          position="sticky"
-          right={0}
-          ml="auto"
-          h={`${String(h)}px`}
-          w="32px"
-          display="grid"
-          placeItems="center"
-          bg={focused ? 'accentBg' : 'panel'}
-          color="ink3"
-          fontFamily="mono"
-          fontSize="14px"
-          flexShrink={0}
-          _hover={{ color: 'down' }}
-        >
-          ×
-        </Box>
-      )}
     </Box>
   );
 }

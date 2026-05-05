@@ -4,7 +4,7 @@
     {
       "name": "web",
       "runtimeExecutable": "pnpm",
-      "runtimeArgs": ["--filter", "@quant/web", "exec", "next", "dev", "-p", "3100"],
+      "runtimeArgs": ["-C", "apps/web", "exec", "next", "dev", "-p", "3100"],
       "port": 3100
     },
     {

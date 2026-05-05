@@ -23,6 +23,7 @@ import {
   type ColumnSpec,
 } from '../../lib/eqty/columns.catalog.js';
 import { useSettingsStore } from '../../lib/stores/settings.store.js';
+import { MonoButton } from '../ui/mono-button.js';
 
 const IMMUTABLE: ReadonlySet<ColumnKey> = new Set(['name']);
 
@@ -86,29 +87,28 @@ export function ColumnManager(): React.ReactElement {
                 <Text color="term.ink3" fontSize="9px" whiteSpace="nowrap">
                   {spec.group}
                 </Text>
-                <ToolButton
-                  label="↑"
-                  title="move up"
+                <MonoButton
+                  icon="up"
+                  label="move up"
                   onClick={(): void => {
                     move(idx, -1);
                   }}
                   disabled={idx === 0}
                 />
-                <ToolButton
-                  label="↓"
-                  title="move down"
+                <MonoButton
+                  icon="down"
+                  label="move down"
                   onClick={(): void => {
                     move(idx, 1);
                   }}
                   disabled={idx === removable.length - 1}
                 />
-                <ToolButton
-                  label="×"
-                  title="remove"
+                <MonoButton
+                  icon="delete"
+                  label="remove"
                   onClick={(): void => {
                     remove(key);
                   }}
-                  danger
                 />
               </Flex>
             );
@@ -138,9 +138,9 @@ export function ColumnManager(): React.ReactElement {
               <Text color="term.ink3" fontSize="9px" whiteSpace="nowrap">
                 {spec.group}
               </Text>
-              <ToolButton
-                label="+"
-                title="add to applied"
+              <MonoButton
+                icon="add"
+                label="add to applied"
                 onClick={(): void => {
                   add(spec.key);
                 }}
@@ -204,50 +204,3 @@ function Empty({ children }: { children: React.ReactNode }): React.ReactElement 
   );
 }
 
-interface ToolButtonProps {
-  readonly label: string;
-  readonly title: string;
-  readonly onClick: () => void;
-  readonly disabled?: boolean;
-  readonly danger?: boolean;
-}
-
-function ToolButton({
-  label,
-  title,
-  onClick,
-  disabled = false,
-  danger = false,
-}: ToolButtonProps): React.ReactElement {
-  return (
-    <Box
-      as="button"
-      onClick={(e: React.MouseEvent): void => {
-        e.stopPropagation();
-        if (!disabled) onClick();
-      }}
-      title={title}
-      color={disabled ? 'term.ink3' : danger ? 'term.red' : 'term.ink2'}
-      bg="transparent"
-      borderWidth="1px"
-      borderColor="term.line"
-      px="6px"
-      h="20px"
-      lineHeight="18px"
-      fontFamily="mono"
-      fontSize="11px"
-      cursor={disabled ? 'not-allowed' : 'pointer'}
-      opacity={disabled ? 0.5 : 1}
-      _hover={
-        disabled
-          ? {}
-          : {
-              borderColor: danger ? 'term.red' : 'term.green',
-              color: danger ? 'term.red' : 'term.green',
-            }
-      }
-    >
-      {label}
-    </Box>
-  );
-}

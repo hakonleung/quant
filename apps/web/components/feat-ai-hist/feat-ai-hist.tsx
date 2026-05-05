@@ -18,7 +18,8 @@ import { usePushPayload } from '../../lib/hooks/use-push-payload.js';
 import { useSectorsStore } from '../../lib/stores/sectors.store.js';
 import { ALL_SECTOR_ID, useUiStore } from '../../lib/stores/ui.store.js';
 import { FeatView } from '../feat-view/feat-view.js';
-import { FeatViewAction, FeatViewHeaderRight } from '../feat-view/feat-view-header.js';
+import { FeatViewHeaderRight } from '../feat-view/feat-view-header.js';
+import { MonoButton } from '../ui/mono-button.js';
 import { ANALYZE_MAX_CODES } from '../feat-sec-list/feat-sec-list.js';
 
 export function FeatAiHist(): React.ReactElement | null {
@@ -146,26 +147,22 @@ export function FeatAiHist(): React.ReactElement | null {
       }
       right={
         <FeatViewHeaderRight>
-          <FeatViewAction
-            title={
+          <MonoButton
+            icon="refresh"
+            label={
               tooLarge
                 ? `too many members (${String(codes.length)} > ${String(ANALYZE_MAX_CODES)})`
                 : `analyze ${sectorLabel}`
             }
             onClick={onFetch}
-            busy={analyze.isPending}
-            disabled={codes.length === 0 || tooLarge}
-          >
-            ⟳
-          </FeatViewAction>
-          <FeatViewAction
-            title="push sector summary to slack"
+            disabled={codes.length === 0 || tooLarge || analyze.isPending}
+          />
+          <MonoButton
+            icon="push"
+            label="push sector summary to slack"
             onClick={onPush}
-            disabled={data === null}
-            busy={push.isPending}
-          >
-            ▶
-          </FeatViewAction>
+            disabled={data === null || push.isPending}
+          />
         </FeatViewHeaderRight>
       }
     >

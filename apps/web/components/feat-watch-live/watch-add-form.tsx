@@ -14,7 +14,7 @@
  * v0 only POSTs sequentially via the BFF — no dedicated batch endpoint.
  */
 
-import { Box, Button, Flex, Input, Text } from '@chakra-ui/react';
+import { Box, Flex, Input, Text } from '@chakra-ui/react';
 import {
   WatchTaskCreateSchema,
   type WatchBaseline,
@@ -22,13 +22,14 @@ import {
   type WatchMarket,
   type WatchTaskCreate,
 } from '@quant/shared';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { z } from 'zod';
 
 import type { UniverseStock } from '../../lib/hooks/use-stock-universe.js';
 import { useStockUniverse } from '../../lib/hooks/use-stock-universe.js';
 import { useSectorsStore, type Sector } from '../../lib/stores/sectors.store.js';
 import { FeatScrNl } from '../feat-scr-nl/feat-scr-nl.js';
+import { MonoButton } from '../ui/mono-button.js';
 import { TermSelect } from './term-select.js';
 
 const KindSchema = z.enum(['pct', 'abs']);
@@ -138,9 +139,7 @@ function buildInitialState(initial: WatchAddInitial | undefined): AddFormState {
   return {
     picked: initial.picked,
     conditions:
-      initial.conditions.length > 0
-        ? initial.conditions.map(fromCondition)
-        : [INITIAL_CONDITION],
+      initial.conditions.length > 0 ? initial.conditions.map(fromCondition) : [INITIAL_CONDITION],
     intervalMin: secondsToMinuteString(initial.intervalSec),
     pushIntervalMin: secondsToMinuteString(initial.pushIntervalSec),
   };
@@ -270,32 +269,41 @@ function SectorImportRow({ onBatchPick }: SectorImportRowProps): React.ReactElem
     }
     if (stocks.length > 0) onBatchPick(stocks);
   };
+  // Alt+1…9 (or Alt+0 for the 10th) imports the i-th sector. Skips
+  // when focus is in a text input so the shortcut doesn't fight typing.
+  useEffect(() => {
+    const handler = (e: KeyboardEvent): void => {
+      if (!e.altKey || e.metaKey || e.ctrlKey) return;
+      const target = e.target;
+      if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) return;
+      const digit = e.key === '0' ? 9 : Number.parseInt(e.key, 10) - 1;
+      if (Number.isNaN(digit) || digit < 0 || digit >= sectors.length) return;
+      e.preventDefault();
+      const sec = sectors[digit];
+      if (sec !== undefined) onImport(sec);
+    };
+    window.addEventListener('keydown', handler);
+    return (): void => {
+      window.removeEventListener('keydown', handler);
+    };
+  }, [sectors, codeToStock]);
   if (sectors.length === 0) return null;
   return (
     <Flex gap="4px" wrap="wrap" align="center" mb="6px">
       <Text fontSize="11px" color="term.ink3" letterSpacing="0.14em" mr="2px">
         SECTOR
       </Text>
-      {sectors.map((sec) => (
-        <Box
+      {sectors.map((sec, idx) => (
+        <MonoButton
           key={sec.id}
-          as="button"
-          px="6px"
-          h="20px"
-          border="1px solid"
-          borderColor="term.line2"
-          color="term.green"
-          fontFamily="mono"
-          fontSize="11px"
-          lineHeight="18px"
-          _hover={{ bg: 'term.panel', borderColor: 'term.green' }}
+          icon="add"
+          label={`import ${String(sec.codes.length)} stocks from ${sec.name} (alt+${String(idx + 1)})`}
           onClick={(): void => {
             onImport(sec);
           }}
-          title={`import ${String(sec.codes.length)} stocks from ${sec.name}`}
         >
-          + {sec.name} ({sec.codes.length})
-        </Box>
+          {sec.name} ({sec.codes.length})
+        </MonoButton>
       ))}
     </Flex>
   );
@@ -351,18 +359,13 @@ function PickRow({ state, setState }: RowProps): React.ReactElement {
               <Text>
                 [{p.market}] {p.code} · {p.name}
               </Text>
-              <Box
-                as="button"
-                aria-label={`remove ${p.code}`}
+              <MonoButton
+                icon="delete"
+                label={`remove ${p.code}`}
                 onClick={(): void => {
                   onRemove(i);
                 }}
-                color="term.ink3"
-                _hover={{ color: 'term.red' }}
-                px="2px"
-              >
-                ×
-              </Box>
+              />
             </Flex>
           ))}
         </Flex>
@@ -393,9 +396,9 @@ function ConditionsList({ state, setState }: RowProps): React.ReactElement {
         <Text fontSize="11px" color="term.ink3" letterSpacing="0.14em">
           CONDITIONS · ANY-OF
         </Text>
-        <Button size="xs" variant="ghost" color="term.green" onClick={onAdd}>
-          + add
-        </Button>
+        <MonoButton icon="add" label="add condition" onClick={onAdd}>
+          add
+        </MonoButton>
       </Flex>
       <Flex direction="column" gap="4px">
         {state.conditions.map((c, i) => (
@@ -490,16 +493,14 @@ function ConditionRow({
           />
         </>
       )}
-      <Button
-        size="xs"
-        variant="ghost"
-        color="term.red"
-        ml="auto"
-        disabled={!canRemove}
-        onClick={onRemove}
-      >
-        ×
-      </Button>
+      <Box ml="auto">
+        <MonoButton
+          icon="delete"
+          label="remove condition"
+          disabled={!canRemove}
+          onClick={onRemove}
+        />
+      </Box>
     </Flex>
   );
 }
@@ -549,17 +550,15 @@ function SubmitRow({
       <Text color="term.ink3" fontSize="11px">
         m
       </Text>
-      <Button
-        size="xs"
-        variant="outline"
-        color="term.green"
-        borderColor="term.green"
-        ml="auto"
+      <MonoButton
+        icon="add"
+        label={busy ? '…' : `add ${String(state.picked.length)}`}
         disabled={busy || !canSubmit}
         onClick={onSubmit}
+        ml="auto"
       >
         {busy ? '…' : `add ${String(state.picked.length)}`}
-      </Button>
+      </MonoButton>
     </Flex>
   );
 }

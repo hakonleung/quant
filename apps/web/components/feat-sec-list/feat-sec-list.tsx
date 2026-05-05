@@ -10,7 +10,8 @@ import { useStockList } from '../../lib/hooks/use-stock-list.js';
 import { useSectorsStore, type Sector } from '../../lib/stores/sectors.store.js';
 import { ALL_SECTOR_ID, useUiStore } from '../../lib/stores/ui.store.js';
 import { FeatView } from "../feat-view/feat-view.js";
-import { FeatViewAction, FeatViewHeaderRight } from "../feat-view/feat-view-header.js";
+import { FeatViewHeaderRight } from "../feat-view/feat-view-header.js";
+import { MonoButton } from '../ui/mono-button.js';
 import { NewSectorDialog } from './new-sector-dialog.js';
 
 /**
@@ -102,15 +103,13 @@ export function FeatSecList(): React.ReactElement {
       feat={Feat.SectorList}
       right={
         <FeatViewHeaderRight>
-          <FeatViewAction
-            title="new sector"
-            tone="accent"
+          <MonoButton
+            icon="add"
+            label="new sector"
             onClick={(): void => {
               setDialogOpen(true);
             }}
-          >
-            +
-          </FeatViewAction>
+          />
         </FeatViewHeaderRight>
       }
     >
@@ -296,25 +295,14 @@ function SectorRow({
         </Text>
       )}
       {onDelete !== undefined && (
-        <Box
-          as="span"
-          role="button"
-          aria-label={`delete sector ${sector.name}`}
-          onClick={(e: React.MouseEvent): void => {
+        <MonoButton
+          icon="delete"
+          label={`delete sector ${sector.name}`}
+          onClick={(e: React.MouseEvent<HTMLButtonElement>): void => {
             e.stopPropagation();
             onDelete();
           }}
-          color="ink3"
-          cursor="pointer"
-          fontFamily="mono"
-          fontSize="14px"
-          lineHeight="1"
-          px="4px"
-          _hover={{ color: 'down' }}
-          title="delete sector"
-        >
-          ×
-        </Box>
+        />
       )}
     </Flex>
   );

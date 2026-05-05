@@ -22,12 +22,13 @@
  * Header actions: blacklist (with confirm) + add-to-sector dialog.
  */
 
-import { Box, Button, Flex, Text } from '@chakra-ui/react';
+import { Box, Flex, Text } from '@chakra-ui/react';
 import type { KlineBar, StockMetaDto } from '@quant/shared';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { Feat } from '../../lib/eqty/feat.js';
-import { FeatViewAction, FeatViewHeaderRight } from "../feat-view/feat-view-header.js";
+import { FeatViewHeaderRight } from '../feat-view/feat-view-header.js';
+import { MonoButton } from '../ui/mono-button.js';
 import {
   clampViewport,
   DEFAULT_VIEWPORT,
@@ -44,8 +45,8 @@ import { useKline, useStockMetaQuery, useStockSnapshots } from '../../lib/hooks/
 import { useBlacklistStore } from '../../lib/stores/blacklist.store.js';
 import { useUiStore } from '../../lib/stores/ui.store.js';
 import { palette } from '../../lib/theme/tokens.js';
-import { FeatView } from "../feat-view/feat-view.js";
-import { AddToSectorDialog } from "../feat-sec-list/add-to-sector-dialog.js";
+import { FeatView } from '../feat-view/feat-view.js';
+import { AddToSectorDialog } from '../feat-sec-list/add-to-sector-dialog.js';
 
 // Render space — height fixed; width fills container via SVG width=100%.
 const PRICE_H = 240;
@@ -737,23 +738,12 @@ function ZoomOverlay({ vp, setVp }: ZoomOverlayProps): React.ReactElement {
     setVp(clampViewport({ ...vp, candleW: Math.max(MIN_CANDLE_W, vp.candleW / 1.4) }));
   };
   return (
-    <Flex
-      position="absolute"
-      top="6px"
-      right="10px"
-      gap="4px"
-      zIndex={2}
-      pointerEvents="none"
-    >
+    <Flex position="absolute" top="6px" right="10px" gap="4px" zIndex={2} pointerEvents="none">
       <Box pointerEvents="auto">
-        <ToolButton onClick={zoomOut} title="zoom out">
-          −
-        </ToolButton>
+        <MonoButton icon="minimize" label="zoom out" onClick={zoomOut} />
       </Box>
       <Box pointerEvents="auto">
-        <ToolButton onClick={zoomIn} title="zoom in">
-          +
-        </ToolButton>
+        <MonoButton icon="add" label="zoom in" onClick={zoomIn} />
       </Box>
     </Flex>
   );
@@ -815,29 +805,17 @@ function ChartHeaderRight({
       <Text>{code}</Text>
       {stockName !== '' && <Text>{stockName}</Text>}
       <FeatViewHeaderRight>
-        <FeatViewAction title="add to sector" onClick={onAddToSector} tone="accent">
-          ★
-        </FeatViewAction>
-        <FeatViewAction
-          title={alreadyBlacklisted ? 'already blacklisted' : 'blacklist'}
+        <MonoButton icon="star" label="add to sector" onClick={onAddToSector} />
+        <MonoButton
+          icon="block"
+          label={alreadyBlacklisted ? 'already blacklisted' : 'blacklist'}
           onClick={onBlacklist}
           disabled={alreadyBlacklisted}
-          tone="danger"
-        >
-          ⊘
-        </FeatViewAction>
+        />
       </FeatViewHeaderRight>
       {confirmComp}
     </Flex>
   );
-}
-
-interface ButtonProps {
-  readonly children: React.ReactNode;
-  readonly onClick?: () => void;
-  readonly title?: string;
-  readonly danger?: boolean;
-  readonly disabled?: boolean;
 }
 
 function findRangeIndices(
@@ -855,38 +833,6 @@ function findRangeIndices(
   }
   if (s < 0 || e < 0) return null;
   return { start: Math.min(s, e), end: Math.max(s, e) };
-}
-
-function ToolButton({
-  children,
-  onClick,
-  title,
-  danger = false,
-  disabled = false,
-}: ButtonProps): React.ReactElement {
-  return (
-    <Button
-      h="auto"
-      px="8px"
-      py="3px"
-      fontFamily="mono"
-      fontSize="10px"
-      letterSpacing="0.14em"
-      textTransform="uppercase"
-      bg="panel"
-      color={danger ? 'up' : 'ink2'}
-      borderWidth="1px"
-      borderColor={danger ? 'up' : 'line'}
-      borderRadius="0"
-      fontWeight="500"
-      onClick={onClick}
-      disabled={disabled}
-      title={title}
-      _hover={disabled ? {} : { bg: 'hover' }}
-    >
-      {children}
-    </Button>
-  );
 }
 
 interface FinancialsProps {
@@ -915,20 +861,10 @@ function FinancialsSection({ code, meta }: FinancialsProps): React.ReactElement 
       fontSize="11px"
       color="ink2"
     >
-      <Text
-        color="ink3"
-        fontSize="9px"
-        letterSpacing="0.16em"
-        textTransform="uppercase"
-        mb="6px"
-      >
+      <Text color="ink3" fontSize="9px" letterSpacing="0.16em" textTransform="uppercase" mb="6px">
         FUNDAMENTALS
       </Text>
-      <Box
-        display="grid"
-        gridTemplateColumns="repeat(auto-fit, minmax(120px, 1fr))"
-        gap="4px 16px"
-      >
+      <Box display="grid" gridTemplateColumns="repeat(auto-fit, minmax(120px, 1fr))" gap="4px 16px">
         <FinCell label="MKT CAP" value={fmtCny(derived?.mkt_cap ?? null)} />
         <FinCell label="FLOAT MC" value={fmtCny(derived?.float_mkt_cap ?? null)} />
         <FinCell label="PE TTM" value={fmtNum(derived?.pe_ttm ?? null)} />

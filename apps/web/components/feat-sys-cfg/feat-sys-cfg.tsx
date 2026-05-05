@@ -21,6 +21,7 @@ import { Feat } from '../../lib/eqty/feat.js';
 import { useBlacklistStore } from '../../lib/stores/blacklist.store.js';
 import { ColumnManager } from "../feat-eq-list/column-manager.js";
 import { FeatView } from "../feat-view/feat-view.js";
+import { MonoButton } from '../ui/mono-button.js';
 
 type Section = 'columns' | 'blacklist';
 
@@ -154,28 +155,13 @@ function BlacklistView(): React.ReactElement {
               added {b.addedAt}
             </Text>
           </Box>
-          <Box
-            as="button"
-            aria-label={`unblacklist ${b.code}`}
-            title="remove from blacklist"
+          <MonoButton
+            icon="delete"
+            label={`unblacklist ${b.code}`}
             onClick={(): void => {
               removeEntry(b.code);
             }}
-            color="term.ink3"
-            bg="transparent"
-            borderWidth="1px"
-            borderColor="term.line"
-            px="6px"
-            h="20px"
-            lineHeight="18px"
-            fontFamily="mono"
-            fontSize="11px"
-            cursor="pointer"
-            flexShrink={0}
-            _hover={{ borderColor: 'term.red', color: 'term.red' }}
-          >
-            ×
-          </Box>
+          />
         </Flex>
       ))}
     </Box>

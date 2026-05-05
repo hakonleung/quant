@@ -1,22 +1,15 @@
 'use client';
 
 /**
- * Shared header-right primitives used by every FeatView:
- *
- *   <FeatViewStatus tone="green" /> · <FeatViewAction onClick title>⟳</FeatViewAction>
- *
- * `FeatViewStatus` renders only the colored bullet — no text label —
- * because the status word ("ready", "idle", "cached") is redundant
- * with the bullet color and clutters the 30px header.
- *
- * `FeatViewAction` is the single icon-button shape. The icon glyph is
- * scaled up so it stays legible inside the cyber pane chrome.
+ * Shared header-right primitives used by every FeatView. Status pellet
+ * + action buttons live in this slot. `FeatViewStatus` only paints
+ * abnormal tones — green / idle return `null` so the steady state
+ * doesn't clutter the chrome. Pane-level actions are rendered through
+ * `<MonoButton icon=... label=...>` directly.
  */
 
 import { Box, Flex } from '@chakra-ui/react';
 import type { ReactNode } from 'react';
-
-import { MonoButton } from '../ui/mono-button.js';
 
 export type FeatViewStatusTone = 'green' | 'amber' | 'red' | 'idle' | 'accent';
 
@@ -61,32 +54,6 @@ export function FeatViewStatus({
     >
       {TONE_TO_GLYPH[tone]}
     </Box>
-  );
-}
-
-interface FeatViewActionProps {
-  readonly title: string;
-  readonly onClick: () => void;
-  readonly disabled?: boolean;
-  readonly busy?: boolean;
-  readonly tone?: 'default' | 'accent' | 'danger';
-  readonly children: ReactNode;
-}
-
-export function FeatViewAction({
-  title,
-  onClick,
-  disabled = false,
-  busy = false,
-  tone: _tone = 'default',
-  children,
-}: FeatViewActionProps): React.ReactElement {
-  void _tone;
-  const isDisabled = disabled || busy;
-  return (
-    <MonoButton label={title} onClick={onClick} disabled={isDisabled}>
-      {busy ? '…' : children}
-    </MonoButton>
   );
 }
 

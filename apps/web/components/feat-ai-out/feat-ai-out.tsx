@@ -11,7 +11,8 @@ import {
 import { usePushPayload } from '../../lib/hooks/use-push-payload.js';
 import { FeatAiMd } from '../feat-ai-md/feat-ai-md.js';
 import { FeatView } from '../feat-view/feat-view.js';
-import { FeatViewAction, FeatViewHeaderRight } from '../feat-view/feat-view-header.js';
+import { FeatViewHeaderRight } from '../feat-view/feat-view-header.js';
+import { MonoButton } from '../ui/mono-button.js';
 
 interface Props {
   readonly code: string;
@@ -83,21 +84,18 @@ export function FeatAiOut({ code }: Props): React.ReactElement {
       }
       right={
         <FeatViewHeaderRight>
-          <FeatViewAction
-            title="fetch sentiment"
+          <MonoButton
+            icon="refresh"
+            label="fetch sentiment"
             onClick={onFetch}
-            busy={analyze.isPending}
-          >
-            ⟳
-          </FeatViewAction>
-          <FeatViewAction
-            title="push sentiment to slack"
+            disabled={analyze.isPending}
+          />
+          <MonoButton
+            icon="push"
+            label="push sentiment to slack"
             onClick={onPush}
-            disabled={sentiment === null}
-            busy={push.isPending}
-          >
-            ▶
-          </FeatViewAction>
+            disabled={sentiment === null || push.isPending}
+          />
         </FeatViewHeaderRight>
       }
     >

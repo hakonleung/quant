@@ -158,7 +158,15 @@ export function FeatView({
       bg={cyber ? 'term.panel' : 'panel'}
       color={cyber ? 'term.ink2' : 'ink'}
       position={isFullscreen ? 'fixed' : 'relative'}
-      flex={isFullscreen ? undefined : inlineCollapsed ? '0 0 auto' : '1 1 0'}
+      flex={
+        isFullscreen
+          ? undefined
+          : bodyOverlay
+            ? '1 1 0'
+            : inlineCollapsed
+              ? '0 0 auto'
+              : '1 1 0'
+      }
       minH={0}
       display="flex"
       flexDirection="column"
@@ -352,22 +360,14 @@ function FeatViewControls({
   return (
     <HStack gap="2px">
       {mode === 'fullscreen' ? (
-        <MonoButton label="exit fullscreen" onClick={onExitFullscreen}>
-          ◱
-        </MonoButton>
+        <MonoButton icon="exitFullscreen" label="exit fullscreen" onClick={onExitFullscreen} />
       ) : (
         <>
-          <MonoButton label="fullscreen" onClick={onFullscreen}>
-            ⛶
-          </MonoButton>
+          <MonoButton icon="fullscreen" label="fullscreen" onClick={onFullscreen} />
           {mode === 'minimized' ? (
-            <MonoButton label="restore" onClick={onRestore}>
-              ▢
-            </MonoButton>
+            <MonoButton icon="restore" label="restore" onClick={onRestore} />
           ) : (
-            <MonoButton label="minimize" onClick={onMinimize}>
-              —
-            </MonoButton>
+            <MonoButton icon="minimize" label="minimize" onClick={onMinimize} />
           )}
         </>
       )}

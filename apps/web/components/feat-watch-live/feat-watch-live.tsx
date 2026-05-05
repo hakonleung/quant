@@ -15,7 +15,7 @@
  * column. Per-row hover highlights the current task.
  */
 
-import { Box, Button, Checkbox, Flex, Text } from '@chakra-ui/react';
+import { Box, Checkbox, Flex, Text } from '@chakra-ui/react';
 import { WatchTaskSchema, type WatchCondition, type WatchTask } from '@quant/shared';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { z } from 'zod';
@@ -23,6 +23,7 @@ import { z } from 'zod';
 import { Feat } from '../../lib/eqty/feat.js';
 import { ConfirmCancelled, useConfirm } from '../../lib/hooks/use-confirm.js';
 import { FeatView } from '../feat-view/feat-view.js';
+import { MonoButton } from '../ui/mono-button.js';
 import { WatchAddForm, type PickedStock, type WatchAddInitial } from './watch-add-form.js';
 
 const TaskListSchema = z.array(WatchTaskSchema);
@@ -190,6 +191,32 @@ export function FeatWatchLive(): React.ReactElement {
     }
   };
 
+  const onDeleteSelected = async (): Promise<void> => {
+    const keys = Array.from(selected);
+    if (keys.length === 0) return;
+    try {
+      await guard({
+        title: 'delete selected',
+        message: (
+          <Text fontFamily="mono" fontSize="12px" color="term.ink2" lineHeight="1.7">
+            delete{' '}
+            <Text as="span" color="term.red">
+              {String(keys.length)}
+            </Text>{' '}
+            selected watch task(s)? This cannot be undone.
+          </Text>
+        ),
+        confirmLabel: 'DELETE',
+      });
+    } catch (e) {
+      if (e instanceof ConfirmCancelled) return;
+      throw e;
+    }
+    const targets = tasks.filter((t) => selected.has(taskKey(t)));
+    await Promise.all(targets.map((t) => deleteTask(t)));
+    setSelected(new Set());
+  };
+
   const onOverrideGroup = async (group: TaskGroup): Promise<void> => {
     const picked: readonly PickedStock[] = group.tasks.map((t) => ({
       market: t.market,
@@ -237,6 +264,45 @@ export function FeatWatchLive(): React.ReactElement {
             <WatchAddForm key={formKey} />
           )}
         </Box>
+        {selected.size > 0 && (
+          <Flex
+            align="center"
+            gap="8px"
+            px="14px"
+            py="6px"
+            mx="14px"
+            borderWidth="1px"
+            borderColor="term.amber"
+            bg="term.panel"
+            color="term.amber"
+            fontFamily="mono"
+            fontSize="11px"
+            letterSpacing="0.06em"
+            flexShrink={0}
+          >
+            <Text>selected {String(selected.size)} task(s)</Text>
+            <Box ml="auto">
+              <MonoButton
+                icon="delete"
+                label="clear selection"
+                onClick={(): void => {
+                  setSelected(new Set());
+                }}
+              >
+                clear
+              </MonoButton>
+            </Box>
+            <MonoButton
+              icon="delete"
+              label="delete selected"
+              onClick={(): void => {
+                void onDeleteSelected();
+              }}
+            >
+              delete
+            </MonoButton>
+          </Flex>
+        )}
         <Box px="14px" py="8px">
           <BodyStatus
             state={state}
@@ -394,49 +460,27 @@ function Group({
           ×{group.tasks.length}
         </Text>
         {allSelected ? (
-          <Button
-            size="xs"
-            h="20px"
-            px="8px"
-            borderRadius="0"
-            borderWidth="1px"
-            borderColor="term.amber"
-            bg="transparent"
-            color="term.amber"
-            fontFamily="mono"
-            fontSize="10px"
-            letterSpacing="0.14em"
-            fontWeight="700"
-            loading={busy}
-            onClick={(e): void => {
+          <MonoButton
+            icon="refresh"
+            label="override (re-edit) this group"
+            disabled={busy}
+            onClick={(e: React.MouseEvent<HTMLButtonElement>): void => {
               e.stopPropagation();
               onOverride(group);
             }}
           >
             OVERRIDE
-          </Button>
+          </MonoButton>
         ) : null}
-        <Button
-          size="xs"
-          h="20px"
-          px="8px"
-          borderRadius="0"
-          borderWidth="1px"
-          borderColor="term.red"
-          bg="transparent"
-          color="term.red"
-          fontFamily="mono"
-          fontSize="10px"
-          letterSpacing="0.14em"
-          fontWeight="700"
-          loading={busy}
-          onClick={(e): void => {
+        <MonoButton
+          icon="delete"
+          label="delete group"
+          disabled={busy}
+          onClick={(e: React.MouseEvent<HTMLButtonElement>): void => {
             e.stopPropagation();
             onDelete(group);
           }}
-        >
-          ×
-        </Button>
+        />
       </Flex>
       <Flex direction="column">
         {group.tasks.map((t) => (

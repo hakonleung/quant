@@ -21,7 +21,8 @@ import { useKline } from '../../lib/hooks/use-eqty-data.js';
 import { useLayoutStore } from '../../lib/stores/layout.store.js';
 import { useUiStore } from '../../lib/stores/ui.store.js';
 import { FeatView } from "../feat-view/feat-view.js";
-import { FeatViewAction, FeatViewHeaderRight } from "../feat-view/feat-view-header.js";
+import { FeatViewHeaderRight } from "../feat-view/feat-view-header.js";
+import { MonoButton } from '../ui/mono-button.js';
 
 export function FeatScrPat(): React.ReactElement {
   const range = useUiStore((s) => s.chartRange);
@@ -71,24 +72,21 @@ export function FeatScrPat(): React.ReactElement {
   const right = (
     <FeatViewHeaderRight>
       {range !== null && (
-        <FeatViewAction
-          title="clear range"
+        <MonoButton
+          icon="delete"
+          label="clear range"
           onClick={(): void => {
             setChartRange(null);
             mutation.reset();
           }}
-        >
-          ×
-        </FeatViewAction>
+        />
       )}
-      <FeatViewAction
-        title={range === null ? 'no range selected' : 'find similar'}
+      <MonoButton
+        icon="search"
+        label={range === null ? 'no range selected' : 'find similar'}
         onClick={onFind}
-        busy={mutation.isPending}
-        disabled={range === null}
-      >
-        ⌕
-      </FeatViewAction>
+        disabled={range === null || mutation.isPending}
+      />
     </FeatViewHeaderRight>
   );
 
