@@ -172,3 +172,28 @@ class TestFetchUsWindow:
         assert quote.day_high == Decimal("103.0")
         assert quote.day_low == Decimal("99.0")
         assert quote.prev_close == Decimal("98.5")
+
+    def test_prev_close_strips_secid_prefix_for_stock_us_daily(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """stock_us_daily rejects the prefix; the source must call it with the bare ticker."""
+        instant = datetime(2026, 5, 5, 20, 0, 0, tzinfo=UTC)
+        _freeze(monkeypatch, instant)
+
+        captured: list[str] = []
+
+        class _PrefixSensitiveGateway(_FakeGateway):
+            def stock_us_daily(self, symbol: str) -> list[dict[str, object]]:
+                captured.append(symbol)
+                if "." in symbol and symbol.split(".", 1)[0].isdigit():
+                    raise IndexError("list index out of range")
+                return [{"close": "98.5"}]
+
+        gw = _PrefixSensitiveGateway(
+            minute_records=[_minute_row("100.0", "101.0", "99.0")],
+        )
+        src = _make_source(gw)
+
+        quote = src.fetch_one("us", "105.SNDK")
+        assert captured == ["SNDK"]
+        assert quote.prev_close == Decimal("98.5")

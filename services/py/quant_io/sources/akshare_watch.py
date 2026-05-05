@@ -72,6 +72,14 @@ def _to_records(raw: object, *, label: str) -> list[dict[str, object]]:
     )
 
 
+def _strip_us_prefix(code: str) -> str:
+    """``"105.AAPL"`` -> ``"AAPL"``; bare tickers pass through unchanged."""
+    head, sep, tail = code.partition(".")
+    if sep == "" or not head.isdigit():
+        return code
+    return tail
+
+
 def _to_decimal(v: object, *, label: str) -> Decimal:
     """Coerce a Python/pandas scalar to ``Decimal`` or raise upstream-fail."""
     try:
@@ -191,9 +199,13 @@ class AKShareWatchSource:
                 {"market": "us", "code": code},
             ) from exc
         last, hi, lo = _minute_session_summary(raw, label=f"us:{code}")
+        # ``stock_us_daily`` rejects the secid prefix (``105.AAPL`` ->
+        # IndexError) — it only accepts the bare ticker. The minute
+        # endpoint above is the opposite, hence two different shapes.
+        bare = _strip_us_prefix(code)
         prev_close = self._cached_prev_close(
             ("us", code),
-            lambda: ak.stock_us_daily(symbol=code),
+            lambda: ak.stock_us_daily(symbol=bare),
         )
         return SpotQuote(
             market="us",
