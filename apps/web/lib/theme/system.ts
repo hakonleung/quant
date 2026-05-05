@@ -4,9 +4,49 @@
  * from here, never raw hex (CLAUDE.md §1.2).
  */
 
-import { createSystem, defaultConfig, defineConfig } from '@chakra-ui/react';
+import { createSystem, defaultConfig, defineConfig, defineRecipe } from '@chakra-ui/react';
 
 import { fonts, palette } from './tokens.js';
+
+/**
+ * `monoButton` — a single-glyph mono icon button used inside pane chrome
+ * (FeatView controls, action slots). The visual glyph is small (11px)
+ * but the click hot-zone (the rendered button box) is larger so it is
+ * comfortable to hit on touch / trackpad. Hover triggers a smooth
+ * color transition on the glyph itself.
+ */
+const monoButtonRecipe = defineRecipe({
+  className: 'mono-btn',
+  base: {
+    display: 'grid',
+    placeItems: 'center',
+    bg: 'transparent',
+    border: 'none',
+    cursor: 'pointer',
+    fontFamily: 'mono',
+    lineHeight: '1',
+    color: 'term.ink3',
+    transition: 'transform 140ms ease, color 140ms ease',
+    transformOrigin: 'center',
+    minW: 0,
+    p: 0,
+    _hover: { bg: 'transparent', transform: 'scale(1.25)', color: 'term.green' },
+    _active: { transform: 'scale(1.1)' },
+    _disabled: {
+      opacity: 0.4,
+      cursor: 'not-allowed',
+      _hover: { bg: 'transparent', transform: 'none', color: 'term.ink3' },
+    },
+    _focusVisible: { outline: '1px solid', outlineColor: 'term.green', outlineOffset: '1px' },
+  },
+  variants: {
+    size: {
+      sm: { w: '18px', h: '18px', fontSize: '11px' },
+      md: { w: '22px', h: '22px', fontSize: '13px' },
+    },
+  },
+  defaultVariants: { size: 'sm' },
+});
 
 const { light, term } = palette;
 
@@ -78,6 +118,9 @@ const config = defineConfig({
           inputBg: { value: term.inputBg },
         },
       },
+    },
+    recipes: {
+      monoButton: monoButtonRecipe,
     },
     semanticTokens: {
       colors: {

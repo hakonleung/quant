@@ -36,7 +36,6 @@ export const Feat = {
   // SYS — system
   SysStat: 'SYS.STAT',
   SysCfg: 'SYS.CFG',
-  SysPush: 'SYS.PUSH',
 
   // WATCH — live watch tasks
   WatchLive: 'WATCH.LIVE',
@@ -74,6 +73,5 @@ export const FEAT_CONFIG_MAP: Readonly<Record<Feat, FeatConfig>> = {
 
   [Feat.SysStat]: { cyber: true, defaultMinimized: true, bodyOverlay: true },
   [Feat.SysCfg]: { cyber: true, defaultMinimized: true, bodyOverlay: true },
-  [Feat.SysPush]: { gridArea: 'R2', cyber: true, defaultMinimized: true },
   [Feat.WatchLive]: { gridArea: 'R3', cyber: true, defaultMinimized: true },
 };

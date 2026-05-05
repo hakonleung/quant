@@ -14,11 +14,12 @@ import { Box, Flex, Text } from '@chakra-ui/react';
 import { Feat } from '../../lib/eqty/feat.js';
 import { ConfirmCancelled, useConfirm } from '../../lib/hooks/use-confirm.js';
 import { useAnalyzeMany, useMarketSentiment } from '../../lib/hooks/use-eqty-data.js';
+import { usePushPayload } from '../../lib/hooks/use-push-payload.js';
 import { useSectorsStore } from '../../lib/stores/sectors.store.js';
 import { ALL_SECTOR_ID, useUiStore } from '../../lib/stores/ui.store.js';
-import { FeatView } from "../feat-view/feat-view.js";
-import { FeatViewAction, FeatViewHeaderRight, FeatViewStatus } from "../feat-view/feat-view-header.js";
-import { ANALYZE_MAX_CODES } from "../feat-sec-list/feat-sec-list.js";
+import { FeatView } from '../feat-view/feat-view.js';
+import { FeatViewAction, FeatViewHeaderRight } from '../feat-view/feat-view-header.js';
+import { ANALYZE_MAX_CODES } from '../feat-sec-list/feat-sec-list.js';
 
 export function FeatAiHist(): React.ReactElement | null {
   const activeSectorId = useUiStore((s) => s.activeSectorId);
@@ -27,6 +28,7 @@ export function FeatAiHist(): React.ReactElement | null {
   const codes = sector?.codes ?? [];
   const cached = useMarketSentiment(codes);
   const analyze = useAnalyzeMany(codes);
+  const push = usePushPayload();
   const data = cached.data ?? null;
   const { guard, comp: confirmComp } = useConfirm();
 
@@ -74,9 +76,36 @@ export function FeatAiHist(): React.ReactElement | null {
     ? 'amber'
     : analyze.isError
       ? 'red'
-      : data === null
-        ? 'idle'
-        : 'green';
+      : push.isPending
+        ? 'amber'
+        : push.isError
+          ? 'red'
+          : data === null
+            ? 'idle'
+            : 'green';
+
+  const onPush = (): void => {
+    if (data === null) return;
+    const head = `[sector ${sectorLabel}] asof ${data.asof} · window ${String(data.windowDays)}d · members ${String(data.codes.length)} · themes ${String(data.themeClusters.length)}`;
+    const themesBlock =
+      data.themeClusters.length === 0
+        ? ''
+        : '\n\n▎ themes\n' +
+          data.themeClusters
+            .map(
+              (t) =>
+                `• ${t.label} [${String(t.memberCount)}m heat=${t.heatScore.toFixed(2)}] ${t.summary}`,
+            )
+            .join('\n');
+    const trendBlock = `\n\n▎ trend\n${data.marketTrendSummary}`;
+    const caveatsBlock =
+      data.caveats.length === 0
+        ? ''
+        : '\n\n▎ caveats\n' + data.caveats.map((c) => `! ${c}`).join('\n');
+    const composed = `${head}${themesBlock}${trendBlock}${caveatsBlock}`;
+    const payload = composed.length > 15800 ? `${composed.slice(0, 15800)}\n…[truncated]` : composed;
+    push.mutate({ payload });
+  };
 
   const lines: readonly string[] =
     data === null
@@ -102,9 +131,21 @@ export function FeatAiHist(): React.ReactElement | null {
   return (
     <FeatView
       feat={Feat.AIHist}
+      status={tone}
+      statusBlink={analyze.isPending || push.isPending}
+      titleSlot={
+        <Text
+          fontFamily="mono"
+          fontSize="11px"
+          letterSpacing="0.06em"
+          color="term.ink2"
+          whiteSpace="nowrap"
+        >
+          {sectorLabel}
+        </Text>
+      }
       right={
         <FeatViewHeaderRight>
-          <FeatViewStatus tone={tone} blink={analyze.isPending} />
           <FeatViewAction
             title={
               tooLarge
@@ -114,9 +155,16 @@ export function FeatAiHist(): React.ReactElement | null {
             onClick={onFetch}
             busy={analyze.isPending}
             disabled={codes.length === 0 || tooLarge}
-            tone="accent"
           >
             ⟳
+          </FeatViewAction>
+          <FeatViewAction
+            title="push sector summary to slack"
+            onClick={onPush}
+            disabled={data === null}
+            busy={push.isPending}
+          >
+            ▶
           </FeatViewAction>
         </FeatViewHeaderRight>
       }

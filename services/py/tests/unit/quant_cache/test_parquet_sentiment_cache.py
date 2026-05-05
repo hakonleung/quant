@@ -139,11 +139,11 @@ class TestExpiry:
         clock.advance(seconds=24 * 3600)
         assert cache.get_stock("600519", _ASOF, 30) is not None
 
-    def test_miss_at_exactly_two_days(self, tmp_path: Path) -> None:
+    def test_miss_at_exactly_seven_days(self, tmp_path: Path) -> None:
         clock = FrozenClock(_FETCHED_AT)
         cache = ParquetSentimentCache(tmp_path, clock)
         cache.put_stock(_stock())
-        target = datetime.combine(_ASOF + timedelta(days=2), datetime.min.time(), tzinfo=UTC)
+        target = datetime.combine(_ASOF + timedelta(days=7), datetime.min.time(), tzinfo=UTC)
         clock.advance(seconds=(target - _FETCHED_AT).total_seconds())
         assert cache.get_stock("600519", _ASOF, 30) is None
 
@@ -152,8 +152,8 @@ class TestExpiry:
         clock = FrozenClock(_FETCHED_AT)
         cache = ParquetSentimentCache(tmp_path, clock)
         # Two rows in the same per-code file: one fresh, one already stale.
-        cache.put_stock(_stock(asof=date(2026, 4, 1), score=0.1))  # expires 2026-04-03
-        cache.put_stock(_stock(asof=_ASOF, score=0.7))             # expires 2026-05-03
+        cache.put_stock(_stock(asof=date(2026, 4, 1), score=0.1))  # expires 2026-04-08
+        cache.put_stock(_stock(asof=_ASOF, score=0.7))             # expires 2026-05-08
         # Sit on 2026-05-02 — only the second row is still valid.
         clock.advance(seconds=24 * 3600)  # _FETCHED_AT + 1d → 2026-05-02 09:30Z
         assert cache.get_stock("600519", date(2026, 4, 1), 30) is None

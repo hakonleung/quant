@@ -24,7 +24,6 @@ import { useSectorsStore, type Sector } from '../../lib/stores/sectors.store.js'
 import { useUiStore } from '../../lib/stores/ui.store.js';
 import { DslTree } from '../dsl/dsl-tree.js';
 import { FeatView } from '../feat-view/feat-view.js';
-import { FeatViewStatus } from '../feat-view/feat-view-header.js';
 
 export function FeatScrDsl(): React.ReactElement {
   const activeSectorId = useUiStore((s) => s.activeSectorId);
@@ -34,7 +33,7 @@ export function FeatScrDsl(): React.ReactElement {
   const hasPlan = isDynamic && sector.screenPlan !== undefined;
 
   return (
-    <FeatView feat={Feat.ScreenDsl} right={<FeatViewStatus tone={hasPlan ? 'green' : 'amber'} />}>
+    <FeatView feat={Feat.ScreenDsl} status={hasPlan ? 'green' : 'amber'}>
       {isDynamic ? <NlEditor sector={sector} /> : null}
       <Box px="10px" py="8px">
         {hasPlan ? <PlanTree sector={sector} /> : <EmptyHint sector={sector} />}

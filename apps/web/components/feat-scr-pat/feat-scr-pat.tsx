@@ -21,7 +21,7 @@ import { useKline } from '../../lib/hooks/use-eqty-data.js';
 import { useLayoutStore } from '../../lib/stores/layout.store.js';
 import { useUiStore } from '../../lib/stores/ui.store.js';
 import { FeatView } from "../feat-view/feat-view.js";
-import { FeatViewAction, FeatViewHeaderRight, FeatViewStatus } from "../feat-view/feat-view-header.js";
+import { FeatViewAction, FeatViewHeaderRight } from "../feat-view/feat-view-header.js";
 
 export function FeatScrPat(): React.ReactElement {
   const range = useUiStore((s) => s.chartRange);
@@ -70,7 +70,6 @@ export function FeatScrPat(): React.ReactElement {
 
   const right = (
     <FeatViewHeaderRight>
-      <FeatViewStatus tone={tone} blink={mutation.isPending} />
       {range !== null && (
         <FeatViewAction
           title="clear range"
@@ -78,7 +77,6 @@ export function FeatScrPat(): React.ReactElement {
             setChartRange(null);
             mutation.reset();
           }}
-          tone="danger"
         >
           ×
         </FeatViewAction>
@@ -88,7 +86,6 @@ export function FeatScrPat(): React.ReactElement {
         onClick={onFind}
         busy={mutation.isPending}
         disabled={range === null}
-        tone="accent"
       >
         ⌕
       </FeatViewAction>
@@ -96,7 +93,12 @@ export function FeatScrPat(): React.ReactElement {
   );
 
   return (
-    <FeatView feat={Feat.ScreenPattern} right={right}>
+    <FeatView
+      feat={Feat.ScreenPattern}
+      status={tone}
+      statusBlink={mutation.isPending}
+      right={right}
+    >
       <Box flex="1" bg="panel">
         {mutation.data === undefined ? (
           <Empty hint={range === null ? 'no reference range' : 'press FIND to scan'} />

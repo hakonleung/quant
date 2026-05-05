@@ -17,7 +17,6 @@
  */
 
 import { Box, Flex } from '@chakra-ui/react';
-import type { Sentiment } from '@quant/shared';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 
 import { LAYOUT_LIMITS, useLayoutStore } from '../../lib/stores/layout.store.js';
@@ -27,13 +26,11 @@ import { FeatEqList } from "../feat-eq-list/feat-eq-list.js";
 import { FeatScrPat } from "../feat-scr-pat/feat-scr-pat.js";
 import { FeatAiHist } from "../feat-ai-hist/feat-ai-hist.js";
 import { FeatSecList } from "../feat-sec-list/feat-sec-list.js";
-import { FeatSysPush } from "../feat-sys-push/feat-sys-push.js";
 import { FeatAiOut } from "../feat-ai-out/feat-ai-out.js";
 import { FeatWatchLive } from "../feat-watch-live/feat-watch-live.js";
 
 export function EqtyModule(): React.ReactElement {
   const code = useUiStore((s) => s.focusCode);
-  const [sentiment, setSentiment] = useState<Sentiment | null>(null);
   const leftWidth = useLayoutStore((s) => s.leftWidth);
   const rightWidth = useLayoutStore((s) => s.rightWidth);
   const setLeftWidth = useLayoutStore((s) => s.setLeftWidth);
@@ -72,16 +69,7 @@ export function EqtyModule(): React.ReactElement {
       />
       <Column width={`${String(rightWidth)}px`}>
         <FeatAiHist />
-        {code !== null && (
-          <>
-            <FeatAiOut code={code} onResult={setSentiment} />
-            <FeatSysPush
-              code={code}
-              sentimentScore={sentiment?.score ?? null}
-              theme={sentiment?.theme ?? null}
-            />
-          </>
-        )}
+        {code !== null && <FeatAiOut code={code} />}
         <FeatWatchLive />
       </Column>
     </Flex>

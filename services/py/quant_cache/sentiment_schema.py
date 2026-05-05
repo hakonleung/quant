@@ -39,7 +39,7 @@ STOCK_SENTIMENT_SCHEMA: Final[pa.Schema] = pa.schema(
 * ``(code, asof, window_days)`` is the logical primary key — adapter
   enforces uniqueness on upsert.
 * ``expires_at`` is computed at write time as
-  ``datetime(asof + 2 days, 00:00, UTC)``. Reads filter on it so expired
+  ``datetime(asof + 7 days, 00:00, UTC)``. Reads filter on it so expired
   rows behave as misses without a separate eviction job.
 * ``payload_json`` is the dataclass tree serialised via the same
   encoder used by the cache before this refactor (``date`` /

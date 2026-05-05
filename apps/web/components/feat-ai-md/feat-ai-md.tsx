@@ -21,13 +21,15 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
 import { Feat } from '../../lib/eqty/feat.js';
-import { FeatView } from "../feat-view/feat-view.js";
+import { FeatView } from '../feat-view/feat-view.js';
 
 interface MarkdownPreviewerProps {
   /** Markdown source. Empty string renders the idle hint. */
   readonly source: string;
   /** Right-slot of the pane header — typically a back / close button. */
   readonly headerRight?: ReactNode;
+  /** Display label appended to the pane title (e.g. stock or sector name). */
+  readonly subject?: string;
 }
 
 const PROSE_TEXT_STYLE = {
@@ -40,12 +42,32 @@ const PROSE_TEXT_STYLE = {
 export function FeatAiMd({
   source,
   headerRight,
+  subject,
 }: MarkdownPreviewerProps): React.ReactElement {
   const trimmed = source.trim();
+  const titleSlot =
+    subject !== undefined && subject.length > 0 ? (
+      <Text
+        fontFamily="mono"
+        fontSize="11px"
+        letterSpacing="0.06em"
+        color="term.ink2"
+        whiteSpace="nowrap"
+      >
+        {subject}
+      </Text>
+    ) : undefined;
   return (
-    <FeatView feat={Feat.AIMd} {...(headerRight !== undefined ? { right: headerRight } : {})}>
+    <FeatView
+      feat={Feat.AIMd}
+      {...(titleSlot !== undefined ? { titleSlot } : {})}
+      {...(headerRight !== undefined ? { right: headerRight } : {})}
+    >
       <Box
         position="relative"
+        flex="1"
+        minH={0}
+        overflow="auto"
         px="18px"
         py="14px"
         bg="term.panel"
@@ -64,10 +86,7 @@ export function FeatAiMd({
           </Text>
         ) : (
           <Box position="relative" zIndex={1} {...PROSE_TEXT_STYLE}>
-            <ReactMarkdown
-              remarkPlugins={[remarkGfm]}
-              components={MARKDOWN_COMPONENTS}
-            >
+            <ReactMarkdown remarkPlugins={[remarkGfm]} components={MARKDOWN_COMPONENTS}>
               {source}
             </ReactMarkdown>
           </Box>
@@ -124,7 +143,15 @@ const MARKDOWN_COMPONENTS = {
     </Text>
   ),
   h4: (p: { readonly children?: ReactNode }): React.ReactElement => (
-    <Text as="h4" color="term.ink" fontFamily="mono" fontSize="12.5px" fontWeight="700" mt="10px" mb="4px">
+    <Text
+      as="h4"
+      color="term.ink"
+      fontFamily="mono"
+      fontSize="12.5px"
+      fontWeight="700"
+      mt="10px"
+      mb="4px"
+    >
       {p.children}
     </Text>
   ),
@@ -233,7 +260,9 @@ const MARKDOWN_COMPONENTS = {
       {p.children}
     </Box>
   ),
-  tbody: (p: { readonly children?: ReactNode }): React.ReactElement => <Box as="tbody">{p.children}</Box>,
+  tbody: (p: { readonly children?: ReactNode }): React.ReactElement => (
+    <Box as="tbody">{p.children}</Box>
+  ),
   tr: (p: { readonly children?: ReactNode }): React.ReactElement => (
     <Box as="tr" borderTopWidth="1px" borderTopColor="line">
       {p.children}
@@ -257,7 +286,10 @@ const MARKDOWN_COMPONENTS = {
       {p.children}
     </Box>
   ),
-  a: (p: { readonly children?: ReactNode; readonly href?: string | undefined }): React.ReactElement => (
+  a: (p: {
+    readonly children?: ReactNode;
+    readonly href?: string | undefined;
+  }): React.ReactElement => (
     <a
       href={p.href}
       target="_blank"

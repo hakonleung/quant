@@ -16,7 +16,7 @@ a concurrent reader sees either the previous file or the new one, never
 a partial parquet.
 
 Expiry policy:
-    ``expires_at = datetime(asof + 2 days, 00:00 UTC)`` is materialised
+    ``expires_at = datetime(asof + 7 days, 00:00 UTC)`` is materialised
     as a column on write. Reads filter on it, so stale rows are skipped
     without a separate eviction job. ``invalidate_stock`` deletes the
     file outright.
@@ -71,7 +71,7 @@ if TYPE_CHECKING:
 
     from quant_core.ports.clock import Clock
 
-_CACHE_TTL_DAYS: Final[int] = 2
+_CACHE_TTL_DAYS: Final[int] = 7
 """``asof`` 之后多少日历天 payload 失效。"""
 
 _HASH_LEN: Final[int] = 32

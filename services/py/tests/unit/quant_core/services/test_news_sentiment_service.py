@@ -2,7 +2,7 @@
 
 Covers the two-step single-stock pipeline (web-search analyst pass +
 flash summariser), the multi-stock fan-out + cluster/synth aggregation,
-boundary errors, the ``asof + 2 days`` cache reuse, and the LLM-output
+boundary errors, the ``asof + 7 days`` cache reuse, and the LLM-output
 retry. The web-search and aggregator clients are exercised through fakes;
 their wiring is tested in their own modules.
 """
@@ -284,7 +284,7 @@ class TestAnalyzeOne:
             service.analyze_one("600519", days=0, asof=_TODAY)
         assert exc.value.code == "INVALID_ARGUMENT"
 
-    def test_cache_hit_skips_llm_within_two_days(
+    def test_cache_hit_skips_llm_within_seven_days(
         self,
         tmp_path: Path,
         meta_repo: _FakeMetaRepo,
@@ -320,7 +320,7 @@ class TestAnalyzeOne:
         assert second.sentiment_score == first.sentiment_score
         assert second.result == first.result
 
-    def test_cache_expires_after_two_days(
+    def test_cache_expires_after_seven_days(
         self,
         tmp_path: Path,
         meta_repo: _FakeMetaRepo,
@@ -342,7 +342,7 @@ class TestAnalyzeOne:
         first = svc.analyze_one("600519", days=30, asof=_TODAY)
         assert first.sentiment_score == pytest.approx(0.6)
 
-        clock.advance(seconds=2 * 24 * 3600)
+        clock.advance(seconds=7 * 24 * 3600)
         refreshed = svc.analyze_one("600519", days=30, asof=_TODAY)
         assert refreshed.sentiment_score == pytest.approx(-0.2)
         assert len(search.calls) == 2

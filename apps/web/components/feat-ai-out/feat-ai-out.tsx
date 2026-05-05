@@ -1,39 +1,47 @@
 'use client';
 
 import { Box, Flex, Text } from '@chakra-ui/react';
-import type { Sentiment } from '@quant/shared';
-import { useEffect } from 'react';
 
 import { Feat } from '../../lib/eqty/feat.js';
-import { useAnalyzeSentiment, useSentiment } from '../../lib/hooks/use-eqty-data.js';
-import { FeatAiMd } from "../feat-ai-md/feat-ai-md.js";
-import { FeatView } from "../feat-view/feat-view.js";
-import { FeatViewAction, FeatViewHeaderRight, FeatViewStatus } from "../feat-view/feat-view-header.js";
+import {
+  useAnalyzeSentiment,
+  useSentiment,
+  useStockMetaQuery,
+} from '../../lib/hooks/use-eqty-data.js';
+import { usePushPayload } from '../../lib/hooks/use-push-payload.js';
+import { FeatAiMd } from '../feat-ai-md/feat-ai-md.js';
+import { FeatView } from '../feat-view/feat-view.js';
+import { FeatViewAction, FeatViewHeaderRight } from '../feat-view/feat-view-header.js';
 
 interface Props {
   readonly code: string;
-  /** Bubbles the latest analysis result up to the page so siblings (e.g.
-   *  the Slack panel) can render the same payload. */
-  readonly onResult?: (s: Sentiment) => void;
 }
 
-export function FeatAiOut({ code, onResult }: Props): React.ReactElement {
+export function FeatAiOut({ code }: Props): React.ReactElement {
   const cached = useSentiment(code);
   const analyze = useAnalyzeSentiment(code);
+  const meta = useStockMetaQuery(code);
+  const push = usePushPayload();
   const sentiment = cached.data ?? null;
-
-  useEffect(() => {
-    if (sentiment !== null && onResult !== undefined) {
-      onResult(sentiment);
-    }
-  }, [sentiment, onResult]);
+  const stockLabel =
+    meta.data !== null && meta.data !== undefined ? `${meta.data.name} ${code}` : code;
 
   const onFetch = (): void => {
-    analyze.mutate(undefined, {
-      onSuccess: (data) => {
-        onResult?.(data);
-      },
-    });
+    analyze.mutate();
+  };
+
+  const onPush = (): void => {
+    if (sentiment === null) return;
+    const themeStr = sentiment.theme === null ? '' : ` · 题材[${sentiment.theme}]`;
+    const head = `[${stockLabel}] sent ${sentiment.score.toFixed(2)}${themeStr}`;
+    const body =
+      sentiment.result.trim().length > 0
+        ? sentiment.result
+        : sentiment.rawLog.join('\n');
+    const composed = `${head}\n\n${body}`;
+    // Slack/webhook payload is capped — leave headroom for server framing.
+    const payload = composed.length > 15800 ? `${composed.slice(0, 15800)}\n…[truncated]` : composed;
+    push.mutate({ payload });
   };
 
   const lines: readonly string[] =
@@ -47,25 +55,48 @@ export function FeatAiOut({ code, onResult }: Props): React.ReactElement {
     ? 'amber'
     : analyze.isError
       ? 'red'
-      : sentiment === null
-        ? 'idle'
-        : 'green';
+      : push.isPending
+        ? 'amber'
+        : push.isError
+          ? 'red'
+          : sentiment === null
+            ? 'idle'
+            : 'green';
 
   const markdownSource = sentiment?.result ?? '';
 
   return (
     <FeatView
       feat={Feat.AIOut}
+      status={tone}
+      statusBlink={analyze.isPending || push.isPending}
+      titleSlot={
+        <Text
+          fontFamily="mono"
+          fontSize="11px"
+          letterSpacing="0.06em"
+          color="term.ink2"
+          whiteSpace="nowrap"
+        >
+          {stockLabel}
+        </Text>
+      }
       right={
         <FeatViewHeaderRight>
-          <FeatViewStatus tone={tone} blink={analyze.isPending} />
           <FeatViewAction
             title="fetch sentiment"
             onClick={onFetch}
             busy={analyze.isPending}
-            tone="accent"
           >
             ⟳
+          </FeatViewAction>
+          <FeatViewAction
+            title="push sentiment to slack"
+            onClick={onPush}
+            disabled={sentiment === null}
+            busy={push.isPending}
+          >
+            ▶
           </FeatViewAction>
         </FeatViewHeaderRight>
       }
@@ -82,6 +113,7 @@ export function FeatAiOut({ code, onResult }: Props): React.ReactElement {
           lineHeight="1.7"
           flex="1"
           minH={0}
+          overflow="auto"
           _after={{
             content: '""',
             position: 'absolute',
@@ -93,7 +125,13 @@ export function FeatAiOut({ code, onResult }: Props): React.ReactElement {
         >
           {lines.map((line, i) => (
             <Flex key={i} gap="10px" position="relative" zIndex={1}>
-              <Text color="term.ink3" minW="34px" textAlign="right" userSelect="none" fontSize="11px">
+              <Text
+                color="term.ink3"
+                minW="34px"
+                textAlign="right"
+                userSelect="none"
+                fontSize="11px"
+              >
                 {String(i + 1).padStart(3, '0')}
               </Text>
               <Text color="term.ink2">{line}</Text>
@@ -116,7 +154,7 @@ export function FeatAiOut({ code, onResult }: Props): React.ReactElement {
         {/* A-2: collapsed by default — header-only line under the stdout
             stream. Click the restore (▢) control in its header to expand
             and read the verbatim analyst write-up. */}
-        <FeatAiMd source={markdownSource} />
+        <FeatAiMd source={markdownSource} subject={stockLabel} />
       </Flex>
     </FeatView>
   );

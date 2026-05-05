@@ -23,7 +23,6 @@ import { z } from 'zod';
 import { Feat } from '../../lib/eqty/feat.js';
 import { ConfirmCancelled, useConfirm } from '../../lib/hooks/use-confirm.js';
 import { FeatView } from '../feat-view/feat-view.js';
-import { FeatViewHeaderRight, FeatViewStatus } from '../feat-view/feat-view-header.js';
 import { WatchAddForm, type PickedStock, type WatchAddInitial } from './watch-add-form.js';
 
 const TaskListSchema = z.array(WatchTaskSchema);
@@ -220,13 +219,7 @@ export function FeatWatchLive(): React.ReactElement {
   return (
     <FeatView
       feat={Feat.WatchLive}
-      right={
-        <FeatViewHeaderRight>
-          <FeatViewStatus
-            tone={state.kind === 'open' ? 'green' : state.kind === 'error' ? 'red' : 'idle'}
-          />
-        </FeatViewHeaderRight>
-      }
+      status={state.kind === 'open' ? 'green' : state.kind === 'error' ? 'red' : 'idle'}
     >
       <Flex
         direction="column"

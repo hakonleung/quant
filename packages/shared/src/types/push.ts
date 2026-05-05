@@ -15,7 +15,7 @@ export const PushTestRequestSchema = z
       .string()
       .regex(/^#?[a-zA-Z0-9_-]+$/, 'invalid channel')
       .optional(),
-    payload: z.string().min(1).max(2000),
+    payload: z.string().min(1).max(16000),
     note: z.string().max(280).optional(),
   })
   .strict();

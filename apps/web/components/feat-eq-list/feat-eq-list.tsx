@@ -36,7 +36,6 @@ import { FeatScrDsl } from "../feat-scr-dsl/feat-scr-dsl.js";
 import { FeatScrNl } from "../feat-scr-nl/feat-scr-nl.js";
 import { FeatView } from "../feat-view/feat-view.js";
 import { ConfirmCancelled, useConfirm } from '../../lib/hooks/use-confirm.js';
-import { FeatViewHeaderRight, FeatViewStatus } from "../feat-view/feat-view-header.js";
 
 /**
  * Row payload — flat record so dynamic sectors literally see
@@ -248,15 +247,11 @@ export function FeatEqList(): React.ReactElement {
       : isLoading || klineBatch.isLoading || snapshots.isLoading
         ? 'amber'
         : 'green';
-  const right = (
-    <FeatViewHeaderRight>
-      <FeatViewStatus tone={listTone} blink={isLoading || klineBatch.isLoading} />
-    </FeatViewHeaderRight>
-  );
-
   return (
     <FeatView
       feat={Feat.EquityList}
+      status={listTone}
+      statusBlink={isLoading || klineBatch.isLoading}
       titleSlot={
         <EditableTitle
           value={sector?.name ?? 'list'}
@@ -264,7 +259,6 @@ export function FeatEqList(): React.ReactElement {
           onSave={onTitleSave}
         />
       }
-      right={right}
     >
       <Flex direction="column" h="100%" minH={0}>
         {isAll && (

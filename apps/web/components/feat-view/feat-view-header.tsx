@@ -16,6 +16,8 @@
 import { Box, Flex } from '@chakra-ui/react';
 import type { ReactNode } from 'react';
 
+import { MonoButton } from '../ui/mono-button.js';
+
 export type FeatViewStatusTone = 'green' | 'amber' | 'red' | 'idle' | 'accent';
 
 const TONE_TO_COLOR: Readonly<Record<FeatViewStatusTone, string>> = {
@@ -39,14 +41,21 @@ interface FeatViewStatusProps {
   readonly blink?: boolean;
 }
 
-export function FeatViewStatus({ tone, blink = false }: FeatViewStatusProps): React.ReactElement {
+export function FeatViewStatus({
+  tone,
+  blink = false,
+}: FeatViewStatusProps): React.ReactElement | null {
+  // Hide the dot for the "normal" steady state — a green pellet on every
+  // pane is visual clutter. Surface only abnormal states (pending/warn/
+  // error/special).
+  if (tone === 'green' || tone === 'idle') return null;
   return (
     <Box
       as="span"
       className={blink ? 'blink' : undefined}
       color={TONE_TO_COLOR[tone]}
       fontFamily="mono"
-      fontSize="14px"
+      fontSize="10px"
       lineHeight="1"
       fontWeight="700"
     >
@@ -69,40 +78,15 @@ export function FeatViewAction({
   onClick,
   disabled = false,
   busy = false,
-  tone = 'default',
+  tone: _tone = 'default',
   children,
 }: FeatViewActionProps): React.ReactElement {
-  const color =
-    tone === 'accent' ? 'accent' : tone === 'danger' ? 'term.red' : 'term.ink2';
-  const hoverColor =
-    tone === 'accent' ? 'accentDark' : tone === 'danger' ? 'term.red' : 'term.green';
+  void _tone;
   const isDisabled = disabled || busy;
   return (
-    <Box
-      as="button"
-      title={title}
-      aria-label={title}
-      aria-disabled={isDisabled}
-      onClick={isDisabled ? undefined : onClick}
-      w="22px"
-      h="22px"
-      display="grid"
-      placeItems="center"
-      bg="transparent"
-      borderWidth="1px"
-      borderColor={tone === 'accent' ? 'accent' : 'term.line'}
-      borderRadius="0"
-      cursor={isDisabled ? 'not-allowed' : 'pointer'}
-      opacity={isDisabled ? 0.4 : 1}
-      color={color}
-      fontFamily="mono"
-      fontSize="14px"
-      fontWeight="700"
-      lineHeight="1"
-      _hover={isDisabled ? {} : { color: hoverColor, borderColor: hoverColor }}
-    >
+    <MonoButton label={title} onClick={onClick} disabled={isDisabled}>
       {busy ? '…' : children}
-    </Box>
+    </MonoButton>
   );
 }
 

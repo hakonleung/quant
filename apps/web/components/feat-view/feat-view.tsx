@@ -6,18 +6,31 @@ import { flushSync } from 'react-dom';
 
 import { FEAT_CONFIG_MAP, type Feat } from '../../lib/eqty/feat.js';
 import { useLayoutStore, type FeatViewMode } from '../../lib/stores/layout.store.js';
+import { MonoButton } from '../ui/mono-button.js';
+import { FeatViewStatus, type FeatViewStatusTone } from './feat-view-header.js';
 
 const TRANSITION_MS = 280;
 
 interface FeatViewProps {
   readonly feat: Feat;
+  /** Status pellet rendered between the id and the title slot — only
+   *  paints for non-normal tones (see :class:`FeatViewStatus`). */
+  readonly status?: FeatViewStatusTone;
+  readonly statusBlink?: boolean;
   /** Custom title slot — when present takes the whole title position. */
   readonly titleSlot?: ReactNode;
   readonly right?: ReactNode;
   readonly children: ReactNode;
 }
 
-export function FeatView({ feat, titleSlot, right, children }: FeatViewProps): React.ReactElement {
+export function FeatView({
+  feat,
+  status,
+  statusBlink,
+  titleSlot,
+  right,
+  children,
+}: FeatViewProps): React.ReactElement {
   const config = FEAT_CONFIG_MAP[feat];
   const cyber = config.cyber ?? false;
   const gridArea = config.gridArea;
@@ -160,6 +173,8 @@ export function FeatView({ feat, titleSlot, right, children }: FeatViewProps): R
     >
       <FeatViewHeader
         id={feat}
+        {...(status !== undefined ? { status } : {})}
+        {...(statusBlink !== undefined ? { statusBlink } : {})}
         titleSlot={titleSlot}
         right={right}
         cyber={cyber}
@@ -228,6 +243,8 @@ function cornerStyle(corner: 'tl' | 'br', cyber: boolean): Record<string, unknow
 
 interface FeatViewHeaderProps {
   readonly id: string;
+  readonly status?: FeatViewStatusTone;
+  readonly statusBlink?: boolean;
   readonly titleSlot?: ReactNode;
   readonly right?: ReactNode;
   readonly cyber: boolean;
@@ -240,6 +257,8 @@ interface FeatViewHeaderProps {
 
 function FeatViewHeader({
   id,
+  status,
+  statusBlink,
   titleSlot,
   right,
   cyber,
@@ -259,6 +278,7 @@ function FeatViewHeader({
       borderBottomWidth="1px"
       borderBottomColor={cyber ? 'term.line' : 'line'}
       flexShrink={0}
+      color={cyber ? 'term.ink3' : 'ink3'}
     >
       <Text
         fontFamily="mono"
@@ -271,21 +291,23 @@ function FeatViewHeader({
       >
         {id}
       </Text>
+      {status !== undefined && (
+        <Box flexShrink={0}>
+          <FeatViewStatus tone={status} blink={statusBlink ?? false} />
+        </Box>
+      )}
       {titleSlot !== undefined && <Box flexShrink={0}>{titleSlot}</Box>}
       {right !== undefined && (
-        <Box
+        <Flex
+          align="center"
+          gap="6px"
           fontFamily="mono"
           fontSize="10px"
           letterSpacing="0.06em"
-          color={cyber ? 'term.ink3' : 'ink3'}
-          flex="1"
-          minW={0}
-          overflow="hidden"
-          textOverflow="ellipsis"
-          whiteSpace="nowrap"
+          flexShrink={0}
         >
           {right}
-        </Box>
+        </Flex>
       )}
       <HStack
         ml="auto"
@@ -319,42 +341,38 @@ interface FeatViewControlsProps {
 }
 
 function FeatViewControls({
-  cyber,
+  cyber: _cyber,
   mode,
   onMinimize,
   onRestore,
   onFullscreen,
   onExitFullscreen,
 }: FeatViewControlsProps): React.ReactElement {
+  void _cyber;
   return (
     <HStack gap="2px">
-      {mode === 'minimized' ? (
-        <CtlButton cyber={cyber} label="restore" onClick={onRestore}>
-          ▢
-        </CtlButton>
-      ) : mode === 'fullscreen' ? (
-        <CtlButton cyber={cyber} label="exit fullscreen" onClick={onExitFullscreen}>
+      {mode === 'fullscreen' ? (
+        <MonoButton label="exit fullscreen" onClick={onExitFullscreen}>
           ◱
-        </CtlButton>
+        </MonoButton>
       ) : (
         <>
-          <CtlButton cyber={cyber} label="minimize" onClick={onMinimize}>
-            —
-          </CtlButton>
-          <CtlButton cyber={cyber} label="fullscreen" onClick={onFullscreen}>
+          <MonoButton label="fullscreen" onClick={onFullscreen}>
             ⛶
-          </CtlButton>
+          </MonoButton>
+          {mode === 'minimized' ? (
+            <MonoButton label="restore" onClick={onRestore}>
+              ▢
+            </MonoButton>
+          ) : (
+            <MonoButton label="minimize" onClick={onMinimize}>
+              —
+            </MonoButton>
+          )}
         </>
       )}
     </HStack>
   );
-}
-
-interface CtlButtonProps {
-  readonly cyber: boolean;
-  readonly label: string;
-  readonly onClick: () => void;
-  readonly children: ReactNode;
 }
 
 interface OverlayBodyProps {
@@ -459,28 +477,3 @@ function OverlayBody({
   );
 }
 
-function CtlButton({ cyber, label, onClick, children }: CtlButtonProps): React.ReactElement {
-  return (
-    <button
-      type="button"
-      aria-label={label}
-      onClick={onClick}
-      style={{
-        width: '18px',
-        height: '18px',
-        display: 'grid',
-        placeItems: 'center',
-        fontFamily: 'var(--font-mono, monospace)',
-        fontSize: '11px',
-        lineHeight: 1,
-        color: 'inherit',
-        background: 'transparent',
-        border: '1px solid transparent',
-        cursor: 'pointer',
-      }}
-      data-cyber={cyber ? 'true' : 'false'}
-    >
-      {children}
-    </button>
-  );
-}
