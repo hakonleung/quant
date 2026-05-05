@@ -31,7 +31,11 @@ if TYPE_CHECKING:
 
 
 _NAME: Final[str] = "akshare_watch"
-_ET: Final[ZoneInfo] = ZoneInfo("America/New_York")
+# stock_us_hist_min_em filters and returns timestamps in Beijing time
+# (Asia/Shanghai) — not ET, despite quoting US tickers. The endpoint
+# silently returns an empty frame when the (start_date, end_date)
+# window doesn't overlap any BJT-stamped bar.
+_BJT: Final[ZoneInfo] = ZoneInfo("Asia/Shanghai")
 
 
 @runtime_checkable
@@ -167,18 +171,18 @@ class AKShareWatchSource:
         # available history. We only need session-level last/high/low, so a
         # 90-minute trailing window is plenty to cover the most recent bar
         # plus a buffer for early-tick delays.
-        # The upstream endpoint filters server-side using ET wall-clock
-        # (DST-aware). Passing UTC strings shifts the window 4-5h forward
-        # in ET, which during the first half of a US session lands fully
-        # in the future and yields an empty frame. Convert to ET first.
-        end_et = datetime.now(_ET)
-        start_et = end_et - timedelta(minutes=90)
+        # The upstream endpoint filters and stamps bars in BJT
+        # (Asia/Shanghai), NOT ET — despite quoting US tickers. Passing
+        # any other clock yields an empty frame because the BJT-stamped
+        # bars don't overlap the requested window.
+        end_bjt = datetime.now(_BJT)
+        start_bjt = end_bjt - timedelta(minutes=90)
         fmt = "%Y-%m-%d %H:%M:%S"
         try:
             raw = ak.stock_us_hist_min_em(
                 symbol=code,
-                start_date=start_et.strftime(fmt),
-                end_date=end_et.strftime(fmt),
+                start_date=start_bjt.strftime(fmt),
+                end_date=end_bjt.strftime(fmt),
             )
         except Exception as exc:
             raise QuantError(

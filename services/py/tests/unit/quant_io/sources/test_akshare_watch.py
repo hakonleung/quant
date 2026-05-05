@@ -1,10 +1,9 @@
 """Unit tests for ``AKShareWatchSource._fetch_us`` window construction.
 
-Regression coverage for the bug where UTC timestamps were passed to
-``stock_us_hist_min_em``. The endpoint filters server-side using
-ET wall-clock; passing UTC strings shifts the requested window 4-5h
-forward in ET and lands fully in the future during the first half of
-a US session, returning an empty frame.
+Regression coverage for the bug where UTC (and later ET) timestamps
+were passed to ``stock_us_hist_min_em``. The endpoint filters and
+stamps bars in BJT (Asia/Shanghai); any other clock returns an empty
+frame.
 """
 
 from __future__ import annotations
@@ -18,7 +17,7 @@ from quant_core.errors import QuantError
 from quant_io.sources import akshare_watch as mod
 from quant_io.sources.akshare_watch import AKShareWatchSource
 
-_ET = ZoneInfo("America/New_York")
+_BJT = ZoneInfo("Asia/Shanghai")
 _FMT = "%Y-%m-%d %H:%M:%S"
 
 
@@ -92,8 +91,8 @@ def _minute_row(close: str, high: str, low: str) -> dict[str, object]:
 
 
 class TestFetchUsWindow:
-    def test_window_uses_et_wall_clock_during_dst(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        # 2026-05-05 14:12 UTC == 10:12 ET (EDT, UTC-4).
+    def test_window_uses_bjt_wall_clock(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # 2026-05-05 14:12 UTC == 22:12 BJT.
         instant = datetime(2026, 5, 5, 14, 12, 0, tzinfo=UTC)
         _freeze(monkeypatch, instant)
         gw = _FakeGateway(minute_records=[_minute_row("12.34", "12.50", "12.00")])
@@ -104,12 +103,28 @@ class TestFetchUsWindow:
         assert len(gw.minute_calls) == 1
         symbol, start_s, end_s = gw.minute_calls[0]
         assert symbol == "105.SNDK"
-        # ET wall-clock 10:12 (and 90 minutes earlier 08:42). NOT 14:12.
-        assert end_s == "2026-05-05 10:12:00"
-        assert start_s == "2026-05-05 08:42:00"
+        # BJT wall-clock 22:12 (and 90 minutes earlier 20:42).
+        assert end_s == "2026-05-05 22:12:00"
+        assert start_s == "2026-05-05 20:42:00"
 
-    def test_window_uses_et_wall_clock_outside_dst(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        # 2026-01-15 19:30 UTC == 14:30 ET (EST, UTC-5).
+    def test_window_crosses_bjt_midnight_boundary(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # 2026-05-05 16:31 UTC == 2026-05-06 00:31 BJT (= 12:31 ET, mid-session).
+        # 90 min earlier in BJT is 2026-05-05 23:01 — different calendar day.
+        instant = datetime(2026, 5, 5, 16, 31, 0, tzinfo=UTC)
+        _freeze(monkeypatch, instant)
+        gw = _FakeGateway(minute_records=[_minute_row("1", "1", "1")])
+        src = _make_source(gw)
+
+        src.fetch_one("us", "106.VRT")
+
+        _, start_s, end_s = gw.minute_calls[0]
+        assert end_s == "2026-05-06 00:31:00"
+        assert start_s == "2026-05-05 23:01:00"
+
+    def test_window_outside_us_dst(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # BJT is fixed UTC+8 year-round (no DST). 2026-01-15 19:30 UTC == 2026-01-16 03:30 BJT.
         instant = datetime(2026, 1, 15, 19, 30, 0, tzinfo=UTC)
         _freeze(monkeypatch, instant)
         gw = _FakeGateway(minute_records=[_minute_row("50", "51", "49")])
@@ -118,26 +133,8 @@ class TestFetchUsWindow:
         src.fetch_one("us", "AAPL")
 
         _, start_s, end_s = gw.minute_calls[0]
-        assert end_s == "2026-01-15 14:30:00"
-        assert start_s == "2026-01-15 13:00:00"
-
-    def test_window_handles_dst_spring_forward(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        # 2026-03-08 02:00 ET DST transition (skip to 03:00 ET).
-        # Pick a UTC instant ~30 min after the jump: 07:30 UTC == 03:30 ET (EDT).
-        instant = datetime(2026, 3, 8, 7, 30, 0, tzinfo=UTC)
-        _freeze(monkeypatch, instant)
-        gw = _FakeGateway(minute_records=[_minute_row("1", "1", "1")])
-        src = _make_source(gw)
-
-        src.fetch_one("us", "TSLA")
-
-        _, start_s, end_s = gw.minute_calls[0]
-        assert end_s == "2026-03-08 03:30:00"
-        # 90 min earlier in wall-clock: 02:00 ET — but that hour was skipped,
-        # so zoneinfo lands at 01:00 EST or 03:00 EDT depending on fold.
-        # Compute the expected value directly from zoneinfo to stay honest.
-        expected_start = (instant.astimezone(_ET) - timedelta(minutes=90)).strftime(_FMT)
-        assert start_s == expected_start
+        assert end_s == "2026-01-16 03:30:00"
+        assert start_s == "2026-01-16 02:00:00"
 
     def test_empty_minute_frame_still_raises_quant_error(
         self, monkeypatch: pytest.MonkeyPatch
@@ -153,7 +150,9 @@ class TestFetchUsWindow:
         assert ei.value.code == "WATCH_QUOTE_UPSTREAM_FAIL"
         assert "empty minute frame for us:DEAD" in str(ei.value)
 
-    def test_returns_spot_quote_with_session_summary(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_returns_spot_quote_with_session_summary(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         instant = datetime(2026, 5, 5, 20, 0, 0, tzinfo=UTC)
         _freeze(monkeypatch, instant)
         gw = _FakeGateway(
