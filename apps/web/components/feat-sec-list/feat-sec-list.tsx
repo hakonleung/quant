@@ -116,7 +116,7 @@ export function FeatSecList(): React.ReactElement {
     >
       <Flex direction="column" h="100%">
         <SideHead />
-        <Box flex="1" overflow="auto">
+        <Box flex="1">
           <SectorRow
             sector={allSector}
             selected={activeSectorId === ALL_SECTOR_ID}

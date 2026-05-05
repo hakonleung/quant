@@ -49,8 +49,6 @@ export function FeatAiMd({
         px="18px"
         py="14px"
         bg="term.panel"
-        h="100%"
-        overflow="auto"
         _after={{
           content: '""',
           position: 'absolute',

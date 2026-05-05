@@ -164,7 +164,7 @@ export function FeatEqChart({ code }: Props): React.ReactElement {
           selected={selectedIdx !== null}
           hovered={selectedIdx === null && hoverIdx !== null}
         />
-        <Box flex="1" minH={0} overflow="auto">
+        <Box flex="1" minH={0}>
           <Box position="relative" h={`${String(TOTAL_H)}px`} bg="panel">
             {isLoading ? (
               <Centered>loading kline…</Centered>

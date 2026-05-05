@@ -177,7 +177,10 @@ export function FeatView({ feat, titleSlot, right, children }: FeatViewProps): R
         <Box
           flex={isMinimized ? '0 0 auto' : '1'}
           minH={0}
-          overflow="hidden"
+          overflowX="hidden"
+          overflowY={isMinimized ? 'hidden' : 'auto'}
+          display="flex"
+          flexDirection="column"
           style={{
             maxHeight: bodyMaxH,
             opacity: isMinimized ? 0 : 1,

@@ -97,7 +97,7 @@ export function FeatScrPat(): React.ReactElement {
 
   return (
     <FeatView feat={Feat.ScreenPattern} right={right}>
-      <Box flex="1" overflow="auto" bg="panel">
+      <Box flex="1" bg="panel">
         {mutation.data === undefined ? (
           <Empty hint={range === null ? 'no reference range' : 'press FIND to scan'} />
         ) : mutation.data.matches.length === 0 ? (

@@ -82,7 +82,6 @@ export function FeatAiOut({ code, onResult }: Props): React.ReactElement {
           lineHeight="1.7"
           flex="1"
           minH={0}
-          overflow="auto"
           _after={{
             content: '""',
             position: 'absolute',

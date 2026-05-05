@@ -130,8 +130,6 @@ export function FeatAiHist(): React.ReactElement | null {
         fontFamily="mono"
         fontSize="12px"
         lineHeight="1.7"
-        h="100%"
-        overflow="auto"
       >
         {lines.map((line, i) => (
           <Flex key={i} gap="10px">

@@ -15,9 +15,15 @@ import type { WatchMarket } from '@quant/shared';
 import React, { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 
 import { Feat } from '../../lib/eqty/feat.js';
+import {
+  matchBatch,
+  tryParseBatchInput,
+  type BatchMatchResult,
+} from '../../lib/fp/batch-stock-match.js';
 import { useStockUniverse, type UniverseStock } from '../../lib/hooks/use-stock-universe.js';
 import { FeatView } from "../feat-view/feat-view.js";
 import { FeatViewStatus } from "../feat-view/feat-view-header.js";
+import { BatchPanel } from './batch-panel.js';
 import { SearchDropdown } from './stock-search-dropdown.js';
 
 const SOFT_RESULT_CAP = 200;
@@ -33,6 +39,14 @@ export interface StockCommandBarProps {
    * `plain` is a bare Chakra input for embedding in a form.
    */
   readonly variant?: 'cyber' | 'plain';
+  /**
+   * Optional batch handler. When set, pasting a JSON `string[]` into
+   * the box switches to batch mode: an Apply button matches each entry
+   * across A / HK / US and invokes this callback with the resolved
+   * universe rows. `marketFilter` is ignored in batch mode — the
+   * matching rules dispatch each entry to a market by shape.
+   */
+  readonly onBatchPick?: (stocks: readonly UniverseStock[]) => void;
 }
 
 /**
@@ -47,16 +61,19 @@ export interface StockCommandBarProps {
 export function FeatScrNl({
   marketFilter,
   onPick,
+  onBatchPick,
   rightSlot,
 }: {
   readonly marketFilter?: WatchMarket;
   readonly onPick: (stock: UniverseStock) => void;
+  readonly onBatchPick?: (stocks: readonly UniverseStock[]) => void;
   readonly rightSlot?: React.ReactNode;
 }): React.ReactElement {
   return (
     <FeatView feat={Feat.ScreenNL} right={rightSlot ?? <FeatViewStatus tone="green" />}>
       <StockCommandBar
         {...(marketFilter !== undefined ? { marketFilter } : {})}
+        {...(onBatchPick !== undefined ? { onBatchPick } : {})}
         onPick={onPick}
       />
     </FeatView>
@@ -151,9 +168,23 @@ function handleKey(
 export function StockCommandBar(props: StockCommandBarProps): React.ReactElement {
   const s = useSearchState(props);
   const anchorRef = useRef<HTMLDivElement>(null);
-  const placeholder = props.placeholder ?? 'code · name · pinyin';
+  const placeholder = props.placeholder ?? 'code · name · pinyin · or paste ["…","…"]';
   const autoFocus = props.autoFocus ?? false;
   const variant = props.variant ?? 'cyber';
+
+  // Batch mode is gated on the consumer wiring `onBatchPick`. Always
+  // fetch the full universe so matching can dispatch by entry shape
+  // (A / HK / US) regardless of `marketFilter`.
+  const fullUniverse = useStockUniverse();
+  const batchEntries = useMemo(
+    () => (props.onBatchPick === undefined ? null : tryParseBatchInput(s.text)),
+    [s.text, props.onBatchPick],
+  );
+  const batchResult = useMemo<BatchMatchResult | null>(
+    () => (batchEntries === null ? null : matchBatch(batchEntries, fullUniverse.data)),
+    [batchEntries, fullUniverse.data],
+  );
+
   const onChange = (text: string): void => {
     s.setText(text);
     s.setOpen(true);
@@ -162,6 +193,16 @@ export function StockCommandBar(props: StockCommandBarProps): React.ReactElement
   const onOpen = (): void => {
     s.setOpen(true);
   };
+
+  const onApplyBatch = (): void => {
+    if (props.onBatchPick === undefined) return;
+    if (batchResult === null || batchResult.kind !== 'matched') return;
+    props.onBatchPick(batchResult.items);
+    s.setText('');
+    s.setOpen(false);
+  };
+
+  const inBatchMode = batchEntries !== null;
 
   return (
     <Box position="relative" ref={anchorRef}>
@@ -186,19 +227,28 @@ export function StockCommandBar(props: StockCommandBarProps): React.ReactElement
           autoFocus={autoFocus}
         />
       )}
-      <SearchDropdown
-        ref={s.dropdownRef}
-        open={s.open && s.text.trim().length > 0}
-        matches={s.matches}
-        highlight={s.highlight}
-        showMarketCol={props.marketFilter === undefined}
-        anchorRef={anchorRef}
-        onPick={s.commit}
-        onHover={s.setHighlight}
-      />
+      {inBatchMode && batchResult !== null ? (
+        <BatchPanel
+          result={batchResult}
+          loading={fullUniverse.isLoading}
+          onApply={onApplyBatch}
+        />
+      ) : (
+        <SearchDropdown
+          ref={s.dropdownRef}
+          open={s.open && s.text.trim().length > 0}
+          matches={s.matches}
+          highlight={s.highlight}
+          showMarketCol={props.marketFilter === undefined}
+          anchorRef={anchorRef}
+          onPick={s.commit}
+          onHover={s.setHighlight}
+        />
+      )}
     </Box>
   );
 }
+
 
 interface InputProps {
   readonly text: string;

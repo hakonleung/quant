@@ -202,12 +202,25 @@ function PickRow({ state, setState }: RowProps): React.ReactElement {
       return { ...prev, picked: [...prev.picked, next] };
     });
   };
+  const onBatchPick = (stocks: readonly UniverseStock[]): void => {
+    setState((prev) => {
+      const seen = new Set(prev.picked.map((p) => `${p.market}:${p.code}`));
+      const next: PickedStock[] = [...prev.picked];
+      for (const s of stocks) {
+        const key = `${s.market}:${s.code}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        next.push({ market: s.market, code: s.code, name: s.name });
+      }
+      return { ...prev, picked: next };
+    });
+  };
   const onRemove = (idx: number): void => {
     setState((prev) => ({ ...prev, picked: prev.picked.filter((_, i) => i !== idx) }));
   };
   return (
     <Box>
-      <FeatScrNl onPick={onPick} />
+      <FeatScrNl onPick={onPick} onBatchPick={onBatchPick} />
       {state.picked.length === 0 ? (
         <Text mt="4px" fontSize="11px" color="term.ink3">
           search and pick one or more stocks · same condition applies to all

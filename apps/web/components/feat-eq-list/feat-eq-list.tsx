@@ -13,7 +13,7 @@
  * scrollable container.
  */
 
-import { Box, Button, Flex, Input, Text, Textarea } from '@chakra-ui/react';
+import { Box, Flex, Input, Text } from '@chakra-ui/react';
 import type { KlineBar, StockMetaDto, StockSnapshotDto } from '@quant/shared';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -26,14 +26,14 @@ import {
 import { Feat } from '../../lib/eqty/feat.js';
 import { deriveStats, type StockStats } from '../../lib/fp/stock-stats.js';
 import { useKlineBulk, useStockSnapshots } from '../../lib/hooks/use-eqty-data.js';
-import { useNlScreen } from '../../lib/hooks/use-nl-screen.js';
 import { useStockList } from '../../lib/hooks/use-stock-list.js';
 import { useBlacklistStore } from '../../lib/stores/blacklist.store.js';
+import { useLayoutStore } from '../../lib/stores/layout.store.js';
 import { useSectorsStore, type Sector } from '../../lib/stores/sectors.store.js';
 import { useSettingsStore } from '../../lib/stores/settings.store.js';
 import { ALL_SECTOR_ID, useUiStore } from '../../lib/stores/ui.store.js';
+import { FeatScrDsl } from "../feat-scr-dsl/feat-scr-dsl.js";
 import { FeatScrNl } from "../feat-scr-nl/feat-scr-nl.js";
-import { DslTree } from '../dsl/dsl-tree.js';
 import { FeatView } from "../feat-view/feat-view.js";
 import { ConfirmCancelled, useConfirm } from '../../lib/hooks/use-confirm.js';
 import { FeatViewHeaderRight, FeatViewStatus } from "../feat-view/feat-view-header.js";
@@ -196,6 +196,19 @@ export function FeatEqList(): React.ReactElement {
     upsert({ ...sector, codes: nextCodes, count: nextCodes.length });
   };
 
+  const onUserAddCodes = (codes: readonly string[]): void => {
+    if (sector === null || sector.kind !== 'user') return;
+    const existing = new Set(sector.codes);
+    const nextCodes = [...sector.codes];
+    for (const c of codes) {
+      if (existing.has(c)) continue;
+      existing.add(c);
+      nextCodes.push(c);
+    }
+    if (nextCodes.length === sector.codes.length) return;
+    upsert({ ...sector, codes: nextCodes, count: nextCodes.length });
+  };
+
   const { guard: confirmGuard, comp: confirmComp } = useConfirm();
   const onUserRemoveCode = (code: string): void => {
     if (sector === null || sector.kind !== 'user') return;
@@ -263,7 +276,7 @@ export function FeatEqList(): React.ReactElement {
           />
         )}
         {isUserSector && sector !== null && (
-          <UserSectorHeader sector={sector} onAdd={onUserAddCode} />
+          <UserSectorHeader sector={sector} onAdd={onUserAddCode} onBatchAdd={onUserAddCodes} />
         )}
         {isDynamic && sector !== null && <DynamicHeader sector={sector} />}
         <ScrollGrid
@@ -502,9 +515,11 @@ function FilterHeader({
 
 function UserSectorHeader({
   onAdd,
+  onBatchAdd,
 }: {
   sector: Sector;
   onAdd: (code: string) => void;
+  onBatchAdd: (codes: readonly string[]) => void;
 }): React.ReactElement {
   return (
     <Box flexShrink={0}>
@@ -513,183 +528,34 @@ function UserSectorHeader({
         onPick={(s): void => {
           onAdd(s.code);
         }}
+        onBatchPick={(stocks): void => {
+          onBatchAdd(stocks.map((s) => s.code));
+        }}
       />
     </Box>
   );
 }
 
-function DynamicHeader({ sector }: { sector: Sector }): React.ReactElement {
-  const upsert = useSectorsStore((s) => s.upsert);
-  const screen = useNlScreen();
-  const sourceText = sector.nl ?? sector.meta;
-
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(sourceText);
-  useEffect(() => {
-    setDraft(sourceText);
-  }, [sourceText]);
-
-  const onSave = (): void => {
-    const next = draft.trim();
-    if (next.length === 0 || screen.isPending) return;
-    screen.mutate(
-      { nl: next },
-      {
-        onSuccess: (data) => {
-          upsert({
-            ...sector,
-            nl: data.nl,
-            meta: data.nl,
-            count: data.matches.length,
-            codes: data.matches.map((m) => m.code),
-            evidence: matchesToEvidenceMap(data.matches),
-            screenPlan: data.screenPlan,
-            universePlan: data.universePlan,
-            rank: data.rank,
-          });
-          setEditing(false);
-        },
-      },
-    );
-  };
-
+function DynamicHeader(_props: { sector: Sector }): React.ReactElement {
+  // FeatScrDsl is wrapped in FeatView; we mirror its persisted mode so
+  // the host wrapper collapses to header-height when minimized and
+  // expands to a definite 320 px when restored. A definite height when
+  // restored is required because FeatView body's flex chain otherwise
+  // resolves to 0 px in an indefinite parent — that prevents the
+  // body's internal scroll from engaging on long plans.
+  const mode = useLayoutStore((s) => s.featViewMode[Feat.ScreenDsl]);
+  const isMinimized = mode === 'minimized';
   return (
-    <Flex
-      direction="column"
-      gap="8px"
-      px="14px"
-      py="10px"
-      borderBottomWidth="1px"
-      borderColor="line"
-      bg="panel3"
+    <Box
+      h={isMinimized ? 'auto' : '320px'}
+      display="flex"
+      flexDirection="column"
+      minH={0}
       flexShrink={0}
     >
-      <Flex align="flex-start" gap="8px">
-        <Text
-          color="prompt"
-          fontFamily="mono"
-          fontSize="12px"
-          fontWeight="700"
-          mt="2px"
-          flexShrink={0}
-        >
-          $
-        </Text>
-        {editing ? (
-          <Textarea
-            value={draft}
-            onChange={(e): void => {
-              setDraft(e.target.value);
-            }}
-            autoFocus
-            rows={Math.min(8, Math.max(2, draft.split('\n').length))}
-            bg="panel"
-            borderWidth="1px"
-            borderColor="accent"
-            borderRadius="0"
-            fontFamily="mono"
-            fontSize="12px"
-            color="ink"
-            px="8px"
-            py="4px"
-            flex="1"
-            minH="auto"
-            resize="vertical"
-            _focus={{ borderColor: 'accent', boxShadow: 'none' }}
-          />
-        ) : (
-          <Text
-            fontFamily="mono"
-            fontSize="12px"
-            color="ink"
-            whiteSpace="pre-wrap"
-            wordBreak="break-word"
-            flex="1"
-            cursor="text"
-            _hover={{ color: 'accent' }}
-            onClick={(): void => {
-              setEditing(true);
-            }}
-            title="click to edit"
-          >
-            {sourceText}
-          </Text>
-        )}
-        <Flex gap="6px" flexShrink={0}>
-          {editing && (
-            <Button
-              h="22px"
-              px="8px"
-              bg="panel"
-              color="ink2"
-              borderWidth="1px"
-              borderColor="line"
-              borderRadius="0"
-              fontFamily="mono"
-              fontSize="10px"
-              letterSpacing="0.14em"
-              onClick={(): void => {
-                setDraft(sourceText);
-                setEditing(false);
-              }}
-              disabled={screen.isPending}
-            >
-              CANCEL
-            </Button>
-          )}
-          <Button
-            h="22px"
-            px="10px"
-            bg={editing ? 'accent' : 'panel'}
-            color={editing ? 'panel' : 'ink2'}
-            borderWidth="1px"
-            borderColor={editing ? 'accent' : 'line'}
-            borderRadius="0"
-            fontFamily="mono"
-            fontSize="10px"
-            letterSpacing="0.14em"
-            fontWeight="700"
-            loading={screen.isPending}
-            onClick={editing ? onSave : (): void => setEditing(true)}
-          >
-            {editing ? 'SAVE' : 'EDIT'}
-          </Button>
-        </Flex>
-      </Flex>
-      {screen.isError && (
-        <Text fontFamily="mono" fontSize="10px" color="up">
-          // {screen.error.message}
-        </Text>
-      )}
-      {sector.screenPlan !== undefined && (
-        <Box
-          mt="4px"
-          pt="6px"
-          borderTopWidth="1px"
-          borderTopColor="line2"
-          maxH="220px"
-          overflow="auto"
-        >
-          <DslTree
-            screenPlan={sector.screenPlan}
-            universePlan={sector.universePlan ?? null}
-            rank={sector.rank ?? null}
-          />
-        </Box>
-      )}
-    </Flex>
+      <FeatScrDsl />
+    </Box>
   );
-}
-
-function matchesToEvidenceMap(
-  matches: readonly {
-    readonly code: string;
-    readonly evidence: Readonly<Record<string, unknown>>;
-  }[],
-): Readonly<Record<string, Readonly<Record<string, unknown>>>> {
-  const out: Record<string, Readonly<Record<string, unknown>>> = {};
-  for (const m of matches) out[m.code] = { ...m.evidence };
-  return out;
 }
 
 interface ColumnDef {

@@ -6,6 +6,12 @@
       "runtimeExecutable": "pnpm",
       "runtimeArgs": ["--filter", "@quant/web", "exec", "next", "dev", "-p", "3100"],
       "port": 3100
+    },
+    {
+      "name": "api",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--filter", "@quant/api", "run", "dev"],
+      "port": 3001
     }
   ]
 }

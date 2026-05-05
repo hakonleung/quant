@@ -24,8 +24,9 @@ export const Feat = {
   EquityList: 'EQ.LIST',
 
   // SCR — screening
-  ScreenNL: 'SCR.NL',
+  ScreenNL: 'SEARCH',
   ScreenPattern: 'SCR.PAT',
+  ScreenDsl: 'SCR.DSL',
 
   // AI — LLM surface
   AIOut: 'AI.OUT',
@@ -65,6 +66,7 @@ export const FEAT_CONFIG_MAP: Readonly<Record<Feat, FeatConfig>> = {
 
   [Feat.ScreenNL]: { cyber: true },
   [Feat.ScreenPattern]: { defaultMinimized: true },
+  [Feat.ScreenDsl]: {},
 
   [Feat.AIOut]: { cyber: true, gridArea: 'CBOT' },
   [Feat.AIHist]: { cyber: true, gridArea: 'R1' },
