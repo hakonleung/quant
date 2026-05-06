@@ -46,7 +46,10 @@ import {
   type TerminalState,
 } from '@quant/terminal';
 
+import { useQueryClient } from '@tanstack/react-query';
+
 import { useUiStore } from '../../lib/stores/ui.store.js';
+import { installRunner } from '../../lib/term/install-runner.js';
 
 const PROMPT = paint('$ ', ANSI.cyan, ANSI.bold);
 const SPINNER_FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'] as const;
@@ -83,12 +86,24 @@ export function useTerminal(): TerminalApi {
   const spinnerTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const registry = useMemo(() => createDefaultRegistry(), []);
+  const queryClient = useQueryClient();
+
+  // Revalidator is installed at mount-time alongside the runner so the
+  // first ref is non-null. It's also threaded into ctxStores below so
+  // commands (e.g. `update`) can call it directly without going via
+  // the runner.
+  const revalidateRef = useRef<((scope: import('@quant/terminal').RevalidateScope) => void) | null>(
+    null,
+  );
 
   const ctxStores = useMemo(
     () => ({
       ui: {
         getFocusCode: (): string | null => useUiStore.getState().focusCode,
         setFocusCode: (code: string | null): void => useUiStore.getState().setFocusCode(code),
+      },
+      revalidate: (scope: import('@quant/terminal').RevalidateScope): void => {
+        revalidateRef.current?.(scope);
       },
     }),
     [],
@@ -286,7 +301,22 @@ export function useTerminal(): TerminalApi {
       fitRef.current = fit;
       memRef.current = { committedHistory: 0, footerRows: 0, initial: true, spinnerTick: 0 };
 
-      term.writeln(paint('qX//OS terminal · type `help` to get started', ANSI.gray));
+      // Install the active action runner BEFORE preloadIndex (which is
+      // the first call into `getRunner()`). The selector reads
+      // `localStorage['tm.runner']` first — set it to `'mock'` to fall
+      // back to fixtures for isolation testing.
+      const installed = installRunner({
+        lookupName: (code) => indexRef.current.byCode(code)?.name ?? null,
+        queryClient,
+      });
+      const { kind } = installed;
+      revalidateRef.current = installed.revalidate;
+
+      const banner =
+        kind === 'mock'
+          ? 'qX//OS terminal · MOCK runner · type `help` to get started'
+          : 'qX//OS terminal · type `help` to get started';
+      term.writeln(paint(banner, ANSI.gray));
       paintTerminal(
         term,
         stateRef.current,
@@ -307,7 +337,7 @@ export function useTerminal(): TerminalApi {
       ro.observe(host);
       observerRef.current = ro;
     },
-    [dispatch, schedulePaint],
+    [dispatch, schedulePaint, queryClient],
   );
 
   const unmount = useCallback((): void => {

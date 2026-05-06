@@ -19,8 +19,35 @@ export interface UiStoreShim {
   setFocusCode(code: string | null): void;
 }
 
+/**
+ * Cross-cache invalidation scopes the bridge maps to react-query keys
+ * (and any other client-side state stores). Commands and the live
+ * runner call `ctx.stores.revalidate(scope)` after a successful write
+ * so the rest of the UI reflects the change without a manual refresh.
+ *
+ *   meta       — stock metadata: list, single rows, industry tags
+ *   kline      — kline series: single, bulk, derived snapshots
+ *   sentiment  — analyze.one + analyze.many caches
+ *   sectors    — sector list (zustand-backed)
+ *   watch      — watch tasks (mostly SSE-driven; included for symmetry)
+ *   all        — everything above
+ */
+export type RevalidateScope =
+  | 'meta'
+  | 'kline'
+  | 'sentiment'
+  | 'sectors'
+  | 'watch'
+  | 'all';
+
 export interface CommandStores {
   readonly ui: UiStoreShim;
+  /**
+   * Optional — host injects a real implementation; when absent (e.g. in
+   * unit tests or when a side-effect-free runner is desired) it
+   * silently becomes a no-op.
+   */
+  readonly revalidate?: (scope: RevalidateScope) => void;
 }
 
 export interface CommandCtx {

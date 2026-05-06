@@ -45,6 +45,14 @@ export const updateCommand: CommandSpec = {
         raw !== null && typeof raw === 'object' && 'startedAt' in raw
           ? String((raw as { startedAt: unknown }).startedAt)
           : new Date().toISOString();
+      // Tell the client-side caches that the upstream data is now
+      // changing. The scan runs async — invalidating eagerly means the
+      // next render of EQ.LIST / FOCUS / dashboard will re-fetch and
+      // pick up rows as the gateway publishes them. SSE counters in
+      // the header SYS row signal when the queue drains.
+      if (sub === 'meta') ctx.stores.revalidate?.('meta');
+      else if (sub === 'kline') ctx.stores.revalidate?.('kline');
+      else ctx.stores.revalidate?.('all');
       return textOk(`update ${sub} dispatched · ${startedAt.slice(11, 19)}`);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);

@@ -1,3 +1,5 @@
+import { isValidWatchCode, type WatchMarket } from '@quant/shared';
+
 import {
   watchListAction,
   watchRemoveAction,
@@ -21,13 +23,30 @@ import {
   widgetResolution,
 } from '../widgets/helpers.js';
 
+const MARKETS: readonly WatchMarket[] = ['a', 'hk', 'us'];
 const BASELINES: readonly WatchBaseline[] = ['prev_close', 'day_high', 'day_low', 'prev'];
 const OPS: readonly WatchOp[] = ['gte', 'lte'];
 
-function currencySuffix(market: 'a' | 'hk' | 'us'): string {
+function currencySuffix(market: WatchMarket): string {
   if (market === 'us') return 'USD';
   if (market === 'hk') return 'HKD';
   return 'CNY';
+}
+
+/** Render a per-market code-shape hint for placeholders / errors. */
+function codeHint(market: WatchMarket): string {
+  switch (market) {
+    case 'a':
+      return '6 digits (e.g. 600519)';
+    case 'hk':
+      return '4–5 digits (e.g. 00700)';
+    case 'us':
+      return 'letters, optional secid prefix (e.g. AAPL, 105.LITE)';
+  }
+}
+
+function isWatchMarket(s: string): s is WatchMarket {
+  return (MARKETS as readonly string[]).includes(s);
 }
 
 export const watchCommand: CommandSpec = {
@@ -137,18 +156,30 @@ function runAdd(ctx: Parameters<CommandSpec['run']>[1]) {
     formPrompt({
       title: 'watch add',
       fields: [
-        { key: 'market', label: 'market', kind: 'enum', options: ['a', 'hk', 'us'], initial: 'a' },
+        { key: 'market', label: 'market', kind: 'enum', options: [...MARKETS], initial: 'a' },
         {
           key: 'code',
           label: 'code',
           kind: 'search',
-          placeholder: 'type code / name / pinyin',
-          search: (q) =>
-            ctx.stockIndex.complete(q, 6).map((m) => ({
+          placeholder: 'type code / name / pinyin (A: 6 digits · HK: 4–5 · US: letters)',
+          // The cached stockIndex covers the A-share universe only — for
+          // hk / us we still surface the input as a free-text candidate
+          // so the user can type a code directly. Strict per-market
+          // validation runs at submit time against shared
+          // `isValidWatchCode`.
+          search: (q) => {
+            if (q.length === 0) return [];
+            const aHits = ctx.stockIndex.complete(q, 6).map((m) => ({
               value: m.code,
               label: m.label,
-            })),
-          validate: (v) => (/^\d{6}$/u.test(v) ? null : 'must be 6 digits'),
+            }));
+            return aHits.length > 0 ? aHits : [{ value: q, label: q }];
+          },
+          // Field-local validator stays lenient (just non-empty) — we
+          // don't know the selected market here. Real per-market
+          // validation happens at onSubmit using shared
+          // `isValidWatchCode`.
+          validate: (v) => (v.trim().length === 0 ? 'code is required' : null),
         },
         { key: 'kind', label: 'kind', kind: 'enum', options: ['pct', 'abs'], initial: 'pct' },
         {
@@ -174,7 +205,17 @@ function runAdd(ctx: Parameters<CommandSpec['run']>[1]) {
         { key: 'pushMin', label: 'push (min)', kind: 'number', initial: '5', suffix: () => 'min' },
       ],
       onSubmit: (v) => {
-        const meta = ctx.stockIndex.byCode(v['code'] ?? '');
+        const market: WatchMarket = isWatchMarket(v['market'] ?? '')
+          ? (v['market'] as WatchMarket)
+          : 'a';
+        const code = (v['code'] ?? '').trim();
+        if (!isValidWatchCode(market, code)) {
+          return outputResolution(
+            `code "${code}" is not valid for market ${market} — expected ${codeHint(market)}`,
+            'err',
+          );
+        }
+        const meta = ctx.stockIndex.byCode(code);
         const kind = v['kind'] === 'abs' ? 'abs' : 'pct';
         const value = (v['value'] ?? '').trim();
         if (value.length === 0 || !/^-?\d+(\.\d+)?$/u.test(value)) {
@@ -203,9 +244,9 @@ function runAdd(ctx: Parameters<CommandSpec['run']>[1]) {
               }
             : { kind: 'abs', op, thresholdPrice: value };
         const task: WatchTask = {
-          market: (v['market'] ?? 'a') as 'a' | 'hk' | 'us',
-          code: v['code'] ?? '',
-          name: meta?.name ?? (v['code'] ?? ''),
+          market,
+          code,
+          name: meta?.name ?? code,
           conditions: [condition],
           intervalSec,
           pushIntervalSec,
@@ -234,9 +275,17 @@ async function runRemove(argv: { positional: readonly string[] }, ctx: Parameter
   if (market === undefined || code === undefined) {
     return textErr('usage: watch rm <market> <code>');
   }
+  if (!isWatchMarket(market)) {
+    return textErr(`watch rm: market must be one of ${MARKETS.join('/')}`);
+  }
+  if (!isValidWatchCode(market, code)) {
+    return textErr(
+      `watch rm: code "${code}" is not valid for market ${market} — expected ${codeHint(market)}`,
+    );
+  }
   await ctx.actions.run(
     watchRemoveAction,
-    { market: market as 'a' | 'hk' | 'us', code },
+    { market, code },
     { signal: ctx.signal },
   );
   return textOk(`removed watch ${market}/${code}`);
