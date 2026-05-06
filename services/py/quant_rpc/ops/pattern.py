@@ -16,7 +16,6 @@ from __future__ import annotations
 import json
 from datetime import date as date_cls
 from datetime import datetime
-from datetime import timedelta
 from typing import TYPE_CHECKING, Any, Final
 
 import pyarrow as pa
@@ -33,7 +32,9 @@ if TYPE_CHECKING:
 
 PAYLOAD_SCHEMA: Final[pa.Schema] = pa.schema([("payload_json", pa.string())])
 
-_DEFAULT_LOOKBACK: Final[int] = 250
+# Per the find-similar contract: scan the most recent 30 trading days
+# of every other stock for windows that match the reference shape.
+_RECENT_TRADING_DAYS: Final[int] = 30
 _DEFAULT_TOP_N: Final[int] = 20
 _MAX_UNIVERSE: Final[int] = 6000
 
@@ -102,7 +103,6 @@ class FindSimilarPatternsHandler:
                 "INVALID_ARGUMENT",
                 f"start_date ({start}) must be <= end_date ({end})",
             )
-        lookback = _opt_int(args, "lookback_days", default=_DEFAULT_LOOKBACK)
         top_n = _opt_int(args, "top_n", default=_DEFAULT_TOP_N)
 
         raw_universe = args.get("universe")
@@ -131,26 +131,23 @@ class FindSimilarPatternsHandler:
                 "args.universe must be a list of strings or omitted",
             )
 
+        # Find-similar searches OTHER stocks: drop the reference code
+        # so the engine can never trivially "match" the reference back
+        # to itself.
+        universe = [c for c in universe if c != code]
+
         reference = self._service.reference_from_stock(code, start, end)
         # ``window_days`` must equal len(reference.closes); both the
         # reference and candidate windows are sliced from kline rows,
-        # which are already filtered to trading days. Using calendar
-        # days here would mismatch by every weekend/holiday in the
-        # range and trip the engine's length check.
+        # which are already filtered to trading days.
         window_days = len(reference.closes)
-        # Scan history strictly before the reference start so candidate
-        # windows can never overlap the reference itself. Using ``now``
-        # as ``asof_end`` would let the engine match the reference back
-        # to itself (distance ~0) and trips the lookahead guard
-        # whenever the user picks a recent range.
-        asof_end = start - timedelta(days=1)
 
         query = PatternQuery(
             reference=reference,
             universe=tuple(universe),
             window_days=window_days,
-            asof_end=asof_end,
-            lookback_days=lookback,
+            asof_end=self._clock.now().date(),
+            recent_trading_days=_RECENT_TRADING_DAYS,
             top_n=top_n,
         )
         matches = self._service.find_similar(query)
@@ -168,18 +165,21 @@ class FindSimilarPatternsHandler:
                     "name": name_by_code.get(hit.code, ""),
                     "startDate": hit.start_date.isoformat(),
                     "endDate": hit.end_date.isoformat(),
-                    "distance": float(hit.distance),
+                    "similarity": float(hit.similarity),
+                    "periodReturn": float(hit.period_return),
                 }
             )
+        ref_first = float(reference.closes[0])
+        ref_last = float(reference.closes[-1])
+        ref_period_return = 0.0 if ref_first == 0.0 else ref_last / ref_first - 1.0
         payload = {
             "referenceCode": code,
             "referenceStart": start.isoformat(),
             "referenceEnd": end.isoformat(),
             "windowDays": window_days,
+            "referencePeriodReturn": ref_period_return,
             "matches": rows,
         }
-        # Suppress unused-import for timedelta on lint variants
-        _ = timedelta(0)
         return pa.Table.from_pylist(
             [{"payload_json": json.dumps(payload, ensure_ascii=False)}],
             schema=PAYLOAD_SCHEMA,

@@ -50,7 +50,6 @@ export class PatternController {
       code: body.code,
       start_date: body.startDate,
       end_date: body.endDate,
-      lookback_days: body.lookbackDays,
       top_n: body.topN,
     };
     const result = await this.flight.doGet('find_similar_patterns', args, { traceId });

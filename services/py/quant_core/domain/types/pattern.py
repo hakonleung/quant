@@ -60,22 +60,35 @@ class PatternSeries:
 
 @dataclass(frozen=True, slots=True)
 class PatternQuery:
-    """Inputs to a pattern-matching scan."""
+    """Inputs to a pattern-matching scan.
+
+    The engine searches the **most recent** ``recent_trading_days``
+    trading bars per code (ending at ``asof_end``) and slides a
+    ``window_days``-length window through them.
+    """
 
     reference: PatternSeries
     universe: Sequence[str]
     window_days: int
     asof_end: date
-    lookback_days: int
+    recent_trading_days: int
     top_n: int = 50
 
 
 @dataclass(frozen=True, slots=True)
 class PatternMatch:
-    """One (code, window) hit, ordered by ascending DTW distance."""
+    """One (code, window) hit, ordered by ascending similarity score.
+
+    ``similarity`` blends shape distance (DTW on z-scored closes) with
+    period-return distance, so a candidate that traces the same shape
+    but diverges sharply in cumulative move ranks lower. Smaller is
+    closer.
+    """
 
     code: str
     start_date: date
     end_date: date
     distance: float
+    period_return: float
+    similarity: float
     aligned_path: tuple[tuple[int, int], ...] | None = None

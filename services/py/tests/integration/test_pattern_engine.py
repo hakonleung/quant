@@ -12,7 +12,6 @@ from quant_core.adapters.pattern.dtw_engine import DTWPatternEngine
 from quant_core.domain.types.pattern import (
     PatternQuery,
     PatternSeries,
-    PatternSourceFromStock,
     PatternSourceUploaded,
 )
 from quant_core.errors import QuantError
@@ -83,7 +82,7 @@ def _series(start: date, closes: list[str]) -> list[tuple[date, Decimal]]:
 
 
 def test_top_match_is_the_self_window() -> None:
-    """5 stocks x 30 days; reference = stock A's day 0-9 -> A wins top-1."""
+    """5 stocks x 30 days; reference shape sits at the start of A — A wins top-1."""
     base = date(2026, 1, 1)
     ref_shape = ["10", "11", "12", "11", "13", "14", "13", "15", "16", "17"]
     repo = _FakeKlineRepo(
@@ -104,7 +103,7 @@ def test_top_match_is_the_self_window() -> None:
         universe=("A", "B", "C", "D", "E"),
         window_days=10,
         asof_end=base + timedelta(days=29),
-        lookback_days=30,
+        recent_trading_days=30,
         top_n=5,
     )
     matches = engine.find_similar(query)
@@ -112,33 +111,72 @@ def test_top_match_is_the_self_window() -> None:
     top = matches[0]
     assert top.code == "A"
     assert top.start_date == base
+    # Identical shape AND identical period return → both terms are zero.
     assert top.distance == pytest.approx(0.0, abs=1e-9)
+    assert top.similarity == pytest.approx(0.0, abs=1e-9)
+    # Reference rises 10 -> 17, candidate rises 10 -> 17 → return = 0.7
+    assert top.period_return == pytest.approx(0.7, abs=1e-6)
 
 
-def test_lookahead_reference_rejected() -> None:
+def test_period_return_penalty_breaks_shape_tie() -> None:
+    """Two candidates with the same z-scored shape but different period
+    returns: the one whose return is closer to the reference wins."""
     base = date(2026, 1, 1)
-    repo = _FakeKlineRepo({"A": _series(base, ["10"] * 30)})
+    # Reference: linear up, +90% over 10 bars.
+    ref_shape = [str(10 + i) for i in range(10)]  # 10..19
+    # B's window: same linear-up shape, also +90% — identical pattern.
+    # C's window: same z-scored shape (linear-up) but only +10% — pattern matches, return diverges.
+    repo = _FakeKlineRepo(
+        {
+            "B": _series(base, ref_shape + ["100"] * 20),
+            "C": _series(base, [f"{100 + i:.4f}" for i in range(10)] + ["200"] * 20),
+        }
+    )
     engine = DTWPatternEngine(repo)
     query = PatternQuery(
         reference=PatternSeries(
-            closes=tuple(Decimal("10") for _ in range(10)),
-            # Reference inside the scan window — must be rejected.
-            source=PatternSourceFromStock(
-                kind="from_stock",
-                code="A",
-                start_date=base + timedelta(days=20),
-                end_date=base + timedelta(days=29),
-            ),
+            closes=tuple(Decimal(x) for x in ref_shape),
+            source=PatternSourceUploaded(kind="uploaded", filename="ref.csv"),
+        ),
+        universe=("B", "C"),
+        window_days=10,
+        asof_end=base + timedelta(days=29),
+        recent_trading_days=30,
+        top_n=5,
+    )
+    matches = engine.find_similar(query)
+    # Both should match; B (matching return) ranks ahead of C.
+    by_code = {m.code: m for m in matches}
+    assert "B" in by_code and "C" in by_code
+    assert by_code["B"].similarity < by_code["C"].similarity
+
+
+def test_only_recent_tail_is_scanned() -> None:
+    """The shape sits in the FIRST 10 days of A's history; with a 12-day tail
+    those bars are out of scope and A produces no match."""
+    base = date(2026, 1, 1)
+    ref_shape = ["10", "11", "12", "11", "13", "14", "13", "15", "16", "17"]
+    # 10 days of ref shape + 50 flat days of "20" = 60 calendar days.
+    repo = _FakeKlineRepo({"A": _series(base, ref_shape + ["20"] * 50)})
+    engine = DTWPatternEngine(repo)
+    query = PatternQuery(
+        reference=PatternSeries(
+            closes=tuple(Decimal(x) for x in ref_shape),
+            source=PatternSourceUploaded(kind="uploaded", filename="ref.csv"),
         ),
         universe=("A",),
         window_days=10,
-        asof_end=base + timedelta(days=29),
-        lookback_days=30,
+        asof_end=base + timedelta(days=59),
+        recent_trading_days=12,  # last 12 trading days are all "20"
         top_n=5,
     )
-    with pytest.raises(QuantError) as exc:
-        engine.find_similar(query)
-    assert exc.value.code == "PATTERN_REFERENCE_LOOKAHEAD"
+    matches = engine.find_similar(query)
+    # 12-bar tail produces 3 windows, all on the flat "20" segment with
+    # ratio=1 (passes the loose ratio filter); but they're all flat so
+    # distance > 0. The point is: they don't include the actual ref shape.
+    for m in matches:
+        # No match should overlap the original ref-shape bars [day 0, day 9].
+        assert m.start_date >= base + timedelta(days=10)
 
 
 def test_window_too_short_rejected() -> None:
@@ -153,7 +191,7 @@ def test_window_too_short_rejected() -> None:
         universe=("A",),
         window_days=5,  # below MIN_WINDOW_DAYS
         asof_end=base + timedelta(days=29),
-        lookback_days=30,
+        recent_trading_days=30,
     )
     with pytest.raises(QuantError) as exc:
         engine.find_similar(query)
@@ -172,10 +210,29 @@ def test_reference_length_must_match_window() -> None:
         universe=("A",),
         window_days=10,
         asof_end=base + timedelta(days=29),
-        lookback_days=30,
+        recent_trading_days=30,
     )
     with pytest.raises(QuantError):
         engine.find_similar(query)
+
+
+def test_recent_tail_must_be_at_least_window_days() -> None:
+    base = date(2026, 1, 1)
+    repo = _FakeKlineRepo({"A": _series(base, ["10"] * 30)})
+    engine = DTWPatternEngine(repo)
+    query = PatternQuery(
+        reference=PatternSeries(
+            closes=tuple(Decimal("10") for _ in range(10)),
+            source=PatternSourceUploaded(kind="uploaded", filename="x"),
+        ),
+        universe=("A",),
+        window_days=10,
+        asof_end=base + timedelta(days=29),
+        recent_trading_days=9,
+    )
+    with pytest.raises(QuantError) as exc:
+        engine.find_similar(query)
+    assert exc.value.code == "INVALID_ARGUMENT"
 
 
 def test_empty_universe_returns_empty() -> None:
@@ -189,7 +246,7 @@ def test_empty_universe_returns_empty() -> None:
         universe=(),
         window_days=10,
         asof_end=date(2026, 5, 1),
-        lookback_days=30,
+        recent_trading_days=30,
     )
     assert engine.find_similar(query) == []
 

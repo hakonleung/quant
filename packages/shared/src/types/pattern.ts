@@ -14,7 +14,6 @@ export const PatternFindSimilarRequestSchema = z
     startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
     /** YYYY-MM-DD inclusive. */
     endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-    lookbackDays: z.number().int().positive().default(250),
     topN: z.number().int().positive().max(200).default(20),
   })
   .strict();
@@ -26,8 +25,10 @@ export const PatternMatchSchema = z
     name: z.string(),
     startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
     endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-    /** DTW distance — smaller = closer. */
-    distance: z.number(),
+    /** Combined similarity — DTW shape distance + period-return penalty. Smaller = closer. */
+    similarity: z.number(),
+    /** Cumulative return of the matched window (fraction; 0.12 = +12%). */
+    periodReturn: z.number(),
   })
   .strict();
 export type PatternMatch = z.infer<typeof PatternMatchSchema>;
@@ -38,6 +39,8 @@ export const PatternFindSimilarResponseSchema = z
     referenceStart: z.string(),
     referenceEnd: z.string(),
     windowDays: z.number().int().positive(),
+    /** Reference's cumulative return (fraction). */
+    referencePeriodReturn: z.number(),
     matches: z.array(PatternMatchSchema),
   })
   .strict();
