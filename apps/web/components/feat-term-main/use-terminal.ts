@@ -35,7 +35,6 @@ import {
   initialState,
   paint,
   reduce,
-  renderHints,
   runCommand,
   stockListAction,
   stripAnsi,
@@ -43,14 +42,13 @@ import {
   type CommandCtx,
   type Effect,
   type Event,
-  type KeyHint,
   type StockIndex,
   type TerminalState,
 } from '@quant/terminal';
 
 import { useUiStore } from '../../lib/stores/ui.store.js';
 
-const PROMPT = paint('▸ ', ANSI.cyan);
+const PROMPT = paint('$ ', ANSI.cyan, ANSI.bold);
 const SPINNER_FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'] as const;
 
 /** Per-instance render memory — what the bridge has already committed to xterm. */
@@ -222,11 +220,16 @@ export function useTerminal(): TerminalApi {
       const term = new Terminal({
         fontFamily:
           '"Monaspace Neon", "Monaspace Krypton", "Monaspace Argon", "JetBrains Mono", "SF Mono", ui-monospace, Menlo, monospace',
-        fontSize: 12,
+        fontSize: 15,
         letterSpacing: 0,
-        lineHeight: 1.15,
+        lineHeight: 1.2,
         cursorBlink: true,
-        cursorStyle: 'underline',
+        // `block` reads as a chunky, fully-filled cell — the closest xterm
+        // can render to "bold cursor". `cursorStyle: 'underline'` is too
+        // thin a line at typical font sizes; bumping fontSize alone doesn't
+        // thicken it enough.
+        cursorStyle: 'block',
+        cursorWidth: 2,
         convertEol: true,
         scrollback: 1000,
         // Bridge the cyber palette to xterm's ANSI slots so paint() output
@@ -264,7 +267,6 @@ export function useTerminal(): TerminalApi {
       } catch {
         /* host not laid out yet */
       }
-      reserveStatusRow(term);
       term.onData((data) => {
         const key = toKeySpec(data);
         if (key.special !== undefined || key.text !== undefined) {
@@ -300,8 +302,7 @@ export function useTerminal(): TerminalApi {
         } catch {
           /* */
         }
-        reserveStatusRow(term);
-        schedulePaint();
+          schedulePaint();
       });
       ro.observe(host);
       observerRef.current = ro;
@@ -368,7 +369,7 @@ async function preloadIndex(ref: React.MutableRefObject<StockIndex>): Promise<vo
 
 /* ---------- incremental rendering ---------- */
 
-function paintTerminal(term: Terminal | null, state: TerminalState, mem: RenderMem, focusCode: string | null): void {
+function paintTerminal(term: Terminal | null, state: TerminalState, mem: RenderMem, _focusCode: string | null): void {
   if (term === null) return;
 
   // History shrunk (e.g. `clear` / `clear last N` reset state.history): we
@@ -421,79 +422,9 @@ function paintTerminal(term: Terminal | null, state: TerminalState, mem: RenderM
     mem.footerRows = 0;
   }
 
-  // 4. Pin the status bar to the absolute last row of the viewport.
-  //    DECSC (\x1b7) saves cursor, the CUP escape jumps to (rows, 1),
-  //    we erase the line and write the bar, then DECRC (\x1b8) restores
-  //    the cursor back into the active footer so typed input stays on
-  //    the prompt line. xterm.js honors both DECSC/DECRC.
-  paintStatusBar(term, state, focusCode);
-}
-
-function paintStatusBar(term: Terminal, state: TerminalState, focusCode: string | null): void {
-  const cols = term.cols;
-  const rows = term.rows;
-  if (rows < 2) return;
-  const hints = collectHints(state);
-  const status = renderStatusBar(cols, state, focusCode, hints);
-  // Truncate to one visual line so the absolute-positioned bar never wraps
-  // into the active footer above.
-  const single = clampToWidth(status, cols);
-  term.write(`\x1b7\x1b[${String(rows)};1H\x1b[2K${single}\x1b8`);
-}
-
-/**
- * Set DECSTBM (Set Top and Bottom Margins) so the scroll region is rows
- * 1..rows-1, leaving the very last row outside scroll. Subsequent
- * `writeln`s and prompt typing scroll within that region only — the bar
- * we paint at row `rows` (via absolute CUP) is never overwritten.
- *
- * Re-applied after every fit() because xterm resets the scroll region on
- * resize.
- */
-function reserveStatusRow(term: Terminal): void {
-  const rows = term.rows;
-  if (rows < 2) return;
-  // CSI <top>;<bottom>r — 1-based, inclusive on both ends.
-  term.write(`\x1b[1;${String(rows - 1)}r`);
-}
-
-function collectHints(state: TerminalState): readonly KeyHint[] {
-  if (state.phase === 'interactive' && state.active !== null) {
-    return state.active.widget.hints(state.active.state);
-  }
-  if (state.phase === 'cancelling') {
-    return [{ keys: ['Ctrl+C'], label: 'force cancel' }];
-  }
-  if (state.phase === 'running') {
-    return [{ keys: ['Ctrl+C'], label: 'cancel', danger: true }];
-  }
-  return idleHints();
-}
-
-/** Truncate a string to `cols` visible characters, preserving ANSI codes. */
-function clampToWidth(s: string, cols: number): string {
-  if (stripAnsi(s).length <= cols) return s;
-  // Walk the string keeping ANSI sequences intact, stop once the visible
-  // width hits cols-1 (leave one column free to avoid wrap on most term
-  // implementations).
-  const limit = Math.max(1, cols - 1);
-  let out = '';
-  let visible = 0;
-  let i = 0;
-  while (i < s.length && visible < limit) {
-    if (s[i] === '\x1b' && s[i + 1] === '[') {
-      const end = s.indexOf('m', i);
-      if (end >= 0) {
-        out += s.slice(i, end + 1);
-        i = end + 1;
-        continue;
-      }
-    }
-    out += s[i];
-    visible += 1;
-    i += 1;
-  }
-  return `${out}${ANSI.reset}`;
+  // The dedicated status bar at the bottom of the viewport is now
+  // rendered as React (TipsBar) outside xterm — see feat-term-main.tsx.
+  // No DECSTBM / absolute-positioned status row needed here anymore.
 }
 
 function writeHistoryEntry(term: Terminal, entry: TerminalState['history'][number]): void {
@@ -546,42 +477,6 @@ function renderFooter(term: Terminal, state: TerminalState, mem: RenderMem): str
     return `${list}\n${promptLine}`;
   }
   return promptLine;
-}
-
-function idleHints(): readonly KeyHint[] {
-  return [
-    { keys: ['Tab'], label: 'complete' },
-    { keys: ['↑', '↓'], label: 'history' },
-    { keys: ['Ctrl+L'], label: 'clear' },
-    { keys: ['help'], label: 'commands' },
-  ];
-}
-
-function renderStatusBar(
-  cols: number,
-  state: TerminalState,
-  focusCode: string | null,
-  hints: readonly KeyHint[],
-): string {
-  const left: string[] = [];
-  const phase = state.phase;
-  const dot =
-    phase === 'idle'
-      ? paint('●', ANSI.green)
-      : phase === 'cancelling'
-        ? paint('●', ANSI.yellow)
-        : paint('●', ANSI.cyan);
-  const phaseLabel =
-    phase === 'idle' ? 'READY' : phase === 'running' ? 'RUNNING' : phase === 'cancelling' ? 'CANCELLING' : 'INPUT';
-  left.push(`${dot} ${paint(phaseLabel, ANSI.gray)}`);
-  if (focusCode !== null) {
-    left.push(paint(`FOCUS ${focusCode}`, ANSI.cyan));
-  }
-  const leftStr = left.join(paint('  ·  ', ANSI.gray));
-
-  const hintStr = renderHints(hints, { width: Math.max(20, cols - 4) });
-  const sep = paint('  ·  ', ANSI.gray);
-  return hintStr.length > 0 ? `${leftStr}${sep}${hintStr.split('\n')[0] ?? ''}` : leftStr;
 }
 
 /** Count the number of physical rows a string occupies given current cols. */

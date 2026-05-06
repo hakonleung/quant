@@ -1,16 +1,21 @@
 'use client';
 
 /**
- * Mini SYS row for TERM.MAIN — a compact strip of capsules and a wall
- * clock that lives directly under the big "qX//OS_" logo.
+ * Vertical SYS.STAT block for the TERM.MAIN header — replaces the
+ * earlier `MetaBlock` (kernel/boot/uptime). Right-aligned, four lines:
  *
- * Mirrors the right-slot of {@link FeatSysStat}: SSE / IDB status, meta
- * / kline queue counters, JS-heap MEM (Chromium-only), and an FPS
- * counter. Hooks live inline because lifting them into a shared module
- * would be premature for two call sites with different chrome.
+ *   meta   inFlight/pending           ← clickable: triggers meta scan
+ *   kline  inFlight/pending           ← clickable: triggers kline scan
+ *   MEM    JS-heap MB
+ *   FPS    requestAnimationFrame rate
+ *
+ * Mirrors the data sources of `feat-sys-stat` so the two panes stay in
+ * lockstep, but lays the capsules out vertically (the user explicitly
+ * requested 纵向 / vertical). Hooks live inline because the call site
+ * is single-purpose.
  */
 
-import { Box, Flex, Text } from '@chakra-ui/react';
+import { Flex, Text } from '@chakra-ui/react';
 import {
   ScanAcceptedSchema,
   type QueueSnapshotEntry,
@@ -20,81 +25,53 @@ import { useEffect, useRef, useState } from 'react';
 
 import { useQueueStream } from '../../lib/hooks/use-queue-stream.js';
 
-export function TermSysRow(): React.ReactElement {
+export function HeaderSysStat(): React.ReactElement {
   const stream = useQueueStream();
   const fps = useFps();
   const memMb = useMemoryMb();
-  const now = useClock();
   const meta = stream.snapshot?.queues.find((q) => q.name === 'meta') ?? null;
   const kline = stream.snapshot?.queues.find((q) => q.name === 'kline') ?? null;
 
-  const sseColor =
-    stream.status === 'open' ? 'term.green' : stream.status === 'error' ? 'term.red' : 'term.amber';
-  const sseGlyph = stream.status === 'open' ? '●' : stream.status === 'error' ? '✘' : '○';
-
   return (
     <Flex
-      align="center"
-      gap="18px"
-      px="18px"
-      py="6px"
+      direction="column"
+      align="flex-end"
+      gap="3px"
       fontFamily="mono"
-      fontSize="10px"
+      fontSize="11px"
       letterSpacing="0.16em"
       color="term.ink2"
-      borderBottomWidth="1px"
-      borderBottomColor="term.line"
-      bg="rgba(6,8,10,0.6)"
-      flexShrink={0}
     >
-      <Capsule code="SSE">
-        <Text as="span" color={sseColor}>
-          {sseGlyph}
-        </Text>
-      </Capsule>
-      <Capsule code="IDB">
-        <Text as="span" color="term.green">
-          ●
-        </Text>
-      </Capsule>
-      <ScanCapsule code="meta" queue={meta} kind="meta" />
-      <ScanCapsule code="kline" queue={kline} kind="kline" />
-      <Capsule code="MEM">
-        <Text as="span" color={memColor(memMb)} fontWeight="700">
-          {memMb === null ? '—' : `${String(memMb)}M`}
-        </Text>
-      </Capsule>
-      <Capsule code="FPS">
-        <Text as="span" color={fpsColor(fps)} fontWeight="700">
-          {String(fps)}
-        </Text>
-      </Capsule>
-      <Box flex="1" />
-      <Text color="term.ink3" suppressHydrationWarning>
-        {now}
-      </Text>
+      <ScanLine code="meta" queue={meta} kind="meta" />
+      <ScanLine code="kline" queue={kline} kind="kline" />
+      <ValueLine code="MEM" value={memMb === null ? '—' : `${String(memMb)}M`} color={memColor(memMb)} />
+      <ValueLine code="FPS" value={String(fps)} color={fpsColor(fps)} />
     </Flex>
   );
 }
 
-function Capsule({
+function ValueLine({
   code,
-  children,
+  value,
+  color,
 }: {
   code: string;
-  children: React.ReactNode;
+  value: string;
+  color: string;
 }): React.ReactElement {
   return (
-    <Flex align="center" gap="6px" whiteSpace="nowrap">
+    <Flex gap="8px" align="baseline" justify="flex-end" minW="120px">
       <Text color="term.green" fontWeight="700">
         {code}
       </Text>
-      {children}
+      <Text color={color} fontWeight="700">
+        {value}
+      </Text>
     </Flex>
   );
 }
 
-function ScanCapsule({
+function ScanLine({
   code,
   queue,
   kind,
@@ -125,12 +102,13 @@ function ScanCapsule({
             if (raw !== null) ScanAcceptedSchema.safeParse(raw);
           })
           .catch(() => {
-            /* swallow — capsule is best-effort */
+            /* best-effort */
           });
       }}
-      align="center"
-      gap="6px"
-      whiteSpace="nowrap"
+      gap="8px"
+      align="baseline"
+      justify="flex-end"
+      minW="120px"
       bg="transparent"
       cursor="pointer"
       title={`trigger ${kind} scan`}
@@ -138,7 +116,7 @@ function ScanCapsule({
       <Text color={flashing ? 'term.amber' : 'term.green'} fontWeight="700">
         {code}
       </Text>
-      <Text as="span" color={queue === null ? 'term.ink3' : 'term.ink2'} fontWeight="700">
+      <Text color={queue === null ? 'term.ink3' : 'term.ink2'} fontWeight="700">
         {counter}
       </Text>
     </Flex>
@@ -194,29 +172,6 @@ function useMemoryMb(): number | null {
     };
   }, []);
   return mb;
-}
-
-function useClock(): string {
-  // Start with an empty string on the server so SSR + first client render
-  // produce identical HTML; the actual time is filled in on mount, when
-  // hydration is already complete.
-  const [s, setS] = useState<string>('');
-  useEffect(() => {
-    setS(formatNow());
-    const t = setInterval(() => {
-      setS(formatNow());
-    }, 1000);
-    return () => {
-      clearInterval(t);
-    };
-  }, []);
-  return s;
-}
-
-function formatNow(): string {
-  const d = new Date();
-  const pad = (n: number): string => String(n).padStart(2, '0');
-  return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
 }
 
 function fpsColor(fps: number): string {

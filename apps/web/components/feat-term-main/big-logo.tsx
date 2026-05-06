@@ -1,132 +1,65 @@
 'use client';
 
 /**
- * Big block-letter "qX//OS_" logo for TERM.MAIN, drawn as ASCII pixel
- * art. Each glyph is a 7-row × 7-column matrix of `█` and ` ` (space),
- * doubled horizontally (each filled cell is rendered as `██`) so the
- * resulting pixels read as tall, tile-shaped blocks rather than thin
- * verticals — matches the reference (docs/CRT Terminal -
- * standalone.html, zoomed-in capture).
+ * Big "qX//OS _" ASCII art logo for TERM.MAIN.
  *
- * Layout:
- *   q  X  /  /  O  S  _      ← 7 glyphs
- *   each 14 cells wide       (7 cols × 2)
- *   1-cell gap between       → total 14·7 + 6 = 104 cells/row
- *   7 rows tall
+ * Two stacked <pre> layers in the same monospace grid:
  *
- * The trailing `_` glyph blinks via the global `@keyframes blink`. We
- * render two stacked <pre> blocks: the static body (without the
- * underscore), and a copy that includes only the underscore — the
- * latter has the blink animation applied to its ENTIRE block, which is
- * fine because the rest of its cells are blank.
+ *   1. STATIC body:  qX//OS without trailing cursor
+ *   2. CURSOR layer: blank rows 1..4 plus a `████████` block on row 5
+ *      positioned right after the `S`, with a global blink animation
+ *
+ * Style tokens (font / color / glow / letter-spacing) are copied verbatim
+ * from the CRT-terminal HTML reference so the logo reads identically to
+ * the reference design.
  */
 
 import { Box } from '@chakra-ui/react';
 
-type Glyph = readonly [string, string, string, string, string, string, string];
+const STATIC_BODY = `  ██████  ██    ██       //  ██████  ███████
+ ██    ██  ██  ██      //   ██    ██ ██
+ ██    ██   ████     //     ██    ██ ███████
+ ████████  ██  ██   //       ██    ██      ██
+       ██ ██    ██ //         ██████  ███████`;
 
-// 7-row × 7-col glyphs. `█` = pixel on, ` ` = pixel off.
-const Q: Glyph = [
-  '       ',
-  ' █████ ',
-  '█     █',
-  '█     █',
-  ' ██████',
-  '      █',
-  '   ████',
-];
-const X_: Glyph = [
-  '       ',
-  '█     █',
-  ' █   █ ',
-  '  █ █  ',
-  '   █   ',
-  '  █ █  ',
-  ' █   █ ',
-];
-const SL: Glyph = [
-  '      █',
-  '     █ ',
-  '    █  ',
-  '   █   ',
-  '  █    ',
-  ' █     ',
-  '█      ',
-];
-const O_: Glyph = [
-  '       ',
-  ' █████ ',
-  '█     █',
-  '█     █',
-  '█     █',
-  '█     █',
-  ' █████ ',
-];
-const S_: Glyph = [
-  '       ',
-  ' ██████',
-  '█      ',
-  ' █████ ',
-  '      █',
-  '      █',
-  '██████ ',
-];
-const BLANK: Glyph = ['       ', '       ', '       ', '       ', '       ', '       ', '       '];
-const UND: Glyph = [
-  '       ',
-  '       ',
-  '       ',
-  '       ',
-  '       ',
-  '       ',
-  '███████',
-];
+// Same column grid as STATIC_BODY — only the trailing `_` cell on row 5
+// carries pixels. Blinking the entire <pre> is fine because every other
+// cell is blank.
+const CURSOR_BODY = `
 
-/** Render a row by joining glyphs with a 1-col gap. Filled cells are
- * doubled horizontally so the visual tile aspect matches the design
- * reference (cells appear as squares rather than thin verticals). */
-function joinRow(row: number, glyphs: readonly Glyph[]): string {
-  return glyphs.map((g) => double(g[row] ?? '')).join(' ');
-}
 
-function double(s: string): string {
-  let out = '';
-  for (const ch of s) out += ch === ' ' ? '  ' : '██';
-  return out;
-}
 
-const STATIC_GLYPHS: readonly Glyph[] = [Q, X_, SL, SL, O_, S_, BLANK];
-const CURSOR_GLYPHS: readonly Glyph[] = [BLANK, BLANK, BLANK, BLANK, BLANK, BLANK, UND];
+                                              ████████`;
 
-const STATIC_BODY = [0, 1, 2, 3, 4, 5, 6].map((r) => joinRow(r, STATIC_GLYPHS)).join('\n');
-const CURSOR_BODY = [0, 1, 2, 3, 4, 5, 6].map((r) => joinRow(r, CURSOR_GLYPHS)).join('\n');
+const LOGO_FONT = `"Space Mono", ui-monospace, Menlo, monospace`;
+const LOGO_COLOR = '#d4ffe2';
+const LOGO_GLOW =
+  'rgba(155, 242, 182, 0.8) 0px 0px 4px, rgba(155, 242, 182, 0.4) 0px 0px 12px, rgba(155, 242, 182, 0.2) 0px 0px 28px';
 
 export function BigLogo(): React.ReactElement {
+  const layerStyle = {
+    margin: 0,
+    fontFamily: LOGO_FONT,
+    color: LOGO_COLOR,
+    fontSize: '11.05px',
+    lineHeight: '1.05',
+    letterSpacing: '1px',
+    textShadow: LOGO_GLOW,
+    whiteSpace: 'pre' as const,
+    userSelect: 'none' as const,
+  };
   return (
-    <Box position="relative" lineHeight="0.85" userSelect="none">
-      <Box
-        as="pre"
-        fontFamily="mono"
-        fontSize={{ base: '7px', md: '9px', lg: '11px', xl: '13px' }}
-        color="term.green"
-        textShadow="0 0 4px rgba(94,255,156,0.55), 0 0 12px rgba(94,255,156,0.25), 0 0 22px rgba(94,255,156,0.12)"
-        letterSpacing="0"
-        margin={0}
-      >
+    <Box position="relative">
+      <Box as="pre" {...layerStyle}>
         {STATIC_BODY}
       </Box>
       <Box
         as="pre"
         position="absolute"
         inset="0"
-        fontFamily="mono"
-        fontSize={{ base: '7px', md: '9px', lg: '11px', xl: '13px' }}
-        color="term.green"
-        textShadow="0 0 4px rgba(94,255,156,0.55), 0 0 12px rgba(94,255,156,0.25)"
-        letterSpacing="0"
-        margin={0}
-        css={{ animation: 'blink 1s steps(1) infinite' }}
         pointerEvents="none"
+        css={{ animation: 'blink 1s steps(1) infinite' }}
+        {...layerStyle}
       >
         {CURSOR_BODY}
       </Box>
