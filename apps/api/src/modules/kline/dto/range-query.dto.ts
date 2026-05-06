@@ -8,7 +8,7 @@ import { z } from 'zod';
 
 export const KlineRangeQuerySchema = z
   .object({
-    range: z.enum(['30D', '90D', '250D']).default('90D'),
+    range: z.enum(['30D', '50D', '90D', '250D']).default('90D'),
   })
   .strict();
 
@@ -17,6 +17,7 @@ export type KlineRangeQuery = z.infer<typeof KlineRangeQuerySchema>;
 /** Mapping from human range to "last N trading bars". */
 export const RANGE_TO_N: Readonly<Record<KlineRangeQuery['range'], number>> = {
   '30D': 30,
+  '50D': 50,
   '90D': 90,
   '250D': 250,
 };

@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { bffErrorResponse, nestJson, readTrace } from '../../_lib/proxy.js';
 
 const ListSchema = z.array(KlineBarSchema);
-const RangeSchema = z.enum(['30D', '90D', '250D']);
+const RangeSchema = z.enum(['30D', '50D', '90D', '250D']);
 
 interface Params {
   readonly params: Promise<{ readonly code: string }>;
