@@ -20,14 +20,18 @@ import {
   Post,
   Query,
 } from '@nestjs/common';
-import type { StockBasic, WatchTask } from '@quant/shared';
+import type { StockBasic, WatchGroup, WatchTask } from '@quant/shared';
 import { ZodValidationPipe } from '../../common/zod-pipe.js';
 import {
   UniverseQuerySchema,
+  WatchGroupCreateSchema,
+  WatchGroupParamsSchema,
   WatchTaskCreateSchema,
   WatchTaskParamsSchema,
   WatchTaskPatchSchema,
   type UniverseQuery,
+  type WatchGroupCreate,
+  type WatchGroupParams,
   type WatchTaskCreate,
   type WatchTaskParams,
   type WatchTaskPatch,
@@ -38,10 +42,35 @@ const createPipe = new ZodValidationPipe(WatchTaskCreateSchema);
 const patchPipe = new ZodValidationPipe(WatchTaskPatchSchema);
 const paramsPipe = new ZodValidationPipe(WatchTaskParamsSchema);
 const universePipe = new ZodValidationPipe(UniverseQuerySchema);
+const groupCreatePipe = new ZodValidationPipe(WatchGroupCreateSchema);
+const groupParamsPipe = new ZodValidationPipe(WatchGroupParamsSchema);
 
 @Controller('watch')
 export class WatchController {
   constructor(@Inject(WatchService) private readonly service: WatchService) {}
+
+  /*
+   * NOTE on route ordering: the static `groups` / `universe` / `lookup`
+   * paths must be declared *before* the `:market/:code` family below,
+   * otherwise Express's first-match dispatch routes them to the param
+   * handler.
+   */
+
+  @Get('groups')
+  listGroups(): readonly WatchGroup[] {
+    return this.service.listGroups();
+  }
+
+  @Post('groups')
+  async createGroup(@Body(groupCreatePipe) body: WatchGroupCreate): Promise<WatchGroup> {
+    return this.service.createGroup(body);
+  }
+
+  @Delete('groups/:name')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async deleteGroup(@Param(groupParamsPipe) params: WatchGroupParams): Promise<void> {
+    await this.service.deleteGroup(params.name);
+  }
 
   @Get()
   list(): readonly WatchTask[] {

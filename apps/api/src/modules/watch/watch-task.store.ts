@@ -8,6 +8,7 @@
  * the store dirty and the flush re-runs once the current one finishes.
  */
 
+import { createHash } from 'node:crypto';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { z } from 'zod';
 import { WatchTaskSchema, watchTaskKey, type WatchMarket, type WatchTask } from '@quant/shared';
@@ -34,8 +35,21 @@ const MIN_FLUSH_INTERVAL_MS = 1_000;
  *      throttle changed to `lastHitPrice ± 2 % + pushIntervalSec`;
  *      strip them and seed `lastHitPrice: null` so the new strict
  *      schema parses.
+ *   4. `groupName` became required when groups went first-class;
+ *      legacy tasks get a synthesized name based on the conds
+ *      signature so identical conds collapse into one group.
  */
 const LEGACY_TASK_KEYS_TO_DROP = ['lastMatchAt', 'lastSamplePrice'] as const;
+
+/**
+ * Stable name for legacy tasks: `legacy-<sha1(conds JSON)[0..6]>`.
+ * Identical conds → identical group name → tasks join the same group.
+ */
+export function synthesizeGroupName(conditions: unknown): string {
+  const sig = JSON.stringify(conditions ?? []);
+  const hash = createHash('sha1').update(sig).digest('hex').slice(0, 6);
+  return `legacy-${hash}`;
+}
 
 function migrateLegacyTasks(raw: unknown): unknown {
   if (!Array.isArray(raw)) return raw;
@@ -64,6 +78,9 @@ function migrateLegacyTasks(raw: unknown): unknown {
     }
     if (t['lastHitPrice'] === undefined) {
       t['lastHitPrice'] = null;
+    }
+    if (typeof t['groupName'] !== 'string' || t['groupName'].length === 0) {
+      t['groupName'] = synthesizeGroupName(t['conditions']);
     }
     return t;
   });
@@ -153,6 +170,28 @@ export class WatchTaskStore {
       }
     });
     return removed;
+  }
+
+  /**
+   * Remove every task that references `groupName`. Returns the count
+   * removed. Used by the group-delete cascade — runs in one mutex
+   * critical section so the scheduler never sees a half-deleted set.
+   */
+  async deleteByGroup(groupName: string): Promise<number> {
+    let count = 0;
+    await this.withLock(async () => {
+      for (const [key, task] of this.tasks) {
+        if (task.groupName === groupName) {
+          this.tasks.delete(key);
+          count += 1;
+        }
+      }
+      if (count > 0) {
+        this.markDirty();
+        await this.flushIfDue();
+      }
+    });
+    return count;
   }
 
   /**

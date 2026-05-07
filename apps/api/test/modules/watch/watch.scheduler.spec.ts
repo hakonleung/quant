@@ -65,6 +65,7 @@ function task(overrides: Partial<WatchTask> = {}): WatchTask {
     market: 'a',
     code: '600000',
     name: '浦发银行',
+    groupName: 'default',
     conditions: [{ kind: 'pct', baseline: 'prev_close', op: 'gte', thresholdPct: '5' }],
     intervalSec: 5,
     pushIntervalSec: 60,

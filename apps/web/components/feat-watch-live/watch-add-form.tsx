@@ -4,26 +4,41 @@
  * Inline add-form for the Watch pane.
  *
  * Persistent at the top of the pane: user picks N stocks via the M-0
- * search (chips), shares one condition list across them, submits — one
- * task per stock. On success the form resets to its initial defaults.
+ * search (chips), shares one condition list across them, names the
+ * group they belong to, then submits — one task per stock.
+ *
+ * Group flow (`docs/modules/06-watch.md`):
+ *
+ *   - "+ new group" → user types a fresh name; the conds/intervals
+ *     they edit on the form become this group's stored conds/intervals.
+ *     Submit POSTs `/api/watch/groups` first, then the tasks.
+ *   - "<existing group>" → conds/intervals become read-only (the
+ *     group already owns them, editing here would silently mutate
+ *     other tasks). Submit just POSTs the tasks.
  *
  * The optional `initial` prop is used by the "override" flow: a group
- * of existing tasks is deleted and their stocks/conditions are pushed
- * back into this form for editing.
+ * of existing tasks has been deleted and their stocks/conds are
+ * pushed back into this form. We open in "new group" mode with the
+ * conds prefilled and an empty name field — the user picks a fresh
+ * name (or reuses the old one now that it's free).
  *
  * v0 only POSTs sequentially via the BFF — no dedicated batch endpoint.
  */
 
 import { Box, Flex, Input, Text } from '@chakra-ui/react';
 import {
+  WATCH_GROUP_NAME_PATTERN,
   WATCH_TREND_WINDOW_MAX_SEC,
+  WatchGroupCreateSchema,
+  WatchGroupSchema,
   WatchTaskCreateSchema,
   type WatchBaseline,
   type WatchCondition,
+  type WatchGroup,
   type WatchMarket,
   type WatchTaskCreate,
 } from '@quant/shared';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { z } from 'zod';
 
 import type { UniverseStock } from '../../lib/hooks/use-stock-universe.js';
@@ -55,6 +70,8 @@ const OP_ITEMS = [
 ];
 /** Default trend lookback in **seconds** (1 minute). */
 const DEFAULT_TREND_WINDOW_SEC = 60;
+
+const NEW_GROUP_SENTINEL = '__new__';
 
 const INPUT_STYLE = {
   bg: 'term.bg' as const,
@@ -89,6 +106,11 @@ interface AddFormState {
   readonly intervalMin: string;
   /** Same — minutes on form, seconds on wire. */
   readonly pushIntervalMin: string;
+  /** Selected group name when mode === 'existing'; ignored when 'new'. */
+  readonly groupSelection: string;
+  /** New group name typed by the user when mode === 'new'. */
+  readonly newGroupName: string;
+  readonly mode: 'new' | 'existing';
 }
 
 const INITIAL_CONDITION: ConditionDraft = {
@@ -105,6 +127,9 @@ const INITIAL_STATE: AddFormState = {
   conditions: [INITIAL_CONDITION],
   intervalMin: '1',
   pushIntervalMin: '5',
+  groupSelection: NEW_GROUP_SENTINEL,
+  newGroupName: '',
+  mode: 'new',
 };
 
 function secondsToMinuteString(secs: number): string {
@@ -152,6 +177,9 @@ function buildInitialState(initial: WatchAddInitial | undefined): AddFormState {
       initial.conditions.length > 0 ? initial.conditions.map(fromCondition) : [INITIAL_CONDITION],
     intervalMin: secondsToMinuteString(initial.intervalSec),
     pushIntervalMin: secondsToMinuteString(initial.pushIntervalSec),
+    groupSelection: NEW_GROUP_SENTINEL,
+    newGroupName: '',
+    mode: 'new',
   };
 }
 
@@ -175,23 +203,23 @@ function toCondition(c: ConditionDraft): WatchCondition {
   return { kind: 'abs', op: c.op, thresholdPrice: c.thresholdPrice };
 }
 
-function buildDraft(s: AddFormState, stock: PickedStock): WatchTaskCreate {
+function buildDraft(stock: PickedStock, groupName: string): WatchTaskCreate {
   return WatchTaskCreateSchema.parse({
     market: stock.market,
     code: stock.code,
     name: stock.name,
-    conditions: s.conditions.map(toCondition),
-    intervalSec: minuteStringToSeconds(s.intervalMin),
-    pushIntervalSec: minuteStringToSeconds(s.pushIntervalMin),
+    groupName,
   });
 }
 
 interface AddFormProps {
   readonly initial?: WatchAddInitial;
+  /** Called after a successful submit so the parent can refresh group state. */
+  readonly onSubmitted?: () => void;
 }
 
-async function postOne(stock: PickedStock, state: AddFormState): Promise<string | null> {
-  const draft = buildDraft(state, stock);
+async function postOne(stock: PickedStock, groupName: string): Promise<string | null> {
+  const draft = buildDraft(stock, groupName);
   const res = await fetch('/api/watch', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -202,11 +230,14 @@ async function postOne(stock: PickedStock, state: AddFormState): Promise<string 
   return `[${stock.market}] ${stock.code} → ${String(res.status)} ${body.slice(0, 100)}`;
 }
 
-async function postBatch(state: AddFormState): Promise<readonly string[]> {
+async function postBatch(
+  picked: readonly PickedStock[],
+  groupName: string,
+): Promise<readonly string[]> {
   const errs: string[] = [];
-  for (const stock of state.picked) {
+  for (const stock of picked) {
     try {
-      const failure = await postOne(stock, state);
+      const failure = await postOne(stock, groupName);
       if (failure !== null) errs.push(failure);
     } catch (e) {
       errs.push(`[${stock.market}] ${stock.code}: ${e instanceof Error ? e.message : String(e)}`);
@@ -215,24 +246,124 @@ async function postBatch(state: AddFormState): Promise<readonly string[]> {
   return errs;
 }
 
-export function WatchAddForm({ initial }: AddFormProps): React.ReactElement {
+async function fetchGroups(): Promise<readonly WatchGroup[]> {
+  const res = await fetch('/api/watch/groups', { cache: 'no-store' });
+  if (!res.ok) throw new Error(`groups list failed: ${String(res.status)}`);
+  const raw: unknown = await res.json();
+  return z.array(WatchGroupSchema).parse(raw);
+}
+
+async function postGroup(state: AddFormState, name: string): Promise<WatchGroup> {
+  const body = WatchGroupCreateSchema.parse({
+    name,
+    conditions: state.conditions.map(toCondition),
+    intervalSec: minuteStringToSeconds(state.intervalMin),
+    pushIntervalSec: minuteStringToSeconds(state.pushIntervalMin),
+  });
+  const res = await fetch('/api/watch/groups', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`group create failed: ${String(res.status)} ${text.slice(0, 100)}`);
+  }
+  return WatchGroupSchema.parse(await res.json());
+}
+
+function useGroups(): {
+  readonly groups: readonly WatchGroup[];
+  readonly refresh: () => void;
+} {
+  const [groups, setGroups] = useState<readonly WatchGroup[]>([]);
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    let cancelled = false;
+    void fetchGroups()
+      .then((g) => {
+        if (!cancelled) setGroups(g);
+      })
+      .catch(() => {
+        if (!cancelled) setGroups([]);
+      });
+    return (): void => {
+      cancelled = true;
+    };
+  }, [tick]);
+  const refresh = useCallback((): void => {
+    setTick((t) => t + 1);
+  }, []);
+  return { groups, refresh };
+}
+
+export function WatchAddForm({ initial, onSubmitted }: AddFormProps): React.ReactElement {
   const [state, setState] = useState<AddFormState>(() => buildInitialState(initial));
   const [busy, setBusy] = useState(false);
   const [errs, setErrs] = useState<readonly string[]>([]);
+  const { groups, refresh: refreshGroups } = useGroups();
+
+  // When the user picks an existing group, mirror its conds/intervals
+  // into the local state so the read-only display shows the right
+  // values (and the override-style "edit then post" path can't drift).
+  useEffect(() => {
+    if (state.mode !== 'existing') return;
+    const g = groups.find((x) => x.name === state.groupSelection);
+    if (g === undefined) return;
+    setState((prev) => ({
+      ...prev,
+      conditions: g.conditions.map(fromCondition),
+      intervalMin: secondsToMinuteString(g.intervalSec),
+      pushIntervalMin: secondsToMinuteString(g.pushIntervalSec),
+    }));
+  }, [state.mode, state.groupSelection, groups]);
+
+  const groupReadOnly = state.mode === 'existing';
+
+  const newNameValid =
+    state.mode !== 'new' ||
+    (state.newGroupName.length > 0 && WATCH_GROUP_NAME_PATTERN.test(state.newGroupName));
+  const newNameDuplicate =
+    state.mode === 'new' && groups.some((g) => g.name === state.newGroupName);
+  const groupReady =
+    state.mode === 'new'
+      ? newNameValid && !newNameDuplicate
+      : groups.some((g) => g.name === state.groupSelection);
 
   const submit = async (): Promise<void> => {
     setBusy(true);
     setErrs([]);
     try {
-      const failures = await postBatch(state);
-      if (failures.length === 0) setState(INITIAL_STATE);
-      else setErrs(failures);
+      let groupName: string;
+      if (state.mode === 'new') {
+        const created = await postGroup(state, state.newGroupName);
+        groupName = created.name;
+        refreshGroups();
+      } else {
+        groupName = state.groupSelection;
+      }
+      const failures = await postBatch(state.picked, groupName);
+      if (failures.length === 0) {
+        // Reset picks but keep the user's group selection so a follow-up
+        // batch under the same group is one click away.
+        setState((prev) => ({
+          ...INITIAL_STATE,
+          mode: prev.mode,
+          groupSelection: prev.mode === 'existing' ? prev.groupSelection : NEW_GROUP_SENTINEL,
+          newGroupName: '',
+        }));
+        onSubmitted?.();
+      } else {
+        setErrs(failures);
+      }
     } catch (e) {
       setErrs([e instanceof Error ? e.message : String(e)]);
     } finally {
       setBusy(false);
     }
   };
+
+  const canSubmit = state.picked.length > 0 && state.conditions.length > 0 && groupReady;
 
   return (
     <Box
@@ -243,13 +374,21 @@ export function WatchAddForm({ initial }: AddFormProps): React.ReactElement {
       bg="term.bgElev"
       color="term.ink2"
     >
+      <GroupRow
+        state={state}
+        setState={setState}
+        groups={groups}
+        duplicate={newNameDuplicate}
+        invalid={!newNameValid}
+      />
       <PickRow state={state} setState={setState} />
-      <ConditionsList state={state} setState={setState} />
+      <ConditionsList state={state} setState={setState} readOnly={groupReadOnly} />
       <SubmitRow
         state={state}
         setState={setState}
         busy={busy}
-        canSubmit={state.picked.length > 0 && state.conditions.length > 0}
+        canSubmit={canSubmit}
+        readOnly={groupReadOnly}
         onSubmit={(): void => {
           void submit();
         }}
@@ -270,6 +409,76 @@ export function WatchAddForm({ initial }: AddFormProps): React.ReactElement {
 interface RowProps {
   readonly state: AddFormState;
   readonly setState: React.Dispatch<React.SetStateAction<AddFormState>>;
+}
+
+interface GroupRowProps extends RowProps {
+  readonly groups: readonly WatchGroup[];
+  readonly duplicate: boolean;
+  readonly invalid: boolean;
+}
+
+function GroupRow({
+  state,
+  setState,
+  groups,
+  duplicate,
+  invalid,
+}: GroupRowProps): React.ReactElement {
+  const items = useMemo(
+    () => [
+      { label: '+ new group', value: NEW_GROUP_SENTINEL },
+      ...groups.map((g) => ({ label: g.name, value: g.name })),
+    ],
+    [groups],
+  );
+  const onChangeSelection = (v: string): void => {
+    if (v === NEW_GROUP_SENTINEL) {
+      setState((prev) => ({ ...prev, groupSelection: NEW_GROUP_SENTINEL, mode: 'new' }));
+      return;
+    }
+    setState((prev) => ({ ...prev, groupSelection: v, mode: 'existing' }));
+  };
+  return (
+    <Flex gap="6px" align="center" mb="6px" wrap="wrap">
+      <Text fontSize="11px" color="term.ink3" letterSpacing="0.14em">
+        GROUP
+      </Text>
+      <TermSelect<string>
+        value={state.groupSelection}
+        items={items}
+        width="170px"
+        onChange={onChangeSelection}
+      />
+      {state.mode === 'new' ? (
+        <>
+          <Input
+            {...INPUT_STYLE}
+            w="180px"
+            placeholder="new group name"
+            value={state.newGroupName}
+            onChange={(e): void => {
+              const v = e.target.value;
+              setState((prev) => ({ ...prev, newGroupName: v }));
+            }}
+          />
+          {state.newGroupName.length > 0 && invalid ? (
+            <Text fontSize="11px" color="term.red">
+              1–32 chars · letters/digits/space/_/-
+            </Text>
+          ) : null}
+          {duplicate ? (
+            <Text fontSize="11px" color="term.red">
+              name already exists
+            </Text>
+          ) : null}
+        </>
+      ) : (
+        <Text fontSize="11px" color="term.ink3">
+          conds · intervals owned by this group (read-only)
+        </Text>
+      )}
+    </Flex>
+  );
 }
 
 interface SectorImportRowProps {
@@ -397,7 +606,11 @@ function PickRow({ state, setState }: RowProps): React.ReactElement {
   );
 }
 
-function ConditionsList({ state, setState }: RowProps): React.ReactElement {
+function ConditionsList({
+  state,
+  setState,
+  readOnly,
+}: RowProps & { readonly readOnly: boolean }): React.ReactElement {
   const onAdd = (): void => {
     setState((prev) => ({ ...prev, conditions: [...prev.conditions, INITIAL_CONDITION] }));
   };
@@ -419,16 +632,19 @@ function ConditionsList({ state, setState }: RowProps): React.ReactElement {
         <Text fontSize="11px" color="term.ink3" letterSpacing="0.14em">
           CONDITIONS · ANY-OF
         </Text>
-        <MonoButton icon="add" label="add condition" onClick={onAdd}>
-          add
-        </MonoButton>
+        {readOnly ? null : (
+          <MonoButton icon="add" label="add condition" onClick={onAdd}>
+            add
+          </MonoButton>
+        )}
       </Flex>
       <Flex direction="column" gap="4px">
         {state.conditions.map((c, i) => (
           <ConditionRow
             key={`cond-${String(i)}`}
             cond={c}
-            canRemove={state.conditions.length > 1}
+            canRemove={!readOnly && state.conditions.length > 1}
+            readOnly={readOnly}
             onChange={(next): void => {
               onChange(i, next);
             }}
@@ -445,6 +661,7 @@ function ConditionsList({ state, setState }: RowProps): React.ReactElement {
 interface ConditionRowProps {
   readonly cond: ConditionDraft;
   readonly canRemove: boolean;
+  readonly readOnly: boolean;
   readonly onChange: (next: ConditionDraft) => void;
   readonly onRemove: () => void;
 }
@@ -452,9 +669,17 @@ interface ConditionRowProps {
 function ConditionRow({
   cond,
   canRemove,
+  readOnly,
   onChange,
   onRemove,
 }: ConditionRowProps): React.ReactElement {
+  if (readOnly) {
+    return (
+      <Flex gap="6px" wrap="wrap" align="center" color="term.ink3" fontSize="11px">
+        <Text fontFamily="mono">{describeCondition(cond)}</Text>
+      </Flex>
+    );
+  }
   return (
     <Flex gap="6px" wrap="wrap" align="center">
       <TermSelect<Kind>
@@ -544,9 +769,21 @@ function ConditionRow({
   );
 }
 
+function describeCondition(c: ConditionDraft): string {
+  const op = c.op === 'gte' ? '≥' : '≤';
+  if (c.kind === 'pct') {
+    if (c.baseline === 'trend') {
+      return `pct trend(${c.windowSec}s) ${op} ${c.thresholdPct}%`;
+    }
+    return `pct ${c.baseline} ${op} ${c.thresholdPct}%`;
+  }
+  return `abs ${op} ${c.thresholdPrice}`;
+}
+
 interface SubmitRowProps extends RowProps {
   readonly busy: boolean;
   readonly canSubmit: boolean;
+  readonly readOnly: boolean;
   readonly onSubmit: () => void;
 }
 
@@ -555,6 +792,7 @@ function SubmitRow({
   setState,
   busy,
   canSubmit,
+  readOnly,
   onSubmit,
 }: SubmitRowProps): React.ReactElement {
   return (
@@ -566,6 +804,7 @@ function SubmitRow({
         {...INPUT_STYLE}
         w="60px"
         value={state.intervalMin}
+        readOnly={readOnly}
         onChange={(e): void => {
           const v = e.target.value;
           setState((s) => ({ ...s, intervalMin: v }));
@@ -581,6 +820,7 @@ function SubmitRow({
         {...INPUT_STYLE}
         w="60px"
         value={state.pushIntervalMin}
+        readOnly={readOnly}
         onChange={(e): void => {
           const v = e.target.value;
           setState((s) => ({ ...s, pushIntervalMin: v }));

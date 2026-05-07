@@ -154,16 +154,18 @@ export function watchToTerm(t: SharedWatchTask): TermWatchTask {
 
 /**
  * Build a `WatchTaskCreate` body suitable for `POST /api/watch` from a
- * terminal-shaped task. Adds the gateway-required `notifySlack` /
- * `remaining` fields with sensible defaults.
+ * terminal-shaped task. The caller must provide an existing `groupName`
+ * — the gateway owns conditions / intervals on the group, not the task.
+ * Adds the gateway-required `notifySlack` / `remaining` defaults.
  */
-export function watchToCreate(t: TermWatchTask): {
+export function watchToCreate(
+  t: TermWatchTask,
+  groupName: string,
+): {
   readonly market: TermWatchTask['market'];
   readonly code: string;
   readonly name: string;
-  readonly conditions: TermWatchTask['conditions'];
-  readonly intervalSec: number;
-  readonly pushIntervalSec: number;
+  readonly groupName: string;
   readonly remaining: null;
   readonly notifySlack: boolean;
   readonly enabled: boolean;
@@ -172,13 +174,31 @@ export function watchToCreate(t: TermWatchTask): {
     market: t.market,
     code: t.code,
     name: t.name,
-    conditions: t.conditions,
-    intervalSec: Math.max(5, t.intervalSec),
-    pushIntervalSec: Math.max(60, t.pushIntervalSec),
+    groupName,
     remaining: null,
     notifySlack: true,
     enabled: t.enabled,
   };
+}
+
+/**
+ * Stable, deterministic group name for a terminal-driven watch upsert.
+ * Hash of `conditions + intervals` so identical recipes converge to the
+ * same group; prefix avoids collisions with user-named GUI groups.
+ *
+ * Browser-friendly (no `node:crypto`): a simple djb2 of the JSON.
+ */
+export function termGroupNameFor(t: TermWatchTask): string {
+  const sig = JSON.stringify({
+    conditions: t.conditions,
+    intervalSec: Math.max(5, t.intervalSec),
+    pushIntervalSec: Math.max(60, t.pushIntervalSec),
+  });
+  let hash = 5381;
+  for (let i = 0; i < sig.length; i += 1) {
+    hash = ((hash * 33) ^ sig.charCodeAt(i)) >>> 0;
+  }
+  return `term-${hash.toString(16).slice(0, 6)}`;
 }
 
 /* ---------- helpers ---------- */

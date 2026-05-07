@@ -128,11 +128,48 @@ export type WatchAbsCondition = z.infer<typeof WatchAbsConditionSchema>;
 
 const isoDateTime = z.string().datetime({ offset: true });
 
+/**
+ * Group name constraints. Names are user-facing identifiers and act as
+ * the primary key for `WatchGroup` plus the foreign key on `WatchTask`.
+ * Limited to a kebab-friendly charset so they fit in URL path segments
+ * (the `DELETE /watch/groups/:name` route) without escaping.
+ */
+export const WATCH_GROUP_NAME_PATTERN = /^[A-Za-z0-9_-][A-Za-z0-9 _-]{0,31}$/;
+export const WatchGroupNameSchema = z
+  .string()
+  .min(1)
+  .max(32)
+  .regex(WATCH_GROUP_NAME_PATTERN, {
+    message: 'group name must be 1–32 chars; letters/digits/space/_/-, no leading space',
+  });
+
+export const WatchGroupSchema = z
+  .object({
+    name: WatchGroupNameSchema,
+    conditions: z.array(WatchConditionSchema).min(1),
+    intervalSec: z.number().int().min(5).default(20),
+    pushIntervalSec: z.number().int().min(60).default(300),
+    createdAt: z.string().datetime({ offset: true }),
+  })
+  .strict();
+export type WatchGroup = z.infer<typeof WatchGroupSchema>;
+
+export const WatchGroupCreateSchema = z
+  .object({
+    name: WatchGroupNameSchema,
+    conditions: z.array(WatchConditionSchema).min(1),
+    intervalSec: z.number().int().min(5).default(20),
+    pushIntervalSec: z.number().int().min(60).default(300),
+  })
+  .strict();
+export type WatchGroupCreate = z.infer<typeof WatchGroupCreateSchema>;
+
 export const WatchTaskSchema = z
   .object({
     market: WatchMarketSchema,
     code: z.string().min(1),
     name: z.string(),
+    groupName: WatchGroupNameSchema,
     conditions: z.array(WatchConditionSchema).min(1),
     intervalSec: z.number().int().min(5).default(20),
     /**
@@ -162,14 +199,18 @@ export const WatchTaskSchema = z
   .strict();
 export type WatchTask = z.infer<typeof WatchTaskSchema>;
 
+/**
+ * Task create payload. The server is the source of truth for a task's
+ * `conditions / intervalSec / pushIntervalSec`: those are owned by the
+ * referenced `WatchGroup`. The client only sends `groupName`; the group
+ * must already exist (create the group via `POST /watch/groups` first).
+ */
 export const WatchTaskCreateSchema = z
   .object({
     market: WatchMarketSchema,
     code: z.string().min(1),
     name: z.string(),
-    conditions: z.array(WatchConditionSchema).min(1),
-    intervalSec: z.number().int().min(5).default(20),
-    pushIntervalSec: z.number().int().min(60).default(300),
+    groupName: WatchGroupNameSchema,
     remaining: z.number().int().min(0).nullable().default(null),
     notifySlack: z.boolean().default(true),
     enabled: z.boolean().default(true),
@@ -186,12 +227,13 @@ export const WatchTaskCreateSchema = z
   });
 export type WatchTaskCreate = z.infer<typeof WatchTaskCreateSchema>;
 
+/**
+ * Group-owned fields (`conditions / intervalSec / pushIntervalSec`) are
+ * not patchable on a task — change them on the group instead.
+ */
 export const WatchTaskPatchSchema = z
   .object({
     name: z.string().optional(),
-    conditions: z.array(WatchConditionSchema).min(1).optional(),
-    intervalSec: z.number().int().min(5).optional(),
-    pushIntervalSec: z.number().int().min(60).optional(),
     remaining: z.number().int().min(0).nullable().optional(),
     notifySlack: z.boolean().optional(),
     enabled: z.boolean().optional(),

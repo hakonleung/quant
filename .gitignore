@@ -50,6 +50,7 @@ data/sentiment/
 # without an akshare round-trip.
 apps/api/data/
 data/watch/tasks.json
+data/watch/groups.json
 # Sectors + Sys.Cfg are user state, never source-tracked.
 data/sectors/
 data/sys-cfg/

@@ -18,6 +18,7 @@ import { ChannelModule } from '../channel/channel.module.js';
 import { StockMetaModule } from '../stock-meta/stock-meta.module.js';
 import { WATCH_QUOTE_PORT } from './domain/watch-port.js';
 import { FlightWatchAdapter, WATCH_FLIGHT_CLIENT } from './flight-watch.adapter.js';
+import { WatchGroupStore } from './watch-group.store.js';
 import { WATCH_DATA_DIR, WatchTaskStore } from './watch-task.store.js';
 import { WatchUniverseStore } from './watch-universe.store.js';
 import { WatchBroadcaster } from './watch.broadcaster.js';
@@ -48,6 +49,7 @@ const DEFAULT_DATA_DIR = '../../data/watch';
     },
     { provide: WATCH_QUOTE_PORT, useClass: FlightWatchAdapter },
     WatchTaskStore,
+    WatchGroupStore,
     WatchUniverseStore,
     WatchService,
     WatchScheduler,

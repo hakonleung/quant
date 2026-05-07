@@ -246,6 +246,7 @@ describe('watchToTerm / watchToCreate', () => {
     market: 'a' as const,
     code: '600519',
     name: '贵州茅台',
+    groupName: 'demo',
     conditions: [
       {
         kind: 'pct' as const,
@@ -267,24 +268,14 @@ describe('watchToTerm / watchToCreate', () => {
     lastHitPrice: null,
   };
 
-  it('round-trips conditions through term and back into create body', () => {
+  it('projects shared task into terminal task and builds a group-bound create body', () => {
     const term = watchToTerm(sharedTask);
     expect(term.conditions[0]?.kind).toBe('pct');
-    const create = watchToCreate(term);
-    expect(create.intervalSec).toBe(60);
-    expect(create.pushIntervalSec).toBe(300);
+    const create = watchToCreate(term, 'demo');
+    expect(create.groupName).toBe('demo');
     expect(create.notifySlack).toBe(true);
     expect(create.remaining).toBeNull();
-    expect(create.conditions).toEqual(term.conditions);
-  });
-
-  it('clamps low intervalSec / pushIntervalSec to gateway minimums', () => {
-    const create = watchToCreate({
-      ...watchToTerm(sharedTask),
-      intervalSec: 1,
-      pushIntervalSec: 1,
-    });
-    expect(create.intervalSec).toBe(5);
-    expect(create.pushIntervalSec).toBe(60);
+    expect(create.market).toBe('a');
+    expect(create.code).toBe('600519');
   });
 });

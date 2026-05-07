@@ -17,8 +17,15 @@
  */
 
 import { Box, Checkbox, Flex, Text } from '@chakra-ui/react';
-import { WatchSnapshotPayloadSchema, type WatchCondition, type WatchTask } from '@quant/shared';
-import { useEffect, useMemo, useState } from 'react';
+import {
+  WatchGroupSchema,
+  WatchSnapshotPayloadSchema,
+  type WatchCondition,
+  type WatchGroup,
+  type WatchTask,
+} from '@quant/shared';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { z } from 'zod';
 
 import { Feat } from '../../lib/eqty/feat.js';
 import { ConfirmCancelled, useConfirm } from '../../lib/hooks/use-confirm.js';
@@ -46,39 +53,79 @@ function formatMinutes(secs: number): string {
   return `${(secs / 60).toFixed(2)}m`;
 }
 
-function groupKeyOf(conditions: readonly WatchCondition[]): string {
-  return JSON.stringify(conditions);
-}
-
 interface TaskGroup {
+  /** Group name; doubles as the React key and the API path segment. */
   readonly key: string;
+  readonly name: string;
   readonly conditions: readonly WatchCondition[];
   readonly intervalSec: number;
   readonly pushIntervalSec: number;
   readonly tasks: readonly WatchTask[];
 }
 
-function groupTasks(tasks: readonly WatchTask[]): readonly TaskGroup[] {
-  const map = new Map<string, WatchTask[]>();
+/**
+ * Bucket tasks by their `groupName`, hydrating header conds/intervals
+ * from the persisted `WatchGroup` config when one exists. Tasks whose
+ * group has been deleted server-side (or that arrived before the group
+ * snapshot) fall back to their own `conditions / intervalSec` so the
+ * row is still rendered usefully.
+ */
+function groupTasks(
+  tasks: readonly WatchTask[],
+  groupConfigs: readonly WatchGroup[],
+): readonly TaskGroup[] {
+  const configByName = new Map<string, WatchGroup>();
+  for (const g of groupConfigs) configByName.set(g.name, g);
+  const buckets = new Map<string, WatchTask[]>();
   for (const t of tasks) {
-    const k = groupKeyOf(t.conditions);
-    const arr = map.get(k);
+    const arr = buckets.get(t.groupName);
     if (arr) arr.push(t);
-    else map.set(k, [t]);
+    else buckets.set(t.groupName, [t]);
   }
-  const groups: TaskGroup[] = [];
-  for (const [k, ts] of map) {
+  const out: TaskGroup[] = [];
+  for (const [name, ts] of buckets) {
+    const cfg = configByName.get(name);
     const first = ts[0];
     if (!first) continue;
-    groups.push({
-      key: k,
-      conditions: first.conditions,
-      intervalSec: first.intervalSec,
-      pushIntervalSec: first.pushIntervalSec,
+    out.push({
+      key: name,
+      name,
+      conditions: cfg?.conditions ?? first.conditions,
+      intervalSec: cfg?.intervalSec ?? first.intervalSec,
+      pushIntervalSec: cfg?.pushIntervalSec ?? first.pushIntervalSec,
       tasks: ts,
     });
   }
-  return groups;
+  out.sort((a, b) => a.name.localeCompare(b.name));
+  return out;
+}
+
+async function fetchGroups(): Promise<readonly WatchGroup[]> {
+  const res = await fetch('/api/watch/groups', { cache: 'no-store' });
+  if (!res.ok) return [];
+  const raw: unknown = await res.json();
+  return z.array(WatchGroupSchema).parse(raw);
+}
+
+function useGroupConfigs(): {
+  readonly groups: readonly WatchGroup[];
+  readonly refresh: () => void;
+} {
+  const [groups, setGroups] = useState<readonly WatchGroup[]>([]);
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    let cancelled = false;
+    void fetchGroups().then((g) => {
+      if (!cancelled) setGroups(g);
+    });
+    return (): void => {
+      cancelled = true;
+    };
+  }, [tick]);
+  const refresh = useCallback((): void => {
+    setTick((t) => t + 1);
+  }, []);
+  return { groups, refresh };
 }
 
 export function FeatWatchLive(): React.ReactElement {
@@ -88,7 +135,8 @@ export function FeatWatchLive(): React.ReactElement {
   const [formInitial, setFormInitial] = useState<WatchAddInitial | undefined>(undefined);
   const [formKey, setFormKey] = useState(0);
   const tasks = state.kind === 'open' ? state.tasks : [];
-  const groups = useMemo(() => groupTasks(tasks), [tasks]);
+  const { groups: groupConfigs, refresh: refreshGroupConfigs } = useGroupConfigs();
+  const groups = useMemo(() => groupTasks(tasks, groupConfigs), [tasks, groupConfigs]);
   const { guard, comp: confirmComp } = useConfirm();
 
   // Drop selections that no longer exist (deleted upstream).
@@ -136,11 +184,15 @@ export function FeatWatchLive(): React.ReactElement {
         title: 'delete group',
         message: (
           <Text fontFamily="mono" fontSize="12px" color="term.ink2" lineHeight="1.7">
-            delete{' '}
+            delete group{' '}
+            <Text as="span" color="term.amber">
+              {group.name}
+            </Text>{' '}
+            and its{' '}
             <Text as="span" color="term.red">
               {group.tasks.length}
             </Text>{' '}
-            watch tasks in this group? This cannot be undone.
+            watch tasks? This also removes the group's stored conds and cannot be undone.
           </Text>
         ),
         confirmLabel: 'DELETE',
@@ -151,12 +203,13 @@ export function FeatWatchLive(): React.ReactElement {
     }
     markGroupBusy(group.key, true);
     try {
-      await Promise.all(group.tasks.map((t) => deleteTask(t)));
+      await deleteGroup(group.name);
       setSelected((prev) => {
         const next = new Set(prev);
         for (const t of group.tasks) next.delete(taskKey(t));
         return next;
       });
+      refreshGroupConfigs();
     } finally {
       markGroupBusy(group.key, false);
     }
@@ -196,7 +249,7 @@ export function FeatWatchLive(): React.ReactElement {
     }));
     markGroupBusy(group.key, true);
     try {
-      await Promise.all(group.tasks.map((t) => deleteTask(t)));
+      await deleteGroup(group.name);
       setSelected((prev) => {
         const next = new Set(prev);
         for (const t of group.tasks) next.delete(taskKey(t));
@@ -209,6 +262,7 @@ export function FeatWatchLive(): React.ReactElement {
         pushIntervalSec: group.pushIntervalSec,
       });
       setFormKey((k) => k + 1);
+      refreshGroupConfigs();
     } finally {
       markGroupBusy(group.key, false);
     }
@@ -230,9 +284,13 @@ export function FeatWatchLive(): React.ReactElement {
       >
         <Box px="14px" pt="10px" flexShrink={0}>
           {formInitial ? (
-            <WatchAddForm key={formKey} initial={formInitial} />
+            <WatchAddForm
+              key={formKey}
+              initial={formInitial}
+              onSubmitted={refreshGroupConfigs}
+            />
           ) : (
-            <WatchAddForm key={formKey} />
+            <WatchAddForm key={formKey} onSubmitted={refreshGroupConfigs} />
           )}
         </Box>
         {selected.size > 0 && (
@@ -366,7 +424,7 @@ function Group({
   const allSelected = selectedInGroup === taskKeys.length && taskKeys.length > 0;
   const partiallySelected = selectedInGroup > 0 && !allSelected;
   const titleLines: readonly string[] = [
-    ...group.conditions.map(formatCondition),
+    `${group.name} · ${group.conditions.map(formatCondition).join(' / ')}`,
     `interval: ${formatMinutes(group.intervalSec)}  push≥: ${formatMinutes(group.pushIntervalSec)}  drift≥2%`,
   ];
 
@@ -475,6 +533,16 @@ async function deleteTask(task: WatchTask): Promise<string | null> {
   });
   if (res.ok || res.status === 204) return null;
   return `delete ${String(res.status)}`;
+}
+
+async function deleteGroup(name: string): Promise<void> {
+  const res = await fetch(`/api/watch/groups/${encodeURIComponent(name)}`, {
+    method: 'DELETE',
+  });
+  if (!res.ok && res.status !== 204) {
+    const body = await res.text();
+    throw new Error(`group delete failed: ${String(res.status)} ${body.slice(0, 100)}`);
+  }
 }
 
 interface RowProps {

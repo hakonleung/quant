@@ -53,10 +53,11 @@ import {
   screenToTerm,
   sentimentToTerm,
   snapshotToTerm,
+  termGroupNameFor,
   watchToCreate,
   watchToTerm,
 } from './projectors.js';
-import { StockMetaDtoSchema } from '@quant/shared';
+import { StockMetaDtoSchema, WatchGroupSchema } from '@quant/shared';
 
 /**
  * Caller-supplied helpers the runner needs but doesn't own. Keeps the
@@ -232,7 +233,29 @@ function buildFetchers(deps: LiveRunnerDeps): Record<string, Fetcher> {
     },
 
     'watch.upsert': async ({ task }: { task: ReturnType<typeof watchToTerm> }) => {
-      const body = watchToCreate(task);
+      // Ensure a group exists for these conds; idempotent — 409 means
+      // the group already exists with the same conds (deterministic
+      // hash), which is exactly what we want.
+      const groupName = termGroupNameFor(task);
+      const groupBody = {
+        name: groupName,
+        conditions: task.conditions,
+        intervalSec: Math.max(5, task.intervalSec),
+        pushIntervalSec: Math.max(60, task.pushIntervalSec),
+      };
+      const groupRes = await fetch('/api/watch/groups', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(groupBody),
+      });
+      if (!groupRes.ok && groupRes.status !== 409) {
+        throw new Error(`watch group create failed: ${String(groupRes.status)}`);
+      }
+      // Validate the persisted group shape if a fresh create succeeded.
+      if (groupRes.ok) {
+        WatchGroupSchema.parse(await groupRes.json());
+      }
+      const body = watchToCreate(task, groupName);
       const saved = await apiPost('/api/watch', body, (raw) => WatchTaskSchema.parse(raw));
       return watchToTerm(saved);
     },

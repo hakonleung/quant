@@ -7,10 +7,16 @@
  */
 
 import { z } from 'zod';
-import { WatchMarketSchema, WatchTaskCreateSchema, WatchTaskPatchSchema } from '@quant/shared';
+import {
+  WatchGroupCreateSchema,
+  WatchGroupNameSchema,
+  WatchMarketSchema,
+  WatchTaskCreateSchema,
+  WatchTaskPatchSchema,
+} from '@quant/shared';
 
-export { WatchTaskCreateSchema, WatchTaskPatchSchema };
-export type { WatchTaskCreate, WatchTaskPatch } from '@quant/shared';
+export { WatchGroupCreateSchema, WatchTaskCreateSchema, WatchTaskPatchSchema };
+export type { WatchGroupCreate, WatchTaskCreate, WatchTaskPatch } from '@quant/shared';
 
 export const WatchTaskParamsSchema = z
   .object({
@@ -19,6 +25,9 @@ export const WatchTaskParamsSchema = z
   })
   .strict();
 export type WatchTaskParams = z.infer<typeof WatchTaskParamsSchema>;
+
+export const WatchGroupParamsSchema = z.object({ name: WatchGroupNameSchema }).strict();
+export type WatchGroupParams = z.infer<typeof WatchGroupParamsSchema>;
 
 export const UniverseQuerySchema = z.object({ market: z.enum(['hk', 'us']) }).strict();
 export type UniverseQuery = z.infer<typeof UniverseQuerySchema>;
