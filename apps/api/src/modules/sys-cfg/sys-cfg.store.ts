@@ -1,8 +1,13 @@
 /**
  * File-backed system-config store. The frontend treats Sys.Cfg as a
- * single blob (theme + slack targets + applied columns + blacklist) and
- * replaces it on every mutation; that mirror keeps the wire format and
- * the on-disk file trivially atomic.
+ * single blob (theme + slack targets + applied columns) and replaces
+ * it on every mutation; that mirror keeps the wire format and the
+ * on-disk file trivially atomic.
+ *
+ * No legacy migration: a `sys-cfg.json` that fails the strict schema
+ * (e.g. carrying the old `blacklist` field) is rejected on load and
+ * `DEFAULT_SYS_CFG` is used instead — the user re-saves once from the
+ * UI and the file is rewritten in the new shape.
  */
 
 import { Inject, Injectable, Logger, type OnModuleInit } from '@nestjs/common';
@@ -32,18 +37,7 @@ export class SysCfgStore implements OnModuleInit {
     return this.withLock(async () => {
       if (this.loaded) return;
       const raw = await readJsonOr<unknown>(this.file, DEFAULT_SYS_CFG);
-      // Pre-zod migration: drop the legacy `blacklist` field (the
-      // user-maintained list moved to a backend-cron-managed file in
-      // 2026-05). Strict schema would otherwise reject loaded files.
-      const cleaned =
-        typeof raw === 'object' && raw !== null && !Array.isArray(raw)
-          ? (() => {
-              const r: Record<string, unknown> = { ...(raw as Record<string, unknown>) };
-              delete r['blacklist'];
-              return r;
-            })()
-          : raw;
-      const parsed = SysCfgSchema.safeParse(cleaned);
+      const parsed = SysCfgSchema.safeParse(raw);
       if (!parsed.success) {
         this.logger.warn(`sys-cfg.json failed validation, using defaults: ${parsed.error.message}`);
         this.cfg = DEFAULT_SYS_CFG;
