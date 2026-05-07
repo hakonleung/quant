@@ -53,6 +53,11 @@ data/watch/tasks.json
 # Sectors + Sys.Cfg are user state, never source-tracked.
 data/sectors/
 data/sys-cfg/
+data/ta/
+# Kline parquet cache: per-code parquet files + the bundled kline.zip
+# archive are regenerated locally by ParquetKlineRepo / scripts/pack_kline.py.
+# kline.zip is too large for GitHub (>100MB), so the whole dir stays untracked.
+data/kline/
 
 # Test output
 coverage/
