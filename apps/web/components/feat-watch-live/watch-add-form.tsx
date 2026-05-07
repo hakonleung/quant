@@ -16,6 +16,7 @@
 
 import { Box, Flex, Input, Text } from '@chakra-ui/react';
 import {
+  WATCH_TREND_WINDOW_MAX_SEC,
   WatchTaskCreateSchema,
   type WatchBaseline,
   type WatchCondition,
@@ -45,12 +46,15 @@ const BASELINE_ITEMS = [
   { label: 'prev_close', value: 'prev_close' as const },
   { label: 'day_high', value: 'day_high' as const },
   { label: 'day_low', value: 'day_low' as const },
-  { label: 'prev', value: 'prev' as const },
+  { label: 'vwap', value: 'vwap' as const },
+  { label: 'trend', value: 'trend' as const },
 ];
 const OP_ITEMS = [
   { label: '≥', value: 'gte' as const },
   { label: '≤', value: 'lte' as const },
 ];
+/** Default trend lookback in **seconds** (1 minute). */
+const DEFAULT_TREND_WINDOW_SEC = 60;
 
 const INPUT_STYLE = {
   bg: 'term.bg' as const,
@@ -74,6 +78,8 @@ interface ConditionDraft {
   readonly thresholdPct: string;
   readonly op: Op;
   readonly thresholdPrice: string;
+  /** Trend lookback in **seconds**; only used when baseline === 'trend'. */
+  readonly windowSec: string;
 }
 
 interface AddFormState {
@@ -81,6 +87,7 @@ interface AddFormState {
   readonly conditions: readonly ConditionDraft[];
   /** Display unit on the form is minutes; the wire format is seconds. */
   readonly intervalMin: string;
+  /** Same — minutes on form, seconds on wire. */
   readonly pushIntervalMin: string;
 }
 
@@ -90,6 +97,7 @@ const INITIAL_CONDITION: ConditionDraft = {
   thresholdPct: '5',
   op: 'gte',
   thresholdPrice: '100',
+  windowSec: String(DEFAULT_TREND_WINDOW_SEC),
 };
 
 const INITIAL_STATE: AddFormState = {
@@ -123,6 +131,7 @@ function fromCondition(c: WatchCondition): ConditionDraft {
       thresholdPct: c.thresholdPct,
       op: c.op,
       thresholdPrice: '100',
+      windowSec: c.window === undefined ? String(DEFAULT_TREND_WINDOW_SEC) : String(c.window),
     };
   }
   return {
@@ -131,6 +140,7 @@ function fromCondition(c: WatchCondition): ConditionDraft {
     thresholdPct: '5',
     op: c.op,
     thresholdPrice: c.thresholdPrice,
+    windowSec: String(DEFAULT_TREND_WINDOW_SEC),
   };
 }
 
@@ -147,6 +157,19 @@ function buildInitialState(initial: WatchAddInitial | undefined): AddFormState {
 
 function toCondition(c: ConditionDraft): WatchCondition {
   if (c.kind === 'pct') {
+    if (c.baseline === 'trend') {
+      const w = Math.max(
+        1,
+        Math.min(WATCH_TREND_WINDOW_MAX_SEC, Math.round(Number(c.windowSec) || 0)),
+      );
+      return {
+        kind: 'pct',
+        baseline: 'trend',
+        op: c.op,
+        thresholdPct: c.thresholdPct,
+        window: w,
+      };
+    }
     return { kind: 'pct', baseline: c.baseline, op: c.op, thresholdPct: c.thresholdPct };
   }
   return { kind: 'abs', op: c.op, thresholdPrice: c.thresholdPrice };
@@ -452,6 +475,22 @@ function ConditionRow({
               onChange({ ...cond, baseline: v });
             }}
           />
+          {cond.baseline === 'trend' ? (
+            <Flex align="center" gap="2px">
+              <Input
+                {...INPUT_STYLE}
+                w="60px"
+                placeholder="window"
+                value={cond.windowSec}
+                onChange={(e): void => {
+                  onChange({ ...cond, windowSec: e.target.value });
+                }}
+              />
+              <Text color="term.ink3" fontSize="11px">
+                s
+              </Text>
+            </Flex>
+          ) : null}
           <TermSelect<Op>
             value={cond.op}
             items={OP_ITEMS}

@@ -51,7 +51,11 @@ function renderOp(op: 'gte' | 'lte'): string {
 export function renderCondition(c: WatchCondition): string {
   if (c.kind === 'pct') {
     const v = new Decimal(c.thresholdPct);
-    return `pct($, ${c.baseline}) ${renderOp(c.op)} ${v.toString()}%`;
+    const baselineLabel =
+      c.baseline === 'trend' && c.window !== undefined
+        ? `trend(${String(c.window)}s)`
+        : c.baseline;
+    return `pct($, ${baselineLabel}) ${renderOp(c.op)} ${v.toString()}%`;
   }
   const price = new Decimal(c.thresholdPrice);
   return `abs($) ${renderOp(c.op)} ${price.toFixed(2)}`;

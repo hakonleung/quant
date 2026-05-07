@@ -22,6 +22,11 @@ class SpotQuote:
     All money fields are :class:`Decimal` to avoid float drift; the wire
     format carries them as strings (CLAUDE.md §2.8). ``ts`` is a
     timezone-aware UTC datetime.
+
+    ``amount`` and ``volume`` are cumulative session totals — required by
+    the NestJS evaluator's ``vwap`` baseline (``vwap = amount / volume``).
+    Both may be ``Decimal(0)`` before the opening auction completes; the
+    consumer must guard against ``volume == 0`` before dividing.
     """
 
     market: WatchMarket
@@ -30,6 +35,8 @@ class SpotQuote:
     day_high: Decimal
     day_low: Decimal
     prev_close: Decimal
+    amount: Decimal
+    volume: Decimal
     ts: datetime
 
 

@@ -9,6 +9,8 @@ const aQuote: SpotQuoteDecimal = {
   dayHigh: new Decimal('12.50'),
   dayLow: new Decimal('12.00'),
   prevClose: new Decimal('12.08'),
+  amount: new Decimal('1234000'),
+  volume: new Decimal('100000'),
   ts: '2026-05-04T01:30:00Z',
 };
 
@@ -78,6 +80,8 @@ describe('buildPayload', () => {
       dayHigh: new Decimal('124'),
       dayLow: new Decimal('122'),
       prevClose: new Decimal('123'),
+      amount: new Decimal('12345670'),
+      volume: new Decimal('100000'),
       ts: '2026-05-04T13:30:00Z',
     };
     const out = buildPayload({
@@ -98,6 +102,8 @@ describe('buildPayload', () => {
       dayHigh: new Decimal('405'),
       dayLow: new Decimal('399'),
       prevClose: new Decimal('400'),
+      amount: new Decimal('40050000'),
+      volume: new Decimal('100000'),
       ts: '2026-05-04T01:30:00Z',
     };
     const out = buildPayload({
@@ -110,9 +116,21 @@ describe('buildPayload', () => {
     expect(out.text).toContain('HK$400.50');
   });
 
-  it('renders prev-baseline pct condition', () => {
+  it('renders vwap-baseline pct condition', () => {
+    expect(renderCondition({ kind: 'pct', baseline: 'vwap', op: 'lte', thresholdPct: '-2' })).toBe(
+      'pct($, vwap) <= -2%',
+    );
+  });
+
+  it('renders trend-baseline pct condition with window (seconds)', () => {
     expect(
-      renderCondition({ kind: 'pct', baseline: 'prev', op: 'lte', thresholdPct: '-2' }),
-    ).toBe('pct($, prev) <= -2%');
+      renderCondition({
+        kind: 'pct',
+        baseline: 'trend',
+        op: 'gte',
+        thresholdPct: '1',
+        window: 60,
+      }),
+    ).toBe('pct($, trend(60s)) >= 1%');
   });
 });

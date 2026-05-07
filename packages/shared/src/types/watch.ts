@@ -1,5 +1,5 @@
 /**
- * Cross-process DTOs for module W-0 watch (`docs/modules/W-0-watch.md`).
+ * Cross-process DTOs for module W-0 watch (`docs/modules/06-watch.md`).
  *
  * Single source of truth for both the NestJS WatchModule (storage,
  * scheduler, controller) and the Next.js Watch pane. Python mirrors the
@@ -7,9 +7,10 @@
  * the wire format is restricted to JSON-friendly primitives (strings for
  * Decimal, ISO 8601 for timestamps).
  *
- * Decimals (`thresholdPct`, `thresholdPrice`) are carried as strings to
- * avoid `number` precision loss (CLAUDE.md §2.8). Timestamps are ISO
- * UTC; consumers convert to BJT for display.
+ * Decimals (`thresholdPct`, `thresholdPrice`, `amount`, `volume`,
+ * `lastHitPrice`) are carried as strings to avoid `number` precision
+ * loss (CLAUDE.md §2.8). Timestamps are ISO UTC; consumers convert to
+ * BJT for display.
  */
 
 import { z } from 'zod';
@@ -20,15 +21,16 @@ export type WatchMarket = z.infer<typeof WatchMarketSchema>;
 /**
  * Reference price the `pct` condition compares the current price against.
  *
- * `prev_close` / `day_high` / `day_low` come from the quote; `prev`
- * means "the last successful sample's `last` price within the same
- * trading day" (cached on the task as `lastSamplePrice`). When the
- * cached prev sample is missing or from a previous trading day, the
- * `prev` baseline can never match. `prev`-baselined matches also
- * bypass the not-match → match edge-trigger gate, so every step in a
- * sustained move is reported as a hit.
+ * - `prev_close` / `day_high` / `day_low` come from the quote.
+ * - `vwap`  — volume-weighted-average price = `amount / volume` of the
+ *   latest quote tick (intraday cumulative).
+ * - `trend` — the cached `last` price whose timestamp is closest to
+ *   `<latest sample's ts> - <window seconds>` (and at or before that
+ *   cutoff). Requires the condition's `window` field (in **seconds**).
+ *   If no cached sample old enough to satisfy the cutoff exists, the
+ *   condition does NOT fire (returns null baseline).
  */
-export const WatchBaselineSchema = z.enum(['prev_close', 'day_high', 'day_low', 'prev']);
+export const WatchBaselineSchema = z.enum(['prev_close', 'day_high', 'day_low', 'vwap', 'trend']);
 export type WatchBaseline = z.infer<typeof WatchBaselineSchema>;
 
 /**
@@ -59,12 +61,24 @@ const positiveDecimal = z
   .regex(/^\d+(\.\d+)?$/, 'expected non-negative decimal as string');
 
 /**
+ * Hard cap on the `trend` baseline window — in **seconds**. 4 hours
+ * comfortably covers a full A-share / HK / US session. Keeps the
+ * in-memory sample buffer bounded by a wall-clock window the scheduler
+ * can trim against.
+ */
+export const WATCH_TREND_WINDOW_MAX_SEC = 4 * 60 * 60;
+
+/**
  * Comparison: `(last - baseline) / baseline` (in %) `op` `thresholdPct`.
  *
  * `op === 'gte'` fires when the delta meets or exceeds the threshold;
  * `op === 'lte'` fires when the delta is at or below it. The threshold
  * itself is signed — negative thresholds are useful when paired with
  * `lte` to express drops (e.g. `-3% lte` ≡ "down at least 3%").
+ *
+ * `window` is required when `baseline === 'trend'` and forbidden
+ * otherwise; the runtime check sits on the union schema below so the
+ * discriminated `kind` narrowing still works end-to-end.
  */
 export const WatchPctConditionSchema = z
   .object({
@@ -74,6 +88,8 @@ export const WatchPctConditionSchema = z
     thresholdPct: signedDecimal.refine((v) => v !== '0' && v !== '-0' && v !== '+0', {
       message: 'thresholdPct must be non-zero',
     }),
+    /** Required iff `baseline === 'trend'`; lookback in **seconds**. */
+    window: z.number().int().min(1).max(WATCH_TREND_WINDOW_MAX_SEC).optional(),
   })
   .strict();
 
@@ -87,10 +103,25 @@ export const WatchAbsConditionSchema = z
   })
   .strict();
 
-export const WatchConditionSchema = z.discriminatedUnion('kind', [
-  WatchPctConditionSchema,
-  WatchAbsConditionSchema,
-]);
+export const WatchConditionSchema = z
+  .discriminatedUnion('kind', [WatchPctConditionSchema, WatchAbsConditionSchema])
+  .superRefine((c, ctx) => {
+    if (c.kind !== 'pct') return;
+    if (c.baseline === 'trend' && c.window === undefined) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['window'],
+        message: 'window required when baseline is "trend"',
+      });
+    }
+    if (c.baseline !== 'trend' && c.window !== undefined) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['window'],
+        message: 'window only valid when baseline is "trend"',
+      });
+    }
+  });
 export type WatchCondition = z.infer<typeof WatchConditionSchema>;
 export type WatchPctCondition = z.infer<typeof WatchPctConditionSchema>;
 export type WatchAbsCondition = z.infer<typeof WatchAbsConditionSchema>;
@@ -104,6 +135,11 @@ export const WatchTaskSchema = z
     name: z.string(),
     conditions: z.array(WatchConditionSchema).min(1),
     intervalSec: z.number().int().min(5).default(20),
+    /**
+     * Minimum seconds between two notifications for this task. Combined
+     * with the price-delta gate (`±2 %` from `lastHitPrice`) — both must
+     * clear for a hit to fire.
+     */
     pushIntervalSec: z.number().int().min(60).default(300),
     remaining: z.number().int().min(0).nullable().default(null),
     notifySlack: z.boolean().default(true),
@@ -111,28 +147,17 @@ export const WatchTaskSchema = z
     createdAt: isoDateTime,
     lastTickAt: isoDateTime.nullable().default(null),
     lastPushAt: isoDateTime.nullable().default(null),
-    /**
-     * Most recent successful quote tick (regardless of match outcome).
-     * Distinct from `lastTickAt` (which also bumps on upstream failures);
-     * used by the match→hit edge detector to identify the "previous
-     * cached price sample".
-     */
+    /** Most recent successful quote tick (regardless of match outcome). */
     lastSampleAt: isoDateTime.nullable().default(null),
-    /**
-     * Most recent successful tick where any condition matched. The
-     * scheduler treats `lastMatchAt === lastSampleAt` (same trading day)
-     * as "previous sample already matched" → current match is not a hit.
-     */
-    lastMatchAt: isoDateTime.nullable().default(null),
-    /** Edge-triggered hits — count of not-match → match transitions. */
+    /** Hit counter; bumped on every fired hit. */
     hitCount: z.number().int().min(0).default(0),
     /**
-     * Most recent successful tick's `last` price (Decimal as string).
-     * Used by `prev`-kind conditions for tick-over-tick comparison;
-     * cleared (treated as null) when `lastSampleAt` falls in a prior
-     * trading day.
+     * `last` price at the most recent fired hit. The price gate
+     * suppresses a new hit unless `|currentLast - lastHitPrice| /
+     * lastHitPrice` is at least 2 %. Reset to `null` on trading-day
+     * rollover. Combined with `pushIntervalSec` time gate.
      */
-    lastSamplePrice: positiveDecimal.nullable().default(null),
+    lastHitPrice: positiveDecimal.nullable().default(null),
   })
   .strict();
 export type WatchTask = z.infer<typeof WatchTaskSchema>;
@@ -191,6 +216,18 @@ export const SpotQuoteSchema = z
     dayHigh: positiveDecimal,
     dayLow: positiveDecimal,
     prevClose: positiveDecimal,
+    /**
+     * Cumulative session traded notional (in market currency units).
+     * Required for the `vwap` baseline (`vwap = amount / volume`).
+     * Source-side may report 0 before the open auction completes.
+     */
+    amount: positiveDecimal,
+    /**
+     * Cumulative session traded volume (shares for A / HK, shares for
+     * US). Same caveat as `amount` re: pre-open zero values; consumers
+     * must guard against `volume <= 0` before computing `vwap`.
+     */
+    volume: positiveDecimal,
     ts: isoDateTime,
   })
   .strict();

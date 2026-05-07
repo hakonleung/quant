@@ -263,9 +263,8 @@ describe('watchToTerm / watchToCreate', () => {
     lastTickAt: null,
     lastPushAt: null,
     lastSampleAt: null,
-    lastMatchAt: null,
     hitCount: 0,
-    lastSamplePrice: null,
+    lastHitPrice: null,
   };
 
   it('round-trips conditions through term and back into create body', () => {

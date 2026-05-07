@@ -1,14 +1,19 @@
 /**
- * Watch master tick (`docs/modules/W-0-watch.md` §8).
+ * Watch master tick (`docs/modules/06-watch.md` §8).
  *
  * Single `setInterval` (5s) ticks every enabled task whose
  * `lastTickAt + intervalSec*1000` has elapsed and whose market is
  * currently open. Quotes are fetched concurrently (`Promise.allSettled`)
  * so a single upstream failure cannot stall the whole batch.
  *
- * Pushes go through `WatchNotifier` and respect `pushIntervalSec`.
- * `remaining` decrements on each push; reaching zero auto-disables the
- * task (per §8 of the doc).
+ * Hit semantics: a fired evaluation is a *hit* iff **both** gates clear:
+ *   - Price gate — `|last - lastHitPrice| / lastHitPrice >= 2 %`, OR
+ *     `lastHitPrice == null` (first hit / new trading day).
+ *   - Time gate — `now >= lastPushAt + pushIntervalSec*1000`, OR
+ *     `lastPushAt == null`.
+ *
+ * `remaining` decrements on each fired hit; reaching zero auto-disables
+ * the task.
  */
 
 import {
@@ -18,10 +23,15 @@ import {
   type OnModuleDestroy,
   type OnModuleInit,
 } from '@nestjs/common';
-import { newTraceId, type WatchMarket, type WatchTask } from '@quant/shared';
+import {
+  WATCH_TREND_WINDOW_MAX_SEC,
+  newTraceId,
+  type WatchMarket,
+  type WatchTask,
+} from '@quant/shared';
 import { Decimal } from 'decimal.js';
 import { decimalQuoteFromDto } from './domain/decimal-mapper.js';
-import { evaluate } from './domain/evaluate.js';
+import { evaluate, type IntradaySample } from './domain/evaluate.js';
 import { buildPayload } from './domain/format.js';
 import { isMarketOpen, marketTradingDayKey } from './domain/market-hours.js';
 import { WATCH_QUOTE_PORT, type WatchQuotePort } from './domain/watch-port.js';
@@ -30,37 +40,16 @@ import { WATCH_NOTIFIER, type WatchNotifier } from './watch-notifier.js';
 
 const MASTER_TICK_MS = 5_000;
 
-/**
- * A spot quote whose `ts` deviates from server time by more than this
- * is treated as stale: the tick is logged and the task is bumped to the
- * next cadence without evaluating any condition. Guards against pricing
- * decisions on data that an upstream may still be replaying through a
- * cache, and keeps prev-baseline comparisons coherent.
- */
+/** Stale quote — bump cadence without evaluating, do not pollute samples. */
 const STALE_QUOTE_MAX_MS = 30 * 60 * 1000;
 
-/**
- * Did the previous successful sample (within the current trading day)
- * already match? Used to suppress the second, third, … matches in a
- * continuous match streak — only the leading edge is a "hit".
- */
-function previousSampleMatched(task: WatchTask, now: Date): boolean {
-  const { lastSampleAt, lastMatchAt } = task;
-  if (lastSampleAt === null || lastMatchAt === null) return false;
-  if (lastMatchAt !== lastSampleAt) return false;
-  return marketTradingDayKey(task.market, new Date(lastSampleAt)) === marketTradingDayKey(task.market, now);
-}
+/** Min ±% drift of `last` from `lastHitPrice` to count as a hit. */
+const HIT_PRICE_DELTA_PCT = new Decimal('2');
 
-/**
- * Resolve the cached prev-sample price for `prev`-kind evaluation.
- * Returns null when there is no prior sample or the cached one falls
- * outside the current trading day.
- */
-function resolvePrevSamplePrice(task: WatchTask, now: Date): Decimal | null {
-  if (task.lastSamplePrice === null || task.lastSampleAt === null) return null;
-  const sampleDay = marketTradingDayKey(task.market, new Date(task.lastSampleAt));
-  if (sampleDay !== marketTradingDayKey(task.market, now)) return null;
-  return new Decimal(task.lastSamplePrice);
+/** Per-task in-memory intraday sample series + the day they belong to. */
+interface IntradayBuffer {
+  readonly day: string;
+  samples: IntradaySample[];
 }
 
 @Injectable()
@@ -69,6 +58,14 @@ export class WatchScheduler implements OnModuleInit, OnModuleDestroy {
   private timer: NodeJS.Timeout | null = null;
   private destroyed = false;
   private tickInFlight: Promise<void> | null = null;
+  /**
+   * Per-task intraday sample buffer for the `trend` baseline. Keyed by
+   * `market:code`. In-memory only — not persisted across restarts; a
+   * cold restart re-warms over the next ~maxWindow seconds. Trimmed by
+   * wall-clock window so the buffer's wall span never exceeds
+   * `max(trend.window) + tickInterval` for the task.
+   */
+  private readonly samples = new Map<string, IntradayBuffer>();
 
   constructor(
     @Inject(WatchTaskStore) private readonly store: WatchTaskStore,
@@ -117,9 +114,6 @@ export class WatchScheduler implements OnModuleInit, OnModuleDestroy {
 
   private async runTick(now: Date): Promise<void> {
     const nowMs = now.getTime();
-    // Compute trading-window status once per master tick instead of
-    // re-running the predicate per task; bail out early if every market
-    // we cover is closed so we don't even snapshot the task store.
     const marketsOpen: Readonly<Record<WatchMarket, boolean>> = {
       a: isMarketOpen('a', now),
       hk: isMarketOpen('hk', now),
@@ -146,6 +140,50 @@ export class WatchScheduler implements OnModuleInit, OnModuleDestroy {
     return nowMs >= lastMs + task.intervalSec * 1000;
   }
 
+  /** Largest `window` (seconds) referenced by this task's pct conditions. */
+  private maxWindowSecFor(task: WatchTask): number {
+    let max = 0;
+    for (const c of task.conditions) {
+      if (c.kind !== 'pct') continue;
+      if (c.baseline !== 'trend') continue;
+      if (c.window !== undefined && c.window > max) max = c.window;
+    }
+    return Math.min(max, WATCH_TREND_WINDOW_MAX_SEC);
+  }
+
+  /**
+   * Append the latest `(ts, price)` to the task's intraday buffer.
+   * Resets the buffer when the trading day rolls over. Trims entries
+   * older than `latestTs - maxWindowSec` so the buffer's wall-clock
+   * span stays bounded. Returns the post-update snapshot for evaluation.
+   */
+  private updateSamples(
+    task: WatchTask,
+    now: Date,
+    quoteTs: Date,
+    last: Decimal,
+  ): readonly IntradaySample[] {
+    const key = `${task.market}:${task.code}`;
+    const day = marketTradingDayKey(task.market, now);
+    let buf = this.samples.get(key);
+    if (buf === undefined || buf.day !== day) {
+      buf = { day, samples: [] };
+      this.samples.set(key, buf);
+    }
+    buf.samples.push({ ts: quoteTs, price: last });
+    const maxWindowSec = this.maxWindowSecFor(task);
+    if (maxWindowSec > 0) {
+      // Keep enough history to cover the largest configured window plus
+      // a one-tick buffer (so trim never strips the very sample the
+      // resolver would pick at the cutoff).
+      const cutoffMs = quoteTs.getTime() - (maxWindowSec * 1000 + task.intervalSec * 1000);
+      while (buf.samples.length > 0 && buf.samples[0]!.ts.getTime() < cutoffMs) {
+        buf.samples.shift();
+      }
+    }
+    return buf.samples;
+  }
+
   private async processOne(task: WatchTask, now: Date, nowMs: number): Promise<void> {
     const traceId = newTraceId();
     let quoteDto;
@@ -155,7 +193,6 @@ export class WatchScheduler implements OnModuleInit, OnModuleDestroy {
       this.logger.warn(
         `watch_quote_fail market=${task.market} code=${task.code} trace_id=${traceId} err=${String(err)}`,
       );
-      // Still bump lastTickAt to honour the cadence even on failure.
       await this.store.patch(task.market, task.code, (t) => ({
         ...t,
         lastTickAt: now.toISOString(),
@@ -169,8 +206,6 @@ export class WatchScheduler implements OnModuleInit, OnModuleDestroy {
       this.logger.warn(
         `watch_quote_stale market=${task.market} code=${task.code} ts=${quoteDto.ts} age_ms=${String(ageMs)} trace_id=${traceId}`,
       );
-      // Bump cadence without touching sample/match state — stale data
-      // must not feed into prev-baseline comparisons or hit detection.
       await this.store.patch(task.market, task.code, (t) => ({
         ...t,
         lastTickAt: now.toISOString(),
@@ -179,43 +214,31 @@ export class WatchScheduler implements OnModuleInit, OnModuleDestroy {
     }
 
     const decimalQuote = decimalQuoteFromDto(quoteDto);
-    const prevSamplePrice = resolvePrevSamplePrice(task, now);
+    const quoteTs = new Date(quoteTsMs);
+    const intradaySamples = this.updateSamples(task, now, quoteTs, decimalQuote.last);
     const matched = task.conditions.filter((c) =>
-      evaluate({ quote: decimalQuote, prevSamplePrice }, c),
+      evaluate({ quote: decimalQuote, intradaySamples }, c),
     );
-    // "Hit" is edge-triggered: between two adjacent successful samples,
-    // only a not-match → match transition counts — except for the
-    // `prev` baseline (tick-over-tick by construction), which reports
-    // every step in a sustained move as a hit.
-    // See `docs/modules/W-0-watch.md` §4.
-    const matchedHasPrev = matched.some((c) => c.kind === 'pct' && c.baseline === 'prev');
+
     const isHit =
-      matched.length > 0 && (matchedHasPrev || !previousSampleMatched(task, now));
+      matched.length > 0 &&
+      this.priceTriggersHit(task, now, decimalQuote.last) &&
+      this.timeTriggersHit(task, nowMs);
     const nowIso = now.toISOString();
-    const nextSamplePriceStr = decimalQuote.last.toString();
+    const nextHitPriceStr = decimalQuote.last.toString();
 
     await this.store.patch(task.market, task.code, (t) => {
       const baseUpdate: WatchTask = {
         ...t,
         lastTickAt: nowIso,
         lastSampleAt: nowIso,
-        lastSamplePrice: nextSamplePriceStr,
-        ...(matched.length > 0 ? { lastMatchAt: nowIso } : {}),
       };
       if (!isHit) return baseUpdate;
-      // Throttle: only push if pushIntervalSec elapsed since lastPushAt.
-      if (t.lastPushAt !== null) {
-        const lastPushMs = Date.parse(t.lastPushAt);
-        if (!Number.isNaN(lastPushMs) && nowMs < lastPushMs + t.pushIntervalSec * 1000) {
-          return baseUpdate;
-        }
-      }
-      // Mutation order: bump push state synchronously; actual webhook
-      // call happens after the patch completes (below).
       const nextRemaining = t.remaining === null ? null : Math.max(0, t.remaining - 1);
       return {
         ...baseUpdate,
         lastPushAt: nowIso,
+        lastHitPrice: nextHitPriceStr,
         hitCount: t.hitCount + 1,
         remaining: nextRemaining,
         enabled: nextRemaining === 0 ? false : t.enabled,
@@ -223,19 +246,42 @@ export class WatchScheduler implements OnModuleInit, OnModuleDestroy {
     });
 
     if (isHit && task.notifySlack) {
-      // Re-read to confirm the patch actually pushed (could have been
-      // skipped by throttle inside the closure).
-      const after = this.store.get(task.market, task.code);
-      if (after !== undefined && after.lastPushAt === nowIso) {
-        const payload = buildPayload({
-          code: task.code,
-          name: task.name,
-          market: task.market,
-          quote: decimalQuote,
-          matched,
-        });
-        await this.notifier.send(payload, traceId);
-      }
+      const payload = buildPayload({
+        code: task.code,
+        name: task.name,
+        market: task.market,
+        quote: decimalQuote,
+        matched,
+      });
+      await this.notifier.send(payload, traceId);
     }
+  }
+
+  /**
+   * Decide whether the price gate clears. New trading day or never-hit
+   * ⇒ always fire; otherwise require ≥ HIT_PRICE_DELTA_PCT % drift
+   * from the previous hit price.
+   */
+  private priceTriggersHit(task: WatchTask, now: Date, last: Decimal): boolean {
+    if (task.lastHitPrice === null || task.lastPushAt === null) return true;
+    const prevDay = marketTradingDayKey(task.market, new Date(task.lastPushAt));
+    const today = marketTradingDayKey(task.market, now);
+    if (prevDay !== today) return true;
+    const prev = new Decimal(task.lastHitPrice);
+    if (prev.lte(0)) return true;
+    const driftPct = last.minus(prev).abs().div(prev).mul(100);
+    return driftPct.gte(HIT_PRICE_DELTA_PCT);
+  }
+
+  /**
+   * Decide whether the `pushIntervalSec` time gate clears. No prior
+   * push ⇒ always fire; otherwise require the configured interval to
+   * have elapsed.
+   */
+  private timeTriggersHit(task: WatchTask, nowMs: number): boolean {
+    if (task.lastPushAt === null) return true;
+    const lastMs = Date.parse(task.lastPushAt);
+    if (Number.isNaN(lastMs)) return true;
+    return nowMs >= lastMs + task.pushIntervalSec * 1000;
   }
 }

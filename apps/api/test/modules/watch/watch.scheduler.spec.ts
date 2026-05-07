@@ -46,6 +46,8 @@ function quote(overrides: Partial<SpotQuote> = {}): SpotQuote {
     dayHigh: '10.80',
     dayLow: '10.00',
     prevClose: '10.00',
+    amount: '10500000',
+    volume: '1000000',
     ts: '2026-05-04T01:30:00Z',
     ...overrides,
   };
@@ -66,9 +68,8 @@ function task(overrides: Partial<WatchTask> = {}): WatchTask {
     lastTickAt: null,
     lastPushAt: null,
     lastSampleAt: null,
-    lastMatchAt: null,
     hitCount: 0,
-    lastSamplePrice: null,
+    lastHitPrice: null,
     ...overrides,
   };
 }
@@ -82,13 +83,12 @@ async function newScheduler(
   notifier: WatchNotifier,
 ): Promise<WatchScheduler> {
   const sched = new WatchScheduler(store, port, notifier);
-  // Bypass setInterval — tests drive ticks manually.
   await store.load();
   return sched;
 }
 
 describe('WatchScheduler.tick', () => {
-  it('fetches quote and pushes when condition hits', async () => {
+  it('fetches quote and pushes when condition hits (no prior hit)', async () => {
     const dir = await tmpDir();
     const store = new WatchTaskStore(dir);
     await store.load();
@@ -106,21 +106,24 @@ describe('WatchScheduler.tick', () => {
     expect(notifier.sent[0]?.text).toContain('600000');
     const after = store.get('a', '600000');
     expect(after?.hitCount).toBe(1);
+    expect(after?.lastHitPrice).toBe('10.5');
     expect(after?.lastPushAt).toBe(TICK_TIME.toISOString());
   });
 
-  it('skips push when within pushIntervalSec window', async () => {
+  it('suppresses second hit when last drifts < 2% from lastHitPrice (price gate)', async () => {
     const dir = await tmpDir();
     const store = new WatchTaskStore(dir);
     await store.load();
     await store.upsert(
       task({
-        lastPushAt: new Date(TICK_TIME.getTime() - 30_000).toISOString(),
+        // Past pushIntervalSec so only the price gate is in play.
+        lastPushAt: new Date(TICK_TIME.getTime() - 120_000).toISOString(),
+        lastHitPrice: '10.5',
         hitCount: 1,
       }),
     );
     const port = new FakeQuotePort();
-    port.responses.push(quote());
+    port.responses.push(quote({ last: '10.55' }));
     const notifier = new FakeNotifier();
     const sched = await newScheduler(store, port, notifier);
 
@@ -128,6 +131,53 @@ describe('WatchScheduler.tick', () => {
 
     expect(notifier.sent).toHaveLength(0);
     expect(store.get('a', '600000')?.hitCount).toBe(1);
+  });
+
+  it('suppresses second hit while pushIntervalSec time gate is open', async () => {
+    const dir = await tmpDir();
+    const store = new WatchTaskStore(dir);
+    await store.load();
+    await store.upsert(
+      task({
+        // 30 s ago — well inside pushIntervalSec=60.
+        lastPushAt: new Date(TICK_TIME.getTime() - 30_000).toISOString(),
+        // Price drifted >> 2 % so the price gate alone wouldn't suppress.
+        lastHitPrice: '9.5',
+        hitCount: 1,
+      }),
+    );
+    const port = new FakeQuotePort();
+    port.responses.push(quote({ last: '10.50' }));
+    const notifier = new FakeNotifier();
+    const sched = await newScheduler(store, port, notifier);
+
+    await sched.tick(TICK_TIME);
+
+    expect(notifier.sent).toHaveLength(0);
+    expect(store.get('a', '600000')?.hitCount).toBe(1);
+  });
+
+  it('fires when both gates clear (drift ≥ 2% AND interval elapsed)', async () => {
+    const dir = await tmpDir();
+    const store = new WatchTaskStore(dir);
+    await store.load();
+    await store.upsert(
+      task({
+        lastPushAt: new Date(TICK_TIME.getTime() - 120_000).toISOString(),
+        lastHitPrice: '10.5',
+        hitCount: 1,
+      }),
+    );
+    const port = new FakeQuotePort();
+    port.responses.push(quote({ last: '10.71' })); // +2.0 % drift
+    const notifier = new FakeNotifier();
+    const sched = await newScheduler(store, port, notifier);
+
+    await sched.tick(TICK_TIME);
+
+    expect(notifier.sent).toHaveLength(1);
+    expect(store.get('a', '600000')?.hitCount).toBe(2);
+    expect(store.get('a', '600000')?.lastHitPrice).toBe('10.71');
   });
 
   it('decrements remaining and disables on hit zero', async () => {
@@ -162,93 +212,30 @@ describe('WatchScheduler.tick', () => {
     expect(notifier.sent).toHaveLength(0);
   });
 
-  it('treats two consecutive matches as one hit (edge-triggered)', async () => {
+  it('trend baseline (window in seconds) only fires once a sample is old enough', async () => {
     const dir = await tmpDir();
     const store = new WatchTaskStore(dir);
     await store.load();
-    await store.upsert(task());
-    const port = new FakeQuotePort();
-    port.responses.push(quote());
-    port.responses.push(quote({ ts: '2026-05-04T01:30:30Z' }));
-    const notifier = new FakeNotifier();
-    const sched = await newScheduler(store, port, notifier);
-
-    await sched.tick(TICK_TIME);
-    // Second tick 30 s later — same trading day, last sample already
-    // matched, so this MUST NOT count as a hit.
-    await sched.tick(new Date(TICK_TIME.getTime() + 30_000));
-
-    const after = store.get('a', '600000');
-    expect(after?.hitCount).toBe(1);
-    expect(notifier.sent).toHaveLength(1);
-  });
-
-  it('re-hits when match resumes after a no-match sample', async () => {
-    const dir = await tmpDir();
-    const store = new WatchTaskStore(dir);
-    await store.load();
-    // pushIntervalSec=5 so the second push isn't throttled by cadence —
-    // we're testing the edge detector, not the push throttle.
-    await store.upsert(task({ pushIntervalSec: 60 }));
-    const port = new FakeQuotePort();
-    // tick1: matches (+5%)
-    port.responses.push(quote());
-    // tick2: does NOT match (last == prevClose)
-    port.responses.push(quote({ last: '10.00', ts: '2026-05-04T01:30:30Z' }));
-    // tick3 (>60s later): matches again
-    port.responses.push(quote({ ts: '2026-05-04T01:32:00Z' }));
-    const notifier = new FakeNotifier();
-    const sched = await newScheduler(store, port, notifier);
-
-    await sched.tick(TICK_TIME);
-    await sched.tick(new Date(TICK_TIME.getTime() + 30_000));
-    await sched.tick(new Date(TICK_TIME.getTime() + 90_000));
-
-    const after = store.get('a', '600000');
-    expect(after?.hitCount).toBe(2);
-    expect(notifier.sent).toHaveLength(2);
-  });
-
-  it('prev baseline: first tick has no cached sample → no match, no hit', async () => {
-    const dir = await tmpDir();
-    const store = new WatchTaskStore(dir);
-    await store.load();
+    // window = 30 s; intervalSec = 5. Resolver picks the most recent
+    // sample whose ts ≤ latestTs - 30 s.
     await store.upsert(
       task({
-        conditions: [{ kind: 'pct', baseline: 'prev', op: 'lte', thresholdPct: '-2' }],
-        pushIntervalSec: 60,
+        conditions: [
+          { kind: 'pct', baseline: 'trend', op: 'gte', thresholdPct: '5', window: 30 },
+        ],
       }),
     );
     const port = new FakeQuotePort();
-    port.responses.push(quote({ last: '10.00' })); // no prev cached
-    const notifier = new FakeNotifier();
-    const sched = await newScheduler(store, port, notifier);
-
-    await sched.tick(TICK_TIME);
-
-    const after = store.get('a', '600000');
-    expect(after?.hitCount).toBe(0);
-    expect(after?.lastSamplePrice).toBe('10');
-    expect(notifier.sent).toHaveLength(0);
-  });
-
-  it('prev baseline: every consecutive -2% step counts as a hit (no edge suppression)', async () => {
-    const dir = await tmpDir();
-    const store = new WatchTaskStore(dir);
-    await store.load();
-    await store.upsert(
-      task({
-        conditions: [{ kind: 'pct', baseline: 'prev', op: 'lte', thresholdPct: '-2' }],
-        pushIntervalSec: 1,
-      }),
-    );
-    const port = new FakeQuotePort();
-    // tick1: prev=null, last=10.00 → no match (caches 10.00)
-    port.responses.push(quote({ last: '10.00' }));
-    // tick2: prev=10.00, last=9.80 → -2% match → hit
-    port.responses.push(quote({ last: '9.80', ts: '2026-05-04T01:30:30Z' }));
-    // tick3: prev=9.80, last=9.604 → -2.0% match → hit (would be suppressed for non-prev baseline)
-    port.responses.push(quote({ last: '9.604', ts: '2026-05-04T01:31:00Z' }));
+    // tick1 (T0)   : last=10.00 — only sample → no fire.
+    port.responses.push(quote({ last: '10.00', ts: '2026-05-04T01:30:00Z' }));
+    // tick2 (T0+30s): last=10.10 — sample at T0 is exactly window-old;
+    //               baseline = 10.00, delta = +1 % < 5 → no fire.
+    port.responses.push(quote({ last: '10.10', ts: '2026-05-04T01:30:30Z' }));
+    // tick3 (T0+60s): last=10.62 — most recent sample with ts ≤ T0+30s
+    //               is the T0+30s sample (older T0 sample is trimmed by
+    //               the wall-clock buffer). baseline = 10.10,
+    //               delta = (10.62-10.10)/10.10 ≈ 5.15 % ≥ 5 → fire.
+    port.responses.push(quote({ last: '10.62', ts: '2026-05-04T01:31:00Z' }));
     const notifier = new FakeNotifier();
     const sched = await newScheduler(store, port, notifier);
 
@@ -256,9 +243,8 @@ describe('WatchScheduler.tick', () => {
     await sched.tick(new Date(TICK_TIME.getTime() + 30_000));
     await sched.tick(new Date(TICK_TIME.getTime() + 60_000));
 
-    const after = store.get('a', '600000');
-    expect(after?.hitCount).toBe(2);
-    expect(notifier.sent).toHaveLength(2);
+    expect(notifier.sent).toHaveLength(1);
+    expect(store.get('a', '600000')?.hitCount).toBe(1);
   });
 
   it('treats quote with ts >30 min off server clock as no match', async () => {
@@ -267,7 +253,6 @@ describe('WatchScheduler.tick', () => {
     await store.load();
     await store.upsert(task());
     const port = new FakeQuotePort();
-    // ts is 31 minutes earlier than the tick — stale.
     port.responses.push(quote({ ts: '2026-05-04T00:59:00Z' }));
     const notifier = new FakeNotifier();
     const sched = await newScheduler(store, port, notifier);
@@ -277,9 +262,7 @@ describe('WatchScheduler.tick', () => {
     const after = store.get('a', '600000');
     expect(after?.hitCount).toBe(0);
     expect(after?.lastTickAt).toBe(TICK_TIME.toISOString());
-    // No sample state recorded — stale quote must not pollute prev-baseline.
     expect(after?.lastSampleAt).toBeNull();
-    expect(after?.lastSamplePrice).toBeNull();
     expect(notifier.sent).toHaveLength(0);
   });
 
@@ -293,7 +276,6 @@ describe('WatchScheduler.tick', () => {
     const notifier = new FakeNotifier();
     const sched = await newScheduler(store, port, notifier);
 
-    // Saturday in BJT and outside US session → all three markets closed.
     await sched.tick(new Date('2026-05-09T05:00:00Z'));
 
     expect(port.calls).toHaveLength(0);
@@ -310,7 +292,6 @@ describe('WatchScheduler.tick', () => {
     const notifier = new FakeNotifier();
     const sched = await newScheduler(store, port, notifier);
 
-    // Saturday — A-share closed.
     await sched.tick(new Date('2026-05-09T01:30:00Z'));
 
     expect(port.calls).toHaveLength(0);

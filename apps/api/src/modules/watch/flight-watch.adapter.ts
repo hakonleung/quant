@@ -62,6 +62,8 @@ export class FlightWatchAdapter implements WatchQuotePort {
       dayHigh: row['day_high'],
       dayLow: row['day_low'],
       prevClose: row['prev_close'],
+      amount: row['amount'],
+      volume: row['volume'],
       ts: tsToIso(row['ts']),
     });
   }

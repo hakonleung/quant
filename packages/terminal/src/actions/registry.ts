@@ -83,7 +83,7 @@ const marketSentimentSchema = z.object({
 });
 export type MarketSentiment = z.infer<typeof marketSentimentSchema>;
 
-const watchBaselineSchema = z.enum(['prev_close', 'day_high', 'day_low', 'prev']);
+const watchBaselineSchema = z.enum(['prev_close', 'day_high', 'day_low', 'vwap', 'trend']);
 export type WatchBaseline = z.infer<typeof watchBaselineSchema>;
 
 const watchOpSchema = z.enum(['gte', 'lte']);
@@ -96,6 +96,13 @@ const watchPctConditionSchema = z
     op: watchOpSchema,
     /** Decimal-as-string, signed. Non-zero. */
     thresholdPct: z.string().regex(/^-?\d+(\.\d+)?$/u),
+    /** Required iff `baseline === 'trend'`; lookback in **seconds**. */
+    window: z
+      .number()
+      .int()
+      .min(1)
+      .max(4 * 60 * 60)
+      .optional(),
   })
   .strict();
 

@@ -24,8 +24,10 @@ import {
 } from '../widgets/helpers.js';
 
 const MARKETS: readonly WatchMarket[] = ['a', 'hk', 'us'];
-const BASELINES: readonly WatchBaseline[] = ['prev_close', 'day_high', 'day_low', 'prev'];
+const BASELINES: readonly WatchBaseline[] = ['prev_close', 'day_high', 'day_low', 'vwap', 'trend'];
 const OPS: readonly WatchOp[] = ['gte', 'lte'];
+/** Default lookback for the `trend` baseline (seconds). */
+const DEFAULT_TREND_WINDOW_SEC = 60;
 
 function currencySuffix(market: WatchMarket): string {
   if (market === 'us') return 'USD';
@@ -90,9 +92,10 @@ async function runList(ctx: Parameters<CommandSpec['run']>[1]) {
   }
   const items = r.data.map((t) => {
     const first = t.conditions[0];
-    const cond = first !== undefined
-      ? describeCondition(first, t.market)
-      : { kind: '—', base: '—', op: '—', value: '—' };
+    const cond =
+      first !== undefined
+        ? describeCondition(first, t.market)
+        : { kind: '—', base: '—', op: '—', value: '—' };
     const more = t.conditions.length > 1 ? ` +${String(t.conditions.length - 1)}` : '';
     return {
       market: t.market,
@@ -127,17 +130,18 @@ async function runList(ctx: Parameters<CommandSpec['run']>[1]) {
       {
         key: 'd',
         hint: { keys: ['d'], label: 'delete', danger: true },
-        resolve: (s) => widgetResolution(
-          confirmPrompt({
-            title: `delete watch ${String(s.market)}/${String(s.code)}?`,
-            danger: true,
-            onYes: () => ({
-              kind: 'command',
-              line: `watch rm ${String(s.market)} ${String(s.code)}`,
+        resolve: (s) =>
+          widgetResolution(
+            confirmPrompt({
+              title: `delete watch ${String(s.market)}/${String(s.code)}?`,
+              danger: true,
+              onYes: () => ({
+                kind: 'command',
+                line: `watch rm ${String(s.market)} ${String(s.code)}`,
+              }),
+              onNo: () => canceledResolution,
             }),
-            onNo: () => canceledResolution,
-          }),
-        ),
+          ),
       },
     ],
   });
@@ -197,12 +201,22 @@ function runAdd(ctx: Parameters<CommandSpec['run']>[1]) {
           initial: '5',
           placeholder: '% (pct) or price (abs)',
           suffix: (v) =>
-            v['kind'] === 'abs'
-              ? currencySuffix((v['market'] ?? 'a') as 'a' | 'hk' | 'us')
-              : '%',
+            v['kind'] === 'abs' ? currencySuffix((v['market'] ?? 'a') as 'a' | 'hk' | 'us') : '%',
         },
-        { key: 'intervalMin', label: 'interval (min)', kind: 'number', initial: '1', suffix: () => 'min' },
-        { key: 'pushMin', label: 'push (min)', kind: 'number', initial: '5', suffix: () => 'min' },
+        {
+          key: 'intervalMin',
+          label: 'interval (min)',
+          kind: 'number',
+          initial: '1',
+          suffix: () => 'min',
+        },
+        {
+          key: 'pushMin',
+          label: 'push (min)',
+          kind: 'number',
+          initial: '5',
+          suffix: () => 'min',
+        },
       ],
       onSubmit: (v) => {
         const market: WatchMarket = isWatchMarket(v['market'] ?? '')
@@ -232,16 +246,25 @@ function runAdd(ctx: Parameters<CommandSpec['run']>[1]) {
         const pushMin = Number.parseFloat(v['pushMin'] ?? '5');
         const pushIntervalSec = Math.max(60, Math.round(pushMin * 60));
         const op = (v['op'] === 'lte' ? 'lte' : 'gte') satisfies WatchOp;
+        const baseline = (BASELINES as readonly string[]).includes(v['baseline'] ?? '')
+          ? (v['baseline'] as WatchBaseline)
+          : 'prev_close';
         const condition: WatchCondition =
           kind === 'pct'
-            ? {
-                kind: 'pct',
-                baseline: ((BASELINES as readonly string[]).includes(v['baseline'] ?? '')
-                  ? (v['baseline'] as WatchBaseline)
-                  : 'prev_close'),
-                op,
-                thresholdPct: value,
-              }
+            ? baseline === 'trend'
+              ? {
+                  kind: 'pct',
+                  baseline,
+                  op,
+                  thresholdPct: value,
+                  window: DEFAULT_TREND_WINDOW_SEC,
+                }
+              : {
+                  kind: 'pct',
+                  baseline,
+                  op,
+                  thresholdPct: value,
+                }
             : { kind: 'abs', op, thresholdPrice: value };
         const task: WatchTask = {
           market,
@@ -269,7 +292,10 @@ function runAdd(ctx: Parameters<CommandSpec['run']>[1]) {
   );
 }
 
-async function runRemove(argv: { positional: readonly string[] }, ctx: Parameters<CommandSpec['run']>[1]) {
+async function runRemove(
+  argv: { positional: readonly string[] },
+  ctx: Parameters<CommandSpec['run']>[1],
+) {
   const market = argv.positional[1];
   const code = argv.positional[2];
   if (market === undefined || code === undefined) {
@@ -283,10 +309,6 @@ async function runRemove(argv: { positional: readonly string[] }, ctx: Parameter
       `watch rm: code "${code}" is not valid for market ${market} — expected ${codeHint(market)}`,
     );
   }
-  await ctx.actions.run(
-    watchRemoveAction,
-    { market, code },
-    { signal: ctx.signal },
-  );
+  await ctx.actions.run(watchRemoveAction, { market, code }, { signal: ctx.signal });
   return textOk(`removed watch ${market}/${code}`);
 }

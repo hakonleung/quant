@@ -94,6 +94,26 @@ def _to_decimal(v: object, *, label: str) -> Decimal:
         ) from exc
 
 
+def _decimal_or_zero(v: object, *, label: str) -> Decimal:
+    """``_to_decimal`` that defaults missing / unparseable values to 0.
+
+    Pre-open auction rows, holiday placeholders, and partial responses
+    can lack ``成交额`` / ``成交量``. Treat those as 0 so the wire-format
+    contract (positive-or-zero decimals) is still satisfied; the NestJS
+    evaluator already guards against zero volume before computing vwap.
+    """
+    if v is None:
+        return Decimal(0)
+    try:
+        s = str(v).strip()
+        if s == "" or s.lower() in {"nan", "none"}:
+            return Decimal(0)
+        d = Decimal(s)
+        return d if d >= 0 else Decimal(0)
+    except (InvalidOperation, ValueError):
+        return Decimal(0)
+
+
 class AKShareWatchSource:
     """Implements both :class:`WatchQuoteSource` and :class:`UniverseSource`."""
 
@@ -143,6 +163,12 @@ class AKShareWatchSource:
             day_high=_to_decimal(kv.get("最高"), label="day_high"),
             day_low=_to_decimal(kv.get("最低"), label="day_low"),
             prev_close=_to_decimal(kv.get("昨收"), label="prev_close"),
+            # ``stock_bid_ask_em`` reports cumulative session amount /
+            # volume under "成交额" / "成交量"; both can be 0 before the
+            # opening auction completes. Default to 0 so the NestJS
+            # evaluator's ``vwap`` baseline guards against div-by-zero.
+            amount=_decimal_or_zero(kv.get("成交额"), label="amount"),
+            volume=_decimal_or_zero(kv.get("成交量"), label="volume"),
             ts=datetime.now(UTC),
         )
 
@@ -156,7 +182,7 @@ class AKShareWatchSource:
                 f"{_NAME}: stock_hk_hist_min_em({code}) failed: {exc!r}",
                 {"market": "hk", "code": code},
             ) from exc
-        last, hi, lo = _minute_session_summary(raw, label=f"hk:{code}")
+        last, hi, lo, amount, volume = _minute_session_summary(raw, label=f"hk:{code}")
         prev_close = self._cached_prev_close(
             ("hk", code),
             lambda: ak.stock_hk_daily(symbol=code),
@@ -168,6 +194,8 @@ class AKShareWatchSource:
             day_high=hi,
             day_low=lo,
             prev_close=prev_close,
+            amount=amount,
+            volume=volume,
             ts=datetime.now(UTC),
         )
 
@@ -198,7 +226,7 @@ class AKShareWatchSource:
                 f"{_NAME}: stock_us_hist_min_em({code}) failed: {exc!r}",
                 {"market": "us", "code": code},
             ) from exc
-        last, hi, lo = _minute_session_summary(raw, label=f"us:{code}")
+        last, hi, lo, amount, volume = _minute_session_summary(raw, label=f"us:{code}")
         # ``stock_us_daily`` rejects the secid prefix (``105.AAPL`` ->
         # IndexError) — it only accepts the bare ticker. The minute
         # endpoint above is the opposite, hence two different shapes.
@@ -214,6 +242,8 @@ class AKShareWatchSource:
             day_high=hi,
             day_low=lo,
             prev_close=prev_close,
+            amount=amount,
+            volume=volume,
             ts=datetime.now(UTC),
         )
 
@@ -295,7 +325,15 @@ def _bid_ask_to_kv(raw: object) -> dict[str, object]:
     return records[0]
 
 
-def _minute_session_summary(raw: object, *, label: str) -> tuple[Decimal, Decimal, Decimal]:
+def _minute_session_summary(
+    raw: object, *, label: str
+) -> tuple[Decimal, Decimal, Decimal, Decimal, Decimal]:
+    """Return ``(last, day_high, day_low, amount_total, volume_total)``.
+
+    Volume / amount are summed across the minute bars in the frame —
+    this is intraday, so the upstream returns one row per minute since
+    session open and the cumulative session total is just the sum.
+    """
     records = _to_records(raw, label=label)
     if not records:
         raise QuantError(
@@ -315,4 +353,16 @@ def _minute_session_summary(raw: object, *, label: str) -> tuple[Decimal, Decima
             f"{_NAME}: missing high/low columns in {label}",
             {"label": label},
         )
-    return last, max(decimals_high), min(decimals_low)
+    amount_total = Decimal(0)
+    for r in records:
+        amount_total += _decimal_or_zero(
+            r.get("成交额", r.get("amount", r.get("turnover"))),
+            label="amount",
+        )
+    volume_total = Decimal(0)
+    for r in records:
+        volume_total += _decimal_or_zero(
+            r.get("成交量", r.get("volume")),
+            label="volume",
+        )
+    return last, max(decimals_high), min(decimals_low), amount_total, volume_total

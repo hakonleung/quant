@@ -4,9 +4,9 @@
  * v0 wires NestJS directly to a Slack incoming webhook. The
  * §08 NotificationService (Python-side) owns the canonical routing /
  * dedupe / audit pipeline; once a Flight ``notify.emit`` op exists this
- * adapter should switch to delegate to it. Until then we keep the per-
- * source dedupe window at zero (per §9 of W-0) and drive throttling
- * entirely from `WatchScheduler.lastPushAt + pushIntervalSec`.
+ * adapter should switch to delegate to it. Throttling is now driven by
+ * `WatchScheduler`'s `lastHitPrice ± HIT_PRICE_DELTA_PCT %` price-delta
+ * gate (no time-based push interval); this notifier only forwards.
  */
 
 import { Injectable, Logger } from '@nestjs/common';

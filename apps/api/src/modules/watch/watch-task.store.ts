@@ -20,29 +20,52 @@ const TasksFileSchema = z.array(WatchTaskSchema);
 const MIN_FLUSH_INTERVAL_MS = 1_000;
 
 /**
- * Pre-zod migration of `tasks.json` to the current condition shape.
- * Pct conditions persisted before the explicit `op` field arrived
- * inferred direction from the sign of `thresholdPct` (negative → lte,
- * non-negative → gte); apply the same rule on load so existing user
- * tasks parse cleanly without data loss.
+ * Pre-zod migration of `tasks.json` to the current schema.
+ *
+ * Three rounds of legacy normalisation, each idempotent:
+ *
+ *   1. Pct conditions persisted before the explicit `op` field arrived
+ *      inferred direction from the sign of `thresholdPct` (negative →
+ *      lte, non-negative → gte); apply the same rule on load.
+ *   2. The `prev` baseline (tick-over-tick comparison) was removed in
+ *      favour of `vwap` / `trend`; rewrite it to `prev_close` so the
+ *      task survives — closest scalar semantic, user can edit further.
+ *   3. `lastMatchAt` / `lastSamplePrice` were dropped when the hit
+ *      throttle changed to `lastHitPrice ± 2 % + pushIntervalSec`;
+ *      strip them and seed `lastHitPrice: null` so the new strict
+ *      schema parses.
  */
+const LEGACY_TASK_KEYS_TO_DROP = ['lastMatchAt', 'lastSamplePrice'] as const;
+
 function migrateLegacyTasks(raw: unknown): unknown {
   if (!Array.isArray(raw)) return raw;
   return raw.map((task) => {
     if (typeof task !== 'object' || task === null) return task;
-    const t = task as Record<string, unknown>;
+    const t = { ...(task as Record<string, unknown>) };
     const conds = t['conditions'];
-    if (!Array.isArray(conds)) return task;
-    const migrated = conds.map((c) => {
-      if (typeof c !== 'object' || c === null) return c;
-      const cc = c as Record<string, unknown>;
-      if (cc['kind'] !== 'pct' || cc['op'] !== undefined) return c;
-      const thr = cc['thresholdPct'];
-      const op =
-        typeof thr === 'string' && thr.trim().startsWith('-') ? 'lte' : 'gte';
-      return { ...cc, op };
-    });
-    return { ...t, conditions: migrated };
+    if (Array.isArray(conds)) {
+      t['conditions'] = conds.map((c) => {
+        if (typeof c !== 'object' || c === null) return c;
+        const cc = { ...(c as Record<string, unknown>) };
+        if (cc['kind'] === 'pct') {
+          if (cc['op'] === undefined) {
+            const thr = cc['thresholdPct'];
+            cc['op'] = typeof thr === 'string' && thr.trim().startsWith('-') ? 'lte' : 'gte';
+          }
+          if (cc['baseline'] === 'prev') {
+            cc['baseline'] = 'prev_close';
+          }
+        }
+        return cc;
+      });
+    }
+    for (const k of LEGACY_TASK_KEYS_TO_DROP) {
+      delete t[k];
+    }
+    if (t['lastHitPrice'] === undefined) {
+      t['lastHitPrice'] = null;
+    }
+    return t;
   });
 }
 

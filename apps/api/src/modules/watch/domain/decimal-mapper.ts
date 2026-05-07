@@ -18,6 +18,8 @@ export function decimalQuoteFromDto(q: SpotQuote): SpotQuoteDecimal {
     dayHigh: new Decimal(q.dayHigh),
     dayLow: new Decimal(q.dayLow),
     prevClose: new Decimal(q.prevClose),
+    amount: new Decimal(q.amount),
+    volume: new Decimal(q.volume),
     ts: q.ts,
   };
 }

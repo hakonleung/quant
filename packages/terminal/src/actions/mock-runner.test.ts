@@ -1,8 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import {
-  _resetMockState,
-  MockActionRunner,
-} from '../actions/mock-runner.js';
+import { _resetMockState, MockActionRunner } from '../actions/mock-runner.js';
 import {
   analyzeOneAction,
   sectorListAction,
@@ -82,9 +79,7 @@ describe('MockActionRunner', () => {
           market: 'a',
           code: '600519',
           name: '贵州茅台',
-          conditions: [
-            { kind: 'pct', baseline: 'prev_close', op: 'gte', thresholdPct: '3' },
-          ],
+          conditions: [{ kind: 'pct', baseline: 'prev_close', op: 'gte', thresholdPct: '3' }],
           intervalSec: 60,
           pushIntervalSec: 300,
           enabled: true,
@@ -100,8 +95,8 @@ describe('MockActionRunner', () => {
   it('aborts when signal already aborted (boundary)', async () => {
     const ac = new AbortController();
     ac.abort();
-    await expect(
-      runner.run(stockListAction, {}, { signal: ac.signal }),
-    ).rejects.toBeInstanceOf(QuantError);
+    await expect(runner.run(stockListAction, {}, { signal: ac.signal })).rejects.toBeInstanceOf(
+      QuantError,
+    );
   });
 });

@@ -34,6 +34,8 @@ WATCH_QUOTE_SCHEMA: Final[pa.Schema] = pa.schema(
         pa.field("day_high", pa.string()),
         pa.field("day_low", pa.string()),
         pa.field("prev_close", pa.string()),
+        pa.field("amount", pa.string()),
+        pa.field("volume", pa.string()),
         pa.field("ts", pa.timestamp("us", tz="UTC")),
     ]
 )
@@ -98,6 +100,8 @@ class WatchQuoteOneHandler:
             "day_high": str(quote.day_high),
             "day_low": str(quote.day_low),
             "prev_close": str(quote.prev_close),
+            "amount": str(quote.amount),
+            "volume": str(quote.volume),
             "ts": quote.ts,
         }
         return pa.Table.from_pylist([row], schema=WATCH_QUOTE_SCHEMA)

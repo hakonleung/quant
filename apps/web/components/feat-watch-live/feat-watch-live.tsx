@@ -396,7 +396,7 @@ function Group({
   const partiallySelected = selectedInGroup > 0 && !allSelected;
   const titleLines: readonly string[] = [
     ...group.conditions.map(formatCondition),
-    `interval: ${formatMinutes(group.intervalSec)}  push≥: ${formatMinutes(group.pushIntervalSec)}`,
+    `interval: ${formatMinutes(group.intervalSec)}  push≥: ${formatMinutes(group.pushIntervalSec)}  drift≥2%`,
   ];
 
   return (
@@ -584,7 +584,11 @@ function RowSummary({ task }: { readonly task: WatchTask }): React.ReactElement 
 function formatCondition(c: WatchCondition): string {
   const op = c.op === 'gte' ? '≥' : '≤';
   if (c.kind === 'pct') {
-    return `pct($, ${c.baseline}) ${op} ${c.thresholdPct}%`;
+    const base =
+      c.baseline === 'trend' && c.window !== undefined
+        ? `trend(${String(c.window)}s)`
+        : c.baseline;
+    return `pct($, ${base}) ${op} ${c.thresholdPct}%`;
   }
   return `abs($) ${op} ${c.thresholdPrice}`;
 }
