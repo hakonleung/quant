@@ -17,6 +17,7 @@
 
 import { Box, Flex, HStack, Text } from '@chakra-ui/react';
 
+import { FeatChannelLive } from '../feat-channel/feat-channel.js';
 import { FeatSysCfg } from '../feat-sys-cfg/feat-sys-cfg.js';
 import { FeatSysStat } from '../feat-sys-stat/feat-sys-stat.js';
 
@@ -26,6 +27,9 @@ export function TopBar(): React.ReactElement {
       <Brand />
       <Box flex="1" minW={0} display="flex" alignItems="stretch">
         <FeatSysStat />
+      </Box>
+      <Box w="220px" flex="0 0 auto" display="flex" alignItems="stretch">
+        <FeatChannelLive />
       </Box>
       <Box w="220px" flex="0 0 auto" display="flex" alignItems="stretch">
         <FeatSysCfg />

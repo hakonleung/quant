@@ -30,13 +30,13 @@ import {
   type WatchTask,
 } from '@quant/shared';
 import { Decimal } from 'decimal.js';
+import { ChannelService } from '../channel/channel.service.js';
 import { decimalQuoteFromDto } from './domain/decimal-mapper.js';
 import { evaluate, type IntradaySample } from './domain/evaluate.js';
 import { buildPayload } from './domain/format.js';
 import { isMarketOpen, marketTradingDayKey } from './domain/market-hours.js';
 import { WATCH_QUOTE_PORT, type WatchQuotePort } from './domain/watch-port.js';
 import { WatchTaskStore } from './watch-task.store.js';
-import { WATCH_NOTIFIER, type WatchNotifier } from './watch-notifier.js';
 
 const MASTER_TICK_MS = 5_000;
 
@@ -70,7 +70,7 @@ export class WatchScheduler implements OnModuleInit, OnModuleDestroy {
   constructor(
     @Inject(WatchTaskStore) private readonly store: WatchTaskStore,
     @Inject(WATCH_QUOTE_PORT) private readonly port: WatchQuotePort,
-    @Inject(WATCH_NOTIFIER) private readonly notifier: WatchNotifier,
+    @Inject(ChannelService) private readonly channels: ChannelService,
   ) {}
 
   async onModuleInit(): Promise<void> {
@@ -253,7 +253,19 @@ export class WatchScheduler implements OnModuleInit, OnModuleDestroy {
         quote: decimalQuote,
         matched,
       });
-      await this.notifier.send(payload, traceId);
+      await this.channels.broadcast(
+        {
+          text: payload.text,
+          kind: 'watch.hit',
+          meta: {
+            market: task.market,
+            code: task.code,
+            name: task.name,
+            last: decimalQuote.last.toString(),
+          },
+        },
+        { traceId, source: 'system' },
+      );
     }
   }
 

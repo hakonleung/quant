@@ -1,5 +1,10 @@
 /**
  * HTTP routes for module W-0 (`docs/modules/W-0-watch.md` §10).
+ *
+ * Live streaming used to be served via `@Sse('stream')` here; it now
+ * runs through the global Socket.IO gateway (`watch.snapshot` topic)
+ * managed by `WatchBroadcaster`. The HTTP surface keeps the one-shot
+ * list, lookup, and CRUD routes untouched.
  */
 
 import {
@@ -14,10 +19,8 @@ import {
   Patch,
   Post,
   Query,
-  Sse,
 } from '@nestjs/common';
 import type { StockBasic, WatchTask } from '@quant/shared';
-import { Observable, interval, map, startWith } from 'rxjs';
 import { ZodValidationPipe } from '../../common/zod-pipe.js';
 import {
   UniverseQuerySchema,
@@ -36,12 +39,6 @@ const patchPipe = new ZodValidationPipe(WatchTaskPatchSchema);
 const paramsPipe = new ZodValidationPipe(WatchTaskParamsSchema);
 const universePipe = new ZodValidationPipe(UniverseQuerySchema);
 
-const STREAM_TICK_MS = 1000;
-
-interface WatchSseChunk {
-  readonly data: readonly WatchTask[];
-}
-
 @Controller('watch')
 export class WatchController {
   constructor(@Inject(WatchService) private readonly service: WatchService) {}
@@ -49,19 +46,6 @@ export class WatchController {
   @Get()
   list(): readonly WatchTask[] {
     return this.service.list();
-  }
-
-  /**
-   * SSE stream of the full task list at 1 Hz. The frontend subscribes to
-   * this instead of polling so `lastTickAt` / `hitCount` updates land
-   * within a tick of the scheduler mutating them.
-   */
-  @Sse('stream')
-  stream(): Observable<WatchSseChunk> {
-    return interval(STREAM_TICK_MS).pipe(
-      startWith(0),
-      map(() => ({ data: this.service.list() })),
-    );
   }
 
   @Post()

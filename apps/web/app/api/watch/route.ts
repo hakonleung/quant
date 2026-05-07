@@ -1,15 +1,28 @@
 /**
- * BFF: POST /api/watch → forward to NestJS `/api/watch`.
+ * BFF: GET /api/watch  → list tasks (one-shot)
+ *      POST /api/watch → create task
  *
- * Re-validates the request body and the upstream response against the
- * shared schemas so a contract drift fails on the BFF rather than
- * silently downstream. List reads go through the SSE stream
- * (`/api/watch/stream`), so no GET handler here.
+ * Live updates moved off SSE onto Socket.IO (`watch.snapshot` topic);
+ * the GET handler returns a single snapshot for terminal `watch list`
+ * commands and degraded clients without a socket connection.
  */
 
 import { TRACE_HEADER, WatchTaskCreateSchema, WatchTaskSchema } from '@quant/shared';
+import { z } from 'zod';
 
 import { bffErrorResponse, nestJson, readTrace } from '../_lib/proxy.js';
+
+const TaskListSchema = z.array(WatchTaskSchema);
+
+export async function GET(request: Request): Promise<Response> {
+  const traceId = readTrace(request);
+  try {
+    const tasks = await nestJson(request, '/api/watch', (r) => TaskListSchema.parse(r));
+    return Response.json(tasks, { headers: { [TRACE_HEADER]: traceId } });
+  } catch (err) {
+    return bffErrorResponse(err, traceId);
+  }
+}
 
 export async function POST(request: Request): Promise<Response> {
   const traceId = readTrace(request);

@@ -5,18 +5,22 @@
  *   - the file-backed task store and HK/US universe stores
  *   - a Flight client (own channel — separate from stock-meta's so the
  *     two surfaces can be load-balanced independently in v2)
- *   - a Slack-webhook notifier (env: ``QUANT_WATCH_SLACK_WEBHOOK``)
  *   - the master tick scheduler (`OnModuleInit`)
+ *   - the socket broadcaster that pushes the `watch.snapshot` topic
+ *
+ * Notifications go through `ChannelService` (see `apps/api/.../channel`),
+ * which subsumes the old slack-webhook notifier + multi-IM routing.
  */
 
 import { Module } from '@nestjs/common';
 import { FlightClient } from '../../adapters/flight/flight-client.js';
+import { ChannelModule } from '../channel/channel.module.js';
 import { StockMetaModule } from '../stock-meta/stock-meta.module.js';
 import { WATCH_QUOTE_PORT } from './domain/watch-port.js';
 import { FlightWatchAdapter, WATCH_FLIGHT_CLIENT } from './flight-watch.adapter.js';
-import { SlackWebhookWatchNotifier, WATCH_NOTIFIER, type WatchNotifier } from './watch-notifier.js';
 import { WATCH_DATA_DIR, WatchTaskStore } from './watch-task.store.js';
 import { WatchUniverseStore } from './watch-universe.store.js';
+import { WatchBroadcaster } from './watch.broadcaster.js';
 import { WatchController } from './watch.controller.js';
 import { WatchScheduler } from './watch.scheduler.js';
 import { WatchService } from './watch.service.js';
@@ -28,7 +32,7 @@ const DEFAULT_FLIGHT_TARGET = '127.0.0.1:8815';
 const DEFAULT_DATA_DIR = '../../data/watch';
 
 @Module({
-  imports: [StockMetaModule],
+  imports: [StockMetaModule, ChannelModule],
   controllers: [WatchController],
   providers: [
     {
@@ -42,22 +46,12 @@ const DEFAULT_DATA_DIR = '../../data/watch';
       provide: WATCH_DATA_DIR,
       useFactory: (): string => process.env['QUANT_WATCH_DIR'] ?? DEFAULT_DATA_DIR,
     },
-    {
-      provide: WATCH_NOTIFIER,
-      useFactory: (): WatchNotifier => {
-        // Prefer the watch-specific override; fall back to the
-        // project-wide `SLACK_WEBHOOK_URL` (the same one §08
-        // NotificationService uses) so a single .env entry powers both.
-        const url =
-          process.env['QUANT_WATCH_SLACK_WEBHOOK'] ?? process.env['SLACK_WEBHOOK_URL'] ?? null;
-        return new SlackWebhookWatchNotifier(url);
-      },
-    },
     { provide: WATCH_QUOTE_PORT, useClass: FlightWatchAdapter },
     WatchTaskStore,
     WatchUniverseStore,
     WatchService,
     WatchScheduler,
+    WatchBroadcaster,
   ],
   exports: [WatchService, WatchScheduler],
 })

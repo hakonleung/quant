@@ -14,16 +14,15 @@
  *   - Every action result is run through `cfg.result.parse()` after
  *     projection so a server payload that drifts from the agreed shape
  *     fails loud at the boundary, not deep inside a renderer.
- *   - `watch.list` consumes one frame from `/api/watch/stream` then
- *     closes the EventSource — the gateway has no plain GET
- *     equivalent (modules/W-0).
+ *   - `watch.list` issues a one-shot `GET /api/watch` BFF call. Live
+ *     updates land via the global Socket.IO bus (`watch.snapshot`).
  *
  * Toggle between mock and live via `lib/term/install-runner.ts`, which
  * inspects `localStorage['tm.runner']` and `process.env.NEXT_PUBLIC_*`.
  */
 
 import { z } from 'zod';
-import { QuantError, WatchTaskSchema, type WatchTask } from '@quant/shared';
+import { QuantError, WatchTaskSchema } from '@quant/shared';
 import {
   MockCache,
   type DataActionConfig,
@@ -227,8 +226,8 @@ function buildFetchers(deps: LiveRunnerDeps): Record<string, Fetcher> {
       return screenToTerm(r, deps.lookupName);
     },
 
-    'watch.list': async (_a, signal: AbortSignal) => {
-      const tasks = await readWatchOnce(signal);
+    'watch.list': async () => {
+      const tasks = await apiGet('/api/watch', (raw) => z.array(WatchTaskSchema).parse(raw));
       return tasks.map(watchToTerm);
     },
 
@@ -250,56 +249,6 @@ function buildFetchers(deps: LiveRunnerDeps): Record<string, Fetcher> {
   };
 }
 
-/**
- * Open the watch SSE stream, take the first frame, close. Used to read
- * the current task list one-shot — there's no plain HTTP GET for it.
- */
-function readWatchOnce(signal: AbortSignal): Promise<readonly WatchTask[]> {
-  return new Promise((resolve, reject) => {
-    if (typeof EventSource === 'undefined') {
-      // SSR / test envs without EventSource — return an empty list.
-      resolve([]);
-      return;
-    }
-    const es = new EventSource('/api/watch/stream');
-    const onAbort = (): void => {
-      es.close();
-      reject(new QuantError('INTERNAL', 'aborted'));
-    };
-    if (signal.aborted) {
-      onAbort();
-      return;
-    }
-    signal.addEventListener('abort', onAbort, { once: true });
-
-    const timeout = setTimeout(() => {
-      signal.removeEventListener('abort', onAbort);
-      es.close();
-      // Stream healthy but slow — degrade to empty rather than spinning forever.
-      resolve([]);
-    }, 5000);
-
-    es.onmessage = (ev): void => {
-      clearTimeout(timeout);
-      signal.removeEventListener('abort', onAbort);
-      es.close();
-      try {
-        const raw: unknown = JSON.parse(ev.data as string);
-        const parsed = z.array(WatchTaskSchema).parse(raw);
-        resolve(parsed);
-      } catch (err) {
-        reject(err);
-      }
-    };
-    es.onerror = (): void => {
-      clearTimeout(timeout);
-      signal.removeEventListener('abort', onAbort);
-      es.close();
-      // Empty rather than throwing — `watch list` shows "no tasks".
-      resolve([]);
-    };
-  });
-}
 
 export class LiveActionRunner implements DataActionRunner {
   readonly id = 'live' as const;

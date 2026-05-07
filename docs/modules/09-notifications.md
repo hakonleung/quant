@@ -1,36 +1,29 @@
-# Notifications — 通知投递
+# Notifications — 通知投递（已并入 Channel 模块）
 
-## 功能
+> ⚠️ 历史文档：v1 的 NestJS 单 Slack-webhook 实现 (`SlackWebhookWatchNotifier`) 与 SYS.PUSH 模块已被新 Channel 模块替代。
+> 详情见 [`docs/modules/11-channel.md`](./11-channel.md) 与 [`docs/modules/12-socket.md`](./12-socket.md)。
 
-- 把 watch hit / cron 失败 / 数据告警等事件投递到外部通道。
-- v1 仅 Slack webhook（NestJS 侧 `SlackWebhookWatchNotifier`），结构上预留多通道。
+## 现状
 
-## 实现
+- watch hit、cron 失败等系统事件 → `ChannelService.broadcast(...)` →（BullMQ 队列） → 各 IM。
+- IM 入站（mention / DM）→ `ChannelBus.publishInbound` → 业务 module 通过 `@OnEvent('channel.inbound:<id>')` 订阅 + 前端 `feat-channel` 渲染。
+- 每条事件同步推到 Socket.IO `channel.activity` topic，前端实时呈现。
 
-| 层        | 位置                                                                               | 说明                                                              |
-| --------- | ---------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
-| Format    | `apps/api/src/modules/watch/domain/format.ts`                                      | 纯文本 mrkdwn 渲染（commit 1e51000：去掉 attachment / Block Kit） |
-| Evaluate  | `apps/api/src/modules/watch/domain/evaluate.ts`                                    | `WatchCondition` 求值（Decimal-only）                             |
-| Sender    | `apps/api/src/modules/watch/adapters/slack-webhook-notifier.ts`                    | `undici.fetch` + 可选 `HTTPS_PROXY`                               |
-| Python 侧 | `quant_io/notify/slack_webhook.py` + `quant_core/services/notification_service.py` | 兜底 / 旧路径，仍在但 watch 主路径已迁到 NestJS                   |
-| 触发点    | NestJS `WatchService` 边沿命中、orchestration worker 死信                          |                                                                   |
+## 旧 → 新映射
+
+| 旧                                                                | 新                                                |
+| ----------------------------------------------------------------- | ------------------------------------------------- |
+| `apps/api/src/modules/push/`                                      | *（删除）*                                        |
+| `apps/api/src/modules/watch/watch-notifier.ts`                    | *（删除）*                                        |
+| `WatchNotifier` 接口                                              | `ChannelAdapter`（多 IM）                         |
+| `SlackWebhookWatchNotifier`                                       | `apps/api/src/modules/channel/adapters/slack.adapter.ts`（Web API + Socket Mode） |
+| `POST /api/push/test`                                             | `POST /api/channel/send`                          |
+| `QUANT_WATCH_SLACK_WEBHOOK` / `SLACK_WEBHOOK_URL`                 | `CHANNEL_SLACK_BOT_TOKEN` 等（见 11-channel.md）  |
 
 ## 消息格式
 
-单一 `text` 字段，三行 mrkdwn：
+watch hit 触发的渲染逻辑保留在 `apps/api/src/modules/watch/domain/format.ts`（mrkdwn 三行）。新 channel 模块直接消费 `format.buildPayload(...)` 的 `text` 字段，未来支持卡片/Block Kit 时再扩展 `OutboundMessage`。
 
-```
-*<name> [<code>]*
-<emoji> *<signed pct>* <emoji>   <price><unit>
-<conditions joined by " · ">
-```
+## Python 侧
 
-- 涨红跌绿：`:large_red_square:` / `:large_green_square:`。
-- 单位：A 股 ¥、HK HK$、US $。
-- 条件文案样例：`pct(close, prev_close) >= 5%`、`abs(close) <= 100`。
-
-## 缓存策略
-
-- **去重**：相同 `(channel, dedupe_key)` 在 TTL 内只发一次；`FileKeyValueStore` key=`notify:<sha>`，TTL 默认 1 小时。
-- **失败**：webhook 4xx 不重试（坏配置），5xx 退避 ≤ 3 次。
-- 无队列持久化——通知是有损的。
+`services/py/quant_io/notify/slack_webhook.py` + `quant_core/services/notification_service.py` 仍保留作为兜底 / Python 自调路径，但 watch 主路径已完全迁到 NestJS。后续如果 Python 侧也要走多 IM，应通过 Flight 调 channel ops，而不是再写第二份 SDK。

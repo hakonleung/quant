@@ -16,17 +16,15 @@
  */
 
 import { Box, Checkbox, Flex, Text } from '@chakra-ui/react';
-import { WatchTaskSchema, type WatchCondition, type WatchTask } from '@quant/shared';
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { z } from 'zod';
+import { WatchSnapshotPayloadSchema, type WatchCondition, type WatchTask } from '@quant/shared';
+import { useEffect, useMemo, useState } from 'react';
 
 import { Feat } from '../../lib/eqty/feat.js';
 import { ConfirmCancelled, useConfirm } from '../../lib/hooks/use-confirm.js';
+import { useSocketTopic } from '../../lib/socket/use-socket-topic.js';
 import { FeatView } from '../feat-view/feat-view.js';
 import { MonoButton } from '../ui/mono-button.js';
 import { WatchAddForm, type PickedStock, type WatchAddInitial } from './watch-add-form.js';
-
-const TaskListSchema = z.array(WatchTaskSchema);
 
 type StreamState =
   | { readonly kind: 'connecting' }
@@ -34,38 +32,10 @@ type StreamState =
   | { readonly kind: 'error'; readonly message: string };
 
 function useWatchStream(): StreamState {
-  const [state, setState] = useState<StreamState>({ kind: 'connecting' });
-  const stateRef = useRef<StreamState>(state);
-  stateRef.current = state;
-
-  useEffect(() => {
-    const es = new EventSource('/api/watch/stream');
-    es.onmessage = (ev: MessageEvent<string>): void => {
-      let raw: unknown;
-      try {
-        raw = JSON.parse(ev.data);
-      } catch (err) {
-        setState({ kind: 'error', message: `bad json: ${String(err)}` });
-        return;
-      }
-      const parsed = TaskListSchema.safeParse(raw);
-      if (!parsed.success) {
-        setState({ kind: 'error', message: parsed.error.message });
-        return;
-      }
-      setState({ kind: 'open', tasks: parsed.data });
-    };
-    es.onerror = (): void => {
-      if (stateRef.current.kind !== 'open') {
-        setState({ kind: 'error', message: 'stream disconnected' });
-      }
-    };
-    return (): void => {
-      es.close();
-    };
-  }, []);
-
-  return state;
+  const remote = useSocketTopic('watch.snapshot', WatchSnapshotPayloadSchema);
+  if (remote.status === 'open') return { kind: 'open', tasks: remote.snapshot };
+  if (remote.status === 'connecting') return { kind: 'connecting' };
+  return { kind: 'error', message: remote.message };
 }
 
 const taskKey = (t: Pick<WatchTask, 'market' | 'code'>): string => `${t.market}:${t.code}`;

@@ -3,18 +3,26 @@
 ## 1. 进程拓扑
 
 ```
-┌─────────────┐  HTTP/JSON + SSE  ┌────────────┐  Arrow Flight (gRPC)  ┌────────────────┐
-│ Next.js     │ ───────────────>  │ NestJS     │ ────────────────────> │ Python svc     │
-│ apps/web    │ <───────────────  │ apps/api   │ <──────────────────── │ services/py    │
-│ :3000       │                   │ :3001      │                       │ :8815 Flight   │
-└─────────────┘                   └────────────┘                       └────────────────┘
-                                        │                                      │
-                                        │ in-memory                            │ akshare / OpenAI / Slack
-                                        ▼ queues + BJT cron                    ▼
-                                  ┌─────────────┐                       ┌────────────────┐
-                                  │ orchestrator│                       │ data/ (Parquet │
-                                  │ (Node 内)   │                       │ + JSON KV)     │
-                                  └─────────────┘                       └────────────────┘
+┌─────────────┐  HTTP/JSON + WebSocket(Socket.IO)  ┌────────────┐  Arrow Flight (gRPC)  ┌────────────────┐
+│ Next.js     │ ────────────────────────────────>  │ NestJS     │ ────────────────────> │ Python svc     │
+│ apps/web    │ <────────────────────────────────  │ apps/api   │ <──────────────────── │ services/py    │
+│ :3000       │                                    │ :3001      │                       │ :8815 Flight   │
+└─────────────┘                                    └────────────┘                       └────────────────┘
+                                                       │ │ │                                  │
+                                                       │ │ │ in-memory queues + cron          │ akshare / OpenAI
+                                                       │ │ ▼                                  ▼
+                                                       │ │ ┌────────────┐                ┌────────────────┐
+                                                       │ │ │orchestrator│                │ data/ (Parquet │
+                                                       │ │ └────────────┘                │ + JSON KV)     │
+                                                       │ │                               └────────────────┘
+                                                       │ ▼ BullMQ
+                                                       │ ┌────────┐
+                                                       │ │ Redis  │  channel.outbound 队列（持久化重试）
+                                                       │ └────────┘
+                                                       ▼ Web API + Socket Mode/WSClient
+                                                  ┌──────────────┐
+                                                  │ Slack/Feishu │
+                                                  └──────────────┘
 ```
 
 | 进程       | 职责                                                                           | 不做                                 |
@@ -70,7 +78,8 @@ docs/              工程文档（本目录）
 
 - 同步小调用（< 1MB）：HTTP/JSON。
 - 列存大数据（K 线、筛选结果）：Arrow Flight。
-- 长任务（cron 同步、形态扫描）：返回 `task_id`，前端走 SSE / 轮询；watch 实时流通过 `GET /api/watch/stream` SSE 推。
+- 长任务（cron 同步、形态扫描）：返回 `task_id`；前端订阅统一的 Socket.IO 总线（`watch.snapshot` / `queue.snapshot` / `channel.activity` topic）。详见 [`docs/modules/12-socket.md`](./modules/12-socket.md)。
+- IM 通知 / 订阅：通过 [`channel` 模块](./modules/11-channel.md)（slack / feishu，可扩展），出站经 BullMQ + Redis 持久重试，入站经 Socket Mode / WSClient 长连接。
 
 ## 4. 终端通道（TERM.MAIN）
 

@@ -4,9 +4,12 @@ import os from 'node:os';
 import type { SpotQuote, StockBasic, WatchTask, WatchMarket } from '@quant/shared';
 import { WatchScheduler } from '../../../src/modules/watch/watch.scheduler.js';
 import { WatchTaskStore } from '../../../src/modules/watch/watch-task.store.js';
+import type {
+  ChannelOutboundRequest,
+  ChannelOutboundResponse,
+} from '@quant/shared';
 import type { WatchQuotePort } from '../../../src/modules/watch/domain/watch-port.js';
-import type { WatchNotifier } from '../../../src/modules/watch/watch-notifier.js';
-import type { SlackPayload } from '../../../src/modules/watch/domain/format.js';
+import type { ChannelService } from '../../../src/modules/channel/channel.service.js';
 
 class FakeQuotePort implements WatchQuotePort {
   responses: SpotQuote[] = [];
@@ -27,10 +30,14 @@ class FakeQuotePort implements WatchQuotePort {
   }
 }
 
-class FakeNotifier implements WatchNotifier {
-  sent: SlackPayload[] = [];
-  async send(payload: SlackPayload): Promise<void> {
-    this.sent.push(payload);
+class FakeNotifier {
+  sent: Array<{ text: string; kind: string }> = [];
+  async broadcast(req: ChannelOutboundRequest): Promise<ChannelOutboundResponse> {
+    this.sent.push({ text: req.text, kind: req.kind });
+    return { accepted: [], activityIds: [] };
+  }
+  async send(): Promise<ChannelOutboundResponse> {
+    return { accepted: [], activityIds: [] };
   }
 }
 
@@ -80,9 +87,9 @@ const TICK_TIME = new Date('2026-05-04T01:30:00Z');
 async function newScheduler(
   store: WatchTaskStore,
   port: WatchQuotePort,
-  notifier: WatchNotifier,
+  notifier: FakeNotifier,
 ): Promise<WatchScheduler> {
-  const sched = new WatchScheduler(store, port, notifier);
+  const sched = new WatchScheduler(store, port, notifier as unknown as ChannelService);
   await store.load();
   return sched;
 }

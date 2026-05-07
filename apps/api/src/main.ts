@@ -3,16 +3,19 @@ import { NestFactory } from '@nestjs/core';
 import { Logger } from '@nestjs/common';
 import { AppModule } from './app.module.js';
 import { QuantErrorFilter } from './common/quant-error.filter.js';
+import { corsOriginCallback } from './modules/socket/cors-origin.js';
 
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create(AppModule, { logger: ['log', 'warn', 'error'] });
   app.setGlobalPrefix('api');
   app.useGlobalFilters(new QuantErrorFilter());
-  // v1 is loopback-only; the web dev server runs on a separate port
-  // (Next: 3000 / 3100, Nest: 3001), so the browser issues cross-origin
-  // requests that need CORS. Restrict to localhost variants.
+  // v1 binds 127.0.0.1 by default; the dev web server runs on a separate
+  // port so the browser issues cross-origin requests that need CORS.
+  // Allow loopback hostnames + same-host different-port to support custom
+  // hostnames (e.g. accessing via the LAN ip on a phone). Extra origins
+  // can be configured via the QUANT_ALLOWED_ORIGINS env (comma list).
   app.enableCors({
-    origin: [/^http:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?$/],
+    origin: corsOriginCallback,
     credentials: true,
     allowedHeaders: ['content-type', 'x-trace-id'],
     exposedHeaders: ['x-trace-id'],

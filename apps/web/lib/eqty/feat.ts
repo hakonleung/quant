@@ -40,6 +40,9 @@ export const Feat = {
   // WATCH — live watch tasks
   WatchLive: 'WATCH.LIVE',
 
+  // CHN — unified system + IM activity feed (replaces SYS.PUSH)
+  ChannelLive: 'CHN.LIVE',
+
   // TERM — keyboard-driven command surface
   Terminal: 'TERM.MAIN',
 } as const;
@@ -77,5 +80,6 @@ export const FEAT_CONFIG_MAP: Readonly<Record<Feat, FeatConfig>> = {
   [Feat.SysStat]: { cyber: true, defaultMinimized: true, bodyOverlay: true },
   [Feat.SysCfg]: { cyber: true, defaultMinimized: true, bodyOverlay: true },
   [Feat.WatchLive]: { gridArea: 'R3', cyber: true, defaultMinimized: true },
+  [Feat.ChannelLive]: { cyber: true, defaultMinimized: true, bodyOverlay: true },
   [Feat.Terminal]: { cyber: true, defaultMinimized: true },
 };
