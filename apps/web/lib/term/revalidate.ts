@@ -15,24 +15,34 @@ import type { RevalidateScope } from '@quant/terminal';
 import { fetchSectors } from '../api/sectors.js';
 import { useSectorsStore } from '../stores/sectors.store.js';
 
+/**
+ * Per-scope query-key prefixes the bridge invalidates on a revalidate
+ * call. Centralising the table keeps `createRevalidate` itself a thin
+ * dispatcher (compliance with eslint `complexity` rule) and makes
+ * adding new scopes a one-line change.
+ */
+const QUERY_KEYS_BY_SCOPE: Readonly<Record<string, readonly readonly string[][]>> = {
+  meta: [
+    ['stock-list'],
+    ['stock-meta'],
+    // Universe shapes (HK / US baskets) feed the watch add-form; the
+    // gateway re-derives them from the same parquet a meta scan
+    // refreshes, so they belong in the meta bucket.
+    ['watch-universe'],
+  ],
+  kline: [['kline'], ['kline.bulk'], ['stock.snapshots']],
+  sentiment: [['sentiment'], ['sentiment.many']],
+  ta: [['ta']],
+};
+
 export function createRevalidate(qc: QueryClient): (scope: RevalidateScope) => void {
   return (scope) => {
-    if (scope === 'meta' || scope === 'all') {
-      void qc.invalidateQueries({ queryKey: ['stock-list'] });
-      void qc.invalidateQueries({ queryKey: ['stock-meta'] });
-      // Universe shapes (HK / US baskets) feed the watch add-form; the
-      // gateway re-derives them from the same parquet a meta scan
-      // refreshes, so they belong in the meta bucket.
-      void qc.invalidateQueries({ queryKey: ['watch-universe'] });
-    }
-    if (scope === 'kline' || scope === 'all') {
-      void qc.invalidateQueries({ queryKey: ['kline'] });
-      void qc.invalidateQueries({ queryKey: ['kline.bulk'] });
-      void qc.invalidateQueries({ queryKey: ['stock.snapshots'] });
-    }
-    if (scope === 'sentiment' || scope === 'all') {
-      void qc.invalidateQueries({ queryKey: ['sentiment'] });
-      void qc.invalidateQueries({ queryKey: ['sentiment.many'] });
+    for (const [bucket, keys] of Object.entries(QUERY_KEYS_BY_SCOPE)) {
+      if (scope === bucket || scope === 'all') {
+        for (const key of keys) {
+          void qc.invalidateQueries({ queryKey: [...key] });
+        }
+      }
     }
     if (scope === 'sectors' || scope === 'all') {
       // Sectors live in zustand, not react-query. Re-fetch and push.

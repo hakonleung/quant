@@ -17,6 +17,7 @@ import {
   SentimentSchema,
   StockMetaDtoSchema,
   StockSnapshotDtoSchema,
+  TaAnalysisSchema,
   type KlineBar,
   type MarketSentiment,
   type NlScreenResult,
@@ -29,6 +30,7 @@ import {
   type Sentiment,
   type StockMetaDto,
   type StockSnapshotDto,
+  type TaAnalysis,
   type UniversePlanAst,
 } from '@quant/shared';
 import { z } from 'zod';
@@ -173,6 +175,22 @@ export async function findSimilarPatterns(
 export async function analyzeManySentiment(codes: readonly string[]): Promise<MarketSentiment> {
   return apiPost(`/api/sentiment/analyze_many`, { codes: [...codes] }, (raw) =>
     MarketSentimentSchema.parse(raw),
+  );
+}
+
+/**
+ * Cached read for the technical-analysis (beta) feature. Returns `null`
+ * on miss so the terminal can decide between rendering "no analysis
+ * yet" and forcing a fresh LLM call.
+ */
+export async function getCachedTaAnalysis(code: string): Promise<TaAnalysis | null> {
+  return safeOne(`/api/ta/analyze_one?code=${encodeURIComponent(code)}`, TaAnalysisSchema);
+}
+
+/** Trigger a fresh TA analysis (paid LLM call). */
+export async function analyzeTa(code: string, bypassCache = false): Promise<TaAnalysis> {
+  return apiPost(`/api/ta/analyze_one`, bypassCache ? { code, bypassCache } : { code }, (raw) =>
+    TaAnalysisSchema.parse(raw),
   );
 }
 

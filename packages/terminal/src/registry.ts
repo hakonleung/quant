@@ -28,11 +28,12 @@ export interface UiStoreShim {
  *   meta       — stock metadata: list, single rows, industry tags
  *   kline      — kline series: single, bulk, derived snapshots
  *   sentiment  — analyze.one + analyze.many caches
+ *   ta         — analyze.ta cache (technical analysis, beta)
  *   sectors    — sector list (zustand-backed)
  *   watch      — watch tasks (mostly SSE-driven; included for symmetry)
  *   all        — everything above
  */
-export type RevalidateScope = 'meta' | 'kline' | 'sentiment' | 'sectors' | 'watch' | 'all';
+export type RevalidateScope = 'meta' | 'kline' | 'sentiment' | 'ta' | 'sectors' | 'watch' | 'all';
 
 export interface CommandStores {
   readonly ui: UiStoreShim;

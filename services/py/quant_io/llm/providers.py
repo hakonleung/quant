@@ -30,6 +30,7 @@ from quant_core.errors import QuantError
 if TYPE_CHECKING:
     from collections.abc import Callable
 
+    from quant_io.llm.fallback import FallbackLlmClient
     from quant_io.llm.openai_compatible import OpenAiCompatibleLlmClient
 
 
@@ -100,14 +101,43 @@ LLM_PROVIDERS: Final[tuple[LlmProviderConfig, ...]] = (
 """Priority-ordered list of LLM providers we know about."""
 
 
+def _ordered_candidates(
+    predicate: Callable[[LlmProviderConfig], bool],
+    *,
+    prefer_provider: str | None,
+) -> list[LlmProviderConfig]:
+    """Return providers passing ``predicate`` with ``prefer_provider``
+    (when present and matching) moved to the front. Order otherwise
+    follows the static catalog priority."""
+    matched = [cfg for cfg in LLM_PROVIDERS if predicate(cfg)]
+    if prefer_provider is None:
+        return matched
+    head: list[LlmProviderConfig] = []
+    tail: list[LlmProviderConfig] = []
+    for cfg in matched:
+        if cfg.provider == prefer_provider:
+            head.append(cfg)
+        else:
+            tail.append(cfg)
+    return head + tail
+
+
 def _first_eligible(
     predicate: Callable[[LlmProviderConfig], bool],
     *,
     label: str,
+    prefer_provider: str | None = None,
 ) -> tuple[LlmProviderConfig, str]:
     """Walk the catalog in priority order, return the first row passing
-    ``predicate`` whose API key is set in ``os.environ``."""
-    candidates = [cfg for cfg in LLM_PROVIDERS if predicate(cfg)]
+    ``predicate`` whose API key is set in ``os.environ``.
+
+    When ``prefer_provider`` is given, that provider is tried first.
+    If its key is missing we fall back to the static catalog order
+    rather than raising — keeping ``build_llm_client`` permissive lets
+    the ``ta`` chain factory still build a usable client when the
+    preferred provider is offline.
+    """
+    candidates = _ordered_candidates(predicate, prefer_provider=prefer_provider)
     if not candidates:
         raise QuantError(
             "LLM_FAILED",
@@ -131,6 +161,7 @@ def build_llm_client(
     *,
     need_web_search: bool = False,
     use_flash: bool = False,
+    prefer_provider: str | None = None,
 ) -> OpenAiCompatibleLlmClient:
     """Construct an LLM client honouring the catalog priority.
 
@@ -139,14 +170,20 @@ def build_llm_client(
             uses ``model_pro``. Mutually exclusive with ``use_flash``.
         use_flash: pick the first provider that defines ``model_flash``;
             uses that cheaper model.
+        prefer_provider: when set, try this provider's row first. If the
+            named provider has no API key in env, the function silently
+            falls back to the static catalog priority — callers wanting
+            strict pinning should check ``client.name`` after construction.
+            Must match a real catalog ``provider`` value when given.
 
     Returns:
         A ready-to-call OpenAI-compatible :class:`LLMClient` adapter.
 
     Raises:
         QuantError: ``LLM_FAILED`` when no provider in the catalog
-            matches the requested capability or when no matching provider
-            has its API key set.
+            matches the requested capability, when no matching provider
+            has its API key set, or when ``prefer_provider`` is given
+            with a value that is not in the catalog.
     """
     from quant_io.llm.openai_compatible import OpenAiCompatibleLlmClient
 
@@ -155,16 +192,34 @@ def build_llm_client(
             "LLM_FAILED",
             "need_web_search and use_flash are mutually exclusive",
         )
+    if prefer_provider is not None and not any(
+        c.provider == prefer_provider for c in LLM_PROVIDERS
+    ):
+        raise QuantError(
+            "LLM_FAILED",
+            f"unknown prefer_provider {prefer_provider!r}",
+            {"prefer_provider": prefer_provider},
+        )
     if need_web_search:
-        cfg, api_key = _first_eligible(lambda c: c.is_pro_web_search, label="is_pro_web_search")
+        cfg, api_key = _first_eligible(
+            lambda c: c.is_pro_web_search,
+            label="is_pro_web_search",
+            prefer_provider=prefer_provider,
+        )
         model = cfg.model_pro
     elif use_flash:
-        cfg, api_key = _first_eligible(lambda c: c.model_flash is not None, label="has_model_flash")
+        cfg, api_key = _first_eligible(
+            lambda c: c.model_flash is not None,
+            label="has_model_flash",
+            prefer_provider=prefer_provider,
+        )
         # Narrowed by the predicate; assert keeps mypy happy.
         assert cfg.model_flash is not None
         model = cfg.model_flash
     else:
-        cfg, api_key = _first_eligible(lambda _c: True, label="any")
+        cfg, api_key = _first_eligible(
+            lambda _c: True, label="any", prefer_provider=prefer_provider
+        )
         model = cfg.model_pro
     return OpenAiCompatibleLlmClient(
         provider_name=cfg.provider,
@@ -173,3 +228,83 @@ def build_llm_client(
         api_key=api_key,
         web_search_kind=cfg.web_search_kind,
     )
+
+
+def build_llm_client_chain(
+    *,
+    use_flash: bool = False,
+    prefer_provider: str | None = None,
+) -> FallbackLlmClient:
+    """Construct a fallback chain over every provider with an API key.
+
+    The chain order is ``prefer_provider`` (if any and matched) followed
+    by the static catalog order. ``need_web_search`` is intentionally not
+    accepted: web-search backends are not chain-friendly (mid-loop
+    fallback would re-do every search) and the only current caller (the
+    ``ta`` service) does not need search.
+
+    Args:
+        use_flash: build each client around ``model_flash`` rather than
+            ``model_pro``. Providers without a ``model_flash`` are
+            skipped.
+        prefer_provider: see :func:`build_llm_client`.
+
+    Returns:
+        A :class:`FallbackLlmClient` wrapping at least one usable
+        adapter.
+
+    Raises:
+        QuantError: ``LLM_FAILED`` when ``prefer_provider`` is unknown,
+            no candidate provider satisfies the capability filter, or
+            none of the candidates have an API key in env.
+    """
+    from quant_io.llm.fallback import FallbackLlmClient
+    from quant_io.llm.openai_compatible import OpenAiCompatibleLlmClient
+
+    if prefer_provider is not None and not any(
+        c.provider == prefer_provider for c in LLM_PROVIDERS
+    ):
+        raise QuantError(
+            "LLM_FAILED",
+            f"unknown prefer_provider {prefer_provider!r}",
+            {"prefer_provider": prefer_provider},
+        )
+    predicate: Callable[[LlmProviderConfig], bool] = (
+        (lambda c: c.model_flash is not None) if use_flash else (lambda _c: True)
+    )
+    label = "has_model_flash" if use_flash else "any"
+    candidates = _ordered_candidates(predicate, prefer_provider=prefer_provider)
+    if not candidates:
+        raise QuantError(
+            "LLM_FAILED",
+            f"no provider in catalog satisfies {label}",
+            {"selector": label},
+        )
+    clients: list[OpenAiCompatibleLlmClient] = []
+    tried: list[str] = []
+    for cfg in candidates:
+        api_key = os.environ.get(cfg.api_key_env)
+        if not api_key:
+            tried.append(cfg.api_key_env)
+            continue
+        if use_flash:
+            assert cfg.model_flash is not None
+            model = cfg.model_flash
+        else:
+            model = cfg.model_pro
+        clients.append(
+            OpenAiCompatibleLlmClient(
+                provider_name=cfg.provider,
+                base_url=cfg.base_url,
+                model=model,
+                api_key=api_key,
+                web_search_kind=cfg.web_search_kind,
+            )
+        )
+    if not clients:
+        raise QuantError(
+            "LLM_FAILED",
+            f"no API key set for any {label} provider (tried: {', '.join(tried)})",
+            {"selector": label, "tried": tried},
+        )
+    return FallbackLlmClient(clients)

@@ -11,6 +11,7 @@ import { SectorsModule } from './modules/sectors/sectors.module.js';
 import { SentimentModule } from './modules/sentiment/sentiment.module.js';
 import { StockMetaModule } from './modules/stock-meta/stock-meta.module.js';
 import { SysCfgModule } from './modules/sys-cfg/sys-cfg.module.js';
+import { TaModule } from './modules/ta/ta.module.js';
 import { WatchModule } from './modules/watch/watch.module.js';
 
 @Module({
@@ -26,6 +27,7 @@ import { WatchModule } from './modules/watch/watch.module.js';
     WatchModule,
     SectorsModule,
     SysCfgModule,
+    TaModule,
   ],
   controllers: [HealthController],
   providers: [TraceMiddleware],

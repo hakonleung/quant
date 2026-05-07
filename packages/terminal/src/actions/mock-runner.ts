@@ -9,6 +9,7 @@ import { MockCache } from './mock-cache.js';
 import {
   analyzeManyAction,
   analyzeOneAction,
+  analyzeTaAction,
   screenNlAction,
   sectorListAction,
   sectorRefreshDynamicAction,
@@ -34,6 +35,7 @@ import {
   fixtureSectors,
   fixtureSentiment,
   fixtureSnapshots,
+  fixtureTaAnalysis,
   fixtureStockMeta,
   fixtureStockMetas,
   fixtureUpsertSector,
@@ -82,6 +84,7 @@ const fetchers: Record<string, Fetcher> = {
   [analyzeOneAction.id]: ({ code }: { code: string }) => fixtureSentiment(code),
   [analyzeManyAction.id]: ({ codes }: { codes: readonly string[] }) =>
     fixtureMarketSentiment(codes),
+  [analyzeTaAction.id]: ({ code }: { code: string }) => fixtureTaAnalysis(code),
   [screenNlAction.id]: ({ nl }: { nl: string }) => fixtureScreenResult(nl),
   [watchListAction.id]: () => fixtureWatch(),
   [watchUpsertAction.id]: ({ task }: { task: Parameters<typeof fixtureUpsertWatch>[0] }) =>

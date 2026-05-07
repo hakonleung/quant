@@ -6,6 +6,7 @@
  * Live runners attach behavior on top.
  */
 
+import { TaAnalysisSchema, type TaAnalysis } from '@quant/shared';
 import { z } from 'zod';
 import type { DataActionConfig } from './types.js';
 
@@ -260,6 +261,16 @@ export const analyzeManyAction: DataActionConfig<
   invalidates: (a) => [['analyze.many', [...a.codes].sort().join(',')]],
 };
 
+export const analyzeTaAction: DataActionConfig<{ code: string; force?: boolean }, TaAnalysis> = {
+  id: 'analyze.ta',
+  kind: 'paid',
+  summary: 'Single-stock 90D price/volume technical analysis (LLM, Kimi Pro).',
+  args: z.object({ code: codeSchema, force: z.boolean().optional() }),
+  result: TaAnalysisSchema,
+  cacheKey: (a) => ['analyze.ta', a.code],
+  invalidates: (a) => [['analyze.ta', a.code]],
+};
+
 export const screenNlAction: DataActionConfig<{ nl: string; asof?: string }, ScreenResult> = {
   id: 'screen.nl',
   kind: 'paid',
@@ -311,6 +322,7 @@ export const ALL_ACTIONS = [
   sectorRefreshDynamicAction,
   analyzeOneAction,
   analyzeManyAction,
+  analyzeTaAction,
   screenNlAction,
   watchListAction,
   watchUpsertAction,

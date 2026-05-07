@@ -6,6 +6,7 @@
  * NOT trust their values for any real-world reasoning.
  */
 
+import type { TaAnalysis } from '@quant/shared';
 import type {
   KlineBar,
   MarketSentiment,
@@ -121,6 +122,35 @@ export function fixtureSentiment(code: string): Sentiment {
     score: round(score),
     theme: '行业景气复苏',
     driver: '需求边际改善',
+    cachedAt: new Date().toISOString(),
+  };
+}
+
+export function fixtureTaAnalysis(code: string): TaAnalysis {
+  // Pure synthetic — derived from `code` so calls are deterministic.
+  const seed = Number.parseInt(code, 10) % 100;
+  const base = 10 + seed * 0.5;
+  return {
+    code,
+    asof: new Date().toISOString().slice(0, 10),
+    barsCount: 90,
+    supportLevels: [
+      { price: (base * 0.95).toFixed(2), strength: 'strong', reason: 'MA60 + 前期密集成交区' },
+      { price: (base * 0.9).toFixed(2), strength: 'medium', reason: '上一波回调低点' },
+    ],
+    resistanceLevels: [
+      { price: (base * 1.05).toFixed(2), strength: 'strong', reason: 'MA20 + 上方筹码峰' },
+      { price: (base * 1.1).toFixed(2), strength: 'medium', reason: '前高密集套牢区' },
+    ],
+    trend: {
+      direction: seed % 3 === 0 ? 'up' : seed % 3 === 1 ? 'sideways' : 'down',
+      horizonDays: 10,
+      confidence: 0.6,
+      rationale: 'MA 多头排列，量能温和放大',
+    },
+    patterns: ['上升三角形整理'],
+    caveats: [],
+    provider: 'moonshot',
     cachedAt: new Date().toISOString(),
   };
 }

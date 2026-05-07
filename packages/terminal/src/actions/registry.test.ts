@@ -2,10 +2,18 @@ import { describe, expect, it } from 'vitest';
 import { ALL_ACTIONS, findAction, listActions } from '../actions/registry.js';
 
 describe('action registry', () => {
-  it('exposes 15 unique action ids (golden)', () => {
+  it('exposes 16 unique action ids (golden)', () => {
     const ids = ALL_ACTIONS.map((a) => a.id);
-    expect(ids.length).toBe(15);
+    expect(ids.length).toBe(16);
     expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it('analyze.ta is registered as a paid action with cacheKey', () => {
+    const cfg = findAction('analyze.ta');
+    expect(cfg).toBeDefined();
+    expect(cfg?.kind).toBe('paid');
+    expect(cfg?.cacheKey).toBeDefined();
+    expect(cfg?.invalidates).toBeDefined();
   });
 
   it('findAction returns matching config', () => {

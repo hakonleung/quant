@@ -23,22 +23,24 @@ from quant_cache.file_kv_store import FileKeyValueStore
 from quant_cache.parquet_kline_repo import ParquetKlineRepo
 from quant_cache.parquet_sentiment_cache import ParquetSentimentCache
 from quant_cache.parquet_stock_meta_repo import ParquetStockMetaRepo
+from quant_cache.parquet_ta_cache import ParquetTaCache
 from quant_core.adapters.clock import SystemClock
 from quant_core.adapters.pattern.dtw_engine import DTWPatternEngine
-from quant_core.services.pattern_service import PatternService
 from quant_core.errors import QuantError
 from quant_core.ports.stock_meta_source import StockMetaSource
+from quant_core.services.financials_service import FinancialsService
 from quant_core.services.kline_service import KlineService
 from quant_core.services.news_sentiment_service import NewsSentimentService
 from quant_core.services.nl_to_dsl_service import NlToDslService
+from quant_core.services.pattern_service import PatternService
 from quant_core.services.screen_service import ScreenService
 from quant_core.services.source_chain import SourceChain
 from quant_core.services.stock_meta_service import StockMetaService
 from quant_core.services.stock_meta_sync_service import StockMetaSyncService
-from quant_core.services.financials_service import FinancialsService
-from quant_core.services.watch_quote_service import WatchQuoteService
+from quant_core.services.ta_service import TaService
 from quant_core.services.universe_screen_service import UniverseScreenService
-from quant_io.llm.providers import build_llm_client
+from quant_core.services.watch_quote_service import WatchQuoteService
+from quant_io.llm.providers import build_llm_client, build_llm_client_chain
 from quant_io.sources.akshare_financials import (
     AKShareFinancialsBulkSource,
     AKShareFinancialsPerStockEnricher,
@@ -49,25 +51,22 @@ from quant_io.sources.akshare_watch import AKShareWatchSource
 
 from quant_rpc.handlers import HandlerRegistry
 from quant_rpc.ops.blacklist import ComputeAshareBlacklistHandler
+from quant_rpc.ops.financials import (
+    BulkSyncFinancialsHandler,
+    EnrichFinancialsForCodeHandler,
+    FindStaleFinancialsHandler,
+)
 from quant_rpc.ops.kline import ListKlineWatermarksHandler, SyncKlineForCodeHandler
 from quant_rpc.ops.kline_read import ListKlineBulkLastNHandler, ListKlineForCodeHandler
 from quant_rpc.ops.nl_screen import NlScreenHandler
-from quant_rpc.ops.screen_ops import NlToDslHandler, ScreenRunHandler
 from quant_rpc.ops.pattern import FindSimilarPatternsHandler
-from quant_rpc.ops.trading_calendar import GetLatestTradeDayHandler
+from quant_rpc.ops.screen_ops import NlToDslHandler, ScreenRunHandler
 from quant_rpc.ops.sentiment import (
     AnalyzeManyStockSentimentHandler,
     AnalyzeOneStockSentimentHandler,
     GetCachedMarketSentimentHandler,
     GetCachedStockSentimentHandler,
 )
-from quant_rpc.ops.financials import (
-    BulkSyncFinancialsHandler,
-    EnrichFinancialsForCodeHandler,
-    FindStaleFinancialsHandler,
-)
-from quant_rpc.ops.stock_snapshot import ListStockSnapshotsHandler
-from quant_rpc.ops.watch import WatchQuoteOneHandler, WatchUniverseRefreshHandler
 from quant_rpc.ops.stock_meta import (
     GetStockMetaBatchHandler,
     ListAllHandler,
@@ -78,6 +77,10 @@ from quant_rpc.ops.stock_meta_admin import (
     EnrichOneHandler,
     SyncFullHandler,
 )
+from quant_rpc.ops.stock_snapshot import ListStockSnapshotsHandler
+from quant_rpc.ops.ta import AnalyzeTaOneHandler, GetCachedTaOneHandler
+from quant_rpc.ops.trading_calendar import GetLatestTradeDayHandler
+from quant_rpc.ops.watch import WatchQuoteOneHandler, WatchUniverseRefreshHandler
 from quant_rpc.server import QuantFlightServer
 
 
@@ -106,7 +109,7 @@ def main() -> int:
     # per call to decode encrypted params; concurrent first-time
     # instantiation across threads triggers V8's address_pool_manager
     # double-init check and aborts the process.
-    import py_mini_racer  # noqa: PLC0415
+    import py_mini_racer
 
     py_mini_racer.MiniRacer().eval("1+1")
 
@@ -166,6 +169,25 @@ def main() -> int:
         sentiment_service = None
         log.warning("sentiment LLM not configured — analyze ops disabled: %s", exc)
 
+    # ``ta`` (technical-analysis, beta) — Kimi Pro is preferred but the
+    # fallback chain reaches qwen / deepseek if Moonshot is offline.
+    ta_root = root / "ta"
+    ta_cache = ParquetTaCache(ta_root, clock)
+    ta_service: TaService | None
+    try:
+        ta_chain = build_llm_client_chain(prefer_provider="moonshot")
+        ta_service = TaService(
+            llm=ta_chain,
+            kline_service=kline_service,
+            cache=ta_cache,
+            meta_repo=meta_repo,
+            clock=clock,
+        )
+        log.info("ta service ready (chain: %s)", ta_chain.name)
+    except QuantError as exc:
+        ta_service = None
+        log.warning("ta LLM not configured — analyze_ta ops disabled: %s", exc)
+
     registry = HandlerRegistry()
     registry.register(GetStockMetaBatchHandler(meta_service))
     registry.register(ListByIndustryHandler(meta_service))
@@ -185,6 +207,8 @@ def main() -> int:
     registry.register(AnalyzeOneStockSentimentHandler(sentiment_service))
     registry.register(GetCachedMarketSentimentHandler(sentiment_cache, clock))
     registry.register(AnalyzeManyStockSentimentHandler(sentiment_service))
+    registry.register(GetCachedTaOneHandler(ta_cache, clock))
+    registry.register(AnalyzeTaOneHandler(ta_service))
     watch_source = AKShareWatchSource()
     watch_service = WatchQuoteService(quotes=watch_source, universe=watch_source)
     registry.register(WatchQuoteOneHandler(watch_service))

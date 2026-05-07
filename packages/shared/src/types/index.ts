@@ -12,3 +12,4 @@ export * from './sectors.js';
 export * from './sys-cfg.js';
 export * from './markets.js';
 export * from './blacklist.js';
+export * from './ta.js';

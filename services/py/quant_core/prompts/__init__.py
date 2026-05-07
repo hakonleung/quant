@@ -26,6 +26,10 @@ from quant_core.prompts.news_sentiment import (
     build_stock_summarize_user_prompt,
 )
 from quant_core.prompts.nl_to_dsl import build_nl_to_dsl_system_prompt
+from quant_core.prompts.ta_prompts import (
+    build_ta_system_prompt,
+    build_ta_user_prompt,
+)
 
 __all__ = [
     "build_cluster_system_prompt",
@@ -35,4 +39,6 @@ __all__ = [
     "build_stock_search_user_prompt",
     "build_stock_summarize_system_prompt",
     "build_stock_summarize_user_prompt",
+    "build_ta_system_prompt",
+    "build_ta_user_prompt",
 ]

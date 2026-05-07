@@ -1,4 +1,10 @@
-import { analyzeManyAction, analyzeOneAction, sectorShowAction } from '../actions/registry.js';
+import type { TaAnalysis } from '@quant/shared';
+import {
+  analyzeManyAction,
+  analyzeOneAction,
+  analyzeTaAction,
+  sectorShowAction,
+} from '../actions/registry.js';
 import { ANSI, paint } from '../render/ansi.js';
 import type { CommandSpec } from '../registry.js';
 import { confirmPrompt } from '../widgets/confirm-prompt.js';
@@ -16,7 +22,7 @@ import { stockListAction } from '../actions/registry.js';
 export const analyzeCommand: CommandSpec = {
   name: 'analyze',
   summary: 'Analyze a stock or sector via LLM (paid; cached results free).',
-  subcommands: ['sector'],
+  subcommands: ['sector', 'ta'],
   complete(positionalIdx, fragment, ctx) {
     if (positionalIdx === 0) {
       return ctx.stockIndex.complete(fragment).map((m) => ({
@@ -42,6 +48,18 @@ export const analyzeCommand: CommandSpec = {
       }
       const sector = await ctx.actions.run(sectorShowAction, { idOrName }, { signal: ctx.signal });
       return analyzeManyConfirm(ctx, sector.data.codes, sector.data.name, force);
+    }
+
+    if (head === 'ta') {
+      const second = argv.positional[1];
+      // Bare `analyze ta` → guided picker, mirrors bare `analyze`.
+      if (second === undefined) {
+        return interactive(guidedAnalyzeTa(ctx));
+      }
+      if (!/^\d{6}$/u.test(second)) {
+        return textErr('usage: analyze ta [<code>] [--force]');
+      }
+      return analyzeTaFlow(ctx, second, force);
     }
 
     if (!/^\d{6}$/u.test(head)) {
@@ -168,3 +186,91 @@ function formatScore(score: number): string {
 // the imports honest; remove if a future refactor exposes a metadata-free
 // guided picker.
 void stockListAction;
+
+// ---------------------------------------------------------------------------
+// `analyze ta` — pure price/volume technical analysis (Kimi Pro, beta).
+// ---------------------------------------------------------------------------
+
+async function analyzeTaFlow(ctx: Parameters<CommandSpec['run']>[1], code: string, force: boolean) {
+  if (!force) {
+    const r = await ctx.actions.run(analyzeTaAction, { code }, { signal: ctx.signal });
+    return r.cached ? textCached(formatTa(r.data)) : textOk(formatTa(r.data));
+  }
+  const widget = confirmPrompt({
+    title: `analyze ta ${code}  (Kimi Pro, paid)`,
+    body: paint('this will trigger a fresh LLM technical-analysis run', ANSI.gray),
+    danger: true,
+    onYes: () => ({ kind: 'command', line: `analyze ta ${code}` }),
+    onNo: () => canceledResolution,
+  });
+  return interactive(widget);
+}
+
+function guidedAnalyzeTa(ctx: Parameters<CommandSpec['run']>[1]) {
+  // REUSE-CANDIDATE (analyze.ts:104 guidedAnalyze): pick-stock-then-confirm
+  // is now used for both `analyze` and `analyze ta`. If a third caller
+  // shows up, extract a `pickStockWidget(ctx, onPicked)` helper.
+  const items = ctx.stockIndex
+    .all()
+    .slice(0, 200)
+    .map((m) => ({
+      code: m.code,
+      name: m.name,
+      industry: m.industry ?? '',
+    }));
+  return selectableList({
+    title: 'analyze ta: pick stock',
+    items,
+    columns: [
+      { key: 'code', header: 'CODE', max: 8 },
+      { key: 'name', header: 'NAME', max: 14 },
+      { key: 'industry', header: 'IND', max: 10 },
+    ],
+    onCommit: (s) =>
+      widgetResolution(
+        confirmPrompt({
+          title: `analyze ta ${String(s.code)} ${String(s.name)}  (Kimi Pro, paid)`,
+          danger: true,
+          onYes: () => ({ kind: 'command', line: `analyze ta ${String(s.code)} --force` }),
+          onNo: () => canceledResolution,
+        }),
+      ),
+  });
+}
+
+function formatTa(t: TaAnalysis): string {
+  const lines: string[] = [];
+  lines.push(
+    paint(
+      `${t.code} technical analysis (${t.asof}, ${String(t.barsCount)} bars)`,
+      ANSI.bold,
+      ANSI.cyan,
+    ),
+  );
+  const dirColor =
+    t.trend.direction === 'up' ? ANSI.green : t.trend.direction === 'down' ? ANSI.red : ANSI.yellow;
+  lines.push(
+    `trend:      ${paint(t.trend.direction, dirColor)}  (${String(t.trend.horizonDays)}d, conf=${t.trend.confidence.toFixed(2)})`,
+  );
+  if (t.trend.rationale.length > 0) lines.push(`rationale:  ${t.trend.rationale}`);
+  if (t.resistanceLevels.length > 0) {
+    lines.push(paint('resistance:', ANSI.bold));
+    for (const lv of t.resistanceLevels) {
+      lines.push(`  ${paint(lv.price, ANSI.red)}  [${lv.strength}]  ${lv.reason}`);
+    }
+  }
+  if (t.supportLevels.length > 0) {
+    lines.push(paint('support:', ANSI.bold));
+    for (const lv of t.supportLevels) {
+      lines.push(`  ${paint(lv.price, ANSI.green)}  [${lv.strength}]  ${lv.reason}`);
+    }
+  }
+  if (t.patterns.length > 0) {
+    lines.push(`patterns:   ${t.patterns.join(', ')}`);
+  }
+  for (const c of t.caveats) {
+    lines.push(paint(`! ${c}`, ANSI.yellow));
+  }
+  lines.push(paint(`provider:   ${t.provider || '—'}   cachedAt: ${t.cachedAt}`, ANSI.gray));
+  return lines.join('\n');
+}

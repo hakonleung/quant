@@ -37,8 +37,10 @@ import { apiGet, apiPost } from '../api/client.js';
 import {
   analyzeManySentiment,
   analyzeSentiment,
+  analyzeTa,
   getCachedMarketSentiment,
   getCachedSentiment,
+  getCachedTaAnalysis,
   getStockMeta,
   listKline,
   listStockSnapshots,
@@ -82,6 +84,7 @@ export interface LiveRunnerDeps {
 const REVALIDATE_AFTER: Readonly<Record<string, readonly RevalidateScope[]>> = {
   'analyze.one': ['sentiment'],
   'analyze.many': ['sentiment'],
+  'analyze.ta': ['ta'],
   'sector.upsert': ['sectors'],
   'sector.remove': ['sectors'],
   'sector.refreshDynamic': ['sectors'],
@@ -206,6 +209,17 @@ function buildFetchers(deps: LiveRunnerDeps): Record<string, Fetcher> {
       }
       const fresh = await analyzeManySentiment(codes);
       return marketSentimentToTerm(fresh, codes);
+    },
+
+    'analyze.ta': async ({ code, force }: { code: string; force?: boolean }) => {
+      // Cached read first when not forced; on miss or force, hit the
+      // paid POST. Result is the shared `TaAnalysis` shape directly —
+      // no projector layer because the schema is already action-friendly.
+      if (force !== true) {
+        const cached = await getCachedTaAnalysis(code);
+        if (cached !== null) return cached;
+      }
+      return analyzeTa(code, force === true);
     },
 
     'screen.nl': async ({ nl, asof }: { nl: string; asof?: string }) => {
