@@ -6,13 +6,13 @@
 
 ## 适配器
 
-| 文件 | akshare 函数 | 用途 |
-| ---- | ------------ | ---- |
-| `quant_io/sources/akshare_kline.py` | `stock_zh_a_hist` | 日线 + 复权因子 |
-| `quant_io/sources/akshare_watch.py` | `stock_us_hist_min_em`、`stock_zh_a_minute` | 盘中分钟（带 start/end 窗口） |
-| `quant_io/sources/akshare_stock_meta.py` | `stock_info_a_code_name`、`stock_zh_a_spot` 等 | 全市场代码 / 名称 / 上市日期 |
-| `quant_io/sources/akshare_financials.py` | `stock_financial_*` | 财务指标聚合 |
-| `quant_io/sources/_common.py` | — | 重试 / 限流 / 列名归一 |
+| 文件                                     | akshare 函数                                   | 用途                          |
+| ---------------------------------------- | ---------------------------------------------- | ----------------------------- |
+| `quant_io/sources/akshare_kline.py`      | `stock_zh_a_hist`                              | 日线 + 复权因子               |
+| `quant_io/sources/akshare_watch.py`      | `stock_us_hist_min_em`、`stock_zh_a_minute`    | 盘中分钟（带 start/end 窗口） |
+| `quant_io/sources/akshare_stock_meta.py` | `stock_info_a_code_name`、`stock_zh_a_spot` 等 | 全市场代码 / 名称 / 上市日期  |
+| `quant_io/sources/akshare_financials.py` | `stock_financial_*`                            | 财务指标聚合                  |
+| `quant_io/sources/_common.py`            | —                                              | 重试 / 限流 / 列名归一        |
 
 ## 调用约束
 

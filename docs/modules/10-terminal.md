@@ -74,23 +74,53 @@ Disallowed: `engine/` importing `widgets/`, `widgets/` importing
 ```ts
 import {
   // engine
-  reduce, runCommand, initialState,
-  type TerminalState, type Event, type Effect,
-  type InteractiveWidget, type CommitResolution,
+  reduce,
+  runCommand,
+  initialState,
+  type TerminalState,
+  type Event,
+  type Effect,
+  type InteractiveWidget,
+  type CommitResolution,
   // widgets
-  selectableList, formPrompt, confirmPrompt, pasteText, pickStockLoop,
-  interactive, textOk, textErr, textCached, widgetResolution, outputResolution,
+  selectableList,
+  formPrompt,
+  confirmPrompt,
+  pasteText,
+  pickStockLoop,
+  interactive,
+  textOk,
+  textErr,
+  textCached,
+  widgetResolution,
+  outputResolution,
   // render
-  ANSI, paint, stripAnsi, renderTable, sparkline,
+  ANSI,
+  paint,
+  stripAnsi,
+  renderTable,
+  sparkline,
   // completion
-  buildStockIndex, complete, EMPTY_STOCK_INDEX, type StockIndex,
+  buildStockIndex,
+  complete,
+  EMPTY_STOCK_INDEX,
+  type StockIndex,
   // actions
-  getRunner, MockActionRunner, ALL_ACTIONS, findAction,
-  type DataActionConfig, type DataActionRunner,
+  getRunner,
+  MockActionRunner,
+  ALL_ACTIONS,
+  findAction,
+  type DataActionConfig,
+  type DataActionRunner,
   // commands
-  createDefaultRegistry, stockCommand, sectorCommand, /* ... */
+  createDefaultRegistry,
+  stockCommand,
+  sectorCommand /* ... */,
   // registry
-  createRegistry, type CommandRegistry, type CommandSpec, type CommandCtx,
+  createRegistry,
+  type CommandRegistry,
+  type CommandSpec,
+  type CommandCtx,
 } from '@quant/terminal';
 ```
 
@@ -136,26 +166,26 @@ host (apps/web `use-terminal.ts`) consumes the effects:
 
 ## 5. Commands & interactive sub-flows
 
-| Command | Form | Interactive |
-|---|---|---|
-| `help [cmd]`             | text  | — |
-| `clear` / `cls`          | text  | — |
-| `:cache stats / clear`   | text  | — |
-| `stock find <q>`         | interactive | SelectableList → `stock info <code>` |
-| `stock info <code>`      | text  | — |
-| `stock kline <code>`     | text  | — |
-| `sector list`            | interactive | SelectableList; `a` → analyze (paid+confirm), `d` → remove (confirm) |
-| `sector show <id>`       | interactive | members SelectableList; `a` → analyze, `f` → focus |
-| `sector add`             | interactive | form (name) → enum (kind) → user/dynamic flow |
-| `sector refresh <id>`    | text  | — |
-| `sector rm <id>`         | text  | — |
-| `analyze [<code>] [--force]` | text or guided picker | confirm widget for paid path |
-| `analyze sector <id>`    | text or confirm | confirm for `--force` |
-| `screen nl <text>`       | confirm → results list | save matches as dynamic sector |
-| `watch list`             | interactive | SelectableList; `d` → remove (confirm) |
-| `watch add [--flags]`    | text or full form | `code` field is search-style (live picker) |
-| `watch rm <m> <c>`       | text  | — |
-| `focus [<code>]`         | text or picker | — |
+| Command                      | Form                   | Interactive                                                          |
+| ---------------------------- | ---------------------- | -------------------------------------------------------------------- |
+| `help [cmd]`                 | text                   | —                                                                    |
+| `clear` / `cls`              | text                   | —                                                                    |
+| `:cache stats / clear`       | text                   | —                                                                    |
+| `stock find <q>`             | interactive            | SelectableList → `stock info <code>`                                 |
+| `stock info <code>`          | text                   | —                                                                    |
+| `stock kline <code>`         | text                   | —                                                                    |
+| `sector list`                | interactive            | SelectableList; `a` → analyze (paid+confirm), `d` → remove (confirm) |
+| `sector show <id>`           | interactive            | members SelectableList; `a` → analyze, `f` → focus                   |
+| `sector add`                 | interactive            | form (name) → enum (kind) → user/dynamic flow                        |
+| `sector refresh <id>`        | text                   | —                                                                    |
+| `sector rm <id>`             | text                   | —                                                                    |
+| `analyze [<code>] [--force]` | text or guided picker  | confirm widget for paid path                                         |
+| `analyze sector <id>`        | text or confirm        | confirm for `--force`                                                |
+| `screen nl <text>`           | confirm → results list | save matches as dynamic sector                                       |
+| `watch list`                 | interactive            | SelectableList; `d` → remove (confirm)                               |
+| `watch add [--flags]`        | text or full form      | `code` field is search-style (live picker)                           |
+| `watch rm <m> <c>`           | text                   | —                                                                    |
+| `focus [<code>]`             | text or picker         | —                                                                    |
 
 ### Cross-cutting rules
 
@@ -180,8 +210,8 @@ Every data access goes through the action registry:
 interface DataActionConfig<A, R> {
   id: string;
   kind: 'read' | 'write' | 'paid';
-  args: ZodTypeAny;     // schema-validates input at the boundary
-  result: ZodTypeAny;   // schema-validates output (server bug guard)
+  args: ZodTypeAny; // schema-validates input at the boundary
+  result: ZodTypeAny; // schema-validates output (server bug guard)
   cacheKey?: (a) => readonly (string | number | boolean)[];
   invalidates?: (a) => readonly (readonly KeyParts)[][];
 }
@@ -198,14 +228,21 @@ interface DataActionRunner {
 `sector.list / .show / .upsert / .remove / .refreshDynamic`, `analyze.one
 / .many`, `screen.nl`, `watch.list / .upsert / .remove`.
 
-**MockActionRunner** is the default in M1: it reads in-memory fixtures
-(200 sample stocks + working sector / watch state), persists reads to a
-TTL+LRU cache backed by `localStorage` (`tm.cache.<hash>`), and resolves
-write/paid actions synchronously. Latency can be simulated via the
-constructor's `latencyRange` option.
+**MockActionRunner** reads in-memory fixtures (200 sample stocks + working
+sector / watch state), persists reads to a TTL+LRU cache backed by
+`localStorage` (`tm.cache.<hash>`), and resolves write/paid actions
+synchronously. Latency can be simulated via the constructor's
+`latencyRange` option.
 
-A `LiveActionRunner` can be added in the same `actions/` directory and
-selected via `getRunner()`'s `tm.runner` switch (M2).
+**LiveActionRunner** ships in `apps/web/lib/term/live-runner.ts` (commit
+3fff934). It calls real `/api/*` endpoints per action id, then runs a
+`REVALIDATE_AFTER` table that maps action ids → react-query queryKey
+prefixes + zustand store fetches. Today the table covers
+`analyze.{one,many}` (sentiment), `sector.{upsert,remove,refreshDynamic}`
+(sectors), and `watch.{upsert,remove}` (no-op; SSE re-pushes within ~1s).
+
+Switch via `localStorage.setItem('tm.runner', 'mock')` for fixtures;
+remove the key (or set anything else) to use live (default).
 
 ---
 
@@ -242,19 +279,19 @@ built once at terminal mount via `stock.list`.
 
 Beyond the standard prompt-line editing, the package recognizes:
 
-| Key                                  | Action                       |
-|--------------------------------------|------------------------------|
-| `Ctrl+A` / `Cmd+Left`                | jump to line start           |
-| `Ctrl+E` / `Cmd+Right`               | jump to line end             |
-| `Ctrl+U` / `Cmd+Backspace`           | delete to line start         |
-| `Ctrl+K`                             | delete to line end           |
-| `Ctrl+W` / `Alt+Backspace` / `Opt+⌫` | delete previous word         |
-| `Alt+B` / `Ctrl+Left` / `Opt+←`      | jump one word to the left    |
-| `Alt+F` / `Ctrl+Right` / `Opt+→`     | jump one word to the right   |
-| `Ctrl+L`                             | clear scrollback             |
+| Key                                  | Action                         |
+| ------------------------------------ | ------------------------------ |
+| `Ctrl+A` / `Cmd+Left`                | jump to line start             |
+| `Ctrl+E` / `Cmd+Right`               | jump to line end               |
+| `Ctrl+U` / `Cmd+Backspace`           | delete to line start           |
+| `Ctrl+K`                             | delete to line end             |
+| `Ctrl+W` / `Alt+Backspace` / `Opt+⌫` | delete previous word           |
+| `Alt+B` / `Ctrl+Left` / `Opt+←`      | jump one word to the left      |
+| `Alt+F` / `Ctrl+Right` / `Opt+→`     | jump one word to the right     |
+| `Ctrl+L`                             | clear scrollback               |
 | `Tab`                                | command / parameter completion |
-| `Up` / `Down` (idle)                 | command history recall       |
-| `Esc` / `Ctrl+C`                     | cancel current widget chain  |
+| `Up` / `Down` (idle)                 | command history recall         |
+| `Esc` / `Ctrl+C`                     | cancel current widget chain    |
 
 Browser-swallowed shortcuts (Cmd/Alt+Arrow on macOS) are caught via
 xterm's `attachCustomKeyEventHandler` and translated by
@@ -307,10 +344,10 @@ pnpm --filter @quant/terminal test:cov   # 90% lines / 80% branches gate
 
 ## 12. Roadmap
 
-- **M1 (current)** — mock runner, full UX flows, 186 tests green, Next.js
-  host wired with cyber theme + Monaspace + Tab completion.
-- **M2** — `LiveActionRunner` bridging react-query (`qc.fetchQuery`) and
-  the project's `endpoints.ts`; `tm.runner = 'live'` switch.
+- **M1 ✅** — mock runner, full UX flows, 186 tests green, Next.js host
+  wired with cyber theme + Monaspace + Tab completion.
+- **M2 ✅** — `LiveActionRunner` against `endpoints.ts` + cross-cache
+  revalidation table; `tm.runner` switch.
 - **M3** — extract a generic `@quant/terminal-core` (engine + widgets +
   render + completion) and keep `@quant/terminal-quant` for actions /
   commands. Allow third-party hosts to ship their own command surfaces.

@@ -7,16 +7,25 @@
 
 ## 实现
 
-| 层 | 位置 | 说明 |
-| -- | ---- | ---- |
-| Types | `quant_core/domain/types/sentiment.py` | `StockSentiment`、`MarketSentiment`、主题、趋势 |
-| Service | `quant_core/services/news_sentiment_service.py` | 单次 LLM 调用（带 web_search 工具）+ 结构化输出 |
-| Prompt | `quant_core/prompts/sentiment_*.md` | system prompt + few-shot |
-| LLM client | `quant_io/llm/openai_compatible.py`、`deepseek_client.py` | OpenAI-compat（Kimi / DeepSeek / 通义） |
-| Cache | `quant_cache/parquet_sentiment_cache.py` | 按 `(code 或 codes_hash, run_date)` 写入 Parquet |
-| RPC | `quant_rpc/ops/sentiment.py` | Arrow Flight |
-| API | `apps/api/src/modules/sentiment/` | `POST /sentiment/stock`、`POST /sentiment/market` |
-| Web | `feat-ai-out`、`feat-ai-md`、`feat-ai-hist` | 渲染 markdown + 历史回看 |
+| 层         | 位置                                                      | 说明                                                                               |
+| ---------- | --------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| Types      | `quant_core/domain/types/sentiment.py`                    | `StockSentiment`、`MarketSentiment`、主题、趋势                                    |
+| Service    | `quant_core/services/news_sentiment_service.py`           | 单次 LLM 调用（带 web_search 工具）+ 结构化输出                                    |
+| Prompt     | `quant_core/prompts/sentiment_*.md`                       | system prompt + few-shot                                                           |
+| LLM client | `quant_io/llm/openai_compatible.py`、`deepseek_client.py` | OpenAI-compat（Kimi / DeepSeek / 通义）                                            |
+| Cache      | `quant_cache/parquet_sentiment_cache.py`                  | 按 `(code 或 codes_hash, run_date)` 写入 Parquet                                   |
+| RPC        | `quant_rpc/ops/sentiment.py`                              | 见下表                                                                             |
+| API        | `apps/api/src/modules/sentiment/`                         | `GET/POST /api/sentiment/analyze_one`、`/analyze_many`（cache 读 + paid 写各一路） |
+| Web        | `feat-ai-out`、`feat-ai-md`、`feat-ai-hist`               | 渲染 markdown + 市场层快照                                                         |
+
+## Flight ops
+
+| op                             | 用途                    |
+| ------------------------------ | ----------------------- |
+| `get_cached_stock_sentiment`   | 仅读缓存，不打 LLM      |
+| `analyze_one_stock_sentiment`  | 强制刷新（paid）—— 单股 |
+| `get_cached_market_sentiment`  | 仅读缓存（多股聚合）    |
+| `analyze_many_stock_sentiment` | 强制刷新（paid）—— 多股 |
 
 ## 缓存策略
 

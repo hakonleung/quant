@@ -9,20 +9,20 @@
 
 ## 适配器
 
-| 文件 | 说明 |
-| ---- | ---- |
-| `quant_core/ports/llm_client.py` | 抽象：`chat(messages, schema?, tools?) -> Result` |
+| 文件                                | 说明                                              |
+| ----------------------------------- | ------------------------------------------------- |
+| `quant_core/ports/llm_client.py`    | 抽象：`chat(messages, schema?, tools?) -> Result` |
 | `quant_io/llm/openai_compatible.py` | 默认实现，支持流式 / 结构化输出 / web_search 工具 |
-| `quant_io/llm/deepseek_client.py` | DeepSeek 特化（rate limit / 工具语义微调） |
-| `quant_io/llm/providers.py` | 工厂：从 `.env` 选 provider + 构造 client |
+| `quant_io/llm/deepseek_client.py`   | DeepSeek 特化（rate limit / 工具语义微调）        |
+| `quant_io/llm/providers.py`         | 工厂：从 `.env` 选 provider + 构造 client         |
 
 ## 已验证 provider
 
-| Provider | 模型 | 用途 | 备注 |
-| -------- | ---- | ---- | ---- |
-| Kimi (Moonshot) | `kimi-k2-*` | sentiment 主路径 | 内置 web_search |
-| DeepSeek | `deepseek-chat` | NL2DSL 主路径 | 便宜稳定 |
-| Qwen / 通义 | — | 实验中（`scripts/try_qwen_search.py`） | |
+| Provider        | 模型            | 用途                                   | 备注            |
+| --------------- | --------------- | -------------------------------------- | --------------- |
+| Kimi (Moonshot) | `kimi-k2-*`     | sentiment 主路径                       | 内置 web_search |
+| DeepSeek        | `deepseek-chat` | NL2DSL 主路径                          | 便宜稳定        |
+| Qwen / 通义     | —               | 实验中（`scripts/try_qwen_search.py`） |                 |
 
 切换通过 `.env` 中 `LLM_PROVIDER` + 对应 API key 完成；业务代码不感知。
 

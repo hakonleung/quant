@@ -11,7 +11,8 @@
 - **NestJS 10** — HTTP 网关 / cron + 内存队列编排
 - **Python 3.11** — 计算 / 数据 IO / LLM 调用
 - 跨进程：**Apache Arrow Flight (gRPC)**
-- 缓存：**Parquet + DuckDB + 本地 KV**（v1 无 Redis、无外部 DB）
+- 缓存：**Parquet + DuckDB + 本地文件 KV**（v1 无 Redis、无外部 DB）
+- 终端：`@quant/terminal` 纯 TS 命令引擎 + `feat-term-main` 的 xterm.js 宿主（CRT 风 `TERM.MAIN`）
 
 ## 前置环境
 
@@ -29,7 +30,7 @@ pnpm install
 uv sync
 
 cp .env.example .env
-# 填入 LLM provider 与 API key（akshare 无需 key）
+# 填入 LLM provider 与 API key（akshare 无需 key；Slack webhook 可选）
 ```
 
 ## 日常开发
@@ -54,6 +55,7 @@ uv run python -m quant_rpc
 pnpm --filter @quant/web test:cov
 pnpm --filter @quant/api test:cov
 pnpm --filter @quant/shared test:cov
+pnpm --filter @quant/terminal test:cov
 uv run pytest services/py/tests --cov=services/py
 
 # 全量门禁（CI 必跑）
@@ -77,44 +79,47 @@ pnpm check
 
 ```
 apps/
-  web/             Next.js（UI）
-  api/             NestJS（HTTP 网关 + cron + 内存队列）
+  web/             Next.js 14（UI；feats + xterm.js 终端宿主）
+  api/             NestJS 10（HTTP 网关 + BJT cron + 内存队列）
 packages/
   shared/          跨 app 共享类型 / zod / 错误（核心资产，禁 IO）
+  terminal/        @quant/terminal — 纯 TS 命令引擎 + 渲染 + 动作注册表
   ui/              React 共享组件
 services/
   py/
-    quant_core/    domain + services + ports + adapters
-    quant_io/      外部数据源 adapter（akshare、LLM、Slack）
-    quant_cache/   Parquet / KV 读取（DuckDB）
-    quant_rpc/     Arrow Flight server
-proto/             跨进程契约（errors.json + codegen）
+    quant_core/    domain / services / ports / adapters（核心资产 = domain/）
+    quant_io/      外部数据源 adapter（akshare、OpenAI-compat LLM、Slack）
+    quant_cache/   Parquet repos + DuckDB 读取 + FileKeyValueStore
+    quant_rpc/     Arrow Flight server + ops 注册表
+proto/             跨进程契约（errors.json + codegen → Py / TS）
 data/              本地缓存（gitignore）
 docs/              工程文档
 ```
 
 ## 文档导航
 
-| 路径                              | 内容                                    |
-| --------------------------------- | --------------------------------------- |
-| `CLAUDE.md`                       | 工程规约（**最高指令**）                |
-| `docs/architecture.md`            | 进程拓扑 + 数据流 + 部署                |
-| `docs/glossary.md`                | 术语表                                  |
-| `docs/requirements.md`            | 需求 / 用户故事                         |
-| `docs/modules/01-stock-meta.md`   | 股票元信息                              |
-| `docs/modules/02-kline.md`        | K 线 + 预计算 MA / 前复权               |
-| `docs/modules/03-screen.md`       | 选股 DSL + NL2DSL                       |
-| `docs/modules/04-pattern.md`      | 形态匹配 (DTW)                          |
-| `docs/modules/05-sentiment.md`    | 新闻舆情 (LLM web_search)               |
-| `docs/modules/06-watch.md`        | 自选盯盘                                |
-| `docs/modules/07-orchestration.md`| 后台 cron + 内存队列                    |
-| `docs/modules/08-frontend.md`     | 前端 Feat 框架                          |
-| `docs/modules/09-notifications.md`| 通知（Slack）                           |
-| `docs/integrations/data-sources.md`  | akshare 适配                         |
-| `docs/integrations/llm-providers.md` | LLM provider 抽象                    |
-| `docs/integrations/ipc-py-ts.md`     | Arrow Flight 通信                    |
-| `docs/integrations/cache-strategy.md`| 文件缓存原语 + 不变量                |
-| `docs/rfcs/`                      | 历史 RFC（DSL / 增量 / IPC 设计）       |
+| 路径                                  | 内容                                      |
+| ------------------------------------- | ----------------------------------------- |
+| `CLAUDE.md`                           | 工程规约（**最高指令**）                  |
+| `docs/architecture.md`                | 进程拓扑 + 数据流 + 部署 + 版本           |
+| `docs/glossary.md`                    | 术语表                                    |
+| `docs/requirements.md`                | 需求 / 用户故事                           |
+| `docs/modules/01-stock-meta.md`       | 股票元信息                                |
+| `docs/modules/02-kline.md`            | K 线 + 预计算 MA / 前复权 + range 预设    |
+| `docs/modules/03-screen.md`           | 选股 DSL + NL2DSL（解耦后双 op）          |
+| `docs/modules/04-pattern.md`          | 形态匹配（DTW，全宇宙 + similarity rank） |
+| `docs/modules/05-sentiment.md`        | 新闻舆情（LLM web_search，paid vs cache） |
+| `docs/modules/06-watch.md`            | 自选盯盘（pct/abs 条件 + 边沿触发）       |
+| `docs/modules/07-orchestration.md`    | BJT 15:15 cron + 内存队列                 |
+| `docs/modules/08-frontend.md`         | 前端 Feat 框架 + Feat 列表                |
+| `docs/modules/09-notifications.md`    | 通知（Slack 纯文本 mrkdwn）               |
+| `docs/modules/10-terminal.md`         | `@quant/terminal` + `TERM.MAIN`           |
+| `docs/modules/12-blacklist.md`        | A 股噪音黑名单（cron + sector-all 过滤）   |
+| `docs/integrations/data-sources.md`   | akshare 适配                              |
+| `docs/integrations/llm-providers.md`  | LLM provider 抽象                         |
+| `docs/integrations/ipc-py-ts.md`      | Arrow Flight 通信 + op 清单               |
+| `docs/integrations/cache-strategy.md` | 文件缓存原语 + 不变量                     |
+| `docs/rfcs/`                          | 历史 RFC（DSL / 增量 / IPC 设计）         |
 
 ## 开发流程
 
@@ -124,4 +129,5 @@ docs/              工程文档
 2. 实现（按 §1 风格 + §2 模块化）
 3. `test-generator` 生成测试 + `run-tests` 跑绿
 4. 必要时调 `code-reviewer`
-5. 交付汇报含变更清单 + 测试结果（+ review 结论）
+5. 文档同步：单次涉及多模块或 milestone 收尾时调 `doc-updater`（连续 5 个 commit 未碰 docs/ 也会自动提醒）
+6. 交付汇报含变更清单 + 测试结果（+ review 结论）

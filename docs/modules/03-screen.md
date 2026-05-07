@@ -8,17 +8,17 @@
 
 ## 实现
 
-| 层 | 位置 | 说明 |
-| -- | ---- | ---- |
-| Types | `quant_core/domain/types/screen.py`、`packages/shared/src/types/nl-screen.ts` | AST 节点（Predicate / Compare / Aggregate / Set） |
-| Parse / Compile / Eval | `quant_core/domain/rules/screen_parse.py`、`screen_compile.py`、`screen_eval.py` | 纯函数，无 IO |
-| Universe | `quant_core/domain/rules/universe_parse.py`、`services/universe_screen_service.py` | 宇宙过滤（剔除 ST / 北交所 / 停牌） |
-| Pipeline | `quant_core/services/screening_pipeline.py` | 多阶段编排 |
-| Execute | `quant_core/services/screen_service.py` | 读 K 线 → 求值 → RecordBatch |
-| NL2DSL | `quant_core/services/nl_to_dsl_service.py` + `quant_core/prompts/nl_to_dsl.md` | OpenAI compat，结构化输出 |
-| RPC | `quant_rpc/ops/screen_ops.py`（`nl_to_dsl` + `screen_run`）、`nl_screen.py`（legacy 合并 op） | 解耦后 NL→DSL 与 DSL 执行各一个 op；legacy 保留兼容 |
-| API | `apps/api/src/modules/screen/` | `POST /api/screen/nl2dsl`（NL→DSL）、`POST /api/screen/run`（执行 DSL）、`POST /api/screen/nl`（legacy 合并） |
-| Web | `feat-scr-nl` + `app/api/screen/{nl2dsl,run}/route.ts` | BFF 双路代理；编辑后的 plan 重跑可跳过 LLM |
+| 层                     | 位置                                                                                                 | 说明                                                                                                          |
+| ---------------------- | ---------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| Types                  | `quant_core/domain/types/screen.py`、`packages/shared/src/types/nl-screen.ts`                        | AST 节点（Predicate / Compare / Aggregate / Set）                                                             |
+| Parse / Compile / Eval | `quant_core/domain/rules/screen_parse.py`、`screen_compile.py`、`screen_eval.py`                     | 纯函数，无 IO                                                                                                 |
+| Universe               | `quant_core/domain/rules/universe_parse.py`、`services/universe_screen_service.py`                   | 宇宙过滤（剔除 ST / 北交所 / 停牌）                                                                           |
+| Pipeline               | `quant_core/services/screening_pipeline.py`                                                          | 多阶段编排                                                                                                    |
+| Execute                | `quant_core/services/screen_service.py`                                                              | 读 K 线 → 求值 → RecordBatch                                                                                  |
+| NL2DSL                 | `quant_core/services/nl_to_dsl_service.py` + `quant_core/prompts/nl_to_dsl.md`                       | OpenAI compat，结构化输出                                                                                     |
+| RPC                    | `quant_rpc/ops/screen_ops.py`（`nl_to_dsl` + `screen_run`）、`nl_screen.py`（legacy 合并 op）        | 解耦后 NL→DSL 与 DSL 执行各一个 op；legacy 保留兼容                                                           |
+| API                    | `apps/api/src/modules/screen/`                                                                       | `POST /api/screen/nl2dsl`（NL→DSL）、`POST /api/screen/run`（执行 DSL）、`POST /api/screen/nl`（legacy 合并） |
+| Web                    | `feat-scr-nl`（自然语言入口）、`feat-scr-dsl`（DSL 编辑器） + `app/api/screen/{nl2dsl,run}/route.ts` | BFF 双路代理；编辑后的 plan 重跑可跳过 LLM                                                                    |
 
 ## DSL 规约
 
