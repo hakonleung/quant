@@ -54,6 +54,9 @@ data/watch/tasks.json
 data/sectors/
 data/sys-cfg/
 data/ta/
+# Cron-managed A-share noise filter (BL trigger / 15:15 BJT cron).
+# Regenerated on demand; never source-tracked.
+data/blacklist.json
 # Kline parquet cache: per-code parquet files + the bundled kline.zip
 # archive are regenerated locally by ParquetKlineRepo / scripts/pack_kline.py.
 # kline.zip is too large for GitHub (>100MB), so the whole dir stays untracked.
