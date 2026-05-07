@@ -46,7 +46,17 @@ pnpm --filter @quant/api dev
 uv run python -m quant_rpc
 ```
 
-或一把启动：`./scripts/dev.sh`。
+或一把启动：
+
+```bash
+./scripts/dev.sh                  # 前台跑全部，Ctrl-C 关闭（pnpm dev）
+pnpm dev:start                    # 后台跑全部 + Redis；shell 立即返回
+pnpm dev:status                   # 看每个服务的 PID / 存活
+pnpm dev:stop                     # 一键关闭后台服务
+pnpm dev:restart                  # = stop + start
+```
+
+后台模式日志写到 `.logs/{redis,py,api,web}.log`，pid 文件在 `.logs/<svc>.pid`。`--with-redis` 走脚本管理的本地 redis-server（依 `CHANNEL_REDIS_URL` 取端口）；如果你用 `brew services start redis` 自己管，去掉 `--with-redis` 即可。
 
 ## 跑测试 / 门禁
 

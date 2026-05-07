@@ -12,6 +12,10 @@
     "dev": "bash scripts/dev.sh",
     "dev:py": "bash scripts/dev.sh --py-only",
     "dev:ts": "bash scripts/dev.sh --ts-only",
+    "dev:start": "bash scripts/dev.sh start --with-redis",
+    "dev:stop": "bash scripts/dev.sh stop --with-redis",
+    "dev:status": "bash scripts/dev.sh status --with-redis",
+    "dev:restart": "bash scripts/dev.sh restart --with-redis",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint": "eslint .",
@@ -28,6 +32,7 @@
     "py:test:cov": "uv run pytest services/py/tests -q --cov=services/py --cov=proto --cov-branch --cov-report=term-missing --cov-fail-under=90",
     "gen:proto": "uv run python -m proto.codegen",
     "gen:proto:check": "uv run python -m proto.codegen --check",
+    "pack:kline": "uv run python scripts/pack_kline.py",
     "check": "pnpm gen:proto:check && pnpm format:check && pnpm lint && pnpm typecheck && pnpm test:cov && pnpm py:format:check && pnpm py:lint && pnpm py:typecheck && pnpm py:test:cov"
   },
   "devDependencies": {

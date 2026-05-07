@@ -80,8 +80,10 @@
 
 ## 六、验证手册（end-to-end）
 
-1. 启动 Redis：`redis-server &`。
-2. `apps/api/.env`：`CHANNEL_ENABLED=`（先空，dry-run）；启 `pnpm dev:ts`。
+1. 启动 Redis（任选）：
+   - `pnpm dev:start`（脚本附带 `--with-redis`，自己拉一个本地 redis-server）；或
+   - `brew services start redis` 由 brew 守护，配 `pnpm dev` 不带 `--with-redis`。
+2. `apps/api/.env`：`CHANNEL_ENABLED=`（先空，dry-run）；前台 `pnpm dev:ts` 或后台 `pnpm dev:start`。
 3. 浏览器访问 `http://localhost:3000`，DevTools → Network → WS 应能看到一条 socket.io 长连。
 4. `feat-watch-live` 1Hz 列表更新，`SYS.STAT` 队列动态正常。
 5. 添加一个 always-true watch task → `feat-channel` 出现 `pending` 行，几十毫秒内变 `dryrun`（无凭据时）或 `sent`。
