@@ -42,12 +42,14 @@ docs/rfcs/*.md                      — historical; only edit the status banner 
 ## Procedure
 
 1. **Gather signals**
+
    ```bash
    git status -s
    git log --oneline -5
    git log -p -5 --stat -- 'apps/' 'services/' 'packages/' 'proto/'
    git diff HEAD -- 'apps/' 'services/' 'packages/' 'proto/'
    ```
+
    Skip pure-test / pure-style changes — they don't shift docs.
 
 2. **Classify each change** into one of:

@@ -61,7 +61,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "echo '{\"hookSpecificOutput\":{\"hookEventName\":\"Stop\",\"additionalContext\":\"Reminder: if any src/ or tests/ file changed this session, you must have run /auto-review (style, type, tests, code-reviewer agent). Verify before ending.\"}}'"
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/post_stop_remind_docs.sh"
           }
         ]
       }
