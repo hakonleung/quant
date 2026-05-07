@@ -54,10 +54,10 @@ export function createRevalidate(qc: QueryClient): (scope: RevalidateScope) => v
           /* best-effort — leave the local store untouched on error */
         });
     }
-    // 'watch' is intentionally a no-op: the watch state is SSE-driven
-    // (`/api/watch/stream`), and the next snapshot will arrive within
-    // ~1s of the gateway accepting the write. Including the scope in
-    // the union keeps the API symmetric for callers and lets us
-    // wire a cache here later if needed.
+    // 'watch' is intentionally a no-op: the watch state is socket-driven
+    // (`watch.snapshot` topic on the Socket.IO bus), and the next
+    // snapshot will arrive within ~1s of the gateway accepting the
+    // write. Including the scope in the union keeps the API symmetric
+    // for callers and lets us wire a cache here later if needed.
   };
 }

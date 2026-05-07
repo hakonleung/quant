@@ -1,10 +1,9 @@
 /**
- * Live `QueueSnapshot` over the unified Socket.IO bus.
- *
- * Replaces the old `EventSource('/api/orchestration/queue/stream')`
- * (modules/07-frontend.md §SSE addendum). The shape returned to
- * consumers is unchanged — `useQueueStream()` callers are agnostic to
- * the underlying transport.
+ * Live `QueueSnapshot` over the unified Socket.IO bus
+ * (`docs/modules/12-socket.md`). Replaces the old
+ * `EventSource('/api/orchestration/queue/stream')` SSE consumer; the
+ * exposed shape is unchanged so callers stay agnostic to the
+ * underlying transport.
  */
 
 'use client';

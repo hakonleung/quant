@@ -4,7 +4,7 @@
  * Top bar — brand mark + SYS.STAT (live capsules) + SYS.CFG (settings).
  *
  * SYS.STAT used to live at the bottom of the page; mounting it here
- * keeps the live SSE / queue / mem / fps capsules in the user's eye
+ * keeps the live WS / queue / mem / fps capsules in the user's eye
  * line at all times.
  *
  * SYS.CFG is the catch-all for persisted UI settings — blacklist and

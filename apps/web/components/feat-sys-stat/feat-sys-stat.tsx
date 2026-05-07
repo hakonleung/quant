@@ -11,7 +11,7 @@
  *
  * Capsules at a glance:
  *
- *   1. SSE   — live | connecting | lost
+ *   1. WS    — Socket.IO connection: live | connecting | lost
  *   2. IDB   — local-storage backend identifier
  *   3. meta  — `inFlight/pending` (always visible; 0/0 when idle)
  *   4. kline — `inFlight/pending`
@@ -22,9 +22,10 @@
  *
  * Manual scan triggers are **fire-and-forget**: clicking META / KLINE
  * posts to `/api/orchestration/scan`, the gateway returns 202 Accepted
- * within a few ms, and progress shows up via the SSE stream's pending
- * counters. The button itself flashes briefly on submit; long-running
- * work surfaces in the queue capsule, not the button.
+ * within a few ms, and progress shows up via the queue.snapshot socket
+ * topic's pending counters. The button itself flashes briefly on
+ * submit; long-running work surfaces in the queue capsule, not the
+ * button.
  */
 
 import { Box, Flex, Text } from '@chakra-ui/react';
@@ -50,15 +51,15 @@ export function FeatSysStat(): React.ReactElement {
   const fps = useFps();
   const memMb = useMemoryMb();
 
-  const sseColor =
+  const wsColor =
     stream.status === 'open' ? 'term.green' : stream.status === 'error' ? 'term.red' : 'term.amber';
-  const sseGlyph = stream.status === 'open' ? '●' : stream.status === 'error' ? '✘' : '○';
+  const wsGlyph = stream.status === 'open' ? '●' : stream.status === 'error' ? '✘' : '○';
 
   const queues: readonly QueueSnapshotEntry[] = stream.snapshot?.queues ?? [];
   const meta = queues.find((q) => q.name === 'meta') ?? null;
   const kline = queues.find((q) => q.name === 'kline') ?? null;
 
-  // Edge-trigger: when the SSE-reported active-scan list transitions
+  // Edge-trigger: when the socket-reported active-scan list transitions
   // away from including 'blacklist' / 'all', the cron has just finished
   // refreshing data/blacklist.json — invalidate the client-side query
   // so the synthetic "全 A" sector picks up the new filter immediately
@@ -78,9 +79,9 @@ export function FeatSysStat(): React.ReactElement {
       feat={Feat.SysStat}
       right={
         <Flex gap="14px" align="center" fontFamily="mono" fontSize="10px" letterSpacing="0.14em">
-          <Capsule code="SSE">
-            <Text as="span" color={sseColor}>
-              {sseGlyph}
+          <Capsule code="WS">
+            <Text as="span" color={wsColor}>
+              {wsGlyph}
             </Text>
           </Capsule>
           <Capsule code="IDB">
@@ -168,7 +169,7 @@ function QueueCapsule({
 }): React.ReactElement {
   const counterColor = queue === null ? 'term.ink3' : queue.paused ? 'term.amber' : 'term.red';
   // Label highlight priority: server-confirmed scanning > local 1s
-  // submit flash > idle. Server "scanning" wins because the SSE
+  // submit flash > idle. Server "scanning" wins because the socket
   // payload is the truth — even if the user landed on the page
   // mid-scan (no recent click), they should see the indicator.
   const labelColor = scanning || scan.flashing ? 'term.amber' : 'term.green';
@@ -206,7 +207,7 @@ function QueueCapsule({
 }
 
 /**
- * Whether the SSE-reported active-scan list covers the given queue.
+ * Whether the socket-reported active-scan list covers the given queue.
  * `'all'` counts as both meta and kline since it fans out to both.
  */
 function isScanning(

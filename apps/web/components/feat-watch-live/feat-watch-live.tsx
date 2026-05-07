@@ -3,7 +3,8 @@
 /**
  * Watch (W-0) pane (`docs/modules/W-0-watch.md` §11).
  *
- * Subscribes to `/api/watch/stream` (SSE, 1 Hz) for live task state.
+ * Subscribes to the `watch.snapshot` Socket.IO topic (1 Hz) for live
+ * task state — see `docs/modules/12-socket.md`.
  * The add form is permanent at the top — no toggle. The task list is
  * grouped by condition signature (tasks with identical conditions
  * collapse into one block); each group header has a checkbox that

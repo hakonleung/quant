@@ -69,7 +69,7 @@ describe('createRevalidate', () => {
     }
   });
 
-  it('"watch" is a no-op (SSE-driven; no react-query keys to evict)', () => {
+  it('"watch" is a no-op (socket-driven; no react-query keys to evict)', () => {
     const { client, invalidated } = fakeClient();
     const revalidate = createRevalidate(client);
     revalidate('watch');
