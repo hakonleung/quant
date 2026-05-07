@@ -53,7 +53,11 @@ export function MiniKline({ bars, cols = 36, rows = 6 }: Props): React.ReactElem
 
   const grid = drawStepChart(closes, rows, window.length);
   const yLabels = buildYLabels(lo, hi, rows);
-  const xLabels = buildXLabels(window.map((b) => b.date), X_TICKS, window.length);
+  const xLabels = buildXLabels(
+    window.map((b) => b.date),
+    X_TICKS,
+    window.length,
+  );
 
   return (
     <Box fontFamily="mono" fontSize="10px" color="term.green" lineHeight="1.05">
@@ -114,17 +118,11 @@ export function MiniKline({ bars, cols = 36, rows = 6 }: Props): React.ReactElem
 
 /* ---------- step-line plotter ---------- */
 
-function drawStepChart(
-  values: readonly number[],
-  rows: number,
-  cols: number,
-): string[][] {
+function drawStepChart(values: readonly number[], rows: number, cols: number): string[][] {
   const lo = Math.min(...values);
   const hi = Math.max(...values);
   const span = hi - lo || 1;
-  const heights = values
-    .slice(0, cols)
-    .map((v) => Math.round((1 - (v - lo) / span) * (rows - 1)));
+  const heights = values.slice(0, cols).map((v) => Math.round((1 - (v - lo) / span) * (rows - 1)));
 
   const grid: string[][] = Array.from({ length: rows }, () => Array(cols).fill(' '));
 

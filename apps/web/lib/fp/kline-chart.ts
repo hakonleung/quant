@@ -107,10 +107,7 @@ export function buildMaPath(
  * Returns `null` when the latest bar is missing or when the inputs are
  * the same bar (so the UI can suppress the `Δ` label cleanly).
  */
-export function pctChangeToLatest(
-  bars: readonly KlineBar[],
-  index: number,
-): number | null {
+export function pctChangeToLatest(bars: readonly KlineBar[], index: number): number | null {
   const last = bars[bars.length - 1];
   const bar = bars[index];
   if (last === undefined || bar === undefined) return null;

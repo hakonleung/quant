@@ -17,8 +17,8 @@
 
 import { Box, Flex, HStack, Text } from '@chakra-ui/react';
 
-import { FeatSysCfg } from "../feat-sys-cfg/feat-sys-cfg.js";
-import { FeatSysStat } from "../feat-sys-stat/feat-sys-stat.js";
+import { FeatSysCfg } from '../feat-sys-cfg/feat-sys-cfg.js';
+import { FeatSysStat } from '../feat-sys-stat/feat-sys-stat.js';
 
 export function TopBar(): React.ReactElement {
   return (
@@ -50,11 +50,7 @@ function Brand(): React.ReactElement {
       <Box lineHeight="1.1">
         <HStack gap="0" align="baseline">
           <Text as="span">qX//OS</Text>
-          <Text
-            as="span"
-            ml="4px"
-            css={{ animation: 'blink 1s steps(1) infinite' }}
-          >
+          <Text as="span" ml="4px" css={{ animation: 'blink 1s steps(1) infinite' }}>
             _
           </Text>
         </HStack>

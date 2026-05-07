@@ -10,10 +10,8 @@ export async function GET(request: Request, { params }: Params): Promise<Respons
   const { code } = await params;
   const traceId = readTrace(request);
   try {
-    const dto = await nestJson(
-      request,
-      `/api/stocks/${encodeURIComponent(code)}`,
-      (raw) => StockMetaDtoSchema.parse(raw),
+    const dto = await nestJson(request, `/api/stocks/${encodeURIComponent(code)}`, (raw) =>
+      StockMetaDtoSchema.parse(raw),
     );
     return Response.json(dto, { headers: { [TRACE_HEADER]: traceId } });
   } catch (err) {

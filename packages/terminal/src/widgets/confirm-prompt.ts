@@ -51,9 +51,7 @@ function renderBody(cfg: ConfirmConfig, state: ConfirmState, width: number): str
   const yes = state.selectedYes
     ? paint(' YES ', cfg.danger === true ? ANSI.bgRed : ANSI.bgGreen, ANSI.bold)
     : paint(' YES ', ANSI.gray);
-  const no = !state.selectedYes
-    ? paint(' NO ', ANSI.bgGray, ANSI.bold)
-    : paint(' NO ', ANSI.gray);
+  const no = !state.selectedYes ? paint(' NO ', ANSI.bgGray, ANSI.bold) : paint(' NO ', ANSI.gray);
   const lines: string[] = [head];
   if (body.length > 0) lines.push(body);
   lines.push(`${yes}    ${no}`);

@@ -38,7 +38,7 @@ import { useEffect, useRef, useState } from 'react';
 
 import { Feat } from '../../lib/eqty/feat.js';
 import { useQueueStream } from '../../lib/hooks/use-queue-stream.js';
-import { FeatView } from "../feat-view/feat-view.js";
+import { FeatView } from '../feat-view/feat-view.js';
 
 export function FeatSysStat(): React.ReactElement {
   const stream = useQueueStream();

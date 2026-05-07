@@ -8,11 +8,7 @@
  */
 
 import { Inject, Injectable } from '@nestjs/common';
-import {
-  QuantError,
-  type StockMetaDto,
-  type StockSnapshotDto,
-} from '@quant/shared';
+import { QuantError, type StockMetaDto, type StockSnapshotDto } from '@quant/shared';
 import { STOCK_META_PORT, type StockMetaPort } from './domain/stock-meta-port.js';
 
 @Injectable()

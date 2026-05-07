@@ -29,9 +29,7 @@ describe('createRevalidate', () => {
     const revalidate = createRevalidate(client);
     revalidate('meta');
     const flat = invalidated.map((k) => k[0]);
-    expect(flat).toEqual(
-      expect.arrayContaining(['stock-list', 'stock-meta', 'watch-universe']),
-    );
+    expect(flat).toEqual(expect.arrayContaining(['stock-list', 'stock-meta', 'watch-universe']));
     expect(flat).not.toContain('kline');
     expect(flat).not.toContain('sentiment');
   });
@@ -41,9 +39,7 @@ describe('createRevalidate', () => {
     const revalidate = createRevalidate(client);
     revalidate('kline');
     const flat = invalidated.map((k) => k[0]);
-    expect(flat).toEqual(
-      expect.arrayContaining(['kline', 'kline.bulk', 'stock.snapshots']),
-    );
+    expect(flat).toEqual(expect.arrayContaining(['kline', 'kline.bulk', 'stock.snapshots']));
     expect(flat).not.toContain('sentiment');
   });
 

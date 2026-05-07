@@ -34,11 +34,7 @@ export interface VisibleSlice {
   readonly stride: number;
 }
 
-export function visibleSlice(
-  total: number,
-  vp: ChartViewport,
-  viewWidth: number,
-): VisibleSlice {
+export function visibleSlice(total: number, vp: ChartViewport, viewWidth: number): VisibleSlice {
   const stride = vp.candleW + vp.gap;
   if (total === 0 || stride <= 0) {
     return { startIdx: 0, count: 0, firstX: 0, stride };
@@ -58,11 +54,7 @@ export function visibleSlice(
 }
 
 /** Pick a bar index given a mouse X within the SVG, or null if none. */
-export function indexAtX(
-  mouseX: number,
-  slice: VisibleSlice,
-  total: number,
-): number | null {
+export function indexAtX(mouseX: number, slice: VisibleSlice, total: number): number | null {
   if (slice.count === 0 || slice.stride <= 0) return null;
   const offset = mouseX - slice.firstX;
   const i = Math.floor(offset / slice.stride);

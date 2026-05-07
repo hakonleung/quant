@@ -11,13 +11,7 @@
  */
 
 import { ANSI, paint } from '../render/ansi.js';
-import type {
-  CommitResolution,
-  InteractiveWidget,
-  KeyHint,
-  KeySpec,
-  WidgetStep,
-} from './types.js';
+import type { CommitResolution, InteractiveWidget, KeyHint, KeySpec, WidgetStep } from './types.js';
 
 export interface PasteTextConfig {
   readonly title: string;
@@ -30,7 +24,9 @@ export interface PasteTextState {
   readonly cursor: number;
 }
 
-export function pasteText(cfg: PasteTextConfig): InteractiveWidget<PasteTextState, CommitResolution> {
+export function pasteText(
+  cfg: PasteTextConfig,
+): InteractiveWidget<PasteTextState, CommitResolution> {
   return {
     title: cfg.title,
     initialState: { buffer: '', cursor: 0 },
@@ -53,9 +49,10 @@ function buildHints(): readonly KeyHint[] {
 
 function renderBody(cfg: PasteTextConfig, state: PasteTextState, width: number): string {
   const head = paint(cfg.title, ANSI.bold, ANSI.cyan);
-  const body = state.buffer.length === 0
-    ? paint(cfg.placeholder ?? '(paste or type, Ctrl+Enter to submit)', ANSI.gray)
-    : state.buffer;
+  const body =
+    state.buffer.length === 0
+      ? paint(cfg.placeholder ?? '(paste or type, Ctrl+Enter to submit)', ANSI.gray)
+      : state.buffer;
   const lines = [head, body];
   void width;
   return lines.join('\n');

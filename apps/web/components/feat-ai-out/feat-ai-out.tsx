@@ -36,12 +36,11 @@ export function FeatAiOut({ code }: Props): React.ReactElement {
     const themeStr = sentiment.theme === null ? '' : ` · 题材[${sentiment.theme}]`;
     const head = `[${stockLabel}] sent ${sentiment.score.toFixed(2)}${themeStr}`;
     const body =
-      sentiment.result.trim().length > 0
-        ? sentiment.result
-        : sentiment.rawLog.join('\n');
+      sentiment.result.trim().length > 0 ? sentiment.result : sentiment.rawLog.join('\n');
     const composed = `${head}\n\n${body}`;
     // Slack/webhook payload is capped — leave headroom for server framing.
-    const payload = composed.length > 15800 ? `${composed.slice(0, 15800)}\n…[truncated]` : composed;
+    const payload =
+      composed.length > 15800 ? `${composed.slice(0, 15800)}\n…[truncated]` : composed;
     push.mutate({ payload });
   };
 

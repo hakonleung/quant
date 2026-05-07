@@ -1,9 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  ALL_ACTIONS,
-  findAction,
-  listActions,
-} from '../actions/registry.js';
+import { ALL_ACTIONS, findAction, listActions } from '../actions/registry.js';
 
 describe('action registry', () => {
   it('exposes 15 unique action ids (golden)', () => {

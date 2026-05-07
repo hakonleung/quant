@@ -8,9 +8,7 @@ export const focusCommand: CommandSpec = {
   subcommands: ['clear'],
   complete(positionalIdx, fragment, ctx) {
     if (positionalIdx === 0) {
-      return ctx.stockIndex
-        .complete(fragment)
-        .map((m) => ({ insert: m.code, label: m.label }));
+      return ctx.stockIndex.complete(fragment).map((m) => ({ insert: m.code, label: m.label }));
     }
     return [];
   },

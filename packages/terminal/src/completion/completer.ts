@@ -47,7 +47,11 @@ export function complete(buffer: string, cursor: number, env: CompleterEnv): Com
   const tokenStart = lastTokenStart(upTo);
   const fragment = upTo.slice(tokenStart);
   const tokenEnd = cursor;
-  const tokens = upTo.slice(0, tokenStart).trim().split(/\s+/u).filter((t) => t.length > 0);
+  const tokens = upTo
+    .slice(0, tokenStart)
+    .trim()
+    .split(/\s+/u)
+    .filter((t) => t.length > 0);
 
   let candidates: readonly CompletionCandidate[];
   if (tokens.length === 0) {
@@ -58,15 +62,11 @@ export function complete(buffer: string, cursor: number, env: CompleterEnv): Com
     const cmd = tokens[0] as string;
     const subs = env.subcommands[cmd];
     if (tokens.length === 1 && subs !== undefined) {
-      candidates = subs
-        .filter((s) => s.startsWith(fragment))
-        .map((s) => ({ insert: s, label: s }));
+      candidates = subs.filter((s) => s.startsWith(fragment)).map((s) => ({ insert: s, label: s }));
     } else {
       const positionalIdx = subs !== undefined ? Math.max(0, tokens.length - 2) : tokens.length - 1;
       candidates =
-        env.paramCompleter !== undefined
-          ? env.paramCompleter(cmd, positionalIdx, fragment)
-          : [];
+        env.paramCompleter !== undefined ? env.paramCompleter(cmd, positionalIdx, fragment) : [];
     }
   }
 

@@ -13,12 +13,7 @@
  * impurity is `setTimeout` for delayed jobs.
  */
 
-import type {
-  AddOptions,
-  JobEnvelope,
-  JobProcessor,
-  ReQueue,
-} from './types.js';
+import type { AddOptions, JobEnvelope, JobProcessor, ReQueue } from './types.js';
 
 interface Pending<T> {
   readonly id: string;
@@ -97,14 +92,17 @@ export class InMemoryQueue<T> implements ReQueue<T> {
 
   reschedule(envelope: JobEnvelope<T>, delayMs: number): void {
     // The id stays "known" so dedup still applies during the delay window.
-    setTimeout(() => {
-      this.waiting.push({
-        id: envelope.id,
-        data: envelope.data,
-        attemptsMade: envelope.attemptsMade,
-      });
-      this.drain();
-    }, Math.max(0, delayMs));
+    setTimeout(
+      () => {
+        this.waiting.push({
+          id: envelope.id,
+          data: envelope.data,
+          attemptsMade: envelope.attemptsMade,
+        });
+        this.drain();
+      },
+      Math.max(0, delayMs),
+    );
   }
 
   private drain(): void {

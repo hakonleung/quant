@@ -147,9 +147,15 @@ function handleKey(state: TerminalState, key: KeySpec): ReduceResult {
       case 'End':
         return { state: { ...state, cursor: state.buffer.length }, effects: [] };
       case 'WordLeft':
-        return { state: { ...state, cursor: prevWordBoundary(state.buffer, state.cursor) }, effects: [] };
+        return {
+          state: { ...state, cursor: prevWordBoundary(state.buffer, state.cursor) },
+          effects: [],
+        };
       case 'WordRight':
-        return { state: { ...state, cursor: nextWordBoundary(state.buffer, state.cursor) }, effects: [] };
+        return {
+          state: { ...state, cursor: nextWordBoundary(state.buffer, state.cursor) },
+          effects: [],
+        };
       case 'WordBackspace': {
         const start = prevWordBoundary(state.buffer, state.cursor);
         return {
@@ -295,10 +301,7 @@ function handleInteractiveKey(state: TerminalState, key: KeySpec): ReduceResult 
   }
 }
 
-function handleExitInteractive(
-  state: TerminalState,
-  reason: 'cancel' | 'commit',
-): ReduceResult {
+function handleExitInteractive(state: TerminalState, reason: 'cancel' | 'commit'): ReduceResult {
   if (state.active === null) {
     return { state: { ...state, phase: 'idle' }, effects: [] };
   }

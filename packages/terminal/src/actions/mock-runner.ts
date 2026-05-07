@@ -54,8 +54,7 @@ const fetchers: Record<string, Fetcher> = {
   },
   [stockKlineAction.id]: ({ code, range }: { code: string; range: '30D' | '90D' | '250D' }) =>
     fixtureKline(code, range),
-  [stockSnapshotsAction.id]: ({ codes }: { codes: readonly string[] }) =>
-    fixtureSnapshots(codes),
+  [stockSnapshotsAction.id]: ({ codes }: { codes: readonly string[] }) => fixtureSnapshots(codes),
   [sectorListAction.id]: () => fixtureSectors(),
   [sectorShowAction.id]: ({ idOrName }: { idOrName: string }) => {
     const s = fixtureFindSector(idOrName);
@@ -81,7 +80,8 @@ const fetchers: Record<string, Fetcher> = {
     return fixtureUpsertSector(refreshed);
   },
   [analyzeOneAction.id]: ({ code }: { code: string }) => fixtureSentiment(code),
-  [analyzeManyAction.id]: ({ codes }: { codes: readonly string[] }) => fixtureMarketSentiment(codes),
+  [analyzeManyAction.id]: ({ codes }: { codes: readonly string[] }) =>
+    fixtureMarketSentiment(codes),
   [screenNlAction.id]: ({ nl }: { nl: string }) => fixtureScreenResult(nl),
   [watchListAction.id]: () => fixtureWatch(),
   [watchUpsertAction.id]: ({ task }: { task: Parameters<typeof fixtureUpsertWatch>[0] }) =>
@@ -110,11 +110,7 @@ export class MockActionRunner implements DataActionRunner {
     this.latencyRange = opts.latencyRange ?? [0, 0];
   }
 
-  async run<A, R>(
-    cfg: DataActionConfig<A, R>,
-    args: A,
-    opts: RunOpts,
-  ): Promise<RunOutcome<R>> {
+  async run<A, R>(cfg: DataActionConfig<A, R>, args: A, opts: RunOpts): Promise<RunOutcome<R>> {
     if (opts.signal.aborted) {
       throw new QuantError('INTERNAL', 'aborted');
     }

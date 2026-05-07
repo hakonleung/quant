@@ -39,9 +39,10 @@ export function renderTable<R extends Record<string, unknown>>(
 
   const cells: string[][] = rows.map((row) =>
     schema.map((col) => {
-      const raw = col.format !== undefined
-        ? col.format(row[col.key] as R[keyof R & string], row)
-        : stringify(row[col.key]);
+      const raw =
+        col.format !== undefined
+          ? col.format(row[col.key] as R[keyof R & string], row)
+          : stringify(row[col.key]);
       return col.max !== undefined ? truncate(raw, col.max) : raw;
     }),
   );
@@ -67,12 +68,7 @@ export function renderTable<R extends Record<string, unknown>>(
       })
       .join(gap);
     lines.push(headerLine);
-    lines.push(
-      paint(
-        widths.map((w) => '─'.repeat(w)).join(gap),
-        ANSI.gray,
-      ),
-    );
+    lines.push(paint(widths.map((w) => '─'.repeat(w)).join(gap), ANSI.gray));
   }
 
   cells.forEach((row, idx) => {

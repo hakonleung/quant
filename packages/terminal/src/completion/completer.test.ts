@@ -8,9 +8,7 @@ const env = {
     if (cmd === 'analyze' && idx === 0) {
       return [{ insert: '600519', label: '600519 贵州茅台' }];
     }
-    return frag === ''
-      ? []
-      : [{ insert: `${frag}xxx`, label: `${frag}xxx` }];
+    return frag === '' ? [] : [{ insert: `${frag}xxx`, label: `${frag}xxx` }];
   },
 };
 

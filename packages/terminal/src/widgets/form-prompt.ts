@@ -11,13 +11,7 @@
 
 import { ANSI, paint } from '../render/ansi.js';
 import { renderTable } from '../render/table.js';
-import type {
-  CommitResolution,
-  InteractiveWidget,
-  KeyHint,
-  KeySpec,
-  WidgetStep,
-} from './types.js';
+import type { CommitResolution, InteractiveWidget, KeyHint, KeySpec, WidgetStep } from './types.js';
 
 export type FormFieldKind = 'text' | 'number' | 'enum' | 'search';
 
@@ -210,9 +204,7 @@ function renderField(field: FormField, state: FormState, active: boolean): strin
 }
 
 function snapshotBody(cfg: FormPromptConfig, state: FormState): string {
-  return cfg.fields
-    .map((f) => `${f.label}=${state.values[f.key] ?? ''}`)
-    .join('  ');
+  return cfg.fields.map((f) => `${f.label}=${state.values[f.key] ?? ''}`).join('  ');
 }
 
 function handleKey(
@@ -325,7 +317,11 @@ function moveActive(
   };
 }
 
-function cycleEnum(field: FormField, state: FormState, delta: number): WidgetStep<FormState, CommitResolution> {
+function cycleEnum(
+  field: FormField,
+  state: FormState,
+  delta: number,
+): WidgetStep<FormState, CommitResolution> {
   const opts = field.options ?? [];
   if (opts.length === 0) return { kind: 'state', next: state };
   const cur = state.values[field.key] ?? opts[0]!;

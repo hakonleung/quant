@@ -1,8 +1,4 @@
-import {
-  screenNlAction,
-  sectorUpsertAction,
-  type Sector,
-} from '../actions/registry.js';
+import { screenNlAction, sectorUpsertAction, type Sector } from '../actions/registry.js';
 import type { CommandSpec } from '../registry.js';
 import { confirmPrompt } from '../widgets/confirm-prompt.js';
 import { selectableList } from '../widgets/selectable-list.js';
@@ -88,7 +84,14 @@ function buildMatchesList(
       {
         key: 's',
         hint: { keys: ['s'], label: 'save as dynamic sector' },
-        resolve: () => widgetResolution(saveAsSector(ctx, nl, items.map((i) => i.code))),
+        resolve: () =>
+          widgetResolution(
+            saveAsSector(
+              ctx,
+              nl,
+              items.map((i) => i.code),
+            ),
+          ),
       },
     ],
   });
@@ -114,7 +117,10 @@ function saveAsSector(
         nl,
       };
       void ctx.actions.run(sectorUpsertAction, { sector }, { signal: ctx.signal });
-      return outputResolution(`saved dynamic sector "${sector.name}" (${String(codes.length)} codes)`, 'ok');
+      return outputResolution(
+        `saved dynamic sector "${sector.name}" (${String(codes.length)} codes)`,
+        'ok',
+      );
     },
     onNo: () => canceledResolution,
   });

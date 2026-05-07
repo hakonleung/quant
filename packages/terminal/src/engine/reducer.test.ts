@@ -140,10 +140,7 @@ describe('reducer — submit / result lifecycle', () => {
   });
 
   it('result transitions running → idle and appends output entry', () => {
-    const submitted = reduce(
-      feed(initialState, [printable('help')]),
-      special('Enter'),
-    ).state;
+    const submitted = reduce(feed(initialState, [printable('help')]), special('Enter')).state;
     const r = reduce(submitted, { kind: 'result', entry: { body: 'ok', status: 'ok' } });
     expect(r.state.phase).toBe('idle');
     const last = r.state.history.at(-1) as HistoryEntry;

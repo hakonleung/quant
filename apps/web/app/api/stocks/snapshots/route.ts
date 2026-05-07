@@ -4,11 +4,7 @@
  * shared schema so a gateway/Python drift fails here, not in the browser.
  */
 
-import {
-  StockSnapshotDtoSchema,
-  TRACE_HEADER,
-  type StockSnapshotDto,
-} from '@quant/shared';
+import { StockSnapshotDtoSchema, TRACE_HEADER, type StockSnapshotDto } from '@quant/shared';
 import { z } from 'zod';
 
 import { bffErrorResponse, nestJson, readTrace } from '../../_lib/proxy.js';

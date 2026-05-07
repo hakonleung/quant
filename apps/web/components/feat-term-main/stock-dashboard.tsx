@@ -110,8 +110,7 @@ function PriceLine({
   const change = computeChangePct(bars);
   // Chinese stock-market convention — 涨红跌绿: gains paint red, losses
   // paint green. The arrow direction still tracks price direction.
-  const chgColor =
-    change === null ? 'term.ink3' : change >= 0 ? 'term.red' : 'term.green';
+  const chgColor = change === null ? 'term.ink3' : change >= 0 ? 'term.red' : 'term.green';
   const chgArrow = change === null ? '·' : change >= 0 ? '▲' : '▼';
   return (
     <Flex direction="column" align="flex-end" flexShrink={0}>
@@ -123,9 +122,7 @@ function PriceLine({
           {chgArrow}
         </Text>
         <Text fontSize="12px" fontWeight="700">
-          {change === null
-            ? '—'
-            : `${change >= 0 ? '+' : ''}${change.toFixed(2)}%`}
+          {change === null ? '—' : `${change >= 0 ? '+' : ''}${change.toFixed(2)}%`}
         </Text>
       </Flex>
     </Flex>
@@ -153,9 +150,7 @@ interface MetricGridProps {
 const HEADER_DUPES = new Set<string>(['name', 'price', 'chgPct']);
 
 function MetricGrid({ snap, bars }: MetricGridProps): React.ReactElement {
-  const rows: { readonly k: string; readonly v: string }[] = [
-    { k: 'vol', v: fmtVolume(bars) },
-  ];
+  const rows: { readonly k: string; readonly v: string }[] = [{ k: 'vol', v: fmtVolume(bars) }];
   for (const key of COLUMN_KEYS) {
     if (HEADER_DUPES.has(key)) continue;
     rows.push({ k: labelOf(key), v: fmtAppliedField(key, snap, bars) });

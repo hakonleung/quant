@@ -7,13 +7,7 @@
 
 import { ANSI, paint } from '../render/ansi.js';
 import { renderTable } from '../render/table.js';
-import type {
-  CommitResolution,
-  InteractiveWidget,
-  KeyHint,
-  KeySpec,
-  WidgetStep,
-} from './types.js';
+import type { CommitResolution, InteractiveWidget, KeyHint, KeySpec, WidgetStep } from './types.js';
 
 export interface StockLite {
   readonly code: string;
@@ -63,16 +57,17 @@ function renderBody(cfg: PickStockLoopConfig, state: PickStockLoopState, width: 
   const head = paint(cfg.title, ANSI.bold, ANSI.cyan);
   const queryLine = `> ${state.query.length === 0 ? paint('(type to search)', ANSI.gray) : state.query}`;
   const matches = filterMatches(cfg.universe, state.query, 8);
-  const list = matches.length === 0
-    ? paint('no matches', ANSI.gray)
-    : renderTable(
-        matches as unknown as readonly Record<string, unknown>[],
-        [
-          { key: 'code', header: 'CODE', max: 8 },
-          { key: 'name', header: 'NAME', max: 14 },
-        ],
-        { highlightRow: state.idx },
-      );
+  const list =
+    matches.length === 0
+      ? paint('no matches', ANSI.gray)
+      : renderTable(
+          matches as unknown as readonly Record<string, unknown>[],
+          [
+            { key: 'code', header: 'CODE', max: 8 },
+            { key: 'name', header: 'NAME', max: 14 },
+          ],
+          { highlightRow: state.idx },
+        );
   const basketLine =
     state.basket.length === 0
       ? paint('basket: (empty)', ANSI.gray)

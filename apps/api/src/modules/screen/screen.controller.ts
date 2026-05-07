@@ -18,14 +18,7 @@
  * cache-mutating-must-be-POST rule.
  */
 
-import {
-  BadRequestException,
-  Body,
-  Controller,
-  Inject,
-  Post,
-  Req,
-} from '@nestjs/common';
+import { BadRequestException, Body, Controller, Inject, Post, Req } from '@nestjs/common';
 import {
   NlScreenResultSchema,
   NlToDslResultSchema,
@@ -72,10 +65,7 @@ export class ScreenController {
   constructor(@Inject(SCREEN_FLIGHT_CLIENT) private readonly flight: FlightClient) {}
 
   @Post('nl')
-  async run(
-    @Req() req: Request,
-    @Body(nlBodyPipe) body: NlBody,
-  ): Promise<NlScreenResult> {
+  async run(@Req() req: Request, @Body(nlBodyPipe) body: NlBody): Promise<NlScreenResult> {
     const traceId = (req as Request & { traceId?: string }).traceId ?? '';
     const args: Record<string, unknown> = { nl: body.nl };
     if (body.asof !== undefined) args['asof'] = body.asof;
@@ -91,10 +81,7 @@ export class ScreenController {
   }
 
   @Post('nl2dsl')
-  async nl2dsl(
-    @Req() req: Request,
-    @Body(nlBodyPipe) body: NlBody,
-  ): Promise<NlToDslResult> {
+  async nl2dsl(@Req() req: Request, @Body(nlBodyPipe) body: NlBody): Promise<NlToDslResult> {
     const traceId = (req as Request & { traceId?: string }).traceId ?? '';
     const args: Record<string, unknown> = { nl: body.nl };
     if (body.asof !== undefined) args['asof'] = body.asof;
@@ -110,10 +97,7 @@ export class ScreenController {
   }
 
   @Post('run')
-  async runScreen(
-    @Req() req: Request,
-    @Body(runBodyPipe) body: RunBody,
-  ): Promise<ScreenRunResult> {
+  async runScreen(@Req() req: Request, @Body(runBodyPipe) body: RunBody): Promise<ScreenRunResult> {
     const traceId = (req as Request & { traceId?: string }).traceId ?? '';
     // Flight args are flat primitives — nested AST goes through as a
     // JSON string and the python op deserialises it back to a domain

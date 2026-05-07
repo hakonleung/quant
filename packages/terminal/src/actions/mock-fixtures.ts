@@ -16,24 +16,25 @@ import type {
   WatchTask,
 } from './registry.js';
 
-const REAL_SAMPLE: ReadonlyArray<{ code: string; name: string; pinyin: string; industry: string }> = [
-  { code: '600519', name: '贵州茅台', pinyin: 'gzmt', industry: '白酒' },
-  { code: '000858', name: '五粮液', pinyin: 'wly', industry: '白酒' },
-  { code: '000568', name: '泸州老窖', pinyin: 'lzlj', industry: '白酒' },
-  { code: '600809', name: '山西汾酒', pinyin: 'sxfj', industry: '白酒' },
-  { code: '600036', name: '招商银行', pinyin: 'zsyh', industry: '银行' },
-  { code: '000001', name: '平安银行', pinyin: 'payh', industry: '银行' },
-  { code: '601398', name: '工商银行', pinyin: 'gsyh', industry: '银行' },
-  { code: '600000', name: '浦发银行', pinyin: 'pfyh', industry: '银行' },
-  { code: '601318', name: '中国平安', pinyin: 'zgpa', industry: '保险' },
-  { code: '601628', name: '中国人寿', pinyin: 'zgrs', industry: '保险' },
-  { code: '300750', name: '宁德时代', pinyin: 'ndsd', industry: '电池' },
-  { code: '002594', name: '比亚迪', pinyin: 'byd', industry: '汽车' },
-  { code: '600276', name: '恒瑞医药', pinyin: 'hryy', industry: '医药' },
-  { code: '300760', name: '迈瑞医疗', pinyin: 'mryl', industry: '医药' },
-  { code: '601012', name: '隆基绿能', pinyin: 'ljln', industry: '光伏' },
-  { code: '600900', name: '长江电力', pinyin: 'cjdl', industry: '电力' },
-];
+const REAL_SAMPLE: ReadonlyArray<{ code: string; name: string; pinyin: string; industry: string }> =
+  [
+    { code: '600519', name: '贵州茅台', pinyin: 'gzmt', industry: '白酒' },
+    { code: '000858', name: '五粮液', pinyin: 'wly', industry: '白酒' },
+    { code: '000568', name: '泸州老窖', pinyin: 'lzlj', industry: '白酒' },
+    { code: '600809', name: '山西汾酒', pinyin: 'sxfj', industry: '白酒' },
+    { code: '600036', name: '招商银行', pinyin: 'zsyh', industry: '银行' },
+    { code: '000001', name: '平安银行', pinyin: 'payh', industry: '银行' },
+    { code: '601398', name: '工商银行', pinyin: 'gsyh', industry: '银行' },
+    { code: '600000', name: '浦发银行', pinyin: 'pfyh', industry: '银行' },
+    { code: '601318', name: '中国平安', pinyin: 'zgpa', industry: '保险' },
+    { code: '601628', name: '中国人寿', pinyin: 'zgrs', industry: '保险' },
+    { code: '300750', name: '宁德时代', pinyin: 'ndsd', industry: '电池' },
+    { code: '002594', name: '比亚迪', pinyin: 'byd', industry: '汽车' },
+    { code: '600276', name: '恒瑞医药', pinyin: 'hryy', industry: '医药' },
+    { code: '300760', name: '迈瑞医疗', pinyin: 'mryl', industry: '医药' },
+    { code: '601012', name: '隆基绿能', pinyin: 'ljln', industry: '光伏' },
+    { code: '600900', name: '长江电力', pinyin: 'cjdl', industry: '电力' },
+  ];
 
 function generateMetas(): readonly StockMeta[] {
   const out: StockMeta[] = [...REAL_SAMPLE.map((s) => ({ ...s, market: 'a' as const }))];
@@ -125,10 +126,7 @@ export function fixtureSentiment(code: string): Sentiment {
 }
 
 export function fixtureMarketSentiment(codes: readonly string[]): MarketSentiment {
-  const total = codes.reduce(
-    (acc, c) => acc + (((Number.parseInt(c, 10) % 200) - 100) / 100),
-    0,
-  );
+  const total = codes.reduce((acc, c) => acc + ((Number.parseInt(c, 10) % 200) - 100) / 100, 0);
   const avg = codes.length === 0 ? 0 : total / codes.length;
   return {
     codes: [...codes],

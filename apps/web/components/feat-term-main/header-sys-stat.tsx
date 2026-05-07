@@ -16,11 +16,7 @@
  */
 
 import { Flex, Text } from '@chakra-ui/react';
-import {
-  ScanAcceptedSchema,
-  type QueueSnapshotEntry,
-  type ScanKind,
-} from '@quant/shared';
+import { ScanAcceptedSchema, type QueueSnapshotEntry, type ScanKind } from '@quant/shared';
 import { useEffect, useRef, useState } from 'react';
 
 import { useQueueStream } from '../../lib/hooks/use-queue-stream.js';
@@ -44,7 +40,11 @@ export function HeaderSysStat(): React.ReactElement {
     >
       <ScanLine code="meta" queue={meta} kind="meta" />
       <ScanLine code="kline" queue={kline} kind="kline" />
-      <ValueLine code="MEM" value={memMb === null ? '—' : `${String(memMb)}M`} color={memColor(memMb)} />
+      <ValueLine
+        code="MEM"
+        value={memMb === null ? '—' : `${String(memMb)}M`}
+        color={memColor(memMb)}
+      />
       <ValueLine code="FPS" value={String(fps)} color={fpsColor(fps)} />
     </Flex>
   );

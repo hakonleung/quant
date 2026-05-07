@@ -3,11 +3,7 @@
  * short and declarative. Pure (CLAUDE.md §2.5.1).
  */
 
-import type {
-  CommitResolution,
-  InteractiveWidgetAny,
-  OutputEntry,
-} from '../engine/state.js';
+import type { CommitResolution, InteractiveWidgetAny, OutputEntry } from '../engine/state.js';
 
 export function textOk(body: string): { kind: 'text'; status: 'ok'; tail: { body: string } } {
   return { kind: 'text', status: 'ok', tail: { body } };
@@ -15,13 +11,18 @@ export function textOk(body: string): { kind: 'text'; status: 'ok'; tail: { body
 export function textErr(body: string): { kind: 'text'; status: 'err'; tail: { body: string } } {
   return { kind: 'text', status: 'err', tail: { body } };
 }
-export function textCached(body: string): { kind: 'text'; status: 'cached'; tail: { body: string } } {
+export function textCached(body: string): {
+  kind: 'text';
+  status: 'cached';
+  tail: { body: string };
+} {
   return { kind: 'text', status: 'cached', tail: { body } };
 }
 
-export function interactive(
-  widget: InteractiveWidgetAny,
-): { kind: 'interactive'; widget: InteractiveWidgetAny } {
+export function interactive(widget: InteractiveWidgetAny): {
+  kind: 'interactive';
+  widget: InteractiveWidgetAny;
+} {
   return { kind: 'interactive', widget };
 }
 

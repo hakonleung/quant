@@ -16,10 +16,7 @@ import { z } from 'zod';
 
 import { FlightClient } from '../../adapters/flight/flight-client.js';
 import { ZodValidationPipe } from '../../common/zod-pipe.js';
-import {
-  arrowTableToKlineBars,
-  arrowTableToKlineBarsByCode,
-} from './domain/arrow-mapper.js';
+import { arrowTableToKlineBars, arrowTableToKlineBarsByCode } from './domain/arrow-mapper.js';
 import { KlineRangeQuerySchema, RANGE_TO_N, type KlineRangeQuery } from './dto/range-query.dto.js';
 
 import { KLINE_FLIGHT_CLIENT } from './kline.token.js';

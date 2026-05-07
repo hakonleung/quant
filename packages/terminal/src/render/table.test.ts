@@ -23,7 +23,7 @@ describe('renderTable', () => {
           { code: '600519', name: '贵州茅台', price: 1700.5 },
           { code: '000001', name: '平安银行', price: 12.34 },
         ],
-        schema as readonly typeof schema[number][],
+        schema as readonly (typeof schema)[number][],
       ),
     );
     const lines = out.split('\n');
@@ -37,7 +37,7 @@ describe('renderTable', () => {
   });
 
   it('returns header only for empty rows (boundary)', () => {
-    const out = stripAnsi(renderTable<Row>([], schema as readonly typeof schema[number][]));
+    const out = stripAnsi(renderTable<Row>([], schema as readonly (typeof schema)[number][]));
     expect(out.split('\n')).toHaveLength(2);
   });
 
@@ -48,17 +48,17 @@ describe('renderTable', () => {
           { code: '600519', name: '贵州茅台', price: 1 },
           { code: '300', name: 'A', price: 22 },
         ],
-        schema as readonly typeof schema[number][],
+        schema as readonly (typeof schema)[number][],
       ),
     );
     const lines = out.split('\n');
     // All non-separator lines should have the same visual width
-    const w = (l: string): number => Array.from(l).reduce((a, ch) => {
-      const cp = ch.codePointAt(0) ?? 0;
-      const isWide =
-        (cp >= 0x4e00 && cp <= 0x9fff) || (cp >= 0xff00 && cp <= 0xff60);
-      return a + (isWide ? 2 : 1);
-    }, 0);
+    const w = (l: string): number =>
+      Array.from(l).reduce((a, ch) => {
+        const cp = ch.codePointAt(0) ?? 0;
+        const isWide = (cp >= 0x4e00 && cp <= 0x9fff) || (cp >= 0xff00 && cp <= 0xff60);
+        return a + (isWide ? 2 : 1);
+      }, 0);
     expect(w(lines[0]!)).toBe(w(lines[2]!));
     expect(w(lines[2]!)).toBe(w(lines[3]!));
   });
@@ -67,7 +67,7 @@ describe('renderTable', () => {
     const out = stripAnsi(
       renderTable<Row>(
         [{ code: 'VERYLONGCODE', name: 'longname超出', price: 1 }],
-        schema as readonly typeof schema[number][],
+        schema as readonly (typeof schema)[number][],
       ),
     );
     expect(out).toContain('…');
@@ -76,7 +76,7 @@ describe('renderTable', () => {
   it('honors highlightRow with inverse ANSI', () => {
     const out = renderTable<Row>(
       [{ code: '1', name: 'x', price: 1 }],
-      schema as readonly typeof schema[number][],
+      schema as readonly (typeof schema)[number][],
       { highlightRow: 0 },
     );
     expect(out).toContain('\x1b[7m');

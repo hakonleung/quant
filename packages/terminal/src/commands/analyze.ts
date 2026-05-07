@@ -1,8 +1,4 @@
-import {
-  analyzeManyAction,
-  analyzeOneAction,
-  sectorShowAction,
-} from '../actions/registry.js';
+import { analyzeManyAction, analyzeOneAction, sectorShowAction } from '../actions/registry.js';
 import { ANSI, paint } from '../render/ansi.js';
 import type { CommandSpec } from '../registry.js';
 import { confirmPrompt } from '../widgets/confirm-prompt.js';
@@ -36,9 +32,7 @@ export const analyzeCommand: CommandSpec = {
 
     // Bare `analyze` → guided picker
     if (head === undefined) {
-      return interactive(
-        guidedAnalyze(ctx),
-      );
+      return interactive(guidedAnalyze(ctx));
     }
 
     if (head === 'sector') {
@@ -46,11 +40,7 @@ export const analyzeCommand: CommandSpec = {
       if (idOrName === undefined) {
         return textErr('usage: analyze sector <id|name> [--force]');
       }
-      const sector = await ctx.actions.run(
-        sectorShowAction,
-        { idOrName },
-        { signal: ctx.signal },
-      );
+      const sector = await ctx.actions.run(sectorShowAction, { idOrName }, { signal: ctx.signal });
       return analyzeManyConfirm(ctx, sector.data.codes, sector.data.name, force);
     }
 
@@ -68,9 +58,7 @@ async function analyzeOneFlow(
 ) {
   if (!force) {
     const r = await ctx.actions.run(analyzeOneAction, { code }, { signal: ctx.signal });
-    return r.cached
-      ? textCached(formatSentiment(r.data))
-      : textOk(formatSentiment(r.data));
+    return r.cached ? textCached(formatSentiment(r.data)) : textOk(formatSentiment(r.data));
   }
   // force: confirm widget
   const widget = confirmPrompt({
@@ -93,11 +81,7 @@ async function analyzeManyConfirm(
   force: boolean,
 ) {
   if (!force) {
-    const r = await ctx.actions.run(
-      analyzeManyAction,
-      { codes },
-      { signal: ctx.signal },
-    );
+    const r = await ctx.actions.run(analyzeManyAction, { codes }, { signal: ctx.signal });
     return r.cached
       ? textCached(formatMarketSentiment(r.data, label))
       : textOk(formatMarketSentiment(r.data, label));
@@ -114,11 +98,14 @@ async function analyzeManyConfirm(
 function guidedAnalyze(ctx: Parameters<CommandSpec['run']>[1]) {
   // Quick picker: just stocks for v1 (sector path is reachable via `analyze sector`).
   // We deliberately don't load all 5500 stocks here — use the index.
-  const items = ctx.stockIndex.all().slice(0, 200).map((m) => ({
-    code: m.code,
-    name: m.name,
-    industry: m.industry ?? '',
-  }));
+  const items = ctx.stockIndex
+    .all()
+    .slice(0, 200)
+    .map((m) => ({
+      code: m.code,
+      name: m.name,
+      industry: m.industry ?? '',
+    }));
   return selectableList({
     title: 'analyze: pick stock',
     items,
@@ -127,18 +114,25 @@ function guidedAnalyze(ctx: Parameters<CommandSpec['run']>[1]) {
       { key: 'name', header: 'NAME', max: 14 },
       { key: 'industry', header: 'IND', max: 10 },
     ],
-    onCommit: (s) => widgetResolution(
-      confirmPrompt({
-        title: `analyze ${String(s.code)} ${String(s.name)}  (LLM, paid)`,
-        danger: true,
-        onYes: () => ({ kind: 'command', line: `analyze ${String(s.code)} --force` }),
-        onNo: () => canceledResolution,
-      }),
-    ),
+    onCommit: (s) =>
+      widgetResolution(
+        confirmPrompt({
+          title: `analyze ${String(s.code)} ${String(s.name)}  (LLM, paid)`,
+          danger: true,
+          onYes: () => ({ kind: 'command', line: `analyze ${String(s.code)} --force` }),
+          onNo: () => canceledResolution,
+        }),
+      ),
   });
 }
 
-function formatSentiment(s: { code: string; score: number; theme: string; driver: string | null; cachedAt: string }): string {
+function formatSentiment(s: {
+  code: string;
+  score: number;
+  theme: string;
+  driver: string | null;
+  cachedAt: string;
+}): string {
   return [
     paint(`${s.code} sentiment`, ANSI.bold, ANSI.cyan),
     `score:    ${formatScore(s.score)}`,
@@ -148,9 +142,16 @@ function formatSentiment(s: { code: string; score: number; theme: string; driver
   ].join('\n');
 }
 
-function formatMarketSentiment(s: { codes: readonly string[]; score: number; themes: readonly string[]; cachedAt: string }, label: string): string {
+function formatMarketSentiment(
+  s: { codes: readonly string[]; score: number; themes: readonly string[]; cachedAt: string },
+  label: string,
+): string {
   return [
-    paint(`sector ${label} aggregate sentiment (${String(s.codes.length)} codes)`, ANSI.bold, ANSI.cyan),
+    paint(
+      `sector ${label} aggregate sentiment (${String(s.codes.length)} codes)`,
+      ANSI.bold,
+      ANSI.cyan,
+    ),
     `score:    ${formatScore(s.score)}`,
     `themes:   ${s.themes.join(', ')}`,
     `cachedAt: ${s.cachedAt}`,

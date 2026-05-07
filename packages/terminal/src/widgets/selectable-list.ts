@@ -12,13 +12,7 @@
 import { renderTable, type ColumnSpec } from '../render/table.js';
 import { ANSI, paint } from '../render/ansi.js';
 import { visualWidth } from '../render/width.js';
-import type {
-  CommitResolution,
-  InteractiveWidget,
-  KeyHint,
-  KeySpec,
-  WidgetStep,
-} from './types.js';
+import type { CommitResolution, InteractiveWidget, KeyHint, KeySpec, WidgetStep } from './types.js';
 
 export interface SelectableListItem {
   readonly id?: string;
@@ -293,8 +287,7 @@ function applyFilter<T extends SelectableListItem>(
   if (filter.length === 0) return cfg.items;
   const needle = filter.toLowerCase();
   const fields =
-    cfg.filterFields ??
-    (cfg.columns.map((c) => c.key) as readonly (keyof T & string)[]);
+    cfg.filterFields ?? (cfg.columns.map((c) => c.key) as readonly (keyof T & string)[]);
   return cfg.items.filter((item) =>
     fields.some((f) => {
       const v = item[f];

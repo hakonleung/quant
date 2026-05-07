@@ -20,10 +20,10 @@ describe('renderHints', () => {
   });
 
   it('hides whenFilter hint outside filter mode', () => {
-    const out = renderHints(
-      [{ keys: ['type'], label: 'filter', when: 'whenFilter' }],
-      { width: 80, inFilter: false },
-    );
+    const out = renderHints([{ keys: ['type'], label: 'filter', when: 'whenFilter' }], {
+      width: 80,
+      inFilter: false,
+    });
     expect(out).toBe('');
   });
 

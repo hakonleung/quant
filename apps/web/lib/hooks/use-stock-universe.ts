@@ -36,9 +36,8 @@ const StockBasicListSchema = z.array(StockBasicSchema);
 
 async function fetchWatchUniverse(market: 'hk' | 'us'): Promise<readonly StockBasic[]> {
   try {
-    return await apiGet(
-      `/api/watch/universe?market=${market}`,
-      (raw) => StockBasicListSchema.parse(raw),
+    return await apiGet(`/api/watch/universe?market=${market}`, (raw) =>
+      StockBasicListSchema.parse(raw),
     );
   } catch {
     return [];
@@ -103,9 +102,7 @@ export function useStockUniverse(marketFilter?: WatchMarket): {
   }, [wantA, wantHk, wantUs, aQuery.data, hkQuery.data, usQuery.data]);
 
   const isLoading =
-    (wantA && aQuery.isLoading) ||
-    (wantHk && hkQuery.isLoading) ||
-    (wantUs && usQuery.isLoading);
+    (wantA && aQuery.isLoading) || (wantHk && hkQuery.isLoading) || (wantUs && usQuery.isLoading);
 
   return { data, isLoading };
 }

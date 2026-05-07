@@ -21,14 +21,14 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 
 import { LAYOUT_LIMITS, useLayoutStore } from '../../lib/stores/layout.store.js';
 import { useUiStore } from '../../lib/stores/ui.store.js';
-import { FeatEqChart } from "../feat-eq-chart/feat-eq-chart.js";
-import { FeatEqList } from "../feat-eq-list/feat-eq-list.js";
-import { FeatScrPat } from "../feat-scr-pat/feat-scr-pat.js";
-import { FeatAiHist } from "../feat-ai-hist/feat-ai-hist.js";
-import { FeatSecList } from "../feat-sec-list/feat-sec-list.js";
-import { FeatAiOut } from "../feat-ai-out/feat-ai-out.js";
-import { FeatWatchLive } from "../feat-watch-live/feat-watch-live.js";
-import { FeatTermMain } from "../feat-term-main/feat-term-main.js";
+import { FeatEqChart } from '../feat-eq-chart/feat-eq-chart.js';
+import { FeatEqList } from '../feat-eq-list/feat-eq-list.js';
+import { FeatScrPat } from '../feat-scr-pat/feat-scr-pat.js';
+import { FeatAiHist } from '../feat-ai-hist/feat-ai-hist.js';
+import { FeatSecList } from '../feat-sec-list/feat-sec-list.js';
+import { FeatAiOut } from '../feat-ai-out/feat-ai-out.js';
+import { FeatWatchLive } from '../feat-watch-live/feat-watch-live.js';
+import { FeatTermMain } from '../feat-term-main/feat-term-main.js';
 
 export function EqtyModule(): React.ReactElement {
   const code = useUiStore((s) => s.focusCode);
@@ -116,7 +116,14 @@ interface DividerProps {
  * and listens to window-level mousemove/up; the column updates live
  * during the drag, and the final value is clamped + persisted.
  */
-function Divider({ side, startWidth, getNext, commit, min, max }: DividerProps): React.ReactElement {
+function Divider({
+  side,
+  startWidth,
+  getNext,
+  commit,
+  min,
+  max,
+}: DividerProps): React.ReactElement {
   void side;
   const [dragging, setDragging] = useState(false);
   const startXRef = useRef(0);

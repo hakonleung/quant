@@ -15,7 +15,10 @@ import { bffErrorResponse, nestJson, readTrace } from '../../_lib/proxy.js';
 const BodySchema = z
   .object({
     nl: z.string().min(1).max(500),
-    asof: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+    asof: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/)
+      .optional(),
   })
   .strict();
 

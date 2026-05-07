@@ -21,8 +21,8 @@ import {
   type BatchMatchResult,
 } from '../../lib/fp/batch-stock-match.js';
 import { useStockUniverse, type UniverseStock } from '../../lib/hooks/use-stock-universe.js';
-import { FeatView } from "../feat-view/feat-view.js";
-import { FeatViewStatus } from "../feat-view/feat-view-header.js";
+import { FeatView } from '../feat-view/feat-view.js';
+import { FeatViewStatus } from '../feat-view/feat-view-header.js';
 import { BatchPanel } from './batch-panel.js';
 import { SearchDropdown } from './stock-search-dropdown.js';
 
@@ -133,7 +133,19 @@ function useSearchState(props: StockCommandBarProps): SearchState {
     }, BLUR_CLOSE_DELAY_MS);
   };
 
-  return { text, setText, open, setOpen, highlight, setHighlight, matches, dropdownRef, commit, onKey, onBlurDeferred };
+  return {
+    text,
+    setText,
+    open,
+    setOpen,
+    highlight,
+    setHighlight,
+    matches,
+    dropdownRef,
+    commit,
+    onKey,
+    onBlurDeferred,
+  };
 }
 
 interface KeyHelpers {
@@ -228,11 +240,7 @@ export function StockCommandBar(props: StockCommandBarProps): React.ReactElement
         />
       )}
       {inBatchMode && batchResult !== null ? (
-        <BatchPanel
-          result={batchResult}
-          loading={fullUniverse.isLoading}
-          onApply={onApplyBatch}
-        />
+        <BatchPanel result={batchResult} loading={fullUniverse.isLoading} onApply={onApplyBatch} />
       ) : (
         <SearchDropdown
           ref={s.dropdownRef}
@@ -248,7 +256,6 @@ export function StockCommandBar(props: StockCommandBarProps): React.ReactElement
     </Box>
   );
 }
-
 
 interface InputProps {
   readonly text: string;

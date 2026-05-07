@@ -104,7 +104,8 @@ export function FeatAiHist(): React.ReactElement | null {
         ? ''
         : '\n\n▎ caveats\n' + data.caveats.map((c) => `! ${c}`).join('\n');
     const composed = `${head}${themesBlock}${trendBlock}${caveatsBlock}`;
-    const payload = composed.length > 15800 ? `${composed.slice(0, 15800)}\n…[truncated]` : composed;
+    const payload =
+      composed.length > 15800 ? `${composed.slice(0, 15800)}\n…[truncated]` : composed;
     push.mutate({ payload });
   };
 

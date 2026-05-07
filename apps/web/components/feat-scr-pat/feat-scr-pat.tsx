@@ -158,14 +158,7 @@ function MatchRow({ match }: { match: PatternMatch }): React.ReactElement {
   const bars = data ?? [];
   const highlight = findRangeIndices(bars, match.startDate, match.endDate);
   return (
-    <Flex
-      align="stretch"
-      gap="12px"
-      px="14px"
-      py="8px"
-      borderBottomWidth="1px"
-      borderColor="line2"
-    >
+    <Flex align="stretch" gap="12px" px="14px" py="8px" borderBottomWidth="1px" borderColor="line2">
       <Box minW="120px" pt="2px">
         <Text fontFamily="mono" fontSize="12px" color="ink" fontWeight="600">
           {match.name === '' ? match.code : match.name}

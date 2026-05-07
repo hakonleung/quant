@@ -1,8 +1,4 @@
-import {
-  stockInfoAction,
-  stockKlineAction,
-  stockSnapshotsAction,
-} from '../actions/registry.js';
+import { stockInfoAction, stockKlineAction, stockSnapshotsAction } from '../actions/registry.js';
 import { ANSI, paint } from '../render/ansi.js';
 import { sparkline } from '../render/sparkline.js';
 import { renderTable } from '../render/table.js';
@@ -76,7 +72,10 @@ function openPicker(
         { key: 'name', header: 'NAME', max: 14 },
         { key: 'industry', header: 'IND', max: 12 },
       ],
-      onCommit: (s) => ({ kind: 'command', line: `stock ${action} ${String(s.code)}${trailingArgs}` }),
+      onCommit: (s) => ({
+        kind: 'command',
+        line: `stock ${action} ${String(s.code)}${trailingArgs}`,
+      }),
       extraKeys: [
         {
           key: 'a',
@@ -117,7 +116,10 @@ async function runInfo(code: string, ctx: Parameters<CommandSpec['run']>[1]) {
   }
   if (last !== undefined) {
     rows.push({ k: 'asof', v: last.date });
-    rows.push({ k: 'O / H / L / C', v: `${String(last.open)} / ${String(last.high)} / ${String(last.low)} / ${String(last.close)}` });
+    rows.push({
+      k: 'O / H / L / C',
+      v: `${String(last.open)} / ${String(last.high)} / ${String(last.low)} / ${String(last.close)}`,
+    });
   }
   const lines: string[] = [];
   lines.push(paint(`${meta.data.code}  ${meta.data.name}`, ANSI.bold, ANSI.cyan));

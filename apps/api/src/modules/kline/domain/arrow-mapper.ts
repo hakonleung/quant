@@ -163,8 +163,7 @@ function uint32QuadToBigInt(quad: Uint32Array): bigint {
   // Four little-endian 32-bit limbs → unsigned 128-bit, then re-interpret
   // the top bit as the sign.
   const [a = 0, b = 0, c = 0, d = 0] = quad;
-  let unsigned =
-    BigInt(a) | (BigInt(b) << 32n) | (BigInt(c) << 64n) | (BigInt(d) << 96n);
+  let unsigned = BigInt(a) | (BigInt(b) << 32n) | (BigInt(c) << 64n) | (BigInt(d) << 96n);
   const SIGN_BIT = 1n << 127n;
   const RANGE = 1n << 128n;
   if (unsigned & SIGN_BIT) unsigned -= RANGE;

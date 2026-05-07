@@ -55,9 +55,7 @@ import {
   watchToCreate,
   watchToTerm,
 } from './projectors.js';
-import {
-  StockMetaDtoSchema,
-} from '@quant/shared';
+import { StockMetaDtoSchema } from '@quant/shared';
 
 /**
  * Caller-supplied helpers the runner needs but doesn't own. Keeps the
@@ -100,11 +98,9 @@ type Fetcher = (args: never, signal: AbortSignal) => unknown | Promise<unknown>;
 function buildFetchers(deps: LiveRunnerDeps): Record<string, Fetcher> {
   return {
     'stock.list': async (_a, signal: AbortSignal) => {
-      const list = await apiGet(
-        '/api/stocks',
-        (raw) => z.array(StockMetaDtoSchema).parse(raw),
-        { signal },
-      );
+      const list = await apiGet('/api/stocks', (raw) => z.array(StockMetaDtoSchema).parse(raw), {
+        signal,
+      });
       return list.map(metaToTerm);
     },
 
@@ -147,9 +143,8 @@ function buildFetchers(deps: LiveRunnerDeps): Record<string, Fetcher> {
     'sector.upsert': async ({ sector }: { sector: Parameters<typeof putSectors>[0][number] }) => {
       const all = await fetchSectors();
       const existing = all.findIndex((s) => s.id === sector.id);
-      const next = existing >= 0
-        ? all.map((s, i) => (i === existing ? sector : s))
-        : [...all, sector];
+      const next =
+        existing >= 0 ? all.map((s, i) => (i === existing ? sector : s)) : [...all, sector];
       const saved = await putSectors(next);
       const ret = saved.find((s) => s.id === sector.id);
       if (ret === undefined) {
@@ -174,9 +169,7 @@ function buildFetchers(deps: LiveRunnerDeps): Record<string, Fetcher> {
     'sector.refreshDynamic': async ({ idOrName }: { idOrName: string }) => {
       const all = await fetchSectors();
       const lower = idOrName.toLowerCase();
-      const cur = all.find(
-        (s) => s.id.toLowerCase() === lower || s.name.toLowerCase() === lower,
-      );
+      const cur = all.find((s) => s.id.toLowerCase() === lower || s.name.toLowerCase() === lower);
       if (cur === undefined) {
         throw new QuantError('NOT_FOUND', `sector ${idOrName} not found`);
       }
@@ -227,11 +220,7 @@ function buildFetchers(deps: LiveRunnerDeps): Record<string, Fetcher> {
 
     'watch.upsert': async ({ task }: { task: ReturnType<typeof watchToTerm> }) => {
       const body = watchToCreate(task);
-      const saved = await apiPost(
-        '/api/watch',
-        body,
-        (raw) => WatchTaskSchema.parse(raw),
-      );
+      const saved = await apiPost('/api/watch', body, (raw) => WatchTaskSchema.parse(raw));
       return watchToTerm(saved);
     },
 
@@ -310,11 +299,7 @@ export class LiveActionRunner implements DataActionRunner {
     this.fetchers = buildFetchers(deps);
   }
 
-  async run<A, R>(
-    cfg: DataActionConfig<A, R>,
-    args: A,
-    opts: RunOpts,
-  ): Promise<RunOutcome<R>> {
+  async run<A, R>(cfg: DataActionConfig<A, R>, args: A, opts: RunOpts): Promise<RunOutcome<R>> {
     if (opts.signal.aborted) {
       throw new QuantError('INTERNAL', 'aborted');
     }

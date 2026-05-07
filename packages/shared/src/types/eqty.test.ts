@@ -65,4 +65,3 @@ describe('SentimentSchema', () => {
     expect(SentimentSchema.parse({ ...s, rawLog: [] }).rawLog).toEqual([]);
   });
 });
-

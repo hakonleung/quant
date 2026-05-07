@@ -60,9 +60,7 @@ export function totalChartHeight(
 ): number {
   const showVolume = opts.showVolume ?? true;
   const showDateAxis = opts.showDateAxis ?? true;
-  return (
-    priceH + (showVolume ? VOL_GAP + volH : 0) + (showDateAxis ? DATE_AXIS_H : 0)
-  );
+  return priceH + (showVolume ? VOL_GAP + volH : 0) + (showDateAxis ? DATE_AXIS_H : 0);
 }
 
 export function findRangeIndices(
@@ -327,11 +325,7 @@ export function ChartCanvas({
         height={totalH}
         style={{
           display: 'block',
-          cursor: !interactive
-            ? 'default'
-            : dragRef.current === null
-              ? 'crosshair'
-              : 'grabbing',
+          cursor: !interactive ? 'default' : dragRef.current === null ? 'crosshair' : 'grabbing',
         }}
         onMouseDown={onMouseDown}
         onMouseMove={onMouseMove}
@@ -340,13 +334,7 @@ export function ChartCanvas({
       >
         {showVolume && (
           <>
-            <line
-              x1={priceAxisW}
-              x2={width}
-              y1={priceH}
-              y2={priceH}
-              stroke={palette.light.line}
-            />
+            <line x1={priceAxisW} x2={width} y1={priceH} y2={priceH} stroke={palette.light.line} />
             <line
               x1={priceAxisW}
               x2={width}
@@ -362,13 +350,7 @@ export function ChartCanvas({
             const y = scaleY(p);
             return (
               <g key={`pt-${String(i)}`}>
-                <line
-                  x1={priceAxisW - 3}
-                  x2={width}
-                  y1={y}
-                  y2={y}
-                  stroke={palette.light.line2}
-                />
+                <line x1={priceAxisW - 3} x2={width} y1={y} y2={y} stroke={palette.light.line2} />
                 <text
                   x={priceAxisW - 6}
                   y={y + 3}

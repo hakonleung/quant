@@ -76,10 +76,9 @@ describe('toKeySpec', () => {
 
 describe('fromBrowserEvent', () => {
   // import locally so we don't change the top-level imports
-  const { fromBrowserEvent } = require('../engine/keymap.ts') as
-    typeof import('../engine/keymap.ts');
-  const ev = (init: KeyboardEventInit): KeyboardEvent =>
-    new KeyboardEvent('keydown', init);
+  const { fromBrowserEvent } =
+    require('../engine/keymap.ts') as typeof import('../engine/keymap.ts');
+  const ev = (init: KeyboardEventInit): KeyboardEvent => new KeyboardEvent('keydown', init);
 
   it('Cmd+Left → Home', () => {
     expect(fromBrowserEvent(ev({ key: 'ArrowLeft', metaKey: true }))?.special).toBe('Home');
@@ -94,7 +93,9 @@ describe('fromBrowserEvent', () => {
     expect(fromBrowserEvent(ev({ key: 'Backspace', altKey: true }))?.special).toBe('WordBackspace');
   });
   it('Cmd+Backspace → LineStartBackspace', () => {
-    expect(fromBrowserEvent(ev({ key: 'Backspace', metaKey: true }))?.special).toBe('LineStartBackspace');
+    expect(fromBrowserEvent(ev({ key: 'Backspace', metaKey: true }))?.special).toBe(
+      'LineStartBackspace',
+    );
   });
   it('Plain ArrowLeft returns null (let xterm handle)', () => {
     expect(fromBrowserEvent(ev({ key: 'ArrowLeft' }))).toBe(null);

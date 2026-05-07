@@ -1,10 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  ArgvParseError,
-  parseArgv,
-  parseLine,
-  tokenize,
-} from '../engine/parse-argv.js';
+import { ArgvParseError, parseArgv, parseLine, tokenize } from '../engine/parse-argv.js';
 
 describe('tokenize', () => {
   it('splits on whitespace (golden)', () => {

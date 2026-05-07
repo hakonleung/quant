@@ -58,9 +58,7 @@ export const fonts = {
    * Geek/cyberpunk-style terminal font. Falls back through the same chain as
    * `mono` if Monaspace isn't loaded (offline / CDN failure).
    */
-  geek:
-    '"Monaspace Neon", "Monaspace Krypton", "Monaspace Argon", "JetBrains Mono", "SF Mono", ui-monospace, Menlo, monospace',
+  geek: '"Monaspace Neon", "Monaspace Krypton", "Monaspace Argon", "JetBrains Mono", "SF Mono", ui-monospace, Menlo, monospace',
   /** Bitmap pixel font used by the TERM.MAIN big logo. */
-  pixel:
-    '"Press Start 2P", "Space Mono", "JetBrains Mono", "SF Mono", ui-monospace, monospace',
+  pixel: '"Press Start 2P", "Space Mono", "JetBrains Mono", "SF Mono", ui-monospace, monospace',
 } as const;

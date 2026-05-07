@@ -30,11 +30,7 @@ export async function GET(request: Request): Promise<Response> {
       ? `/api/kline/bulk?n=${encodeURIComponent(n)}`
       : `/api/kline/bulk?codes=${encodeURIComponent(codes)}&n=${encodeURIComponent(n)}`;
   try {
-    const result = await nestJson(
-      request,
-      upstreamPath,
-      (raw) => ResponseSchema.parse(raw),
-    );
+    const result = await nestJson(request, upstreamPath, (raw) => ResponseSchema.parse(raw));
     return Response.json(result, { headers: { [TRACE_HEADER]: traceId } });
   } catch (err) {
     // Always degrade to {} — the UI prefers partial / empty rendering

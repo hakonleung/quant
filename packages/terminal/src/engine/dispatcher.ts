@@ -14,7 +14,12 @@ import { ZodError } from 'zod';
 import { QuantError } from '@quant/shared';
 
 import { ANSI, paint } from '../render/ansi.js';
-import { CommandError, type CommandCtx, type CommandRegistry, type CommandRunOutput } from '../registry.js';
+import {
+  CommandError,
+  type CommandCtx,
+  type CommandRegistry,
+  type CommandRunOutput,
+} from '../registry.js';
 import { ArgvParseError, parseLine } from './parse-argv.js';
 import type { Event } from './state.js';
 
@@ -64,9 +69,6 @@ export async function runCommand(
   }
 }
 
-function text(
-  body: string,
-  status: 'ok' | 'err' | 'cached' | 'info',
-): Event {
+function text(body: string, status: 'ok' | 'err' | 'cached' | 'info'): Event {
   return { kind: 'result', entry: { body, status } };
 }

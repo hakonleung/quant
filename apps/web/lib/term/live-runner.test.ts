@@ -51,13 +51,12 @@ function jsonResponse(body: unknown, status = 200): Response {
   });
 }
 
-function newRunner(deps: {
-  readonly revalidate?: (scope: RevalidateScope) => void;
-} = {}): LiveActionRunner {
-  return new LiveActionRunner(
-    { lookupName: () => null, ...deps },
-    new MockCache(null, 60_000),
-  );
+function newRunner(
+  deps: {
+    readonly revalidate?: (scope: RevalidateScope) => void;
+  } = {},
+): LiveActionRunner {
+  return new LiveActionRunner({ lookupName: () => null, ...deps }, new MockCache(null, 60_000));
 }
 
 describe('LiveActionRunner — caching parity', () => {
@@ -190,8 +189,6 @@ describe('LiveActionRunner — unknown action surfaces a clean error', () => {
       cacheKey: () => ['unknown.action'],
     };
     const ac = new AbortController();
-    await expect(r.run(fakeAction, {}, { signal: ac.signal })).rejects.toThrow(
-      /no live fetcher/,
-    );
+    await expect(r.run(fakeAction, {}, { signal: ac.signal })).rejects.toThrow(/no live fetcher/);
   });
 });

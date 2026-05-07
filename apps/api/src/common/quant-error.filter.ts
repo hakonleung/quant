@@ -4,7 +4,13 @@
  * generic 500 with the trace_id so users can quote it back to support.
  */
 
-import { Catch, HttpException, Logger, type ArgumentsHost, type ExceptionFilter } from '@nestjs/common';
+import {
+  Catch,
+  HttpException,
+  Logger,
+  type ArgumentsHost,
+  type ExceptionFilter,
+} from '@nestjs/common';
 import type { Request, Response } from 'express';
 import { QuantError, ERROR_HTTP_STATUS, TRACE_HEADER } from '@quant/shared';
 import type { RequestWithTraceId } from './trace.middleware.js';

@@ -73,35 +73,41 @@ async function runList(ctx: Parameters<CommandSpec['run']>[1]) {
       {
         key: 'a',
         hint: { keys: ['a'], label: 'analyze (paid)', danger: true },
-        resolve: (s) => widgetResolution(
-          confirmPrompt({
-            title: `analyze sector ${String(s.name)} (paid)`,
-            danger: true,
-            onYes: () => ({ kind: 'command', line: `analyze sector ${String(s.id)} --force` }),
-            onNo: () => canceledResolution,
-          }),
-        ),
+        resolve: (s) =>
+          widgetResolution(
+            confirmPrompt({
+              title: `analyze sector ${String(s.name)} (paid)`,
+              danger: true,
+              onYes: () => ({ kind: 'command', line: `analyze sector ${String(s.id)} --force` }),
+              onNo: () => canceledResolution,
+            }),
+          ),
       },
       {
         key: 'd',
         hint: { keys: ['d'], label: 'delete', danger: true },
-        resolve: (s) => widgetResolution(
-          confirmPrompt({
-            title: `delete sector ${String(s.name)}?`,
-            danger: true,
-            onYes: () => ({ kind: 'command', line: `sector rm ${String(s.id)}` }),
-            onNo: () => canceledResolution,
-          }),
-        ),
+        resolve: (s) =>
+          widgetResolution(
+            confirmPrompt({
+              title: `delete sector ${String(s.name)}?`,
+              danger: true,
+              onYes: () => ({ kind: 'command', line: `sector rm ${String(s.id)}` }),
+              onNo: () => canceledResolution,
+            }),
+          ),
       },
     ],
   });
   return interactive(widget);
 }
 
-async function runShow(argv: { positional: readonly string[] }, ctx: Parameters<CommandSpec['run']>[1]) {
+async function runShow(
+  argv: { positional: readonly string[] },
+  ctx: Parameters<CommandSpec['run']>[1],
+) {
   const idOrName = argv.positional[1];
-  if (idOrName === undefined) return textErr('usage: sector show <id|name>   (use `all` for the full universe)');
+  if (idOrName === undefined)
+    return textErr('usage: sector show <id|name>   (use `all` for the full universe)');
   const isAll = idOrName.toLowerCase() === ALL_ID;
   let sectorName: string;
   let codes: readonly string[];
@@ -130,9 +136,10 @@ async function runShow(argv: { positional: readonly string[] }, ctx: Parameters<
       pe: snap?.pe_ttm ?? 0,
     };
   });
-  const titleSuffix = codes.length > items.length
-    ? `${String(items.length)} of ${String(codes.length)} shown`
-    : `${String(items.length)} members`;
+  const titleSuffix =
+    codes.length > items.length
+      ? `${String(items.length)} of ${String(codes.length)} shown`
+      : `${String(items.length)} members`;
   const widget = selectableList({
     title: `sector ${sectorName} (${titleSuffix})`,
     items,
@@ -147,14 +154,15 @@ async function runShow(argv: { positional: readonly string[] }, ctx: Parameters<
       {
         key: 'a',
         hint: { keys: ['a'], label: 'analyze (paid)', danger: true },
-        resolve: (s) => widgetResolution(
-          confirmPrompt({
-            title: `analyze ${String(s.code)} (paid)`,
-            danger: true,
-            onYes: () => ({ kind: 'command', line: `analyze ${String(s.code)} --force` }),
-            onNo: () => canceledResolution,
-          }),
-        ),
+        resolve: (s) =>
+          widgetResolution(
+            confirmPrompt({
+              title: `analyze ${String(s.code)} (paid)`,
+              danger: true,
+              onYes: () => ({ kind: 'command', line: `analyze ${String(s.code)} --force` }),
+              onNo: () => canceledResolution,
+            }),
+          ),
       },
       {
         key: 'f',
@@ -166,21 +174,23 @@ async function runShow(argv: { positional: readonly string[] }, ctx: Parameters<
   return interactive(widget);
 }
 
-async function runRemove(argv: { positional: readonly string[] }, ctx: Parameters<CommandSpec['run']>[1]) {
+async function runRemove(
+  argv: { positional: readonly string[] },
+  ctx: Parameters<CommandSpec['run']>[1],
+) {
   const idOrName = argv.positional[1];
   if (idOrName === undefined) return textErr('usage: sector rm <id|name>');
   await ctx.actions.run(sectorRemoveAction, { idOrName }, { signal: ctx.signal });
   return textOk(`removed sector ${idOrName}`);
 }
 
-async function runRefresh(argv: { positional: readonly string[] }, ctx: Parameters<CommandSpec['run']>[1]) {
+async function runRefresh(
+  argv: { positional: readonly string[] },
+  ctx: Parameters<CommandSpec['run']>[1],
+) {
   const idOrName = argv.positional[1];
   if (idOrName === undefined) return textErr('usage: sector refresh <id|name>');
-  const r = await ctx.actions.run(
-    sectorRefreshDynamicAction,
-    { idOrName },
-    { signal: ctx.signal },
-  );
+  const r = await ctx.actions.run(sectorRefreshDynamicAction, { idOrName }, { signal: ctx.signal });
   return textOk(
     `refreshed sector ${r.data.name}: codes=${String(r.data.count)} chgPct=${String(r.data.chgPct ?? '—')}`,
   );
@@ -295,7 +305,11 @@ function addUserPaste(ctx: Parameters<CommandSpec['run']>[1], name: string, mode
   });
 }
 
-function addUserConfirm(ctx: Parameters<CommandSpec['run']>[1], name: string, codes: readonly string[]) {
+function addUserConfirm(
+  ctx: Parameters<CommandSpec['run']>[1],
+  name: string,
+  codes: readonly string[],
+) {
   return confirmPrompt({
     title: `save user sector "${name}" (${String(codes.length)} codes)?`,
     onYes: () => {
@@ -358,7 +372,10 @@ void noopResolution;
 
 /* ---------- helpers ---------- */
 
-function parseCodesText(text: string, mode: 'json' | 'csv'): { valid: string[]; invalid: string[] } {
+function parseCodesText(
+  text: string,
+  mode: 'json' | 'csv',
+): { valid: string[]; invalid: string[] } {
   const valid: string[] = [];
   const invalid: string[] = [];
   let raw: unknown[];

@@ -36,10 +36,7 @@ interface AnchorRect {
   readonly width: number;
 }
 
-function useAnchorRect(
-  ref: React.RefObject<HTMLElement | null>,
-  open: boolean,
-): AnchorRect | null {
+function useAnchorRect(ref: React.RefObject<HTMLElement | null>, open: boolean): AnchorRect | null {
   const [rect, setRect] = useState<AnchorRect | null>(null);
   useEffect(() => {
     const el = ref.current;

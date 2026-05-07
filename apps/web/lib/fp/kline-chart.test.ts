@@ -30,7 +30,9 @@ describe('buildLayout', () => {
     const bars = [bar(), bar({ open: 105, close: 100 })];
     const { layout } = buildLayout(bars);
     expect(layout[0]!.x).toBe(DEFAULT_GEOMETRY.leftPad);
-    expect(layout[1]!.x).toBe(DEFAULT_GEOMETRY.leftPad + DEFAULT_GEOMETRY.candleWidth + DEFAULT_GEOMETRY.candleGap);
+    expect(layout[1]!.x).toBe(
+      DEFAULT_GEOMETRY.leftPad + DEFAULT_GEOMETRY.candleWidth + DEFAULT_GEOMETRY.candleGap,
+    );
   });
 
   it('flags up bar when close >= open', () => {

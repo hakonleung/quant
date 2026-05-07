@@ -12,7 +12,10 @@ describe('formPrompt — basic editing', () => {
       { key: 'name', label: 'name', kind: 'text' },
       { key: 'kind', label: 'kind', kind: 'enum', options: ['user', 'dynamic'], initial: 'user' },
     ],
-    onSubmit: (v): CommitResolution => ({ kind: 'output', entry: { body: JSON.stringify(v), status: 'ok' } }),
+    onSubmit: (v): CommitResolution => ({
+      kind: 'output',
+      entry: { body: JSON.stringify(v), status: 'ok' },
+    }),
   });
 
   it('typing into text field appends char (golden)', () => {

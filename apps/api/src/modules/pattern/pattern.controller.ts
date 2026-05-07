@@ -8,14 +8,7 @@
  * `PatternFindSimilarResponseSchema`.
  */
 
-import {
-  BadRequestException,
-  Body,
-  Controller,
-  Inject,
-  Post,
-  Req,
-} from '@nestjs/common';
+import { BadRequestException, Body, Controller, Inject, Post, Req } from '@nestjs/common';
 import {
   PatternFindSimilarRequestSchema,
   type PatternFindSimilarRequest,

@@ -8,11 +8,7 @@
  * `{dryRun:true}` when no webhook is configured.
  */
 
-import {
-  PushTestResponseSchema,
-  type PushTestRequest,
-  type PushTestResponse,
-} from '@quant/shared';
+import { PushTestResponseSchema, type PushTestRequest, type PushTestResponse } from '@quant/shared';
 import { useMutation, type UseMutationResult } from '@tanstack/react-query';
 
 import { apiPost } from '../api/client.js';

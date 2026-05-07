@@ -1,9 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import {
-  QueueSnapshotEntrySchema,
-  QueueSnapshotSchema,
-} from './queue-status.js';
+import { QueueSnapshotEntrySchema, QueueSnapshotSchema } from './queue-status.js';
 
 describe('QueueSnapshotEntrySchema', () => {
   it('accepts a valid entry', () => {

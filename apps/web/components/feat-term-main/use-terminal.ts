@@ -81,7 +81,12 @@ export function useTerminal(): TerminalApi {
   const fitRef = useRef<FitAddon | null>(null);
   const indexRef = useRef<StockIndex>(EMPTY_STOCK_INDEX);
   const abortRef = useRef<AbortController | null>(null);
-  const memRef = useRef<RenderMem>({ committedHistory: 0, footerRows: 0, initial: true, spinnerTick: 0 });
+  const memRef = useRef<RenderMem>({
+    committedHistory: 0,
+    footerRows: 0,
+    initial: true,
+    spinnerTick: 0,
+  });
   const paintScheduledRef = useRef<boolean>(false);
   const spinnerTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -177,7 +182,7 @@ export function useTerminal(): TerminalApi {
         applyCompletion();
       }
     },
-    [buildCtx, dispatch, registry, /* applyCompletion */],
+    [buildCtx, dispatch, registry /* applyCompletion */],
     // applyCompletion is stable below
   );
 
@@ -206,7 +211,8 @@ export function useTerminal(): TerminalApi {
     }
     // Multiple — insert the longest common prefix beyond the user fragment
     if (r.commonPrefix.length > fragmentText.length) {
-      const next = cur.buffer.slice(0, r.tokenStart) + r.commonPrefix + cur.buffer.slice(r.tokenEnd);
+      const next =
+        cur.buffer.slice(0, r.tokenStart) + r.commonPrefix + cur.buffer.slice(r.tokenEnd);
       const cursor = r.tokenStart + r.commonPrefix.length;
       dispatch({ kind: 'setBuffer', buffer: next, cursor });
       return;
@@ -317,12 +323,7 @@ export function useTerminal(): TerminalApi {
           ? 'qX//OS terminal · MOCK runner · type `help` to get started'
           : 'qX//OS terminal · type `help` to get started';
       term.writeln(paint(banner, ANSI.gray));
-      paintTerminal(
-        term,
-        stateRef.current,
-        memRef.current,
-        useUiStore.getState().focusCode,
-      );
+      paintTerminal(term, stateRef.current, memRef.current, useUiStore.getState().focusCode);
 
       void preloadIndex(indexRef);
 
@@ -332,7 +333,7 @@ export function useTerminal(): TerminalApi {
         } catch {
           /* */
         }
-          schedulePaint();
+        schedulePaint();
       });
       ro.observe(host);
       observerRef.current = ro;
@@ -399,7 +400,12 @@ async function preloadIndex(ref: React.MutableRefObject<StockIndex>): Promise<vo
 
 /* ---------- incremental rendering ---------- */
 
-function paintTerminal(term: Terminal | null, state: TerminalState, mem: RenderMem, _focusCode: string | null): void {
+function paintTerminal(
+  term: Terminal | null,
+  state: TerminalState,
+  mem: RenderMem,
+  _focusCode: string | null,
+): void {
   if (term === null) return;
 
   // History shrunk (e.g. `clear` / `clear last N` reset state.history): we
@@ -496,14 +502,10 @@ function renderFooter(term: Terminal, state: TerminalState, mem: RenderMem): str
   }
   // idle
   const tail =
-    state.cursor < state.buffer.length
-      ? `\x1b[${String(state.buffer.length - state.cursor)}D`
-      : '';
+    state.cursor < state.buffer.length ? `\x1b[${String(state.buffer.length - state.cursor)}D` : '';
   const promptLine = `${PROMPT}${state.buffer}${tail}`;
   if (state.candidates.length > 0) {
-    const list = state.candidates
-      .map((c) => paint(c, ANSI.gray))
-      .join(paint(' · ', ANSI.gray));
+    const list = state.candidates.map((c) => paint(c, ANSI.gray)).join(paint(' · ', ANSI.gray));
     return `${list}\n${promptLine}`;
   }
   return promptLine;

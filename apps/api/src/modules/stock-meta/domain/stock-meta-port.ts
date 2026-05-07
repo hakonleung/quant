@@ -39,8 +39,5 @@ export interface StockMetaPort {
    * record are dropped (matching `getBatch`); codes whose kline cache
    * is empty come back with `price: null` and every derived field null.
    */
-  listSnapshots(
-    codes: readonly string[],
-    traceId: string,
-  ): Promise<readonly StockSnapshotDto[]>;
+  listSnapshots(codes: readonly string[], traceId: string): Promise<readonly StockSnapshotDto[]>;
 }

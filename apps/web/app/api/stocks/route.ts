@@ -15,10 +15,8 @@ const ListSchema = z.array(StockMetaDtoSchema);
 export async function GET(request: Request): Promise<Response> {
   const traceId = readTrace(request);
   try {
-    const rows: readonly StockMetaDto[] = await nestJson(
-      request,
-      '/api/stocks',
-      (raw) => ListSchema.parse(raw),
+    const rows: readonly StockMetaDto[] = await nestJson(request, '/api/stocks', (raw) =>
+      ListSchema.parse(raw),
     );
     return Response.json(rows, { headers: { [TRACE_HEADER]: traceId } });
   } catch (err) {

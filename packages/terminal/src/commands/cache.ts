@@ -18,7 +18,11 @@ export const cacheCommand: CommandSpec = {
       const s = ctx.actions.stats();
       return textOk(
         renderTable(
-          [{ K: 'entries', V: s.entries }, { K: 'hits', V: s.hits }, { K: 'misses', V: s.misses }],
+          [
+            { K: 'entries', V: s.entries },
+            { K: 'hits', V: s.hits },
+            { K: 'misses', V: s.misses },
+          ],
           [
             { key: 'K', header: 'KEY', max: 12 },
             { key: 'V', header: 'VAL', align: 'right' },

@@ -68,9 +68,8 @@ export async function listKlineBulk(
 ): Promise<KlineBulkResponse> {
   const q = codes.length === 0 ? '' : codes.map(encodeURIComponent).join(',');
   try {
-    return await apiGet(
-      `/api/kline/bulk?codes=${q}&n=${String(n)}`,
-      (raw) => KlineBulkSchema.parse(raw),
+    return await apiGet(`/api/kline/bulk?codes=${q}&n=${String(n)}`, (raw) =>
+      KlineBulkSchema.parse(raw),
     );
   } catch {
     return {};
@@ -98,10 +97,7 @@ export async function listStockSnapshots(
  * yet" without throwing.
  */
 export async function getCachedSentiment(code: string): Promise<Sentiment | null> {
-  return safeOne(
-    `/api/sentiment/analyze_one?code=${encodeURIComponent(code)}`,
-    SentimentSchema,
-  );
+  return safeOne(`/api/sentiment/analyze_one?code=${encodeURIComponent(code)}`, SentimentSchema);
 }
 
 /**
@@ -112,11 +108,7 @@ export async function getCachedSentiment(code: string): Promise<Sentiment | null
  * {@link useAnalyzeSentiment}).
  */
 export async function analyzeSentiment(code: string): Promise<Sentiment> {
-  return apiPost(
-    `/api/sentiment/analyze_one`,
-    { code },
-    (raw) => SentimentSchema.parse(raw),
-  );
+  return apiPost(`/api/sentiment/analyze_one`, { code }, (raw) => SentimentSchema.parse(raw));
 }
 
 /**
@@ -141,23 +133,16 @@ export async function getCachedMarketSentiment(
  * AND the parsed AST so the UI can show "this is how the parser
  * understood your sentence" alongside the result.
  */
-export async function runNlScreen(
-  nl: string,
-  asof?: string,
-): Promise<NlScreenResult> {
-  return apiPost(
-    `/api/screen/nl`,
-    asof === undefined ? { nl } : { nl, asof },
-    (raw) => NlScreenResultSchema.parse(raw),
+export async function runNlScreen(nl: string, asof?: string): Promise<NlScreenResult> {
+  return apiPost(`/api/screen/nl`, asof === undefined ? { nl } : { nl, asof }, (raw) =>
+    NlScreenResultSchema.parse(raw),
   );
 }
 
 /** Translate NL → AST without executing the screen. */
 export async function nlToDsl(nl: string, asof?: string): Promise<NlToDslResult> {
-  return apiPost(
-    `/api/screen/nl2dsl`,
-    asof === undefined ? { nl } : { nl, asof },
-    (raw) => NlToDslResultSchema.parse(raw),
+  return apiPost(`/api/screen/nl2dsl`, asof === undefined ? { nl } : { nl, asof }, (raw) =>
+    NlToDslResultSchema.parse(raw),
   );
 }
 
@@ -185,13 +170,9 @@ export async function findSimilarPatterns(
   );
 }
 
-export async function analyzeManySentiment(
-  codes: readonly string[],
-): Promise<MarketSentiment> {
-  return apiPost(
-    `/api/sentiment/analyze_many`,
-    { codes: [...codes] },
-    (raw) => MarketSentimentSchema.parse(raw),
+export async function analyzeManySentiment(codes: readonly string[]): Promise<MarketSentiment> {
+  return apiPost(`/api/sentiment/analyze_many`, { codes: [...codes] }, (raw) =>
+    MarketSentimentSchema.parse(raw),
   );
 }
 

@@ -32,13 +32,7 @@ export interface UiStoreShim {
  *   watch      — watch tasks (mostly SSE-driven; included for symmetry)
  *   all        — everything above
  */
-export type RevalidateScope =
-  | 'meta'
-  | 'kline'
-  | 'sentiment'
-  | 'sectors'
-  | 'watch'
-  | 'all';
+export type RevalidateScope = 'meta' | 'kline' | 'sentiment' | 'sectors' | 'watch' | 'all';
 
 export interface CommandStores {
   readonly ui: UiStoreShim;
@@ -60,7 +54,11 @@ export interface CommandCtx {
 /* ---------- command spec ---------- */
 
 export type CommandRunOutput =
-  | { readonly kind: 'text'; readonly status: OutputEntry['status']; readonly tail: { readonly body: string } }
+  | {
+      readonly kind: 'text';
+      readonly status: OutputEntry['status'];
+      readonly tail: { readonly body: string };
+    }
   | { readonly kind: 'interactive'; readonly widget: InteractiveWidgetAny }
   /**
    * Bypass the normal `result` event and dispatch one or more engine events

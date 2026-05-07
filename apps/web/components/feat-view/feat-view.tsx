@@ -159,13 +159,7 @@ export function FeatView({
       color={cyber ? 'term.ink2' : 'ink'}
       position={isFullscreen ? 'fixed' : 'relative'}
       flex={
-        isFullscreen
-          ? undefined
-          : bodyOverlay
-            ? '1 1 0'
-            : inlineCollapsed
-              ? '0 0 auto'
-              : '1 1 0'
+        isFullscreen ? undefined : bodyOverlay ? '1 1 0' : inlineCollapsed ? '0 0 auto' : '1 1 0'
       }
       minH={0}
       display="flex"
@@ -246,7 +240,13 @@ function cornerStyle(corner: 'tl' | 'br', cyber: boolean): Record<string, unknow
   if (corner === 'tl') {
     return { ...base, top: '-1px', left: '-1px', borderTopWidth: '1px', borderLeftWidth: '1px' };
   }
-  return { ...base, bottom: '-1px', right: '-1px', borderBottomWidth: '1px', borderRightWidth: '1px' };
+  return {
+    ...base,
+    bottom: '-1px',
+    right: '-1px',
+    borderBottomWidth: '1px',
+    borderRightWidth: '1px',
+  };
 }
 
 interface FeatViewHeaderProps {
@@ -414,10 +414,7 @@ function OverlayBody({
       const target = Math.max(r.width, 480);
       const width = Math.min(target, window.innerWidth - margin * 2);
       const desiredLeft = r.right - width;
-      const left = Math.min(
-        Math.max(desiredLeft, margin),
-        window.innerWidth - width - margin,
-      );
+      const left = Math.min(Math.max(desiredLeft, margin), window.innerWidth - width - margin);
       setRect({ top: r.bottom, left, width });
     };
     update();
@@ -476,4 +473,3 @@ function OverlayBody({
     </Box>
   );
 }
-

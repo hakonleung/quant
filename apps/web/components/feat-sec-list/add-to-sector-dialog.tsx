@@ -140,7 +140,14 @@ export function AddToSectorDialog({ open, code, onClose }: Props): React.ReactEl
             })
           )}
         </Box>
-        <Flex gap="8px" px="14px" py="10px" borderTopWidth="1px" borderColor="line" justify="flex-end">
+        <Flex
+          gap="8px"
+          px="14px"
+          py="10px"
+          borderTopWidth="1px"
+          borderColor="line"
+          justify="flex-end"
+        >
           <Button
             h="28px"
             px="14px"

@@ -2,11 +2,7 @@
  * BFF: POST /api/push/test → forward to NestJS `/api/push/test`.
  */
 
-import {
-  PushTestRequestSchema,
-  PushTestResponseSchema,
-  TRACE_HEADER,
-} from '@quant/shared';
+import { PushTestRequestSchema, PushTestResponseSchema, TRACE_HEADER } from '@quant/shared';
 
 import { bffErrorResponse, nestJson, readTrace } from '../../_lib/proxy.js';
 

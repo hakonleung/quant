@@ -6,7 +6,14 @@ function bjt(year: number, month1: number, day: number, hour: number, minute = 0
 }
 
 // Helper: build UTC Date from ET wall clock with explicit offset (DST = -4, std = -5).
-function etUtc(year: number, month1: number, day: number, hour: number, minute: number, offsetH: number): Date {
+function etUtc(
+  year: number,
+  month1: number,
+  day: number,
+  hour: number,
+  minute: number,
+  offsetH: number,
+): Date {
   return new Date(Date.UTC(year, month1 - 1, day, hour - offsetH, minute));
 }
 

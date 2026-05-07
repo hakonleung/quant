@@ -29,10 +29,7 @@ import { z } from 'zod';
 
 import { FlightClient } from '../../adapters/flight/flight-client.js';
 import { ZodValidationPipe } from '../../common/zod-pipe.js';
-import {
-  mapMarketSentimentToView,
-  mapStockSentimentToView,
-} from './domain/payload-mapper.js';
+import { mapMarketSentimentToView, mapStockSentimentToView } from './domain/payload-mapper.js';
 import { SENTIMENT_FLIGHT_CLIENT } from './sentiment.token.js';
 
 // ---------------------------------------------------------------------------

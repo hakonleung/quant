@@ -59,7 +59,9 @@ function isVisible(hint: KeyHint, opts: RenderHintsOptions): boolean {
 function renderSegment(hint: KeyHint): string {
   const keyText = hint.keys.join('/');
   const danger = hint.danger === true;
-  const keyPaint = danger ? paint(keyText, ANSI.red, ANSI.bold) : paint(keyText, ANSI.cyan, ANSI.bold);
+  const keyPaint = danger
+    ? paint(keyText, ANSI.red, ANSI.bold)
+    : paint(keyText, ANSI.cyan, ANSI.bold);
   const labelPaint = danger ? paint(hint.label, ANSI.red) : paint(hint.label, ANSI.gray);
   return `${keyPaint} ${labelPaint}`;
 }
