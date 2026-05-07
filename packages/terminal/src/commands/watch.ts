@@ -204,6 +204,15 @@ function runAdd(ctx: Parameters<CommandSpec['run']>[1]) {
             v['kind'] === 'abs' ? currencySuffix((v['market'] ?? 'a') as 'a' | 'hk' | 'us') : '%',
         },
         {
+          // Only consumed when baseline === 'trend'; the suffix hides it
+          // visually for the other baselines so the row reads as inert.
+          key: 'windowSec',
+          label: 'window',
+          kind: 'number',
+          initial: String(DEFAULT_TREND_WINDOW_SEC),
+          suffix: (v) => (v['baseline'] === 'trend' ? 's' : '— (only for trend)'),
+        },
+        {
           key: 'intervalMin',
           label: 'interval (min)',
           kind: 'number',
@@ -249,6 +258,10 @@ function runAdd(ctx: Parameters<CommandSpec['run']>[1]) {
         const baseline = (BASELINES as readonly string[]).includes(v['baseline'] ?? '')
           ? (v['baseline'] as WatchBaseline)
           : 'prev_close';
+        const windowSecRaw = Number.parseInt(v['windowSec'] ?? '', 10);
+        const windowSec = Number.isFinite(windowSecRaw)
+          ? Math.max(1, Math.min(4 * 60 * 60, windowSecRaw))
+          : DEFAULT_TREND_WINDOW_SEC;
         const condition: WatchCondition =
           kind === 'pct'
             ? baseline === 'trend'
@@ -257,7 +270,7 @@ function runAdd(ctx: Parameters<CommandSpec['run']>[1]) {
                   baseline,
                   op,
                   thresholdPct: value,
-                  window: DEFAULT_TREND_WINDOW_SEC,
+                  window: windowSec,
                 }
               : {
                   kind: 'pct',
