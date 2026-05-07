@@ -149,6 +149,7 @@ module = [
     "quant_core.ports.cache",
     "quant_core.ports.kline_repo",
     "quant_core.services.kline_service",
+    "quant_core.services.blacklist_service",
     "quant_core.domain.rules.kline_assemble",
     "quant_io.llm.deepseek_client",
     "quant_cache.*",

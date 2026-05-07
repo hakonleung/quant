@@ -32,7 +32,18 @@ export class SysCfgStore implements OnModuleInit {
     return this.withLock(async () => {
       if (this.loaded) return;
       const raw = await readJsonOr<unknown>(this.file, DEFAULT_SYS_CFG);
-      const parsed = SysCfgSchema.safeParse(raw);
+      // Pre-zod migration: drop the legacy `blacklist` field (the
+      // user-maintained list moved to a backend-cron-managed file in
+      // 2026-05). Strict schema would otherwise reject loaded files.
+      const cleaned =
+        typeof raw === 'object' && raw !== null && !Array.isArray(raw)
+          ? (() => {
+              const r: Record<string, unknown> = { ...(raw as Record<string, unknown>) };
+              delete r['blacklist'];
+              return r;
+            })()
+          : raw;
+      const parsed = SysCfgSchema.safeParse(cleaned);
       if (!parsed.success) {
         this.logger.warn(`sys-cfg.json failed validation, using defaults: ${parsed.error.message}`);
         this.cfg = DEFAULT_SYS_CFG;

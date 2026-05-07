@@ -48,6 +48,7 @@ from quant_io.sources.akshare_stock_meta import AKShareStockMetaSource
 from quant_io.sources.akshare_watch import AKShareWatchSource
 
 from quant_rpc.handlers import HandlerRegistry
+from quant_rpc.ops.blacklist import ComputeAshareBlacklistHandler
 from quant_rpc.ops.kline import ListKlineWatermarksHandler, SyncKlineForCodeHandler
 from quant_rpc.ops.kline_read import ListKlineBulkLastNHandler, ListKlineForCodeHandler
 from quant_rpc.ops.nl_screen import NlScreenHandler
@@ -192,6 +193,11 @@ def main() -> int:
     pattern_engine = DTWPatternEngine(kline_repo)
     pattern_service = PatternService(kline_repo, pattern_engine)
     registry.register(FindSimilarPatternsHandler(pattern_service, meta_repo, clock))
+    registry.register(
+        ComputeAshareBlacklistHandler(
+            meta_repo=meta_repo, kline_repo=kline_repo, clock=clock,
+        )
+    )
     registry.register(GetLatestTradeDayHandler(clock))
     registry.register(
         NlScreenHandler(

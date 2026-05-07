@@ -20,12 +20,8 @@
  */
 
 import { Inject, Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
-import {
-  newTraceId,
-  type ScanAccepted,
-  type ScanKind,
-  type ScanResult,
-} from '@quant/shared';
+import { newTraceId, type ScanAccepted, type ScanKind, type ScanResult } from '@quant/shared';
+import { BlacklistService } from '../blacklist/blacklist.service.js';
 import { CacheInspector } from './cache-inspector.js';
 import { KLINE_QUEUE, META_QUEUE } from './flight.token.js';
 import type { InMemoryQueue } from './domain/in-memory-queue.js';
@@ -81,6 +77,7 @@ export class CronOrchestrator implements OnModuleInit, OnModuleDestroy {
     @Inject(META_QUEUE) private readonly metaQueue: InMemoryQueue<MetaJob>,
     @Inject(KLINE_QUEUE) private readonly klineQueue: InMemoryQueue<KlineJob>,
     @Inject(CacheInspector) private readonly inspector: CacheInspector,
+    @Inject(BlacklistService) private readonly blacklist: BlacklistService,
   ) {}
 
   onModuleInit(): void {
@@ -160,11 +157,33 @@ export class CronOrchestrator implements OnModuleInit, OnModuleDestroy {
   private async scan(kind: ScanKind, traceId: string): Promise<ScanResult> {
     const startedAt = new Date().toISOString();
     const t0 = Date.now();
+    const wantBlacklist = kind === 'blacklist' || kind === 'all';
     const wantMeta = kind === 'meta' || kind === 'all';
     const wantKline = kind === 'kline' || kind === 'all';
     let metaEnqueued = 0;
     let klineEnqueued = 0;
+    let blacklisted: number | undefined;
     try {
+      // Blacklist runs **first** so meta + kline scans see the latest
+      // filter — the cron's whole point is reducing noise, and a stale
+      // blacklist would let a freshly-flagged code through one more
+      // sync cycle.
+      if (wantBlacklist) {
+        try {
+          const snap = await this.blacklist.refresh(traceId);
+          blacklisted = snap.codes.length;
+        } catch (err) {
+          if (isPyFlightDown(err)) {
+            this.logger.warn(
+              `blacklist refresh skipped — py flight unreachable. traceId=${traceId}`,
+            );
+          } else {
+            this.logger.warn(
+              `blacklist refresh failed: ${err instanceof Error ? err.message : String(err)}`,
+            );
+          }
+        }
+      }
       const [meta, kline] = await Promise.all([
         wantMeta ? this.scanMeta(traceId) : Promise.resolve(0),
         wantKline ? this.scanKline(traceId) : Promise.resolve(0),
@@ -173,10 +192,6 @@ export class CronOrchestrator implements OnModuleInit, OnModuleDestroy {
       klineEnqueued = kline;
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      // ECONNREFUSED on the Flight port is a benign dev-time signal —
-      // it means the Python service isn't up yet (or has been stopped
-      // for maintenance). Log at WARN with an explicit hint, not ERROR,
-      // so the gateway log stays readable when py is intentionally off.
       if (isPyFlightDown(err)) {
         this.logger.warn(
           `inspector skipped — py flight unreachable (port 8815). traceId=${traceId}`,
@@ -191,13 +206,22 @@ export class CronOrchestrator implements OnModuleInit, OnModuleDestroy {
         elapsedMs: Date.now() - t0,
         metaEnqueued: 0,
         klineEnqueued: 0,
+        ...(blacklisted !== undefined ? { blacklisted } : {}),
       };
     }
     const elapsedMs = Date.now() - t0;
     this.logger.log(
-      `cron_scan_done kind=${kind} traceId=${traceId} meta_enqueued=${String(metaEnqueued)} kline_enqueued=${String(klineEnqueued)} elapsedMs=${String(elapsedMs)}`,
+      `cron_scan_done kind=${kind} traceId=${traceId} meta_enqueued=${String(metaEnqueued)} kline_enqueued=${String(klineEnqueued)} blacklisted=${String(blacklisted ?? '-')} elapsedMs=${String(elapsedMs)}`,
     );
-    return { kind, traceId, startedAt, elapsedMs, metaEnqueued, klineEnqueued };
+    return {
+      kind,
+      traceId,
+      startedAt,
+      elapsedMs,
+      metaEnqueued,
+      klineEnqueued,
+      ...(blacklisted !== undefined ? { blacklisted } : {}),
+    };
   }
 
   private async scanMeta(traceId: string): Promise<number> {

@@ -8,8 +8,9 @@
  */
 
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import { QuantError } from '@quant/shared';
+import { QuantError, isAShareCode } from '@quant/shared';
 import { FlightClient } from '../../adapters/flight/flight-client.js';
+import { BlacklistStore } from '../blacklist/blacklist.store.js';
 import { ORCH_FLIGHT_CLIENT } from './flight.token.js';
 import { ExponentialBackoff } from './domain/backoff.js';
 import type { JobEnvelope, JobProcessor, MetaJob, ReQueue } from './domain/types.js';
@@ -26,9 +27,22 @@ export class MetaWorker implements JobProcessor<MetaJob> {
     jitterRatio: 0.2,
   });
 
-  constructor(@Inject(ORCH_FLIGHT_CLIENT) private readonly flight: FlightClient) {}
+  constructor(
+    @Inject(ORCH_FLIGHT_CLIENT) private readonly flight: FlightClient,
+    @Inject(BlacklistStore) private readonly blacklist: BlacklistStore,
+  ) {}
 
   async process(job: JobEnvelope<MetaJob>, queue: ReQueue<MetaJob>): Promise<void> {
+    // Skip per-code meta enrichment for blacklisted A-share codes — they
+    // contribute no value to the workbench and the cron will revisit
+    // them once the daily blacklist re-runs.
+    if (
+      (job.data.kind === 'enrich' || job.data.kind === 'enrich-financials') &&
+      isAShareCode(job.data.code) &&
+      this.blacklist.has(job.data.code)
+    ) {
+      return;
+    }
     try {
       switch (job.data.kind) {
         case 'enrich':
@@ -46,11 +60,7 @@ export class MetaWorker implements JobProcessor<MetaJob> {
           );
           break;
         case 'full_sync':
-          await this.flight.doGet(
-            'sync_stock_meta_full',
-            {},
-            { traceId: job.data.traceId },
-          );
+          await this.flight.doGet('sync_stock_meta_full', {}, { traceId: job.data.traceId });
           break;
       }
     } catch (err) {

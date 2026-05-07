@@ -1,9 +1,12 @@
 /**
- * User settings (theme + Slack push targets + applied columns) and the
- * stock blacklist are bundled into one Sys.Cfg blob persisted on the
- * backend via `PUT /api/sys-cfg`. The two Zustand stores stay separate
- * for callers (settings vs. blacklist domains are independent) but
- * `useSysCfgRemoteSync` reads from / writes to both as one record.
+ * User settings (theme + Slack push targets + applied columns) are
+ * persisted on the backend via `PUT /api/sys-cfg`. This store mirrors
+ * the in-memory copy; `useSysCfgRemoteSync` (mounted once at the shell)
+ * loads at boot and debounce-PUTs on change.
+ *
+ * The user-maintained "stock blacklist" was removed in 2026-05; the
+ * A-share noise blacklist is now backend-cron-managed and reachable via
+ * `/api/blacklist` (see `lib/hooks/use-blacklist.ts`).
  */
 
 'use client';
@@ -19,7 +22,6 @@ import {
   isColumnKey,
   type ColumnKey,
 } from '../eqty/columns.catalog.js';
-import { useBlacklistStore } from './blacklist.store.js';
 import { jsonEqual } from './remote-sync.js';
 
 export type { ThemeMode, SlackTarget };
@@ -68,12 +70,10 @@ export const useSettingsStore = create<SettingsState>()((set) => ({
 
 function snapshotCfg(): SysCfg {
   const s = useSettingsStore.getState();
-  const b = useBlacklistStore.getState();
   return {
     theme: s.theme,
     slackTargets: [...s.slackTargets],
     appliedColumns: [...s.appliedColumns],
-    blacklist: [...b.entries],
   };
 }
 
@@ -92,15 +92,14 @@ function applyCfg(cfg: SysCfg): void {
     slackTargets: cfg.slackTargets,
     appliedColumns: filtered.length === 0 ? DEFAULT_APPLIED_COLUMNS : filtered,
   });
-  useBlacklistStore.getState().setEntries(cfg.blacklist);
 }
 
 const DEBOUNCE_MS = 400;
 
 /**
  * Boot hook — call once at the app shell. Loads sys-cfg from the
- * backend and seeds both stores; afterwards any mutation in either
- * store debounce-PUTs the combined blob.
+ * backend and seeds the store; afterwards any mutation debounce-PUTs
+ * the combined blob.
  */
 export function useSysCfgRemoteSync(): void {
   const lastSentRef = useRef<SysCfg | null>(null);
@@ -140,13 +139,11 @@ export function useSysCfgRemoteSync(): void {
     };
 
     const u1 = useSettingsStore.subscribe(onChange);
-    const u2 = useBlacklistStore.subscribe(onChange);
 
     return () => {
       cancelled = true;
       if (timer !== null) clearTimeout(timer);
       u1();
-      u2();
     };
   }, []);
 }

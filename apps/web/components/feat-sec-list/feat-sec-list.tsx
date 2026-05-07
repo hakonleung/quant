@@ -4,13 +4,14 @@ import { Box, Flex, Text } from '@chakra-ui/react';
 import { useMemo, useState } from 'react';
 
 import { Feat } from '../../lib/eqty/feat.js';
+import { useBlacklistSet } from '../../lib/hooks/use-blacklist.js';
 import { ConfirmCancelled, useConfirm } from '../../lib/hooks/use-confirm.js';
 import { useKlineBulk, useMarketSentiment } from '../../lib/hooks/use-eqty-data.js';
 import { useStockList } from '../../lib/hooks/use-stock-list.js';
 import { useSectorsStore, type Sector } from '../../lib/stores/sectors.store.js';
 import { ALL_SECTOR_ID, useUiStore } from '../../lib/stores/ui.store.js';
-import { FeatView } from "../feat-view/feat-view.js";
-import { FeatViewHeaderRight } from "../feat-view/feat-view-header.js";
+import { FeatView } from '../feat-view/feat-view.js';
+import { FeatViewHeaderRight } from '../feat-view/feat-view-header.js';
 import { MonoButton } from '../ui/mono-button.js';
 import { NewSectorDialog } from './new-sector-dialog.js';
 
@@ -66,8 +67,12 @@ export function FeatSecList(): React.ReactElement {
   const userRows = sectors.filter((r) => r.kind === 'user');
   const dynRows = sectors.filter((r) => r.kind === 'dynamic');
 
-  // Synthetic "All" sector — total universe, always pinned at the top.
-  const allCodes = (universe.data ?? []).map((s) => s.code);
+  // Synthetic "All" sector — total A-share universe minus the
+  // cron-managed blacklist. The blacklist is fetched async; before it
+  // resolves we render the unfiltered list (5-min stale window — first
+  // load is briefly noisier than steady state).
+  const blacklistSet = useBlacklistSet();
+  const allCodes = (universe.data ?? []).map((s) => s.code).filter((c) => !blacklistSet.has(c));
   const allSector: Sector = {
     id: ALL_SECTOR_ID,
     name: 'All',
@@ -201,7 +206,13 @@ function SideHead(): React.ReactElement {
   );
 }
 
-function SubHead({ label, border = false }: { label: string; border?: boolean }): React.ReactElement {
+function SubHead({
+  label,
+  border = false,
+}: {
+  label: string;
+  border?: boolean;
+}): React.ReactElement {
   return (
     <Text
       px="10px"
@@ -280,10 +291,28 @@ function SectorRow({
       onClick={onClick}
     >
       <Box flex="1" minW={0}>
-        <Text fontFamily="mono" fontSize="11px" color="ink" fontWeight="500" letterSpacing="0.04em" overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap">
+        <Text
+          fontFamily="mono"
+          fontSize="11px"
+          color="ink"
+          fontWeight="500"
+          letterSpacing="0.04em"
+          overflow="hidden"
+          textOverflow="ellipsis"
+          whiteSpace="nowrap"
+        >
           {sector.name}
         </Text>
-        <Text fontFamily="mono" fontSize="9px" color="ink3" letterSpacing="0.14em" mt="1px" overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap">
+        <Text
+          fontFamily="mono"
+          fontSize="9px"
+          color="ink3"
+          letterSpacing="0.14em"
+          mt="1px"
+          overflow="hidden"
+          textOverflow="ellipsis"
+          whiteSpace="nowrap"
+        >
           {sector.meta || `${String(sector.count)} members`}
           {themeCount > 0 ? ` · themed:${String(themeCount)}` : ''}
         </Text>

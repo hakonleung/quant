@@ -12,20 +12,38 @@
  */
 
 import { Inject, Injectable, Logger } from '@nestjs/common';
+import { isAShareCode } from '@quant/shared';
 import { FlightClient } from '../../adapters/flight/flight-client.js';
+import { BlacklistStore } from '../blacklist/blacklist.store.js';
 import { ORCH_FLIGHT_CLIENT } from './flight.token.js';
 import { arrowTableToStockMetaDtos } from '../stock-meta/domain/arrow-mapper.js';
+
+/** Calendar-day staleness threshold for blacklisted A-share kline. */
+const BLACKLIST_KLINE_REFRESH_DAYS = 10;
+const DAY_MS = 86_400_000;
 
 @Injectable()
 export class CacheInspector {
   private readonly logger = new Logger(CacheInspector.name);
 
-  constructor(@Inject(ORCH_FLIGHT_CLIENT) private readonly flight: FlightClient) {}
+  constructor(
+    @Inject(ORCH_FLIGHT_CLIENT) private readonly flight: FlightClient,
+    @Inject(BlacklistStore) private readonly blacklist: BlacklistStore,
+  ) {}
 
   async findIncompleteMeta(traceId: string): Promise<readonly string[]> {
     const result = await this.flight.doGet('list_stock_meta_all', {}, { traceId });
     const rows = arrowTableToStockMetaDtos(result.value);
-    return rows.filter((r) => r.industries === '').map((r) => r.code);
+    return (
+      rows
+        .filter((r) => r.industries === '')
+        // Blacklisted A-share codes never get re-enriched — meta is
+        // already deemed not worth chasing for these names (the cron
+        // will re-evaluate the blacklist daily, so a code that's no
+        // longer stagnant rejoins the work set automatically).
+        .filter((r) => !(isAShareCode(r.code) && this.blacklist.has(r.code)))
+        .map((r) => r.code)
+    );
   }
 
   /**
@@ -109,21 +127,34 @@ export class CacheInspector {
     // Authoritative threshold = the latest trading day whose bar is
     // expected to be available right now (akshare calendar +
     // post-close gating, owned by Python). On weekends, holidays, or
-    // mid-session the threshold is the previous trade day, so a code
-    // synced to that date is correctly considered fresh and skips the
-    // queue. Without this gate, every cron tick on a non-trading day
-    // re-enqueued every code forever.
+    // mid-session the threshold is the previous trade day.
     if (latestTradeDay === null) {
       this.logger.warn(`latest_trade_day_unavailable — skipping stale-kline scan`);
       return [];
     }
+    const todayMs = Date.now();
     const stale = rows
       .filter((r) => r.lastDate === null || r.lastDate < latestTradeDay)
+      .filter((r) => this.shouldSyncBlacklisted(r.code, r.lastDate, todayMs))
       .map((r) => r.code);
     this.logger.debug(
       `stale_kline_count=${String(stale.length)} latest_trade_day=${latestTradeDay}`,
     );
     return stale;
+  }
+
+  /**
+   * For blacklisted A-share codes the kline is only refreshed when the
+   * cache is missing or its watermark is ≥ 10 calendar days behind
+   * today. Non-blacklisted codes always pass.
+   */
+  private shouldSyncBlacklisted(code: string, lastDate: string | null, todayMs: number): boolean {
+    if (!isAShareCode(code) || !this.blacklist.has(code)) return true;
+    if (lastDate === null) return true;
+    const lastMs = Date.parse(`${lastDate}T00:00:00Z`);
+    if (Number.isNaN(lastMs)) return true;
+    const ageDays = Math.floor((todayMs - lastMs) / DAY_MS);
+    return ageDays >= BLACKLIST_KLINE_REFRESH_DAYS;
   }
 
   private async fetchLatestTradeDay(traceId: string): Promise<string | null> {

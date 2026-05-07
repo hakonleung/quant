@@ -10,3 +10,5 @@ export * from './watch.js';
 export * from './push.js';
 export * from './sectors.js';
 export * from './sys-cfg.js';
+export * from './markets.js';
+export * from './blacklist.js';

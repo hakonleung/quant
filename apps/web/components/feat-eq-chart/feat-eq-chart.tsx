@@ -19,7 +19,7 @@
  *   - Drag the chart body to pan; +/- overlay zooms by adjusting candle
  *     width.
  *
- * Header actions: blacklist (with confirm) + add-to-sector dialog.
+ * Header actions: add-to-sector dialog.
  */
 
 import { Box, Flex, Text } from '@chakra-ui/react';
@@ -45,9 +45,7 @@ import {
   findRangeIndices,
   totalChartHeight,
 } from './chart-canvas.js';
-import { ConfirmCancelled, useConfirm } from '../../lib/hooks/use-confirm.js';
 import { useKline, useStockMetaQuery, useStockSnapshots } from '../../lib/hooks/use-eqty-data.js';
-import { useBlacklistStore } from '../../lib/stores/blacklist.store.js';
 import { useUiStore } from '../../lib/stores/ui.store.js';
 import { FeatView } from '../feat-view/feat-view.js';
 import { AddToSectorDialog } from '../feat-sec-list/add-to-sector-dialog.js';
@@ -365,60 +363,13 @@ function ChartHeaderRight({
   stockName,
   onAddToSector,
 }: HeaderRightProps): React.ReactElement {
-  const blacklist = useBlacklistStore((s) => s.entries);
-  const addBlacklist = useBlacklistStore((s) => s.add);
-  const alreadyBlacklisted = blacklist.some((b) => b.code === code);
-  const { guard, comp: confirmComp } = useConfirm();
-
-  const onBlacklist = (): void => {
-    if (alreadyBlacklisted) return;
-    guard({
-      title: 'blacklist stock',
-      message: (
-        <>
-          <Text fontFamily="mono" fontSize="12px" color="ink2" lineHeight="1.7">
-            blacklist{' '}
-            <Text as="span" color="accent">
-              {code}
-              {stockName === '' ? '' : ` · ${stockName}`}
-            </Text>
-            ?
-          </Text>
-          <Text fontFamily="mono" fontSize="11px" color="ink3" mt="8px">
-            // hides this stock from every list view until removed manually
-          </Text>
-        </>
-      ),
-      confirmLabel: 'BLACKLIST',
-    })
-      .then(() => {
-        addBlacklist({
-          code,
-          name: stockName,
-          addedAt: new Date().toISOString().slice(0, 10),
-          note: '',
-        });
-      })
-      .catch((e: unknown) => {
-        if (e instanceof ConfirmCancelled) return;
-        throw e;
-      });
-  };
-
   return (
     <Flex align="center" gap="8px">
       <Text>{code}</Text>
       {stockName !== '' && <Text>{stockName}</Text>}
       <FeatViewHeaderRight>
         <MonoButton icon="star" label="add to sector" onClick={onAddToSector} />
-        <MonoButton
-          icon="block"
-          label={alreadyBlacklisted ? 'already blacklisted' : 'blacklist'}
-          onClick={onBlacklist}
-          disabled={alreadyBlacklisted}
-        />
       </FeatViewHeaderRight>
-      {confirmComp}
     </Flex>
   );
 }

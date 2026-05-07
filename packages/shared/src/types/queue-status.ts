@@ -27,7 +27,7 @@ export type QueueSnapshotEntry = z.infer<typeof QueueSnapshotEntrySchema>;
  * the (cheap) meta enrichment, and vice-versa. The daily 15:15 BJT
  * cron uses `'all'`.
  */
-export const ScanKindSchema = z.enum(['meta', 'kline', 'all']);
+export const ScanKindSchema = z.enum(['meta', 'kline', 'blacklist', 'all']);
 export type ScanKind = z.infer<typeof ScanKindSchema>;
 
 export const QueueSnapshotSchema = z
@@ -86,6 +86,9 @@ export const ScanResultSchema = z
     elapsedMs: z.number().int().nonnegative(),
     metaEnqueued: z.number().int().nonnegative(),
     klineEnqueued: z.number().int().nonnegative(),
+    /** Number of A-share codes flagged by the blacklist run (0 when
+     *  this scan kind didn't include the blacklist refresh). */
+    blacklisted: z.number().int().nonnegative().optional(),
   })
   .strict();
 

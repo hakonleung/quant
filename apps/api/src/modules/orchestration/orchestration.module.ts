@@ -12,6 +12,7 @@
 
 import { Inject, Module, type OnModuleInit } from '@nestjs/common';
 import { FlightClient } from '../../adapters/flight/flight-client.js';
+import { BlacklistModule } from '../blacklist/blacklist.module.js';
 import { CacheInspector } from './cache-inspector.js';
 import { CronOrchestrator } from './cron.orchestrator.js';
 import { InMemoryQueue } from './domain/in-memory-queue.js';
@@ -24,6 +25,7 @@ import type { KlineJob, MetaJob } from './domain/types.js';
 const DEFAULT_FLIGHT_TARGET = '127.0.0.1:8815';
 
 @Module({
+  imports: [BlacklistModule],
   controllers: [QueueStatusController],
   providers: [
     {

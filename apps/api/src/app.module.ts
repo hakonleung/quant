@@ -1,6 +1,7 @@
 import { Module, type MiddlewareConsumer, type NestModule } from '@nestjs/common';
 import { HealthController } from './common/health.controller.js';
 import { TraceMiddleware } from './common/trace.middleware.js';
+import { BlacklistModule } from './modules/blacklist/blacklist.module.js';
 import { KlineModule } from './modules/kline/kline.module.js';
 import { OrchestrationModule } from './modules/orchestration/orchestration.module.js';
 import { PatternModule } from './modules/pattern/pattern.module.js';
@@ -14,6 +15,7 @@ import { WatchModule } from './modules/watch/watch.module.js';
 
 @Module({
   imports: [
+    BlacklistModule,
     StockMetaModule,
     OrchestrationModule,
     KlineModule,
