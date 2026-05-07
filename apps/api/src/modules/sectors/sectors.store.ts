@@ -56,6 +56,24 @@ export class SectorsStore implements OnModuleInit {
     });
   }
 
+  /**
+   * Upsert a single sector by id (preserves position when updating).
+   * Used by the refresh endpoint to swap in fresh codes / evidence /
+   * `lastScreenedAt` without forcing the client to round-trip the full
+   * list back to PUT.
+   */
+  async upsert(sector: Sector): Promise<Sector> {
+    return this.withLock(async () => {
+      const idx = this.sectors.findIndex((s) => s.id === sector.id);
+      const next = [...this.sectors];
+      if (idx >= 0) next[idx] = sector;
+      else next.push(sector);
+      this.sectors = next;
+      await atomicWriteJson(this.file, this.sectors);
+      return sector;
+    });
+  }
+
   private async withLock<T>(fn: () => Promise<T>): Promise<T> {
     const next = this.mutexChain.then(fn, fn);
     this.mutexChain = next.catch(() => undefined);

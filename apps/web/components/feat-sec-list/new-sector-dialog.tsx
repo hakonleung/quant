@@ -13,9 +13,10 @@ import { Box, Button, Flex, Input, Text } from '@chakra-ui/react';
 import type { NlScreenResult, ScreenMatchView } from '@quant/shared';
 import { useState } from 'react';
 
+import { makeSectorId } from '../../lib/fp/sector-id.js';
 import { useNlScreen } from '../../lib/hooks/use-nl-screen.js';
 import { useSectorsStore, type Sector } from '../../lib/stores/sectors.store.js';
-import { ALL_SECTOR_ID, useUiStore } from '../../lib/stores/ui.store.js';
+import { useUiStore } from '../../lib/stores/ui.store.js';
 import { DslTree } from '../dsl/dsl-tree.js';
 
 type Tab = 'user' | 'dynamic';
@@ -64,7 +65,7 @@ export function NewSectorDialog({ open, onClose }: Props): React.ReactElement | 
   const saveUser = (): void => {
     const t = title.trim();
     if (t.length === 0) return;
-    const id = makeId(t);
+    const id = makeSectorId(t);
     const s: Sector = {
       id,
       name: t,
@@ -82,7 +83,7 @@ export function NewSectorDialog({ open, onClose }: Props): React.ReactElement | 
   const saveDynamic = (): void => {
     const t = title.trim();
     if (t.length === 0 || preview === null) return;
-    const id = makeId(t);
+    const id = makeSectorId(t);
     const evidence = matchesToEvidence(preview.matches);
     const codes = preview.matches.map((m) => m.code);
     const s: Sector = {
@@ -98,6 +99,7 @@ export function NewSectorDialog({ open, onClose }: Props): React.ReactElement | 
       screenPlan: preview.screenPlan,
       universePlan: preview.universePlan,
       rank: preview.rank,
+      lastScreenedAt: new Date().toISOString(),
     };
     upsert(s);
     setActiveSector(id);
@@ -525,21 +527,6 @@ function Footer({ onCancel, onSave, canSave, saveLabel }: FooterProps): React.Re
       </Button>
     </Flex>
   );
-}
-
-function makeId(name: string): string {
-  const slug = name
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9一-龥]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 24);
-  const base = slug.length === 0 ? 'sec' : slug;
-  // Suffix prevents collisions across same-titled sectors (and keeps
-  // ALL_SECTOR_ID untouched).
-  const suffix = Math.random().toString(36).slice(2, 8);
-  const id = `${base}-${suffix}`;
-  return id === ALL_SECTOR_ID ? `${id}-x` : id;
 }
 
 function matchesToEvidence(

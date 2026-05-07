@@ -1,9 +1,10 @@
 import { SectorSchema, type Sector } from '@quant/shared';
 import { z } from 'zod';
 
-import { apiGet, apiPut } from './client.js';
+import { apiGet, apiPost, apiPut } from './client.js';
 
 const ListResponseSchema = z.object({ sectors: z.array(SectorSchema) });
+const RefreshResponseSchema = z.object({ sector: SectorSchema });
 
 export async function fetchSectors(): Promise<readonly Sector[]> {
   const out = await apiGet('/api/sectors', (r) => ListResponseSchema.parse(r));
@@ -11,10 +12,13 @@ export async function fetchSectors(): Promise<readonly Sector[]> {
 }
 
 export async function putSectors(sectors: readonly Sector[]): Promise<readonly Sector[]> {
-  const out = await apiPut(
-    '/api/sectors',
-    { sectors },
-    (r) => ListResponseSchema.parse(r),
-  );
+  const out = await apiPut('/api/sectors', { sectors }, (r) => ListResponseSchema.parse(r));
   return out.sectors;
+}
+
+export async function refreshSector(id: string): Promise<Sector> {
+  const out = await apiPost(`/api/sectors/${encodeURIComponent(id)}/refresh`, {}, (r) =>
+    RefreshResponseSchema.parse(r),
+  );
+  return out.sector;
 }

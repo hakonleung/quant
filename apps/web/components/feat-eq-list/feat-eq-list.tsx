@@ -27,14 +27,14 @@ import { Feat } from '../../lib/eqty/feat.js';
 import { deriveStats, type StockStats } from '../../lib/fp/stock-stats.js';
 import { useKlineBulk, useStockSnapshots } from '../../lib/hooks/use-eqty-data.js';
 import { useStockList } from '../../lib/hooks/use-stock-list.js';
-import { useBlacklistStore } from '../../lib/stores/blacklist.store.js';
+import { refreshSector } from '../../lib/api/sectors.js';
 import { useLayoutStore } from '../../lib/stores/layout.store.js';
 import { useSectorsStore, type Sector } from '../../lib/stores/sectors.store.js';
 import { useSettingsStore } from '../../lib/stores/settings.store.js';
 import { ALL_SECTOR_ID, useUiStore } from '../../lib/stores/ui.store.js';
-import { FeatScrDsl } from "../feat-scr-dsl/feat-scr-dsl.js";
-import { FeatScrNl } from "../feat-scr-nl/feat-scr-nl.js";
-import { FeatView } from "../feat-view/feat-view.js";
+import { FeatScrDsl } from '../feat-scr-dsl/feat-scr-dsl.js';
+import { FeatScrNl } from '../feat-scr-nl/feat-scr-nl.js';
+import { FeatView } from '../feat-view/feat-view.js';
 import { MonoButton } from '../ui/mono-button.js';
 import { ConfirmCancelled, useConfirm } from '../../lib/hooks/use-confirm.js';
 
@@ -81,15 +81,10 @@ export function FeatEqList(): React.ReactElement {
   const focusCode = useUiStore((s) => s.focusCode);
   const sectors = useSectorsStore((s) => s.sectors);
   const upsert = useSectorsStore((s) => s.upsert);
-  const blacklist = useBlacklistStore((s) => s.entries);
-  const blacklistSet = useMemo(() => new Set(blacklist.map((b) => b.code)), [blacklist]);
 
   const { data, isLoading, error } = useStockList();
   const universe = data ?? [];
-  const ready = useMemo(
-    () => universe.filter((s) => s.industries !== '' && !blacklistSet.has(s.code)),
-    [universe, blacklistSet],
-  );
+  const ready = useMemo(() => universe.filter((s) => s.industries !== ''), [universe]);
   const universeByCode = useMemo(() => {
     const m = new Map<string, StockMetaDto>();
     for (const r of ready) m.set(r.code, r);
@@ -109,11 +104,8 @@ export function FeatEqList(): React.ReactElement {
   const codes: readonly string[] = useMemo(() => {
     if (isAll) return ready.map((r) => r.code);
     if (sector === null) return [];
-    // Sector definitions are persisted, blacklist isn't part of the
-    // sector — strip blacklisted members at render time so the user's
-    // bans apply across every sector view (user + dynamic).
-    return sector.codes.filter((c) => !blacklistSet.has(c));
-  }, [isAll, sector, ready, blacklistSet]);
+    return sector.codes;
+  }, [isAll, sector, ready]);
   const bulkCodes: readonly string[] = isAll ? [] : codes;
   // For "All" we deliberately send [] and rely on the server to expand
   // to the full universe — force-enable the query in that mode so the
@@ -533,7 +525,7 @@ function UserSectorHeader({
   );
 }
 
-function DynamicHeader(_props: { sector: Sector }): React.ReactElement {
+function DynamicHeader({ sector }: { sector: Sector }): React.ReactElement {
   // FeatScrDsl is wrapped in FeatView; we mirror its persisted mode so
   // the host wrapper collapses to header-height when minimized and
   // expands to a definite 320 px when restored. A definite height when
@@ -543,16 +535,86 @@ function DynamicHeader(_props: { sector: Sector }): React.ReactElement {
   const mode = useLayoutStore((s) => s.featViewMode[Feat.ScreenDsl]);
   const isMinimized = mode === 'minimized';
   return (
-    <Box
-      h={isMinimized ? 'auto' : '320px'}
-      display="flex"
-      flexDirection="column"
-      minH={0}
+    <>
+      <DynamicRefreshBar sector={sector} />
+      <Box
+        h={isMinimized ? 'auto' : '320px'}
+        display="flex"
+        flexDirection="column"
+        minH={0}
+        flexShrink={0}
+      >
+        <FeatScrDsl />
+      </Box>
+    </>
+  );
+}
+
+function DynamicRefreshBar({ sector }: { sector: Sector }): React.ReactElement {
+  const upsert = useSectorsStore((s) => s.upsert);
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const canRefresh = sector.screenPlan !== undefined;
+  const onRefresh = (): void => {
+    if (!canRefresh || pending) return;
+    setPending(true);
+    setError(null);
+    refreshSector(sector.id)
+      .then((next) => {
+        upsert(next);
+      })
+      .catch((e: unknown) => {
+        setError(e instanceof Error ? e.message : String(e));
+      })
+      .finally(() => {
+        setPending(false);
+      });
+  };
+
+  return (
+    <Flex
+      align="center"
+      gap="10px"
+      px="14px"
+      py="6px"
+      borderBottomWidth="1px"
+      borderColor="line"
+      bg="panel3"
       flexShrink={0}
     >
-      <FeatScrDsl />
-    </Box>
+      <Text fontFamily="mono" fontSize="10px" color="ink3" letterSpacing="0.14em">
+        last screened: {formatRelativeTime(sector.lastScreenedAt)}
+      </Text>
+      <Box flex="1" />
+      {error !== null && (
+        <Text fontFamily="mono" fontSize="10px" color="down" letterSpacing="0.06em">
+          {error}
+        </Text>
+      )}
+      <MonoButton
+        icon="refresh"
+        label={canRefresh ? (pending ? 'refreshing…' : 'refresh') : 'no plan to re-run'}
+        onClick={onRefresh}
+        disabled={!canRefresh || pending}
+      />
+    </Flex>
   );
+}
+
+function formatRelativeTime(iso: string | undefined): string {
+  if (iso === undefined) return '—';
+  const t = Date.parse(iso);
+  if (Number.isNaN(t)) return '—';
+  const diffSec = Math.floor((Date.now() - t) / 1000);
+  if (diffSec < 60) return `${String(diffSec)}s ago`;
+  const diffMin = Math.floor(diffSec / 60);
+  if (diffMin < 60) return `${String(diffMin)}m ago`;
+  const diffH = Math.floor(diffMin / 60);
+  if (diffH < 24) return `${String(diffH)}h ago`;
+  const diffD = Math.floor(diffH / 24);
+  if (diffD < 30) return `${String(diffD)}d ago`;
+  return new Date(t).toISOString().slice(0, 10);
 }
 
 interface ColumnDef {

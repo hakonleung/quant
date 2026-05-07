@@ -26,6 +26,12 @@ export const SectorSchema = z.object({
   screenPlan: ScreenPlanAstSchema.optional(),
   universePlan: UniversePlanAstSchema.nullable().optional(),
   rank: RankSpecSchema.nullable().optional(),
+  /**
+   * ISO datetime of the last successful screen run that produced this
+   * sector's `codes` / `evidence`. Set on dynamic-sector creation and on
+   * refresh; missing on legacy / user sectors.
+   */
+  lastScreenedAt: z.string().datetime({ offset: true }).optional(),
 });
 export type Sector = z.infer<typeof SectorSchema>;
 
