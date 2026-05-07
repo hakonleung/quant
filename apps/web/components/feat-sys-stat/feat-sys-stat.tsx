@@ -34,6 +34,7 @@ import {
   type ScanAccepted,
   type ScanKind,
 } from '@quant/shared';
+import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 
 import { Feat } from '../../lib/eqty/feat.js';
@@ -45,6 +46,7 @@ export function FeatSysStat(): React.ReactElement {
   const now = useClock();
   const metaScan = useManualScan('meta');
   const klineScan = useManualScan('kline');
+  const blacklistScan = useManualScan('blacklist');
   const fps = useFps();
   const memMb = useMemoryMb();
 
@@ -55,6 +57,21 @@ export function FeatSysStat(): React.ReactElement {
   const queues: readonly QueueSnapshotEntry[] = stream.snapshot?.queues ?? [];
   const meta = queues.find((q) => q.name === 'meta') ?? null;
   const kline = queues.find((q) => q.name === 'kline') ?? null;
+
+  // Edge-trigger: when the SSE-reported active-scan list transitions
+  // away from including 'blacklist' / 'all', the cron has just finished
+  // refreshing data/blacklist.json — invalidate the client-side query
+  // so the synthetic "全 A" sector picks up the new filter immediately
+  // instead of waiting out the 5-minute stale window.
+  const qc = useQueryClient();
+  const wasBlacklistScanningRef = useRef(false);
+  const isNowScanning = isBlacklistScanning(stream.snapshot?.activeScans);
+  useEffect(() => {
+    if (wasBlacklistScanningRef.current && !isNowScanning) {
+      void qc.invalidateQueries({ queryKey: ['blacklist'] });
+    }
+    wasBlacklistScanningRef.current = isNowScanning;
+  }, [isNowScanning, qc]);
 
   return (
     <FeatView
@@ -83,6 +100,7 @@ export function FeatSysStat(): React.ReactElement {
             scan={klineScan}
             scanning={isScanning(stream.snapshot?.activeScans, 'kline')}
           />
+          <TriggerCapsule code="BL" scan={blacklistScan} scanning={isNowScanning} />
           <Capsule code="MEM">
             <Text as="span" color={memColor(memMb)} fontWeight="700">
               {memMb === null ? '—' : `${String(memMb)}M`}
@@ -111,6 +129,7 @@ export function FeatSysStat(): React.ReactElement {
           <Text color="term.ink2">{now}</Text>
           <ScanReadout label="meta" scan={metaScan} />
           <ScanReadout label="kline" scan={klineScan} />
+          <ScanReadout label="bl" scan={blacklistScan} />
           <Text as="span" className="blink" color="term.green">
             ▌
           </Text>
@@ -196,6 +215,53 @@ function isScanning(
 ): boolean {
   if (activeScans === undefined) return false;
   return activeScans.includes(queue) || activeScans.includes('all');
+}
+
+/** Blacklist mirrors the same `'all'` fan-out semantics. */
+function isBlacklistScanning(activeScans: readonly ScanKind[] | undefined): boolean {
+  if (activeScans === undefined) return false;
+  return activeScans.includes('blacklist') || activeScans.includes('all');
+}
+
+/**
+ * Click-to-fire capsule for kinds that have **no queue** (single-shot
+ * RPCs like `blacklist`). Same flash + scanning indicator as
+ * {@link QueueCapsule}, minus the `inFlight/pending` counter.
+ */
+function TriggerCapsule({
+  code,
+  scan,
+  scanning,
+}: {
+  code: string;
+  scan: ManualScan;
+  scanning: boolean;
+}): React.ReactElement {
+  const labelColor = scanning || scan.flashing ? 'term.amber' : 'term.green';
+  return (
+    <Flex
+      as="button"
+      onClick={(): void => {
+        scan.run();
+      }}
+      align="center"
+      gap="5px"
+      whiteSpace="nowrap"
+      bg="transparent"
+      cursor="pointer"
+      _hover={{ color: 'term.green' }}
+      title={scanning ? `${code} scan in progress` : `trigger ${code} scan now`}
+    >
+      <Text color={labelColor} fontWeight="700" letterSpacing="0.18em">
+        {code}
+      </Text>
+      {scanning && (
+        <Text as="span" className="blink" color="term.amber" fontWeight="700">
+          ⟳
+        </Text>
+      )}
+    </Flex>
+  );
 }
 
 function ScanReadout({

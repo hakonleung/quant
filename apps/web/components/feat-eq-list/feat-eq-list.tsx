@@ -25,6 +25,7 @@ import {
 } from '../../lib/eqty/columns.catalog.js';
 import { Feat } from '../../lib/eqty/feat.js';
 import { deriveStats, type StockStats } from '../../lib/fp/stock-stats.js';
+import { useBlacklistSet } from '../../lib/hooks/use-blacklist.js';
 import { useKlineBulk, useStockSnapshots } from '../../lib/hooks/use-eqty-data.js';
 import { useStockList } from '../../lib/hooks/use-stock-list.js';
 import { refreshSector } from '../../lib/api/sectors.js';
@@ -98,14 +99,18 @@ export function FeatEqList(): React.ReactElement {
 
   // Codes used for both row construction and the bulk kline fetch.
   // For the synthetic "All" sector we render every meta-listed stock
-  // but do NOT enumerate them on the wire — the bulk endpoint expands
-  // an empty `codes` to the full universe server-side (and applies the
-  // server-side cap), saving us from a multi-kilobyte query string.
+  // **minus the cron-managed blacklist** but do NOT enumerate them on
+  // the wire — the bulk endpoint expands an empty `codes` to the full
+  // universe server-side (and applies the server-side cap), saving us
+  // from a multi-kilobyte query string. User / dynamic sectors keep
+  // their own member list verbatim — the blacklist is only applied to
+  // the synthetic All view.
+  const blacklistSet = useBlacklistSet();
   const codes: readonly string[] = useMemo(() => {
-    if (isAll) return ready.map((r) => r.code);
+    if (isAll) return ready.map((r) => r.code).filter((c) => !blacklistSet.has(c));
     if (sector === null) return [];
     return sector.codes;
-  }, [isAll, sector, ready]);
+  }, [isAll, sector, ready, blacklistSet]);
   const bulkCodes: readonly string[] = isAll ? [] : codes;
   // For "All" we deliberately send [] and rely on the server to expand
   // to the full universe — force-enable the query in that mode so the
