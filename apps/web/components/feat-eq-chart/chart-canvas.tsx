@@ -91,6 +91,17 @@ export const MA_COLORS: Readonly<Record<MaKey, string>> = {
   ma60: '#10b981',
 };
 
+/** Euclidean distance between two pointer positions. Module-level so
+ *  the hot-path doesn't reallocate it on every move. */
+function pointerDistance(
+  a: { readonly clientX: number; readonly clientY: number },
+  b: { readonly clientX: number; readonly clientY: number },
+): number {
+  const dx = a.clientX - b.clientX;
+  const dy = a.clientY - b.clientY;
+  return Math.hypot(dx, dy);
+}
+
 export function totalChartHeight(
   priceH: number,
   volH: number,
@@ -208,35 +219,23 @@ export function ChartCanvas({
     startPan: number;
     moved: boolean;
   } | null>(null);
+  // Active pointers (mouse / pen / touch). The map lets us spot the
+  // moment a second finger lands and pivot the gesture from "pan" to
+  // "pinch-zoom". Cleared on pointerup / pointercancel.
+  const pointersRef = useRef<Map<number, { clientX: number; clientY: number }>>(new Map());
+  const pinchRef = useRef<{
+    startDist: number;
+    startCandleW: number;
+    /** Bar index under the pinch midpoint when the gesture began —
+     *  we keep that bar pinned to its original screen X so the user
+     *  zooms *into* whatever they're holding. */
+    anchorIdx: number | null;
+    anchorScreenX: number;
+  } | null>(null);
 
-  // While dragging, mouse moves outside the SVG would be lost — bind
-  // to the window so the gesture survives leaving the chart bounds and
-  // mouse-up always lands.
-  useEffect(() => {
-    if (!interactive) return;
-    const onWinMove = (e: MouseEvent): void => {
-      const drag = dragRef.current;
-      if (drag === null) return;
-      const dx = e.clientX - drag.startClientX;
-      if (Math.abs(dx) > 2) drag.moved = true;
-      // Upper bound: don't pan past the start of the series. Short
-      // series (totalSpan <= innerW) are entirely unpannable —
-      // `maxPanPx` returns 0 so `nextPan` stays at 0.
-      const upper = maxPanPx(bars.length, vp, innerW);
-      const nextPan = Math.min(upper, Math.max(0, drag.startPan + dx));
-      setVp(clampViewport({ ...vp, panPx: nextPan }));
-    };
-    const onWinUp = (): void => {
-      if (dragRef.current === null) return;
-      dragRef.current = null;
-    };
-    window.addEventListener('mousemove', onWinMove);
-    window.addEventListener('mouseup', onWinUp);
-    return () => {
-      window.removeEventListener('mousemove', onWinMove);
-      window.removeEventListener('mouseup', onWinUp);
-    };
-  }, [interactive, vp, setVp, bars.length, innerW]);
+  // Drag-pan via window listeners is no longer required — pointer
+  // capture (set in onPointerDown) keeps move/up events firing on the
+  // SVG even after the finger leaves the chart bounds.
 
   // Auto-fit candleW so ~`DEFAULT_VISIBLE_BARS` show on first paint.
   // Triggered once per (series, width-becomes-known) tuple — refusing
@@ -268,17 +267,101 @@ export function ChartCanvas({
     if (vp.panPx > upper) setVp(clampViewport({ ...vp, panPx: upper }));
   }, [interactive, vp, bars.length, innerW, setVp]);
 
-  const onMouseDown = (e: React.MouseEvent<SVGSVGElement>): void => {
+  /**
+   * Pointer events unify mouse / pen / touch. Single-pointer drag
+   * pans (existing behaviour); two-pointer drag pinches to adjust
+   * `candleW`. Touch interactions never paint a hover crosshair —
+   * touch has no hover semantics and the persistent crosshair would
+   * just look like a stuck artifact after a tap.
+   */
+  const onPointerDown = (e: React.PointerEvent<SVGSVGElement>): void => {
     if (!interactive) return;
+    pointersRef.current.set(e.pointerId, { clientX: e.clientX, clientY: e.clientY });
+    // setPointerCapture keeps move/up events firing on the SVG even
+    // when the pointer leaves its bounds — replaces the previous
+    // window-level mouse listeners.
+    e.currentTarget.setPointerCapture(e.pointerId);
+
+    if (pointersRef.current.size === 2) {
+      // Pivot single-pointer drag → pinch.
+      dragRef.current = null;
+      const [a, b] = [...pointersRef.current.values()];
+      if (a !== undefined && b !== undefined) {
+        const startDist = pointerDistance(a, b);
+        if (startDist > 0) {
+          const rect = e.currentTarget.getBoundingClientRect();
+          const midX = (a.clientX + b.clientX) / 2 - rect.left - priceAxisW;
+          const anchorIdx = indexAtX(midX, slice, bars.length);
+          pinchRef.current = {
+            startDist,
+            startCandleW: vp.candleW,
+            anchorIdx,
+            anchorScreenX: midX,
+          };
+        }
+      }
+      return;
+    }
+    if (pointersRef.current.size > 2) return; // ignore extra fingers
+
+    // Single-pointer = drag-pan. Same gesture for mouse and one-finger
+    // touch; the existing pan logic was already pointer-agnostic.
     dragRef.current = {
       startClientX: e.clientX,
       startPan: vp.panPx,
       moved: false,
     };
   };
-  const onMouseMove = (e: React.MouseEvent<SVGSVGElement>): void => {
+
+  const onPointerMove = (e: React.PointerEvent<SVGSVGElement>): void => {
     if (!interactive) return;
-    if (dragRef.current !== null) return;
+    const rec = pointersRef.current.get(e.pointerId);
+    if (rec !== undefined) {
+      pointersRef.current.set(e.pointerId, { clientX: e.clientX, clientY: e.clientY });
+    }
+
+    const pinch = pinchRef.current;
+    if (pinch !== null && pointersRef.current.size === 2) {
+      const [a, b] = [...pointersRef.current.values()];
+      if (a === undefined || b === undefined) return;
+      const dist = pointerDistance(a, b);
+      if (dist <= 0) return;
+      const ratio = dist / pinch.startDist;
+      const nextCandleW = pinch.startCandleW * ratio;
+      const nextVp = clampViewport({ ...vp, candleW: nextCandleW });
+      // Anchor: keep the bar under the original midpoint at the same
+      // screen X by adjusting panPx — without this, pinching would
+      // always zoom around the right edge (latest bar) and the user
+      // would lose whatever they pinched.
+      if (pinch.anchorIdx !== null) {
+        const stride = nextVp.candleW + nextVp.gap;
+        const totalSpan = bars.length * stride - nextVp.gap;
+        const upper = Math.max(0, totalSpan - innerW);
+        const desiredFirstX =
+          pinch.anchorScreenX - (pinch.anchorIdx - 0) * stride;
+        const desiredLatestRightX = desiredFirstX + bars.length * stride - nextVp.gap;
+        const nextPan = Math.min(upper, Math.max(0, desiredLatestRightX - innerW));
+        setVp({ ...nextVp, panPx: nextPan });
+      } else {
+        setVp(nextVp);
+      }
+      return;
+    }
+
+    const drag = dragRef.current;
+    if (drag !== null) {
+      const dx = e.clientX - drag.startClientX;
+      if (Math.abs(dx) > 2) drag.moved = true;
+      const upper = maxPanPx(bars.length, vp, innerW);
+      const nextPan = Math.min(upper, Math.max(0, drag.startPan + dx));
+      setVp(clampViewport({ ...vp, panPx: nextPan }));
+      return;
+    }
+
+    // Hover crosshair — mouse / pen only. Touch never produces a
+    // "hover" without a contact, so suppressing this branch on touch
+    // avoids leaving a stuck crosshair after a tap.
+    if (e.pointerType === 'touch') return;
     const rect = e.currentTarget.getBoundingClientRect();
     const x = e.clientX - rect.left - priceAxisW;
     const y = e.clientY - rect.top;
@@ -291,11 +374,42 @@ export function ChartCanvas({
       setHoverPrice?.(null);
     }
   };
-  const onMouseUp = (e: React.MouseEvent<SVGSVGElement>): void => {
+
+  const onPointerUp = (e: React.PointerEvent<SVGSVGElement>): void => {
     if (!interactive) return;
+    const wasPinching = pinchRef.current !== null;
+    pointersRef.current.delete(e.pointerId);
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    } catch {
+      /* pointer was already released */
+    }
+
+    if (pointersRef.current.size < 2) {
+      pinchRef.current = null;
+    }
+
+    // After lifting one finger of a pinch, keep the remaining finger
+    // active as a fresh drag — anchored to its current position so
+    // there's no jump.
+    if (wasPinching && pointersRef.current.size === 1) {
+      const [remaining] = [...pointersRef.current.values()];
+      if (remaining !== undefined) {
+        dragRef.current = {
+          startClientX: remaining.clientX,
+          startPan: vp.panPx,
+          moved: true,
+        };
+      }
+      return;
+    }
+
     const drag = dragRef.current;
-    if (drag !== null) dragRef.current = null;
-    if (drag?.moved === true) return;
+    if (pointersRef.current.size === 0) {
+      dragRef.current = null;
+    }
+    // Click / tap commit — only when the gesture didn't move (≤2 px).
+    if (drag === null || drag.moved) return;
     const rect = e.currentTarget.getBoundingClientRect();
     const x = e.clientX - rect.left - priceAxisW;
     const y = e.clientY - rect.top;
@@ -304,8 +418,18 @@ export function ChartCanvas({
     if (idx === null) return;
     onBarClick?.(idx);
   };
-  const onMouseLeave = (): void => {
+
+  const onPointerCancel = (e: React.PointerEvent<SVGSVGElement>): void => {
     if (!interactive) return;
+    pointersRef.current.delete(e.pointerId);
+    if (pointersRef.current.size < 2) pinchRef.current = null;
+    if (pointersRef.current.size === 0) dragRef.current = null;
+  };
+
+  const onPointerLeave = (e: React.PointerEvent<SVGSVGElement>): void => {
+    if (!interactive) return;
+    // Touch pointers don't have a "left the canvas" hover state.
+    if (e.pointerType === 'touch') return;
     setHoverIdx?.(null);
     setHoverPrice?.(null);
   };
@@ -422,11 +546,17 @@ export function ChartCanvas({
         style={{
           display: 'block',
           cursor: !interactive ? 'default' : dragRef.current === null ? 'crosshair' : 'grabbing',
+          // `none` blocks the browser's default touch panning / pinch-
+          // to-zoom on the chart so our pointer handlers can drive
+          // pan + zoom themselves. Outside this SVG the page still
+          // scrolls / zooms normally.
+          touchAction: interactive ? 'none' : 'auto',
         }}
-        onMouseDown={onMouseDown}
-        onMouseMove={onMouseMove}
-        onMouseUp={onMouseUp}
-        onMouseLeave={onMouseLeave}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        onPointerCancel={onPointerCancel}
+        onPointerLeave={onPointerLeave}
       >
         {showVolume && (
           <>

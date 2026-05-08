@@ -29,6 +29,7 @@ import { z } from 'zod';
 
 import { Feat } from '../../lib/eqty/feat.js';
 import { ConfirmCancelled, useConfirm } from '../../lib/hooks/use-confirm.js';
+import { useViewport } from '../../lib/hooks/use-viewport.js';
 import { useSocketTopic } from '../../lib/socket/use-socket-topic.js';
 import { FeatView } from '../feat-view/feat-view.js';
 import { MonoButton } from '../ui/mono-button.js';
@@ -134,6 +135,19 @@ export function FeatWatchLive(): React.ReactElement {
   const [groupBusy, setGroupBusy] = useState<ReadonlySet<string>>(new Set());
   const [formInitial, setFormInitial] = useState<WatchAddInitial | undefined>(undefined);
   const [formKey, setFormKey] = useState(0);
+  // The 800-line WatchAddForm dominates the screen on a phone — keep
+  // it collapsed by default below the breakpoint so the live task
+  // list stays in view, and surface a "+ NEW WATCH" trigger that
+  // expands it on demand. Desktop / tablet keep the existing always-
+  // open behaviour (no extra click for power users).
+  const { mode: vpMode } = useViewport();
+  const isMobile = vpMode === 'mobile';
+  const [formOpen, setFormOpen] = useState(!isMobile);
+  // OVERRIDE flow always pops the form open even on mobile so the
+  // user immediately sees the prefilled state.
+  useEffect(() => {
+    if (formInitial !== undefined) setFormOpen(true);
+  }, [formInitial]);
   const tasks = state.kind === 'open' ? state.tasks : [];
   const { groups: groupConfigs, refresh: refreshGroupConfigs } = useGroupConfigs();
   const groups = useMemo(() => groupTasks(tasks, groupConfigs), [tasks, groupConfigs]);
@@ -283,14 +297,61 @@ export function FeatWatchLive(): React.ReactElement {
         lineHeight="1.7"
       >
         <Box px="14px" pt="10px" flexShrink={0}>
-          {formInitial ? (
-            <WatchAddForm
-              key={formKey}
-              initial={formInitial}
-              onSubmitted={refreshGroupConfigs}
-            />
+          {isMobile && !formOpen ? (
+            <Flex
+              as="button"
+              w="100%"
+              h="36px"
+              align="center"
+              justify="center"
+              gap="8px"
+              border="1px dashed"
+              borderColor="term.line"
+              bg="term.bgElev"
+              color="term.green"
+              fontFamily="mono"
+              fontSize="12px"
+              letterSpacing="0.18em"
+              cursor="pointer"
+              _hover={{ bg: 'term.panel2' }}
+              onClick={(): void => {
+                setFormOpen(true);
+              }}
+            >
+              + NEW WATCH
+            </Flex>
           ) : (
-            <WatchAddForm key={formKey} onSubmitted={refreshGroupConfigs} />
+            <Box position="relative">
+              {isMobile && (
+                <Flex justify="flex-end" mb="4px">
+                  <MonoButton
+                    icon="close"
+                    label="collapse new watch form"
+                    onClick={(): void => {
+                      setFormOpen(false);
+                    }}
+                  />
+                </Flex>
+              )}
+              {formInitial ? (
+                <WatchAddForm
+                  key={formKey}
+                  initial={formInitial}
+                  onSubmitted={(): void => {
+                    refreshGroupConfigs();
+                    if (isMobile) setFormOpen(false);
+                  }}
+                />
+              ) : (
+                <WatchAddForm
+                  key={formKey}
+                  onSubmitted={(): void => {
+                    refreshGroupConfigs();
+                    if (isMobile) setFormOpen(false);
+                  }}
+                />
+              )}
+            </Box>
           )}
         </Box>
         {selected.size > 0 && (
@@ -585,8 +646,12 @@ function Row({ task, checked, onToggle }: RowProps): React.ReactElement {
 }
 
 function RowSummary({ task }: { readonly task: WatchTask }): React.ReactElement {
+  // `flexWrap: wrap` lets the status badges (push-interval / hit count)
+  // drop to a second line when the column is narrow (mobile shell or
+  // a tightly-dragged right column). On wider hosts everything stays
+  // on one row — no layout regression on desktop.
   return (
-    <Flex flex="1" minW={0} align="baseline" gap="6px" lineHeight="1.3">
+    <Flex flex="1" minW={0} align="baseline" gap="6px" lineHeight="1.3" flexWrap="wrap">
       <Text fontSize="11px" color="term.ink3" letterSpacing="0.04em" flexShrink={0}>
         [{task.market}]
       </Text>
@@ -605,17 +670,14 @@ function RowSummary({ task }: { readonly task: WatchTask }): React.ReactElement 
         {task.name}
       </Text>
       <Box flex="1" />
-      <Text
-        fontSize="9px"
-        color={task.enabled ? 'term.ink3' : 'term.red'}
-        letterSpacing="0.02em"
-        flexShrink={0}
-      >
-        {task.enabled ? `↺${formatMinutes(task.pushIntervalSec)}` : 'off'}
-      </Text>
-      <Text fontSize="9px" color={task.hitCount > 0 ? 'term.amber' : 'term.ink3'} flexShrink={0}>
-        ✦{String(task.hitCount)}
-      </Text>
+      <Flex align="baseline" gap="6px" flexShrink={0}>
+        <Text fontSize="9px" color={task.enabled ? 'term.ink3' : 'term.red'} letterSpacing="0.02em">
+          {task.enabled ? `↺${formatMinutes(task.pushIntervalSec)}` : 'off'}
+        </Text>
+        <Text fontSize="9px" color={task.hitCount > 0 ? 'term.amber' : 'term.ink3'}>
+          ✦{String(task.hitCount)}
+        </Text>
+      </Flex>
     </Flex>
   );
 }
