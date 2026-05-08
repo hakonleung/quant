@@ -12,6 +12,7 @@
 import { Box } from '@chakra-ui/react';
 
 import { runViewTransition } from '../../lib/fp/view-transition.js';
+import { useViewport } from '../../lib/hooks/use-viewport.js';
 import { useLayoutStore } from '../../lib/stores/layout.store.js';
 import { LogoArt } from '../shell/logo-art.js';
 
@@ -21,6 +22,14 @@ const LOGO_GLOW =
 
 export function BigLogo(): React.ReactElement {
   const setAppMode = useLayoutStore((s) => s.setAppMode);
+  // The ASCII grid is 46 chars wide. At 11.05 px + 1 px letter-spacing
+  // it renders ≈ 350 px — fits desktop but eats the entire row on a
+  // 375 px phone, leaving header sys-stat with no breathing room. Drop
+  // to 6.5 px on mobile (≈ 215 px) so the brand stays prominent without
+  // overflowing.
+  const { mode: vpMode } = useViewport();
+  const fontSize = vpMode === 'mobile' ? '6.5px' : '11.05px';
+  const letterSpacing = vpMode === 'mobile' ? '0.5px' : '1px';
   const onClick = (): void => {
     runViewTransition(typeof document === 'undefined' ? null : document, () => {
       setAppMode('regular');
@@ -31,6 +40,7 @@ export function BigLogo(): React.ReactElement {
       as="button"
       onClick={onClick}
       title="exit TERM mode"
+      aria-label="Exit terminal mode"
       position="relative"
       bg="transparent"
       border="0"
@@ -38,7 +48,12 @@ export function BigLogo(): React.ReactElement {
       cursor="pointer"
       style={{ viewTransitionName: 'app-logo' }}
     >
-      <LogoArt color={LOGO_COLOR} fontSize="11.05px" textShadow={LOGO_GLOW} />
+      <LogoArt
+        color={LOGO_COLOR}
+        fontSize={fontSize}
+        letterSpacing={letterSpacing}
+        textShadow={LOGO_GLOW}
+      />
     </Box>
   );
 }

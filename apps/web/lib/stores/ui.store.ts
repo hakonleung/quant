@@ -19,6 +19,14 @@ import { idbStorage } from './idb-storage.js';
 export const ALL_SECTOR_ID = 'all';
 
 /**
+ * Active tab in the mobile shell. The desktop layout shows every Feat
+ * concurrently, so this slice has no effect on viewports ≥ 768px — it
+ * only routes the single-Feat-at-a-time mobile shell.
+ */
+export type MobileTab = 'list' | 'chart' | 'ai' | 'ledger' | 'watch';
+export const MOBILE_TAB_DEFAULT: MobileTab = 'list';
+
+/**
  * Active reference range selected on the price chart, used by Feat 105
  * pattern-match. Cleared when the focused stock changes.
  */
@@ -41,10 +49,20 @@ interface UiState {
   readonly nlResult: NlScreenResult | null;
   /** Pattern-match reference range; null = not selected. */
   readonly chartRange: ChartRangeSelection | null;
+  /** Currently active tab in the mobile shell. Persisted so a refresh
+   *  on the phone keeps the user on the same Feat. */
+  readonly mobileTab: MobileTab;
   setFocusCode(code: string | null): void;
   setActiveSector(id: string): void;
   setNlResult(result: NlScreenResult | null): void;
   setChartRange(range: ChartRangeSelection | null): void;
+  /**
+   * Function-property style (rather than method shorthand) so the
+   * `@typescript-eslint/unbound-method` rule treats it as a plain
+   * value when consumers extract it from a Zustand selector. The
+   * legacy setters above predate this convention.
+   */
+  readonly setMobileTab: (tab: MobileTab) => void;
 }
 
 export const useUiStore = create<UiState>()(
@@ -54,6 +72,7 @@ export const useUiStore = create<UiState>()(
       activeSectorId: ALL_SECTOR_ID,
       nlResult: null,
       chartRange: null,
+      mobileTab: MOBILE_TAB_DEFAULT,
       setFocusCode: (code) => {
         set({ focusCode: code, chartRange: null });
       },
@@ -68,18 +87,24 @@ export const useUiStore = create<UiState>()(
       setChartRange: (range) => {
         set({ chartRange: range });
       },
+      setMobileTab: (tab) => {
+        set({ mobileTab: tab });
+      },
     }),
     {
       name: 'ui',
+      // Bumped to v2 — mobileTab field added. Existing clients with v1
+      // payloads keep their cursor; mobileTab falls back to the default.
+      version: 2,
       storage: createJSONStorage(() => idbStorage('ui')),
-      version: 1,
-      // Only the user's workspace cursor is persisted. NL results and
-      // chart ranges are session-scoped — re-deriving them after a
-      // refresh would require replaying server calls we don't have a
-      // cache for.
+      // Only the user's workspace cursor + last mobile tab are
+      // persisted. NL results and chart ranges are session-scoped —
+      // re-deriving them after a refresh would require replaying
+      // server calls we don't have a cache for.
       partialize: (state) => ({
         activeSectorId: state.activeSectorId,
         focusCode: state.focusCode,
+        mobileTab: state.mobileTab,
       }),
     },
   ),

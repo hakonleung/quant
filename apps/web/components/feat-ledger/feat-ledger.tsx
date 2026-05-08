@@ -12,6 +12,7 @@
 import { Box, Flex, Text } from '@chakra-ui/react';
 import { LEDGER_EXPORT_URL } from '../../lib/api/endpoints.js';
 import { Feat } from '../../lib/eqty/feat.js';
+import { ConfirmCancelled, useConfirm } from '../../lib/hooks/use-confirm.js';
 import {
   useLedgerAnalyzeMutation,
   useLedgerCachedAnalysis,
@@ -37,6 +38,7 @@ export function FeatLedger(): React.ReactElement {
   const mutations = useLedgerMutations();
   const cachedAnalysis = useLedgerCachedAnalysis();
   const analyze = useLedgerAnalyzeMutation();
+  const { guard: confirmGuard, comp: confirmComp } = useConfirm();
 
   const [tab, setTab] = useState<Tab>('list');
   const [aiOpen, setAiOpen] = useState(false);
@@ -85,9 +87,19 @@ export function FeatLedger(): React.ReactElement {
   const onDelete = async (date: string): Promise<void> => {
     setActionError(null);
     try {
-      if (typeof window !== 'undefined' && !window.confirm(`删除 ${date} 的记录？`)) return;
+      // Themed confirm replaces native window.confirm — keeps the
+      // workbench chrome consistent (mono panel + accent button) and
+      // unblocks rendering while the user decides.
+      await confirmGuard({
+        title: 'LDG.DELETE',
+        message: `删除 ${date} 的记录？此操作不可撤销。`,
+        confirmLabel: '删除',
+        cancelLabel: '取消',
+      });
       await mutations.remove.mutateAsync(date);
     } catch (err) {
+      // ConfirmCancelled is the user clicking "cancel" — not an error.
+      if (err instanceof ConfirmCancelled) return;
       setActionError(err instanceof Error ? err.message : String(err));
     }
   };
@@ -104,6 +116,21 @@ export function FeatLedger(): React.ReactElement {
 
   const onAnalyze = async (force: boolean): Promise<void> => {
     setActionError(null);
+    if (force) {
+      // Force = paid LLM call (cache bypass). Make the cost visible —
+      // a stray click on FORCE was burning Kimi tokens silently before.
+      try {
+        await confirmGuard({
+          title: 'LDG.FORCE',
+          message: '本次将绕过缓存调用付费模型（Kimi Pro 优先），约消耗 ~1k tokens。继续？',
+          confirmLabel: '继续',
+          cancelLabel: '取消',
+        });
+      } catch (err) {
+        if (err instanceof ConfirmCancelled) return;
+        throw err;
+      }
+    }
     setAiOpen(true);
     try {
       await analyze.mutateAsync(force);
@@ -264,6 +291,7 @@ export function FeatLedger(): React.ReactElement {
           busy={busy}
         />
       )}
+      {confirmComp}
     </FeatView>
   );
 }

@@ -32,6 +32,7 @@
 import { Box, Flex } from '@chakra-ui/react';
 import { useCallback, useRef } from 'react';
 
+import { useViewport } from '../../lib/hooks/use-viewport.js';
 import { useUiStore } from '../../lib/stores/ui.store.js';
 
 import { BigLogo } from './big-logo.js';
@@ -46,6 +47,13 @@ export function FeatTermMain(): React.ReactElement {
   const focusCode = useUiStore((s) => s.focusCode);
   const previewCode = peekListCode(state.active?.state) ?? focusCode;
   const lastNodeRef = useRef<HTMLDivElement | null>(null);
+  // Mobile term mode is keyboard-driven and the soft keyboard already
+  // claims half the viewport once the user focuses the prompt. Stack
+  // the dashboard *above* the xterm at a compact height instead of
+  // splitting horizontally — at <768 px the side-by-side layout left
+  // the prompt with ~75 px (≈ 7 chars) of usable width.
+  const { mode: vpMode } = useViewport();
+  const isMobile = vpMode === 'mobile';
 
   const hostRefCallback = useCallback(
     (node: HTMLDivElement | null): void => {
@@ -91,12 +99,32 @@ export function FeatTermMain(): React.ReactElement {
         <HeaderSysStat />
       </Flex>
 
-      {/* MAIN — xterm | dashboard */}
-      <Flex flex="1" minH={0} position="relative" zIndex={2}>
+      {/* MAIN — xterm | dashboard. Mobile stacks vertically (dashboard
+          on top, terminal below) so the prompt stays full-width above
+          the soft keyboard; desktop keeps the side-by-side split. */}
+      <Flex
+        flex="1"
+        minH={0}
+        position="relative"
+        zIndex={2}
+        direction={isMobile ? 'column' : 'row'}
+      >
+        {isMobile && (
+          <Box
+            flexShrink={0}
+            maxH="46vh"
+            overflowY="auto"
+            borderBottomWidth="1px"
+            borderBottomColor="rgba(94, 255, 156, 0.12)"
+          >
+            <StockDashboard code={previewCode} />
+          </Box>
+        )}
         <Box
           ref={hostRefCallback}
           flex="1"
           minW={0}
+          minH={0}
           position="relative"
           tabIndex={0}
           onClick={(): void => {
@@ -105,9 +133,11 @@ export function FeatTermMain(): React.ReactElement {
               ?.focus();
           }}
         />
-        <Box w={{ base: '300px', xl: '360px' }} flexShrink={0} minH="100%">
-          <StockDashboard code={previewCode} />
-        </Box>
+        {!isMobile && (
+          <Box w={{ base: '300px', xl: '360px' }} flexShrink={0} minH="100%">
+            <StockDashboard code={previewCode} />
+          </Box>
+        )}
       </Flex>
 
       {/* BOTTOM — tips bar (driven by terminal widget hints) */}

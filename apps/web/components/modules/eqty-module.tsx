@@ -38,6 +38,7 @@
 import { Box, Flex } from '@chakra-ui/react';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 
+import { useViewport } from '../../lib/hooks/use-viewport.js';
 import { LAYOUT_LIMITS, useLayoutStore } from '../../lib/stores/layout.store.js';
 import { useUiStore } from '../../lib/stores/ui.store.js';
 import { FeatEqChart } from '../feat-eq-chart/feat-eq-chart.js';
@@ -48,7 +49,20 @@ import { FeatAiEq } from '../feat-ai-eq/feat-ai-eq.js';
 import { FeatLedger } from '../feat-ledger/feat-ledger.js';
 import { FeatWatchLive } from '../feat-watch-live/feat-watch-live.js';
 
+import { EqtyModuleMobile } from './eqty-module-mobile.js';
+
 export function EqtyModule(): React.ReactElement {
+  const { mode } = useViewport();
+  // Tablet falls through to the desktop three-column layout — the
+  // existing min-widths (160 / 280) leave ~324px for the chart at
+  // 768px viewport, which is the smallest tablet portrait we promise
+  // to support. Mobile (<768px) needs a totally different paradigm
+  // (single-Feat tab shell), handled in `EqtyModuleMobile`.
+  if (mode === 'mobile') return <EqtyModuleMobile />;
+  return <EqtyModuleDesktop />;
+}
+
+function EqtyModuleDesktop(): React.ReactElement {
   const code = useUiStore((s) => s.focusCode);
   const leftWidth = useLayoutStore((s) => s.leftWidth);
   const rightWidth = useLayoutStore((s) => s.rightWidth);
@@ -120,6 +134,27 @@ interface DividerProps {
 }
 
 /**
+ * Hit-zone expansion — keeps the visual handle at 4 px (so columns
+ * snap together at 4 px gaps) while letting trackpad / pen pointers
+ * grab a 16 px strip without affecting layout. The wider strip on
+ * `pointer: coarse` is the touch-target accommodation called out by
+ * the UX plan §P0-4.
+ */
+const DIVIDER_HIT_BEFORE = {
+  content: '""',
+  position: 'absolute',
+  top: 0,
+  bottom: 0,
+  left: '-6px',
+  right: '-6px',
+} as const;
+const DIVIDER_HIT_CSS = {
+  '@media (pointer: coarse)': {
+    '&::before': { left: '-10px', right: '-10px' },
+  },
+} as const;
+
+/**
  * 4-px vertical drag handle. Mouse-down pins the starting column width
  * and listens to window-level mousemove/up; the column updates live
  * during the drag, and the final value is clamped + persisted.
@@ -158,13 +193,19 @@ function Divider({ startWidth, getNext, commit, min, max }: DividerProps): React
         startWRef.current = startWidth;
         setDragging(true);
       }}
+      role="separator"
+      aria-orientation="vertical"
+      aria-label="resize column"
       w="4px"
       h="100%"
       bg={dragging ? 'accent' : 'line'}
       cursor="col-resize"
       flexShrink={0}
+      position="relative"
       _hover={{ bg: 'accent' }}
       transition="background 120ms ease"
+      _before={DIVIDER_HIT_BEFORE}
+      css={DIVIDER_HIT_CSS}
     />
   );
 }

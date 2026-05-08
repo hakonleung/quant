@@ -11,6 +11,25 @@ import { FeatViewStatus, type FeatViewStatusTone } from './feat-view-header.js';
 
 const TRANSITION_MS = 280;
 
+/** Returns true when the user has asked for reduced motion. SSR-safe. */
+const prefersReducedMotion = (): boolean =>
+  typeof window !== 'undefined' &&
+  window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/** Inline styles applied to the pane when it switches to fullscreen.
+ *  Lifted to module scope so the pane chrome stays under the per-
+ *  function line cap. `100dvh` tracks iOS dynamic viewport; the
+ *  safe-area paddings keep the header clear of the notch / home bar. */
+const FULLSCREEN_STYLE = {
+  top: 0,
+  left: 0,
+  width: '100vw',
+  height: '100dvh',
+  zIndex: 1000,
+  paddingTop: 'env(safe-area-inset-top)',
+  paddingBottom: 'env(safe-area-inset-bottom)',
+} as const;
+
 interface FeatViewProps {
   readonly feat: Feat;
   /** Status pellet rendered between the id and the title slot — only
@@ -64,6 +83,9 @@ export function FeatView({
     if (el === null) return;
     const r = el.getBoundingClientRect();
     setMode('fullscreen');
+    // Reduced-motion users skip the keyframe — the pane snaps to
+    // fullscreen via the inline `position:fixed` switch alone.
+    if (prefersReducedMotion()) return;
     // After the mode change paints (pane becomes position:fixed inset:0),
     // play a Web Animations keyframe from the starting rect → fullscreen.
     requestAnimationFrame(() => {
@@ -77,7 +99,10 @@ export function FeatView({
             width: `${r.width}px`,
             height: `${r.height}px`,
           },
-          { top: '0px', left: '0px', width: '100vw', height: '100vh' },
+          // 100dvh follows iOS dynamic viewport (URL bar / keyboard);
+          // 100vh would let the bottom of the pane slip below the
+          // address bar after a swipe-down.
+          { top: '0px', left: '0px', width: '100vw', height: '100dvh' },
         ],
         { duration: TRANSITION_MS, easing: 'ease' },
       );
@@ -91,10 +116,16 @@ export function FeatView({
       setMode('normal');
       return;
     }
+    if (prefersReducedMotion()) {
+      // Same rationale as goFullscreen — instant transition keeps the
+      // pane behaviour identical for assistive-tech users.
+      setMode('normal');
+      return;
+    }
     const r = ph.getBoundingClientRect();
     const anim = node.animate(
       [
-        { top: '0px', left: '0px', width: '100vw', height: '100vh' },
+        { top: '0px', left: '0px', width: '100vw', height: '100dvh' },
         {
           top: `${r.top}px`,
           left: `${r.left}px`,
@@ -107,7 +138,7 @@ export function FeatView({
     anim.onfinish = (): void => {
       // Swap to normal mode synchronously so the inline `position:fixed`
       // styles are gone before we cancel the keyframe — otherwise the
-      // pane briefly snaps back to 100vw/100vh on cancel and flickers.
+      // pane briefly snaps back to 100vw/100dvh on cancel and flickers.
       flushSync(() => {
         setMode('normal');
       });
@@ -179,11 +210,7 @@ export function FeatView({
       display="flex"
       flexDirection="column"
       overflow={overlayActive ? 'visible' : 'hidden'}
-      style={
-        isFullscreen
-          ? { top: 0, left: 0, width: '100vw', height: '100vh', zIndex: 1000 }
-          : undefined
-      }
+      style={isFullscreen ? FULLSCREEN_STYLE : undefined}
       _before={corners._before as never}
       _after={corners._after as never}
     >

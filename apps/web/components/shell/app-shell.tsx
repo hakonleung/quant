@@ -32,15 +32,45 @@ export function AppShell({ children }: AppShellProps): React.ReactElement {
   const mode = useLayoutStore((s) => s.appMode);
 
   if (mode === 'term') {
+    // `100dvh` follows the on-screen-keyboard / iOS bottom bar so the
+    // terminal's input row stays visible once the keyboard pops. The
+    // safe-area paddings keep its caret out of the notch + home bar.
     return (
-      <Box h="100vh" w="100vw" bg="bg" overflow="hidden">
+      <Box
+        h="100dvh"
+        w="100vw"
+        bg="bg"
+        overflow="hidden"
+        style={{
+          paddingTop: 'env(safe-area-inset-top)',
+          paddingBottom: 'env(safe-area-inset-bottom)',
+          paddingLeft: 'env(safe-area-inset-left)',
+          paddingRight: 'env(safe-area-inset-right)',
+        }}
+      >
         <FeatTermMain />
       </Box>
     );
   }
 
   return (
-    <Box as="main" h="100vh" bg="bg" display="flex" flexDirection="column" overflow="hidden">
+    <Box
+      as="main"
+      h="100dvh"
+      bg="bg"
+      display="flex"
+      flexDirection="column"
+      overflow="hidden"
+      style={{
+        // Top-bar already anchors to the top, so safe-area-top is
+        // applied inside TopBar to keep its accent border continuous
+        // with the notch shadow. Bottom safe-area absorbs the iOS home
+        // indicator under the mobile tab bar.
+        paddingBottom: 'env(safe-area-inset-bottom)',
+        paddingLeft: 'env(safe-area-inset-left)',
+        paddingRight: 'env(safe-area-inset-right)',
+      }}
+    >
       <TopBar />
       <Box flex="1" minH={0}>
         {children}

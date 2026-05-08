@@ -22,6 +22,7 @@
 import { Box, Flex } from '@chakra-ui/react';
 
 import { runViewTransition } from '../../lib/fp/view-transition.js';
+import { useViewport } from '../../lib/hooks/use-viewport.js';
 import { useLayoutStore } from '../../lib/stores/layout.store.js';
 
 import { FeatChannelLive } from '../feat-channel/feat-channel.js';
@@ -31,35 +32,53 @@ import { FeatSysStat } from '../feat-sys-stat/feat-sys-stat.js';
 import { LogoArt } from './logo-art.js';
 
 const BRAND_HEIGHT = 52;
+const BRAND_HEIGHT_MOBILE = 44;
 const TERM_BG = 'radial-gradient(ellipse at center, #08120c 0%, #04060a 65%, #020406 100%)';
 const TERM_LOGO_COLOR = '#d4ffe2';
 const TERM_LOGO_GLOW =
   'rgba(155, 242, 182, 0.8) 0px 0px 4px, rgba(155, 242, 182, 0.4) 0px 0px 12px';
 
 export function TopBar(): React.ReactElement {
+  const { mode } = useViewport();
+  const isMobile = mode === 'mobile';
+  // SYS.STAT capsule strip (queue / mem / fps) eats ~360px even
+  // collapsed; on mobile it pushes Channel/SysCfg off-screen, so we
+  // drop it from the topbar — the user can still get queue progress
+  // from the in-pane status badges. Channel + SysCfg shrink to icon-
+  // sized chips since their bodies are bodyOverlay anchored to the
+  // header rect, the inline width only affects the chip click target.
+  const sideSlot = isMobile ? '96px' : '220px';
   return (
     <Flex
-      minH={`${String(BRAND_HEIGHT)}px`}
+      minH={`${String(isMobile ? BRAND_HEIGHT_MOBILE : BRAND_HEIGHT)}px`}
       bg="panel"
       borderBottomWidth="2px"
       borderBottomColor="accent"
       align="stretch"
+      style={{ paddingTop: 'env(safe-area-inset-top)' }}
     >
-      <Brand />
-      <Box flex="1" minW={0} display="flex" alignItems="stretch">
-        <FeatSysStat />
-      </Box>
-      <Box w="220px" flex="0 0 auto" display="flex" alignItems="stretch">
+      <Brand compact={isMobile} />
+      {!isMobile && (
+        <Box flex="1" minW={0} display="flex" alignItems="stretch">
+          <FeatSysStat />
+        </Box>
+      )}
+      {isMobile && <Box flex="1" minW={0} />}
+      <Box w={sideSlot} flex="0 0 auto" display="flex" alignItems="stretch">
         <FeatChannelLive />
       </Box>
-      <Box w="220px" flex="0 0 auto" display="flex" alignItems="stretch">
+      <Box w={sideSlot} flex="0 0 auto" display="flex" alignItems="stretch">
         <FeatSysCfg />
       </Box>
     </Flex>
   );
 }
 
-function Brand(): React.ReactElement {
+interface BrandProps {
+  readonly compact?: boolean;
+}
+
+function Brand({ compact = false }: BrandProps): React.ReactElement {
   const setAppMode = useLayoutStore((s) => s.setAppMode);
   const onToggle = (): void => {
     runViewTransition(typeof document === 'undefined' ? null : document, () => {
@@ -74,10 +93,11 @@ function Brand(): React.ReactElement {
       as="button"
       onClick={onToggle}
       title="enter TERM mode"
+      aria-label="Enter terminal mode"
       position="relative"
       h="100%"
-      pl="16px"
-      pr="20px"
+      pl={compact ? '10px' : '16px'}
+      pr={compact ? '12px' : '20px'}
       display="flex"
       alignItems="center"
       flexShrink={0}
@@ -88,7 +108,29 @@ function Brand(): React.ReactElement {
       _hover={{ filter: 'brightness(1.15)' }}
       _focus={{ outline: 'none', boxShadow: '0 0 0 2px rgba(155,242,182,0.4) inset' }}
     >
-      {/* CRT chrome — coarse grid (z=0) + horizontal scanlines (z=1). */}
+      <CrtBackdrop />
+      <Box position="relative" zIndex={2}>
+        <LogoArt
+          color={TERM_LOGO_COLOR}
+          fontSize={compact ? '6px' : '7.5px'}
+          lineHeight="1"
+          letterSpacing={compact ? '0.5px' : '1px'}
+          textShadow={TERM_LOGO_GLOW}
+          showCursor={false}
+        />
+      </Box>
+    </Box>
+  );
+}
+
+/**
+ * CRT chrome — coarse grid (z=0) + horizontal scanlines (z=1).
+ * Extracted from Brand so the latter stays under the per-function
+ * line cap; the layers never change at runtime.
+ */
+function CrtBackdrop(): React.ReactElement {
+  return (
+    <>
       <Box
         position="absolute"
         inset="0"
@@ -106,16 +148,6 @@ function Brand(): React.ReactElement {
         background="repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.32) 0px, rgba(0, 0, 0, 0.32) 1px, transparent 1px, transparent 3px)"
         css={{ mixBlendMode: 'multiply' }}
       />
-      <Box position="relative" zIndex={2}>
-        <LogoArt
-          color={TERM_LOGO_COLOR}
-          fontSize="7.5px"
-          lineHeight="1"
-          letterSpacing="1px"
-          textShadow={TERM_LOGO_GLOW}
-          showCursor={false}
-        />
-      </Box>
-    </Box>
+    </>
   );
 }

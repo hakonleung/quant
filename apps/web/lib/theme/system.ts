@@ -38,6 +38,18 @@ const monoButtonRecipe = defineRecipe({
       _hover: { bg: 'transparent', transform: 'none', color: 'term.ink3' },
     },
     _focusVisible: { outline: '1px solid', outlineColor: 'term.green', outlineOffset: '1px' },
+    // Touch devices get a 36-square hit zone (centred glyph stays the
+    // same visual size). Apple HIG / Material both call for ≥ 36px;
+    // we don't push to 44 so existing pane chrome doesn't reflow on
+    // tablets that already have their own dense grids. Hover is
+    // suppressed since `(hover: hover)` is false here — the scale
+    // animation looked janky as a tap-feedback on phones.
+    '@media (pointer: coarse)': {
+      minW: '36px',
+      minH: '36px',
+      _hover: { bg: 'transparent', transform: 'none' },
+      _active: { bg: 'panel2', transform: 'none' },
+    },
   },
   variants: {
     size: {
