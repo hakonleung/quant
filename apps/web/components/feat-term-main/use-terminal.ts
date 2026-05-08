@@ -48,6 +48,7 @@ import {
 
 import { useQueryClient } from '@tanstack/react-query';
 
+import { parseTrailingCursorUp } from '../../lib/fp/parse-trailing-cursor-up.js';
 import { useUiStore } from '../../lib/stores/ui.store.js';
 import { installRunner } from '../../lib/term/install-runner.js';
 
@@ -60,6 +61,15 @@ interface RenderMem {
   committedHistory: number;
   /** Number of *physical* footer lines currently on screen (after the last write). */
   footerRows: number;
+  /**
+   * Net upward cursor displacement that the previous footer's trailing
+   * cursor-positioning escape ended on. Widgets like form-prompt place
+   * the user's typing cursor inside the body via `\x1b[<n>F`, so after
+   * a paint the cursor sits N rows above the body's last row. The next
+   * paint must move the cursor back down by N before its "up
+   * `footerRows - 1`" clear, otherwise it erases into the scrollback.
+   */
+  cursorUpFromBottom: number;
   /** True while the very first paint hasn't happened yet. */
   initial: boolean;
   /** Frame index for the running-state spinner. */
@@ -84,6 +94,7 @@ export function useTerminal(): TerminalApi {
   const memRef = useRef<RenderMem>({
     committedHistory: 0,
     footerRows: 0,
+    cursorUpFromBottom: 0,
     initial: true,
     spinnerTick: 0,
   });
@@ -305,7 +316,13 @@ export function useTerminal(): TerminalApi {
       });
       termRef.current = term;
       fitRef.current = fit;
-      memRef.current = { committedHistory: 0, footerRows: 0, initial: true, spinnerTick: 0 };
+      memRef.current = {
+        committedHistory: 0,
+        footerRows: 0,
+        cursorUpFromBottom: 0,
+        initial: true,
+        spinnerTick: 0,
+      };
 
       // Install the active action runner BEFORE preloadIndex (which is
       // the first call into `getRunner()`). The selector reads
@@ -324,6 +341,18 @@ export function useTerminal(): TerminalApi {
           : 'qX//OS terminal · type `help` to get started';
       term.writeln(paint(banner, ANSI.gray));
       paintTerminal(term, stateRef.current, memRef.current, useUiStore.getState().focusCode);
+      // Term mode is keyboard-driven — give xterm focus on mount so the
+      // block cursor is immediately visible. Browsers tie programmatic
+      // focus to the live user-activation context, so we call this
+      // synchronously inside the mount path that the user's click
+      // triggered (logo → setAppMode('term') → ref-callback → mount).
+      try {
+        term.focus();
+      } catch {
+        /* host may not be in the layout tree yet on the very first
+           mount — the click handler in feat-term-main.tsx will give
+           focus on the next user interaction. */
+      }
 
       void preloadIndex(indexRef);
 
@@ -349,7 +378,12 @@ export function useTerminal(): TerminalApi {
     fitRef.current = null;
   }, []);
 
-  useEffect(() => () => unmount(), [unmount]);
+  // The ref-callback in `feat-term-main.tsx` is the authoritative
+  // mount/unmount driver: it fires with `null` when the host node
+  // detaches (component unmount, mode toggle), at which point we tear
+  // down xterm. A separate `useEffect` cleanup would call `unmount`
+  // again under React 18 strict mode and during fast refresh, racing
+  // with the next ref-attach and leaving the host empty.
 
   // Repaint when the global focus code changes — the bottom status bar
   // shows `FOCUS <code>` and reads from `ui.store` at paint time, so it
@@ -418,16 +452,22 @@ function paintTerminal(
     term.write('\x1b[2J\x1b[H');
     mem.committedHistory = 0;
     mem.footerRows = 0;
+    mem.cursorUpFromBottom = 0;
     mem.initial = true;
   }
 
   // 1. Clear the previous footer in place. After the last paint the cursor
-  //    sits on the LAST row of the previous footer (we don't end with \n),
-  //    so we move up `footerRows - 1` rows then erase to end of screen.
-  //    `\x1b[J` erases everything from the cursor down — that wipes both
-  //    the active footer AND the bottom status bar, so we re-paint both
-  //    fresh below.
+  //    can be ANYWHERE inside the footer — widgets like form-prompt move
+  //    it up to position the typing caret inside an input row. We have
+  //    to undo that displacement first (`cursorUpFromBottom` rows down)
+  //    so we land on the body's last row, then move up `footerRows - 1`
+  //    to land on the body's first row. `\x1b[J` erases everything from
+  //    cursor down. Without the displacement undo, repeated repaints
+  //    drift further into the scrollback and eat committed history.
   if (!mem.initial && mem.footerRows > 0) {
+    if (mem.cursorUpFromBottom > 0) {
+      term.write(`\x1b[${String(mem.cursorUpFromBottom)}B`);
+    }
     if (mem.footerRows > 1) {
       term.write(`\x1b[${String(mem.footerRows - 1)}A`);
     }
@@ -454,8 +494,10 @@ function paintTerminal(
   if (footer.length > 0) {
     term.write(footer);
     mem.footerRows = countWrappedRows(footer, term.cols);
+    mem.cursorUpFromBottom = parseTrailingCursorUp(footer);
   } else {
     mem.footerRows = 0;
+    mem.cursorUpFromBottom = 0;
   }
 
   // The dedicated status bar at the bottom of the viewport is now

@@ -21,7 +21,7 @@ import { useSectorsStore } from '../stores/sectors.store.js';
  * dispatcher (compliance with eslint `complexity` rule) and makes
  * adding new scopes a one-line change.
  */
-const QUERY_KEYS_BY_SCOPE: Readonly<Record<string, readonly readonly string[][]>> = {
+const QUERY_KEYS_BY_SCOPE: Readonly<Record<string, readonly (readonly string[])[]>> = {
   meta: [
     ['stock-list'],
     ['stock-meta'],

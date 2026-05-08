@@ -11,4 +11,6 @@ export * from './form-prompt.js';
 export * from './confirm-prompt.js';
 export * from './paste-text.js';
 export * from './pick-stock-loop.js';
+export * from './pager.js';
+export * from './select-reading-mode.js';
 export * from './helpers.js';

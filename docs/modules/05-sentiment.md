@@ -16,7 +16,7 @@
 | Cache      | `quant_cache/parquet_sentiment_cache.py`                  | 按 `(code 或 codes_hash, run_date)` 写入 Parquet                                   |
 | RPC        | `quant_rpc/ops/sentiment.py`                              | 见下表                                                                             |
 | API        | `apps/api/src/modules/sentiment/`                         | `GET/POST /api/sentiment/analyze_one`、`/analyze_many`（cache 读 + paid 写各一路） |
-| Web        | `feat-ai-out`、`feat-ai-md`、`feat-ai-hist`               | 渲染 markdown + 市场层快照                                                         |
+| Web        | `feat-ai-eq`、`feat-ai-md`、`feat-ai-sec`                 | 渲染 markdown + 市场层快照                                                         |
 
 ## Flight ops
 

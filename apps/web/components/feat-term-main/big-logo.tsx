@@ -1,68 +1,44 @@
 'use client';
 
 /**
- * Big "qX//OS _" ASCII art logo for TERM.MAIN.
+ * TERM.MAIN big "qX//OS_" ASCII pixel-art logo, with green-CRT glow.
  *
- * Two stacked <pre> layers in the same monospace grid:
- *
- *   1. STATIC body:  qX//OS without trailing cursor
- *   2. CURSOR layer: blank rows 1..4 plus a `████████` block on row 5
- *      positioned right after the `S`, with a global blink animation
- *
- * Style tokens (font / color / glow / letter-spacing) are copied verbatim
- * from the CRT-terminal HTML reference so the logo reads identically to
- * the reference design.
+ * The ASCII grid is shared with the TopBar's small Brand variant via
+ * the `LogoArt` primitive in `components/shell/logo-art.tsx`. This
+ * file owns only the term-mode chrome — the click-to-exit affordance
+ * + the CRT styling (color, glow, scale).
  */
 
 import { Box } from '@chakra-ui/react';
 
-const STATIC_BODY = `  ██████  ██    ██       //  ██████  ███████
- ██    ██  ██  ██      //   ██    ██ ██
- ██    ██   ████     //     ██    ██ ███████
- ████████  ██  ██   //       ██    ██      ██
-       ██ ██    ██ //         ██████  ███████`;
+import { runViewTransition } from '../../lib/fp/view-transition.js';
+import { useLayoutStore } from '../../lib/stores/layout.store.js';
+import { LogoArt } from '../shell/logo-art.js';
 
-// Same column grid as STATIC_BODY — only the trailing `_` cell on row 5
-// carries pixels. Blinking the entire <pre> is fine because every other
-// cell is blank.
-const CURSOR_BODY = `
-
-
-
-                                              ████████`;
-
-const LOGO_FONT = `"Space Mono", ui-monospace, Menlo, monospace`;
 const LOGO_COLOR = '#d4ffe2';
 const LOGO_GLOW =
   'rgba(155, 242, 182, 0.8) 0px 0px 4px, rgba(155, 242, 182, 0.4) 0px 0px 12px, rgba(155, 242, 182, 0.2) 0px 0px 28px';
 
 export function BigLogo(): React.ReactElement {
-  const layerStyle = {
-    margin: 0,
-    fontFamily: LOGO_FONT,
-    color: LOGO_COLOR,
-    fontSize: '11.05px',
-    lineHeight: '1.05',
-    letterSpacing: '1px',
-    textShadow: LOGO_GLOW,
-    whiteSpace: 'pre' as const,
-    userSelect: 'none' as const,
+  const setAppMode = useLayoutStore((s) => s.setAppMode);
+  const onClick = (): void => {
+    runViewTransition(typeof document === 'undefined' ? null : document, () => {
+      setAppMode('regular');
+    });
   };
   return (
-    <Box position="relative">
-      <Box as="pre" {...layerStyle}>
-        {STATIC_BODY}
-      </Box>
-      <Box
-        as="pre"
-        position="absolute"
-        inset="0"
-        pointerEvents="none"
-        css={{ animation: 'blink 1s steps(1) infinite' }}
-        {...layerStyle}
-      >
-        {CURSOR_BODY}
-      </Box>
+    <Box
+      as="button"
+      onClick={onClick}
+      title="exit TERM mode"
+      position="relative"
+      bg="transparent"
+      border="0"
+      p={0}
+      cursor="pointer"
+      style={{ viewTransitionName: 'app-logo' }}
+    >
+      <LogoArt color={LOGO_COLOR} fontSize="11.05px" textShadow={LOGO_GLOW} />
     </Box>
   );
 }

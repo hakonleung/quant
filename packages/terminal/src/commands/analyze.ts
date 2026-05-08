@@ -8,13 +8,14 @@ import {
 import { ANSI, paint } from '../render/ansi.js';
 import type { CommandSpec } from '../registry.js';
 import { confirmPrompt } from '../widgets/confirm-prompt.js';
+import { pager } from '../widgets/pager.js';
 import { selectableList } from '../widgets/selectable-list.js';
+import { selectReadingMode } from '../widgets/select-reading-mode.js';
 import {
   canceledResolution,
   interactive,
-  textCached,
+  outputResolution,
   textErr,
-  textOk,
   widgetResolution,
 } from '../widgets/helpers.js';
 import { stockListAction } from '../actions/registry.js';
@@ -74,22 +75,36 @@ async function analyzeOneFlow(
   code: string,
   force: boolean,
 ) {
-  if (!force) {
-    const r = await ctx.actions.run(analyzeOneAction, { code }, { signal: ctx.signal });
-    return r.cached ? textCached(formatSentiment(r.data)) : textOk(formatSentiment(r.data));
+  if (force) {
+    // force: confirm widget — bypass reading-mode (no cached output to render)
+    const widget = confirmPrompt({
+      title: `analyze ${code}  (LLM, paid)`,
+      body: paint('this will trigger a fresh LLM request', ANSI.gray),
+      danger: true,
+      onYes: () => ({
+        kind: 'command',
+        line: `analyze ${code}`,
+      }),
+      onNo: () => canceledResolution,
+    });
+    return interactive(widget);
   }
-  // force: confirm widget
-  const widget = confirmPrompt({
-    title: `analyze ${code}  (LLM, paid)`,
-    body: paint('this will trigger a fresh LLM request', ANSI.gray),
-    danger: true,
-    onYes: () => ({
-      kind: 'command',
-      line: `analyze ${code}`,
+
+  const r = await ctx.actions.run(analyzeOneAction, { code }, { signal: ctx.signal });
+  return interactive(
+    selectReadingMode({
+      title: `analyze ${code} — pick reading mode`,
+      onPick: (mode) =>
+        mode === 'brief'
+          ? outputResolution(formatSentiment(r.data), r.cached ? 'cached' : 'ok')
+          : widgetResolution(
+              pager({
+                title: `analyze ${code} (${r.cached ? 'cached' : 'fresh'})`,
+                body: formatSentimentDetail(r.data),
+              }),
+            ),
     }),
-    onNo: () => canceledResolution,
-  });
-  return interactive(widget);
+  );
 }
 
 async function analyzeManyConfirm(
@@ -98,19 +113,30 @@ async function analyzeManyConfirm(
   label: string,
   force: boolean,
 ) {
-  if (!force) {
-    const r = await ctx.actions.run(analyzeManyAction, { codes }, { signal: ctx.signal });
-    return r.cached
-      ? textCached(formatMarketSentiment(r.data, label))
-      : textOk(formatMarketSentiment(r.data, label));
+  if (force) {
+    const widget = confirmPrompt({
+      title: `analyze sector ${label}  (${String(codes.length)} codes, paid)`,
+      danger: true,
+      onYes: () => ({ kind: 'command', line: `analyze sector ${label}` }),
+      onNo: () => canceledResolution,
+    });
+    return interactive(widget);
   }
-  const widget = confirmPrompt({
-    title: `analyze sector ${label}  (${String(codes.length)} codes, paid)`,
-    danger: true,
-    onYes: () => ({ kind: 'command', line: `analyze sector ${label}` }),
-    onNo: () => canceledResolution,
-  });
-  return interactive(widget);
+  const r = await ctx.actions.run(analyzeManyAction, { codes }, { signal: ctx.signal });
+  return interactive(
+    selectReadingMode({
+      title: `analyze sector ${label} — pick reading mode`,
+      onPick: (mode) =>
+        mode === 'brief'
+          ? outputResolution(formatMarketSentiment(r.data, label), r.cached ? 'cached' : 'ok')
+          : widgetResolution(
+              pager({
+                title: `analyze sector ${label} (${r.cached ? 'cached' : 'fresh'})`,
+                body: formatMarketSentimentDetail(r.data, label),
+              }),
+            ),
+    }),
+  );
 }
 
 function guidedAnalyze(ctx: Parameters<CommandSpec['run']>[1]) {
@@ -160,6 +186,34 @@ function formatSentiment(s: {
   ].join('\n');
 }
 
+function formatSentimentDetail(s: {
+  code: string;
+  score: number;
+  theme: string;
+  driver: string | null;
+  cachedAt: string;
+}): string {
+  // Detail mode: same fields plus framing prose so the pager has more
+  // than five lines to scroll through. This is the read-only document
+  // view; production code should pass an LLM-rendered narrative when
+  // available (`Sentiment.result` from the API).
+  return [
+    `# ${s.code} sentiment — detail`,
+    '',
+    `score    : ${formatScore(s.score)}`,
+    `theme    : ${s.theme}`,
+    `driver   : ${s.driver ?? '—'}`,
+    `cached   : ${s.cachedAt}`,
+    '',
+    '## Reading',
+    '',
+    'Brief mode renders the cached summary inline.',
+    'Detail mode (this view) shows the same data in a',
+    'pageable document. Use j/k or arrows to scroll,',
+    'space for one viewport, / to search, q to close.',
+  ].join('\n');
+}
+
 function formatMarketSentiment(
   s: { codes: readonly string[]; score: number; themes: readonly string[]; cachedAt: string },
   label: string,
@@ -173,6 +227,25 @@ function formatMarketSentiment(
     `score:    ${formatScore(s.score)}`,
     `themes:   ${s.themes.join(', ')}`,
     `cachedAt: ${s.cachedAt}`,
+  ].join('\n');
+}
+
+function formatMarketSentimentDetail(
+  s: { codes: readonly string[]; score: number; themes: readonly string[]; cachedAt: string },
+  label: string,
+): string {
+  return [
+    `# sector ${label} — aggregate sentiment`,
+    '',
+    `members  : ${String(s.codes.length)}`,
+    `score    : ${formatScore(s.score)}`,
+    `cached   : ${s.cachedAt}`,
+    '',
+    '## Themes',
+    ...(s.themes.length === 0 ? ['—'] : s.themes.map((t) => `  · ${t}`)),
+    '',
+    '## Members',
+    ...s.codes.map((c) => `  ${c}`),
   ].join('\n');
 }
 
@@ -192,18 +265,31 @@ void stockListAction;
 // ---------------------------------------------------------------------------
 
 async function analyzeTaFlow(ctx: Parameters<CommandSpec['run']>[1], code: string, force: boolean) {
-  if (!force) {
-    const r = await ctx.actions.run(analyzeTaAction, { code }, { signal: ctx.signal });
-    return r.cached ? textCached(formatTa(r.data)) : textOk(formatTa(r.data));
+  if (force) {
+    const widget = confirmPrompt({
+      title: `analyze ta ${code}  (Kimi Pro, paid)`,
+      body: paint('this will trigger a fresh LLM technical-analysis run', ANSI.gray),
+      danger: true,
+      onYes: () => ({ kind: 'command', line: `analyze ta ${code}` }),
+      onNo: () => canceledResolution,
+    });
+    return interactive(widget);
   }
-  const widget = confirmPrompt({
-    title: `analyze ta ${code}  (Kimi Pro, paid)`,
-    body: paint('this will trigger a fresh LLM technical-analysis run', ANSI.gray),
-    danger: true,
-    onYes: () => ({ kind: 'command', line: `analyze ta ${code}` }),
-    onNo: () => canceledResolution,
-  });
-  return interactive(widget);
+  const r = await ctx.actions.run(analyzeTaAction, { code }, { signal: ctx.signal });
+  return interactive(
+    selectReadingMode({
+      title: `analyze ta ${code} — pick reading mode`,
+      onPick: (mode) =>
+        mode === 'brief'
+          ? outputResolution(formatTa(r.data), r.cached ? 'cached' : 'ok')
+          : widgetResolution(
+              pager({
+                title: `analyze ta ${code} (${r.cached ? 'cached' : 'fresh'})`,
+                body: formatTaDetail(r.data),
+              }),
+            ),
+    }),
+  );
 }
 
 function guidedAnalyzeTa(ctx: Parameters<CommandSpec['run']>[1]) {
@@ -272,5 +358,55 @@ function formatTa(t: TaAnalysis): string {
     lines.push(paint(`! ${c}`, ANSI.yellow));
   }
   lines.push(paint(`provider:   ${t.provider || '—'}   cachedAt: ${t.cachedAt}`, ANSI.gray));
+  return lines.join('\n');
+}
+
+function formatTaDetail(t: TaAnalysis): string {
+  const lines: string[] = [];
+  lines.push(`# ${t.code} technical analysis`);
+  lines.push('');
+  lines.push(`asof     : ${t.asof}`);
+  lines.push(`bars     : ${String(t.barsCount)}`);
+  lines.push(`provider : ${t.provider || '—'}`);
+  lines.push(`cached   : ${t.cachedAt}`);
+  lines.push('');
+  lines.push('## Trend');
+  lines.push('');
+  lines.push(
+    `direction : ${t.trend.direction}  (${String(t.trend.horizonDays)}d, conf=${t.trend.confidence.toFixed(2)})`,
+  );
+  if (t.trend.rationale.length > 0) {
+    lines.push('');
+    lines.push('rationale :');
+    lines.push(`  ${t.trend.rationale}`);
+  }
+  lines.push('');
+  lines.push('## Resistance levels');
+  if (t.resistanceLevels.length === 0) {
+    lines.push('—');
+  } else {
+    for (const lv of t.resistanceLevels) {
+      lines.push(`  ${lv.price}  [${lv.strength}]  ${lv.reason}`);
+    }
+  }
+  lines.push('');
+  lines.push('## Support levels');
+  if (t.supportLevels.length === 0) {
+    lines.push('—');
+  } else {
+    for (const lv of t.supportLevels) {
+      lines.push(`  ${lv.price}  [${lv.strength}]  ${lv.reason}`);
+    }
+  }
+  if (t.patterns.length > 0) {
+    lines.push('');
+    lines.push('## Patterns');
+    for (const p of t.patterns) lines.push(`  · ${p}`);
+  }
+  if (t.caveats.length > 0) {
+    lines.push('');
+    lines.push('## Caveats');
+    for (const c of t.caveats) lines.push(`  ! ${c}`);
+  }
   return lines.join('\n');
 }

@@ -1,12 +1,12 @@
 'use client';
 
-import { Box, Flex, Text } from '@chakra-ui/react';
+import { Flex, Text } from '@chakra-ui/react';
 import { useMemo, useState } from 'react';
 
 import { Feat } from '../../lib/eqty/feat.js';
 import { useBlacklistSet } from '../../lib/hooks/use-blacklist.js';
 import { ConfirmCancelled, useConfirm } from '../../lib/hooks/use-confirm.js';
-import { useKlineBulk, useMarketSentiment } from '../../lib/hooks/use-eqty-data.js';
+import { useKlineBulk } from '../../lib/hooks/use-eqty-data.js';
 import { useStockList } from '../../lib/hooks/use-stock-list.js';
 import { useSectorsStore, type Sector } from '../../lib/stores/sectors.store.js';
 import { ALL_SECTOR_ID, useUiStore } from '../../lib/stores/ui.store.js';
@@ -14,15 +14,27 @@ import { FeatView } from '../feat-view/feat-view.js';
 import { FeatViewHeaderRight } from '../feat-view/feat-view-header.js';
 import { MonoButton } from '../ui/mono-button.js';
 import { NewSectorDialog } from './new-sector-dialog.js';
+import { SectorSwiper } from './sector-swiper.js';
 
 /**
  * Cap on members per analyze_many call. Each member fans out into a
  * web-search + LLM aggregator pass; >50 routinely runs into provider
- * rate-limits and burns minutes of paid LLM time. Surfaces in the 104
- * sector.sentiment FETCH guard.
+ * rate-limits and burns minutes of paid LLM time. Surfaces in the
+ * AI.SEC sentiment FETCH guard.
  */
 export const ANALYZE_MAX_CODES = 50;
 
+/**
+ * SEC.LIST — single-row sector slider.
+ *
+ * Each sector renders as a chip (`name + chg%`); dynamic sectors get a
+ * leading `[D]` badge so the kind is legible at a glance. Click to
+ * activate; the right-most slot keeps the "new sector" button and a
+ * dedicated delete button appears on hover for user/dynamic chips. The
+ * sector count is small and bounded (~ tens at most), so a virtualized
+ * list would be premature here — `SectorSwiper` covers the swiper-style
+ * drag / snap / nav-button affordances natively.
+ */
 export function FeatSecList(): React.ReactElement {
   const sectors = useSectorsStore((s) => s.sectors);
   const removeSector = useSectorsStore((s) => s.remove);
@@ -53,9 +65,6 @@ export function FeatSecList(): React.ReactElement {
     })
       .then(() => {
         removeSector(sector.id);
-        // Reset highlight when the deleted sector was active.
-        // setActiveSector already clears focusCode, so list-panel's
-        // auto-default picks the first row of the new (All) sector.
         if (activeSectorId === sector.id) setActiveSector(ALL_SECTOR_ID);
       })
       .catch((e: unknown) => {
@@ -64,13 +73,6 @@ export function FeatSecList(): React.ReactElement {
       });
   };
 
-  const userRows = sectors.filter((r) => r.kind === 'user');
-  const dynRows = sectors.filter((r) => r.kind === 'dynamic');
-
-  // Synthetic "All" sector — total A-share universe minus the
-  // cron-managed blacklist. The blacklist is fetched async; before it
-  // resolves we render the unfiltered list (5-min stale window — first
-  // load is briefly noisier than steady state).
   const blacklistSet = useBlacklistSet();
   const allCodes = (universe.data ?? []).map((s) => s.code).filter((c) => !blacklistSet.has(c));
   const allSector: Sector = {
@@ -83,13 +85,9 @@ export function FeatSecList(): React.ReactElement {
     codes: allCodes,
   };
 
-  // Bulk last-2-bar fetch — the panel renders every sector's avg
-  // chg%, and the union always includes the synthetic "All" basket
-  // which already covers the full universe. So we always ask for the
-  // universe (`codes=[]`) instead of enumerating thousands of
-  // 6-digit ids in the query string. The server applies its own cap.
-  // `enabled: true` forces the request because the hook would
-  // otherwise gate out the empty-codes case.
+  // Bulk last-2-bar fetch — same path as the old vertical SEC.LIST: ask
+  // for the universe (`codes=[]`) once and let every chip read its
+  // members' average chg% from the local map.
   const klineBatch = useKlineBulk([], 2, { enabled: true });
   const chgPctByCode = useMemo(() => {
     const out = new Map<string, number>();
@@ -103,9 +101,14 @@ export function FeatSecList(): React.ReactElement {
     return out;
   }, [klineBatch.byCode]);
 
+  const userRows = sectors.filter((r) => r.kind === 'user');
+  const dynRows = sectors.filter((r) => r.kind === 'dynamic');
+  const orderedSectors: readonly Sector[] = [allSector, ...userRows, ...dynRows];
+
   return (
     <FeatView
       feat={Feat.SectorList}
+      contentSized
       right={
         <FeatViewHeaderRight>
           <MonoButton
@@ -118,57 +121,26 @@ export function FeatSecList(): React.ReactElement {
         </FeatViewHeaderRight>
       }
     >
-      <Flex direction="column" h="100%">
-        <SideHead />
-        <Box flex="1">
-          <SectorRow
-            sector={allSector}
-            selected={activeSectorId === ALL_SECTOR_ID}
+      <SectorSwiper height={40}>
+        {orderedSectors.map((s) => (
+          <SectorChip
+            key={s.id}
+            sector={s}
+            selected={activeSectorId === s.id}
             chgPctByCode={chgPctByCode}
             onClick={(): void => {
-              setActiveSector(ALL_SECTOR_ID);
+              setActiveSector(s.id);
             }}
+            onDelete={
+              s.id === ALL_SECTOR_ID
+                ? undefined
+                : (): void => {
+                    onDelete(s);
+                  }
+            }
           />
-          <SubHead label="// USER" border />
-          {userRows.length === 0 ? (
-            <Empty>no user sectors yet</Empty>
-          ) : (
-            userRows.map((r) => (
-              <SectorRow
-                key={r.id}
-                sector={r}
-                selected={activeSectorId === r.id}
-                chgPctByCode={chgPctByCode}
-                onClick={(): void => {
-                  setActiveSector(r.id);
-                }}
-                onDelete={(): void => {
-                  onDelete(r);
-                }}
-              />
-            ))
-          )}
-          <SubHead label="// DYNAMIC" border />
-          {dynRows.length === 0 ? (
-            <Empty>no dynamic sectors yet</Empty>
-          ) : (
-            dynRows.map((r) => (
-              <SectorRow
-                key={r.id}
-                sector={r}
-                selected={activeSectorId === r.id}
-                chgPctByCode={chgPctByCode}
-                onClick={(): void => {
-                  setActiveSector(r.id);
-                }}
-                onDelete={(): void => {
-                  onDelete(r);
-                }}
-              />
-            ))
-          )}
-        </Box>
-      </Flex>
+        ))}
+      </SectorSwiper>
       <NewSectorDialog
         open={dialogOpen}
         onClose={(): void => {
@@ -180,88 +152,23 @@ export function FeatSecList(): React.ReactElement {
   );
 }
 
-function SideHead(): React.ReactElement {
-  return (
-    <Flex
-      align="center"
-      gap="6px"
-      px="10px"
-      py="8px"
-      borderBottomWidth="1px"
-      borderColor="line"
-      bg="panel3"
-      fontFamily="mono"
-      fontSize="11px"
-      color="ink2"
-      flexShrink={0}
-    >
-      <Text color="prompt" fontWeight="700">
-        $
-      </Text>
-      <Text>sectors --list</Text>
-      <Text className="blink" color="prompt">
-        ▌
-      </Text>
-    </Flex>
-  );
-}
-
-function SubHead({
-  label,
-  border = false,
-}: {
-  label: string;
-  border?: boolean;
-}): React.ReactElement {
-  return (
-    <Text
-      px="10px"
-      py="6px"
-      fontFamily="mono"
-      fontSize="9px"
-      letterSpacing="0.18em"
-      color="ink3"
-      fontWeight="700"
-      bg="panel3"
-      borderTopWidth={border ? '1px' : 0}
-      borderColor="line"
-    >
-      {label}
-    </Text>
-  );
-}
-
-function Empty({ children }: { children: React.ReactNode }): React.ReactElement {
-  return (
-    <Text px="10px" py="10px" fontFamily="mono" fontSize="10px" color="ink3" letterSpacing="0.12em">
-      // {children}
-    </Text>
-  );
-}
-
-interface RowProps {
+interface ChipProps {
   readonly sector: Sector;
   readonly selected: boolean;
   readonly chgPctByCode: ReadonlyMap<string, number>;
   readonly onClick: () => void;
-  /** Omitted for the synthetic "All" row, which can't be deleted. */
-  readonly onDelete?: () => void;
+  readonly onDelete?: (() => void) | undefined;
 }
 
-function SectorRow({
+function SectorChip({
   sector,
   selected,
   chgPctByCode,
   onClick,
   onDelete,
-}: RowProps): React.ReactElement {
+}: ChipProps): React.ReactElement {
+  const isDynamic = sector.kind === 'dynamic';
   const codes = sector.codes;
-  const cached = useMarketSentiment(codes);
-  const themeCount = cached.data?.themeClusters.length ?? 0;
-
-  // Average chg% across members that have a fresh latest+previous bar.
-  // Members without recent kline are excluded from both numerator and
-  // denominator so a half-loaded universe doesn't drag the mean to 0.
   const avgChgPct = (() => {
     let sum = 0;
     let count = 0;
@@ -276,51 +183,52 @@ function SectorRow({
 
   return (
     <Flex
+      as="li"
+      role="button"
+      onClick={onClick}
       align="center"
-      gap="8px"
-      px={selected ? '8px' : '10px'}
-      py="6px"
-      borderBottomWidth="1px"
+      gap="6px"
+      px="10px"
+      borderRightWidth="1px"
       borderColor="line2"
-      borderLeftWidth={selected ? '2px' : 0}
-      borderLeftColor="accent"
-      bg={selected ? 'accentBg' : 'transparent'}
+      bg={selected ? 'accentBg' : 'panel'}
+      borderTopWidth={selected ? '2px' : 0}
+      borderTopColor="accent"
       cursor="pointer"
       _hover={selected ? {} : { bg: 'hover' }}
-      fontSize="11px"
-      onClick={onClick}
+      flexShrink={0}
+      whiteSpace="nowrap"
+      data-testid={`sector-chip-${sector.id}`}
     >
-      <Box flex="1" minW={0}>
-        <Text
-          fontFamily="mono"
-          fontSize="11px"
-          color="ink"
-          fontWeight="500"
-          letterSpacing="0.04em"
-          overflow="hidden"
-          textOverflow="ellipsis"
-          whiteSpace="nowrap"
-        >
-          {sector.name}
-        </Text>
+      {isDynamic && (
         <Text
           fontFamily="mono"
           fontSize="9px"
-          color="ink3"
+          fontWeight="700"
           letterSpacing="0.14em"
-          mt="1px"
-          overflow="hidden"
-          textOverflow="ellipsis"
-          whiteSpace="nowrap"
+          color="accent"
+          aria-label="dynamic sector"
         >
-          {sector.meta || `${String(sector.count)} members`}
-          {themeCount > 0 ? ` · themed:${String(themeCount)}` : ''}
+          [D]
         </Text>
-      </Box>
-      {avgChgPct !== null && (
-        <Text fontFamily="mono" color={avgChgPct >= 0 ? 'up' : 'down'} fontWeight="600">
+      )}
+      <Text
+        fontFamily="mono"
+        fontSize="12px"
+        color={selected ? 'ink' : 'ink2'}
+        fontWeight={selected ? '700' : '500'}
+        letterSpacing="0.04em"
+      >
+        {sector.name}
+      </Text>
+      {avgChgPct !== null ? (
+        <Text fontFamily="mono" fontSize="11px" color={avgChgPct >= 0 ? 'up' : 'down'}>
           {avgChgPct >= 0 ? '+' : ''}
           {(avgChgPct * 100).toFixed(2)}%
+        </Text>
+      ) : (
+        <Text fontFamily="mono" fontSize="11px" color="ink3">
+          —
         </Text>
       )}
       {onDelete !== undefined && (

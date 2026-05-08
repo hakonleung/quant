@@ -26,21 +26,21 @@
 
 ## Feat 列表
 
-| Feat         | 目录            | 功能                                               |
-| ------------ | --------------- | -------------------------------------------------- |
-| `SYS.STAT`   | feat-sys-stat   | 队列 / 缓存健康                                    |
-| `SYS.CFG`    | feat-sys-cfg    | 设置面板（dark mode / Slack webhook / 板块持久化） |
-| `SEC.LIST`   | feat-sec-list   | 板块（sector）管理；新增 / 删除 / 刷新动态板块     |
-| `EQ.LIST`    | feat-eq-list    | 当前候选股清单（动态列、可排序）；dynamic sector 头部带 last-screened 时间 + 刷新按钮（`POST /api/sectors/:id/refresh`）|
-| `EQ.CHART`   | feat-eq-chart   | K 线图                                             |
-| `SCR.NL`     | feat-scr-nl     | 自然语言筛选（NL → DSL）                           |
-| `SCR.DSL`    | feat-scr-dsl    | DSL 编辑器 + 直接执行                              |
-| `SCR.PAT`    | feat-scr-pat    | 形态筛选（带内嵌 50D 相似形态行）                  |
-| `WATCH.LIVE` | feat-watch-live | 自选盯盘实时（多选；条件含 vwap / trend baseline）  |
-| `AI.OUT`     | feat-ai-out     | 单股 LLM 输出（cache + paid 双路）                 |
-| `AI.HIST`    | feat-ai-hist    | 板块层市场快照                                     |
-| `AI.MD`      | feat-ai-md      | markdown 渲染容器（supplies AI.OUT / AI.HIST）     |
-| `TERM.MAIN`  | feat-term-main  | CRT 风命令终端（详见 `10-terminal.md`）            |
+| Feat         | 目录            | 功能                                                                                                                     |
+| ------------ | --------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `SYS.STAT`   | feat-sys-stat   | 队列 / 缓存健康                                                                                                          |
+| `SYS.CFG`    | feat-sys-cfg    | 设置面板（dark mode / Slack webhook / 板块持久化）                                                                       |
+| `SEC.LIST`   | feat-sec-list   | 板块（sector）管理；新增 / 删除 / 刷新动态板块                                                                           |
+| `EQ.LIST`    | feat-eq-list    | 当前候选股清单（动态列、可排序）；dynamic sector 头部带 last-screened 时间 + 刷新按钮（`POST /api/sectors/:id/refresh`） |
+| `EQ.CHART`   | feat-eq-chart   | K 线图                                                                                                                   |
+| `SCR.NL`     | feat-scr-nl     | 自然语言筛选（NL → DSL）                                                                                                 |
+| `SCR.DSL`    | feat-scr-dsl    | DSL 编辑器 + 直接执行                                                                                                    |
+| `SCR.PAT`    | feat-scr-pat    | 形态筛选（带内嵌 50D 相似形态行）                                                                                        |
+| `WATCH.LIVE` | feat-watch-live | 自选盯盘实时（多选；条件含 vwap / trend baseline）                                                                       |
+| `AI.EQ`      | feat-ai-eq      | 单股 LLM 输出（cache + paid 双路）                                                                                       |
+| `AI.SEC`     | feat-ai-sec     | 板块层市场快照                                                                                                           |
+| `AI.MD`      | feat-ai-md      | markdown 渲染容器（supplies AI.EQ / AI.SEC）                                                                             |
+| `TERM.MAIN`  | feat-term-main  | CRT 风命令终端（详见 `10-terminal.md`）                                                                                  |
 
 > 历史 `SYS.PUSH` 已并入 `SYS.CFG`（commit 8273327），不再单独存在。`SYS.CFG` 的"blacklist"分区已在 2026-05 移除——A 股噪音黑名单改由后端 cron 维护，详见 `12-blacklist.md`。
 

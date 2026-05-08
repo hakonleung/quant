@@ -4,8 +4,8 @@
  * Vertical SYS.STAT block for the TERM.MAIN header — replaces the
  * earlier `MetaBlock` (kernel/boot/uptime). Right-aligned, four lines:
  *
- *   meta   inFlight/pending           ← clickable: triggers meta scan
- *   kline  inFlight/pending           ← clickable: triggers kline scan
+ *   meta   inFlight/pending           (read-only indicator)
+ *   kline  inFlight/pending           (read-only indicator)
  *   MEM    JS-heap MB
  *   FPS    requestAnimationFrame rate
  *
@@ -13,10 +13,14 @@
  * lockstep, but lays the capsules out vertically (the user explicitly
  * requested 纵向 / vertical). Hooks live inline because the call site
  * is single-purpose.
+ *
+ * Term mode is intentionally keyboard-only — these capsules are
+ * informational; trigger scans via `update meta` / `update kline`
+ * commands at the prompt instead.
  */
 
 import { Flex, Text } from '@chakra-ui/react';
-import { ScanAcceptedSchema, type QueueSnapshotEntry, type ScanKind } from '@quant/shared';
+import { type QueueSnapshotEntry } from '@quant/shared';
 import { useEffect, useRef, useState } from 'react';
 
 import { useQueueStream } from '../../lib/hooks/use-queue-stream.js';
@@ -38,8 +42,8 @@ export function HeaderSysStat(): React.ReactElement {
       letterSpacing="0.16em"
       color="term.ink2"
     >
-      <ScanLine code="meta" queue={meta} kind="meta" />
-      <ScanLine code="kline" queue={kline} kind="kline" />
+      <ScanLine code="meta" queue={meta} />
+      <ScanLine code="kline" queue={kline} />
       <ValueLine
         code="MEM"
         value={memMb === null ? '—' : `${String(memMb)}M`}
@@ -74,46 +78,14 @@ function ValueLine({
 function ScanLine({
   code,
   queue,
-  kind,
 }: {
   code: string;
   queue: QueueSnapshotEntry | null;
-  kind: ScanKind;
 }): React.ReactElement {
-  const [flashing, setFlashing] = useState(false);
-  useEffect(() => {
-    if (!flashing) return;
-    const t = setTimeout(() => {
-      setFlashing(false);
-    }, 800);
-    return () => {
-      clearTimeout(t);
-    };
-  }, [flashing]);
   const counter = queue === null ? '—' : `${String(queue.inFlight)}/${String(queue.pending)}`;
   return (
-    <Flex
-      as="button"
-      onClick={(): void => {
-        setFlashing(true);
-        void fetch(`/api/orchestration/scan?kind=${kind}`, { method: 'POST' })
-          .then((r) => (r.ok ? r.json() : null))
-          .then((raw: unknown): void => {
-            if (raw !== null) ScanAcceptedSchema.safeParse(raw);
-          })
-          .catch(() => {
-            /* best-effort */
-          });
-      }}
-      gap="8px"
-      align="baseline"
-      justify="flex-end"
-      minW="120px"
-      bg="transparent"
-      cursor="pointer"
-      title={`trigger ${kind} scan`}
-    >
-      <Text color={flashing ? 'term.amber' : 'term.green'} fontWeight="700">
+    <Flex gap="8px" align="baseline" justify="flex-end" minW="120px">
+      <Text color="term.green" fontWeight="700">
         {code}
       </Text>
       <Text color={queue === null ? 'term.ink3' : 'term.ink2'} fontWeight="700">

@@ -1,9 +1,9 @@
 'use client';
 
 /**
- * 104 — Sector sentiment.
+ * AI.SEC — Sector sentiment.
  *
- * Mirrors 103 stdout, but operates on the active sector's member codes
+ * Mirrors AI.EQ stdout, but operates on the active sector's member codes
  * via analyze_many. Cached read (useMarketSentiment) is the default
  * render path; the FETCH button fires the LLM-backed analyze_many
  * mutation behind a confirm guard (paid call).
@@ -22,7 +22,7 @@ import { FeatViewHeaderRight } from '../feat-view/feat-view-header.js';
 import { MonoButton } from '../ui/mono-button.js';
 import { ANALYZE_MAX_CODES } from '../feat-sec-list/feat-sec-list.js';
 
-export function FeatAiHist(): React.ReactElement | null {
+export function FeatAiSec(): React.ReactElement | null {
   const activeSectorId = useUiStore((s) => s.activeSectorId);
   const sectors = useSectorsStore((s) => s.sectors);
   const sector = sectors.find((s) => s.id === activeSectorId) ?? null;
@@ -132,7 +132,7 @@ export function FeatAiHist(): React.ReactElement | null {
 
   return (
     <FeatView
-      feat={Feat.AIHist}
+      feat={Feat.AISec}
       status={tone}
       statusBlink={analyze.isPending || push.isPending}
       titleSlot={

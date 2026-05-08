@@ -28,9 +28,9 @@ export const Feat = {
   ScreenPattern: 'SCR.PAT',
   ScreenDsl: 'SCR.DSL',
 
-  // AI — LLM surface
-  AIOut: 'AI.OUT',
-  AIHist: 'AI.HIST',
+  // AI — LLM surface (AI.SEC = sector aggregate, AI.EQ = single stock)
+  AIEq: 'AI.EQ',
+  AISec: 'AI.SEC',
   AIMd: 'AI.MD',
 
   // SYS — system
@@ -73,8 +73,8 @@ export const FEAT_CONFIG_MAP: Readonly<Record<Feat, FeatConfig>> = {
   [Feat.ScreenPattern]: { defaultMinimized: true },
   [Feat.ScreenDsl]: {},
 
-  [Feat.AIOut]: { cyber: true, gridArea: 'CBOT' },
-  [Feat.AIHist]: { cyber: true, gridArea: 'R1' },
+  [Feat.AIEq]: { cyber: true, gridArea: 'CBOT' },
+  [Feat.AISec]: { cyber: true, gridArea: 'R1' },
   [Feat.AIMd]: { cyber: true, defaultMinimized: true },
 
   [Feat.SysStat]: { cyber: true, defaultMinimized: true, bodyOverlay: true },

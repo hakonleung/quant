@@ -3,17 +3,36 @@
 /**
  * Module 07 §workbench — EQTY (Equity workbench).
  *
- * Three independent column streams (with draggable dividers between
- * left / center and center / right):
- *   left   — Sectors (002) + Blacklist (003)
- *   middle — List (001) of stocks under the active sector
- *   right  — TaskQueue (300) always; per-stock 101/102/103/200 mount
- *            once a row is clicked in the list
+ * Layout:
+ *
+ *   ┌──────────────┬───────────────────────────────┬──────────────┐
+ *   │  SEC.LIST    │                               │              │
+ *   │  (slider)    │                               │              │
+ *   ├──────────────┤                               │              │
+ *   │              │                               │              │
+ *   │  EQ.LIST     │  EQ.CHART (with SCR.PAT       │  AI.SEC      │
+ *   │              │  embedded inline)             │  AI.EQ       │
+ *   │              │                               │  AI.MD       │
+ *   │              │                               │  WATCH.LIVE  │
+ *   │              │                               │              │
+ *   └──────────────┴───────────────────────────────┴──────────────┘
+ *
+ * Column widths:
+ *   left  — `leftWidth`  (resizable, persisted in idb); stacks
+ *           SEC.LIST (horizontal chip slider) on top of EQ.LIST.
+ *   mid   — flex-fills the gap; hosts EQ.CHART.
+ *   right — `rightWidth` (resizable, persisted in idb).
+ *
+ * SEC.LIST is the chip strip from `feat-sec-list/`; its inner row keeps
+ * its own `overflowX:auto`, so even when `leftWidth` is narrower than
+ * the chip total the slider stays scrollable. SCR.PAT is embedded
+ * inside EQ.CHART so the pattern range tracks the chart lifecycle.
+ * TERM.MAIN no longer mounts here — it has its own top-level mode (see
+ * AppShell).
  *
  * Columns flow top-to-bottom by their own content; rows across columns
  * intentionally do not align so minimize / restore in one column does
- * not reflow the others. Side-column widths persist via the layout
- * store (idb-backed) and survive reloads.
+ * not reflow the others.
  */
 
 import { Box, Flex } from '@chakra-ui/react';
@@ -23,12 +42,10 @@ import { LAYOUT_LIMITS, useLayoutStore } from '../../lib/stores/layout.store.js'
 import { useUiStore } from '../../lib/stores/ui.store.js';
 import { FeatEqChart } from '../feat-eq-chart/feat-eq-chart.js';
 import { FeatEqList } from '../feat-eq-list/feat-eq-list.js';
-import { FeatScrPat } from '../feat-scr-pat/feat-scr-pat.js';
-import { FeatAiHist } from '../feat-ai-hist/feat-ai-hist.js';
+import { FeatAiSec } from '../feat-ai-sec/feat-ai-sec.js';
 import { FeatSecList } from '../feat-sec-list/feat-sec-list.js';
-import { FeatAiOut } from '../feat-ai-out/feat-ai-out.js';
+import { FeatAiEq } from '../feat-ai-eq/feat-ai-eq.js';
 import { FeatWatchLive } from '../feat-watch-live/feat-watch-live.js';
-import { FeatTermMain } from '../feat-term-main/feat-term-main.js';
 
 export function EqtyModule(): React.ReactElement {
   const code = useUiStore((s) => s.focusCode);
@@ -38,29 +55,20 @@ export function EqtyModule(): React.ReactElement {
   const setRightWidth = useLayoutStore((s) => s.setRightWidth);
 
   return (
-    <Flex h="100%" gap="0" bg="line" align="stretch">
+    <Flex h="100%" bg="line" gap="0" align="stretch">
       <Column width={`${String(leftWidth)}px`}>
         <FeatSecList />
+        <FeatEqList />
       </Column>
       <Divider
-        side="left"
         getNext={(dx, start): number => start + dx}
         startWidth={leftWidth}
         commit={setLeftWidth}
         min={LAYOUT_LIMITS.leftMin}
         max={LAYOUT_LIMITS.leftMax}
       />
-      <Column flex="1">
-        <FeatEqList />
-        {/* 101 chart sits directly above 105 pattern-match — pattern
-            match operates on a range selected from the chart, so the
-            two related surfaces are stacked together in the middle
-            column. */}
-        {code !== null && <FeatEqChart code={code} />}
-        <FeatScrPat />
-      </Column>
+      <Column flex="1">{code !== null && <FeatEqChart code={code} />}</Column>
       <Divider
-        side="right"
         // Drag right edge: dragging *right* shrinks the right column.
         getNext={(dx, start): number => start - dx}
         startWidth={rightWidth}
@@ -69,10 +77,9 @@ export function EqtyModule(): React.ReactElement {
         max={LAYOUT_LIMITS.rightMax}
       />
       <Column width={`${String(rightWidth)}px`}>
-        <FeatAiHist />
-        {code !== null && <FeatAiOut code={code} />}
+        <FeatAiSec />
+        {code !== null && <FeatAiEq code={code} />}
         <FeatWatchLive />
-        <FeatTermMain />
       </Column>
     </Flex>
   );
@@ -102,7 +109,6 @@ function Column({ width, flex, children }: ColumnProps): React.ReactElement {
 }
 
 interface DividerProps {
-  readonly side: 'left' | 'right';
   readonly startWidth: number;
   /** dx → drag delta in CSS px; returns the new column width. */
   readonly getNext: (dx: number, startWidth: number) => number;
@@ -116,15 +122,7 @@ interface DividerProps {
  * and listens to window-level mousemove/up; the column updates live
  * during the drag, and the final value is clamped + persisted.
  */
-function Divider({
-  side,
-  startWidth,
-  getNext,
-  commit,
-  min,
-  max,
-}: DividerProps): React.ReactElement {
-  void side;
+function Divider({ startWidth, getNext, commit, min, max }: DividerProps): React.ReactElement {
   const [dragging, setDragging] = useState(false);
   const startXRef = useRef(0);
   const startWRef = useRef(startWidth);

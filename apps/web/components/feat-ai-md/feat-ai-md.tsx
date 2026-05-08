@@ -9,7 +9,7 @@
  * tables, lists and code blocks pick up the mono palette so the result
  * reads like the rest of the workbench.
  *
- * The first consumer is A-0 (`FeatAiOut`) flipping into preview mode
+ * The first consumer is AI.EQ (`FeatAiEq`) flipping into preview mode
  * to render `Sentiment.result` (the verbatim analyst write-up returned
  * by the web-search pass). The component itself does not know about
  * sentiment; pass any markdown text in.

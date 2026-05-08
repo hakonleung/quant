@@ -1,53 +1,32 @@
 'use client';
 
 /**
- * 105 — Pattern match.
+ * SCR.PAT — pattern-match section embedded inside EQ.CHART.
  *
- * Reads the chart-range selection (set by shift-drag in the 101 chart)
- * and runs a similarity scan: for each non-reference stock, look at
- * its most recent 30 trading days and find sub-windows whose shape
- * AND period return match the reference. Each match renders as a row
- * with a 90D inline kline (reusing EQ.CHART's canvas in read-only
- * mode) with the matched window highlighted, plus the combined
- * similarity score and the candidate's period return.
- *
- * Rows are non-interactive — no click callback, no hover state. The
- * match table is purely informational.
+ * Reads `chartRange` from `useUiStore` (set by shift-drag in EQ.CHART)
+ * and exposes a `find similar` action; results render as one row per
+ * match with an inline 50D kline (read-only ChartCanvas). Rows are
+ * non-interactive — purely informational.
  */
 
 import { Box, Flex, Text } from '@chakra-ui/react';
 import type { PatternFindSimilarResponse, PatternMatch } from '@quant/shared';
 import { useMutation } from '@tanstack/react-query';
-import { useEffect } from 'react';
 
-import { Feat } from '../../lib/eqty/feat.js';
 import { findSimilarPatterns } from '../../lib/api/endpoints.js';
 import { DEFAULT_VIEWPORT } from '../../lib/fp/chart-view.js';
 import { useKline } from '../../lib/hooks/use-eqty-data.js';
-import { useLayoutStore } from '../../lib/stores/layout.store.js';
 import { useUiStore } from '../../lib/stores/ui.store.js';
 import { ChartCanvas, findRangeIndices } from '../feat-eq-chart/chart-canvas.js';
-import { FeatView } from '../feat-view/feat-view.js';
-import { FeatViewHeaderRight } from '../feat-view/feat-view-header.js';
 import { MonoButton } from '../ui/mono-button.js';
 
-// Inline-row chart height — tall enough that the candle bodies and
-// the highlight rect read clearly. Volume sub-pane is suppressed.
 const ROW_PRICE_H = 120;
 
-export function FeatScrPat(): React.ReactElement {
+export function ScrPatSection(): React.ReactElement {
   const range = useUiStore((s) => s.chartRange);
   const setChartRange = useUiStore((s) => s.setChartRange);
 
-  const featViewMode = useLayoutStore((s) => s.featViewMode[Feat.ScreenPattern]);
-  const setFeatViewMode = useLayoutStore((s) => s.setFeatViewMode);
-  useEffect(() => {
-    if (range !== null && featViewMode === 'minimized') {
-      setFeatViewMode(Feat.ScreenPattern, 'normal');
-    }
-  }, [range, featViewMode, setFeatViewMode]);
-
-  const mutation = useMutation<PatternFindSimilarResponse, Error, void>({
+  const mutation = useMutation<PatternFindSimilarResponse>({
     mutationKey: ['pattern.find_similar', range],
     mutationFn: async (): Promise<PatternFindSimilarResponse> => {
       if (range === null) throw new Error('no chart range selected');
@@ -65,43 +44,48 @@ export function FeatScrPat(): React.ReactElement {
     mutation.mutate();
   };
 
-  const tone = mutation.isPending
-    ? 'amber'
-    : mutation.isError
-      ? 'red'
-      : mutation.data !== undefined
-        ? 'green'
-        : 'idle';
-
-  const right = (
-    <FeatViewHeaderRight>
-      {range !== null && (
-        <MonoButton
-          icon="delete"
-          label="clear range"
-          onClick={(): void => {
-            setChartRange(null);
-            mutation.reset();
-          }}
-        />
-      )}
-      <MonoButton
-        icon="search"
-        label={range === null ? 'no range selected' : 'find similar'}
-        onClick={onFind}
-        disabled={range === null || mutation.isPending}
-      />
-    </FeatViewHeaderRight>
-  );
-
   return (
-    <FeatView
-      feat={Feat.ScreenPattern}
-      status={tone}
-      statusBlink={mutation.isPending}
-      right={right}
-    >
-      <Box flex="1" bg="panel" overflowY="auto">
+    <Box borderTopWidth="1px" borderColor="line" bg="panel">
+      <Flex
+        align="center"
+        gap="10px"
+        px="14px"
+        py="6px"
+        borderBottomWidth="1px"
+        borderColor="line"
+        bg="panel3"
+        fontFamily="mono"
+        fontSize="10px"
+        color="ink3"
+        letterSpacing="0.16em"
+      >
+        <Text textTransform="uppercase" fontWeight="700">
+          SCR.PAT
+        </Text>
+        <Text>
+          {range === null
+            ? '// shift-drag the chart above to pick a reference range'
+            : `${range.startDate} → ${range.endDate}`}
+        </Text>
+        <Box flex="1" />
+        {range !== null && (
+          <MonoButton
+            icon="delete"
+            label="clear range"
+            onClick={(): void => {
+              setChartRange(null);
+              mutation.reset();
+            }}
+          />
+        )}
+        <MonoButton
+          icon="search"
+          label={range === null ? 'no range selected' : 'find similar'}
+          onClick={onFind}
+          disabled={range === null || mutation.isPending}
+        />
+      </Flex>
+      <Box>
         {mutation.data === undefined ? (
           <Empty hint={range === null ? 'no reference range' : 'press FIND to scan'} />
         ) : mutation.data.matches.length === 0 ? (
@@ -115,7 +99,7 @@ export function FeatScrPat(): React.ReactElement {
           </>
         )}
       </Box>
-    </FeatView>
+    </Box>
   );
 }
 

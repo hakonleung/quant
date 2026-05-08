@@ -74,7 +74,8 @@ interface SortState {
   readonly dir: 'asc' | 'desc';
 }
 
-const STICKY_COL_WIDTH = 130;
+const STICKY_COL_WIDTH = 110;
+const ROW_H = 26;
 
 export function FeatEqList(): React.ReactElement {
   const activeSectorId = useUiStore((s) => s.activeSectorId);
@@ -150,7 +151,10 @@ export function FeatEqList(): React.ReactElement {
     return baseRows.filter((r) => r.code.startsWith(q) || r.name.toLowerCase().includes(q));
   }, [baseRows, filter, isDynamic, isUserSector]);
 
-  const [sort, setSort] = useState<SortState | null>(null);
+  // Default sort: descending by chgPct so winners surface first.
+  // `null` is reserved for the "use sector-defined order" mode (kept
+  // accessible by clicking the active sort header twice to clear it).
+  const [sort, setSort] = useState<SortState | null>({ key: 'chgPct', dir: 'desc' });
   const sortedRows: readonly ListRow[] = useMemo(() => {
     if (sort === null) return filteredRows;
     const arr = [...filteredRows];
@@ -669,14 +673,22 @@ function makeCodeColumn(): ColumnDef {
     align: 'left',
     sticky: true,
     render: (r) => (
-      <Box>
-        <Text fontFamily="mono" fontSize="12px" color="ink" fontWeight="600">
+      <Flex gap="6px" align="baseline" minW={0}>
+        <Text
+          fontFamily="mono"
+          fontSize="11px"
+          color="ink"
+          fontWeight="600"
+          overflow="hidden"
+          textOverflow="ellipsis"
+          whiteSpace="nowrap"
+        >
           {r.name}
         </Text>
-        <Text fontFamily="mono" fontSize="10px" color="ink3" letterSpacing="0.06em">
+        <Text fontFamily="mono" fontSize="10px" color="ink3" letterSpacing="0.04em" flexShrink={0}>
           {r.code}
         </Text>
-      </Box>
+      </Flex>
     ),
     sortValue: (r) => r.name,
   };
@@ -892,7 +904,7 @@ function ScrollGrid({
   const rowVirtualizer = useVirtualizer({
     count: rows.length,
     getScrollElement: () => scrollRef.current,
-    estimateSize: () => 38,
+    estimateSize: () => ROW_H,
     overscan: 12,
   });
 
@@ -994,8 +1006,8 @@ function ColumnHeader({
               }
             }}
             w={`${String(c.w)}px`}
-            px="10px"
-            py="6px"
+            px="8px"
+            py="4px"
             textAlign={c.align}
             color={active ? 'accent' : 'ink3'}
             fontFamily="mono"
@@ -1087,8 +1099,8 @@ function RowItem({
           key={c.key}
           w={`${String(c.w)}px`}
           h={`${String(h)}px`}
-          px="10px"
-          py="4px"
+          px="8px"
+          py="2px"
           textAlign={c.align}
           overflow="hidden"
           display="flex"

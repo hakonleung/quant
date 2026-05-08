@@ -13,17 +13,38 @@
  *
  * The cross-market search input (M-0 / SCR.NL) has been removed from
  * the top-bar; picking now happens from inside individual panes.
+ *
+ * The Brand cell uses the same dark CRT background + scanline overlay
+ * as TERM.MAIN's BigLogo so the workbench and terminal modes read as
+ * the same OS chrome. Click to toggle into term mode.
  */
 
-import { Box, Flex, HStack, Text } from '@chakra-ui/react';
+import { Box, Flex } from '@chakra-ui/react';
+
+import { runViewTransition } from '../../lib/fp/view-transition.js';
+import { useLayoutStore } from '../../lib/stores/layout.store.js';
 
 import { FeatChannelLive } from '../feat-channel/feat-channel.js';
 import { FeatSysCfg } from '../feat-sys-cfg/feat-sys-cfg.js';
 import { FeatSysStat } from '../feat-sys-stat/feat-sys-stat.js';
 
+import { LogoArt } from './logo-art.js';
+
+const BRAND_HEIGHT = 52;
+const TERM_BG = 'radial-gradient(ellipse at center, #08120c 0%, #04060a 65%, #020406 100%)';
+const TERM_LOGO_COLOR = '#d4ffe2';
+const TERM_LOGO_GLOW =
+  'rgba(155, 242, 182, 0.8) 0px 0px 4px, rgba(155, 242, 182, 0.4) 0px 0px 12px';
+
 export function TopBar(): React.ReactElement {
   return (
-    <Flex minH="42px" bg="panel" borderBottomWidth="2px" borderBottomColor="accent" align="stretch">
+    <Flex
+      minH={`${String(BRAND_HEIGHT)}px`}
+      bg="panel"
+      borderBottomWidth="2px"
+      borderBottomColor="accent"
+      align="stretch"
+    >
       <Brand />
       <Box flex="1" minW={0} display="flex" alignItems="stretch">
         <FeatSysStat />
@@ -39,29 +60,62 @@ export function TopBar(): React.ReactElement {
 }
 
 function Brand(): React.ReactElement {
+  const setAppMode = useLayoutStore((s) => s.setAppMode);
+  const onToggle = (): void => {
+    runViewTransition(typeof document === 'undefined' ? null : document, () => {
+      setAppMode('term');
+    });
+  };
+  // ASCII pixel-art logo on a CRT background. The cursor block is
+  // term-only — the regular-mode brand stays static so the eye doesn't
+  // track an animating glyph in the chrome.
   return (
-    <HStack
-      bg="accent"
-      color="panel"
+    <Box
+      as="button"
+      onClick={onToggle}
+      title="enter TERM mode"
+      position="relative"
       h="100%"
-      px="14px"
-      gap="6px"
-      letterSpacing="0.18em"
-      fontWeight="700"
-      fontSize="12px"
+      pl="16px"
+      pr="20px"
+      display="flex"
+      alignItems="center"
       flexShrink={0}
+      cursor="pointer"
+      border="0"
+      overflow="hidden"
+      style={{ background: TERM_BG, viewTransitionName: 'app-logo' }}
+      _hover={{ filter: 'brightness(1.15)' }}
+      _focus={{ outline: 'none', boxShadow: '0 0 0 2px rgba(155,242,182,0.4) inset' }}
     >
-      <Box lineHeight="1.1">
-        <HStack gap="0" align="baseline">
-          <Text as="span">qX//OS</Text>
-          <Text as="span" ml="4px" css={{ animation: 'blink 1s steps(1) infinite' }}>
-            _
-          </Text>
-        </HStack>
-        <Text fontSize="9px" letterSpacing="0.22em" opacity={0.85} fontWeight="500">
-          v0.1 · LOCAL
-        </Text>
+      {/* CRT chrome — coarse grid (z=0) + horizontal scanlines (z=1). */}
+      <Box
+        position="absolute"
+        inset="0"
+        pointerEvents="none"
+        zIndex={0}
+        opacity={0.32}
+        backgroundImage="linear-gradient(rgb(26, 58, 38) 1px, transparent 1px), linear-gradient(90deg, rgb(26, 58, 38) 1px, transparent 1px)"
+        backgroundSize="16px 16px"
+      />
+      <Box
+        position="absolute"
+        inset="0"
+        pointerEvents="none"
+        zIndex={1}
+        background="repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.32) 0px, rgba(0, 0, 0, 0.32) 1px, transparent 1px, transparent 3px)"
+        css={{ mixBlendMode: 'multiply' }}
+      />
+      <Box position="relative" zIndex={2}>
+        <LogoArt
+          color={TERM_LOGO_COLOR}
+          fontSize="7.5px"
+          lineHeight="1"
+          letterSpacing="1px"
+          textShadow={TERM_LOGO_GLOW}
+          showCursor={false}
+        />
       </Box>
-    </HStack>
+    </Box>
   );
 }

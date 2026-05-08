@@ -1,20 +1,11 @@
 import type { ReactNode } from 'react';
 
-import { Box } from '@chakra-ui/react';
-
-import { TopBar } from '../../components/shell/top-bar.js';
+import { AppShell } from '../../components/shell/app-shell.js';
 
 interface AppLayoutProps {
   readonly children: ReactNode;
 }
 
 export default function AppLayout({ children }: AppLayoutProps): ReactNode {
-  return (
-    <Box as="main" h="100vh" bg="bg" display="flex" flexDirection="column" overflow="hidden">
-      <TopBar />
-      <Box flex="1" minH={0}>
-        {children}
-      </Box>
-    </Box>
-  );
+  return <AppShell>{children}</AppShell>;
 }

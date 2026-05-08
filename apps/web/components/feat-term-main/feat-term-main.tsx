@@ -32,9 +32,7 @@
 import { Box, Flex } from '@chakra-ui/react';
 import { useCallback, useRef } from 'react';
 
-import { Feat } from '../../lib/eqty/feat.js';
 import { useUiStore } from '../../lib/stores/ui.store.js';
-import { FeatView } from '../feat-view/feat-view.js';
 
 import { BigLogo } from './big-logo.js';
 import { CrtOverlay } from './crt-overlay.js';
@@ -63,59 +61,60 @@ export function FeatTermMain(): React.ReactElement {
     [mount, unmount],
   );
 
+  // Term mode is the whole-app surface in this layout — no FeatView
+  // chrome. The BigLogo doubles as the exit affordance (click to
+  // return to the regular workbench).
   return (
-    <FeatView feat={Feat.Terminal}>
+    <Flex
+      direction="column"
+      h="100%"
+      minH="320px"
+      bg="radial-gradient(ellipse at center, #08120c 0%, #04060a 65%, #020406 100%)"
+      position="relative"
+      overflow="hidden"
+    >
+      <CrtOverlay />
+
+      {/* TOP — logo (left) + vertical sys.stat (right) */}
       <Flex
-        direction="column"
-        h="100%"
-        minH="320px"
-        bg="radial-gradient(ellipse at center, #08120c 0%, #04060a 65%, #020406 100%)"
         position="relative"
-        overflow="hidden"
+        zIndex={2}
+        px="18px"
+        pt="10px"
+        pb="8px"
+        align="flex-start"
+        justify="space-between"
+        gap="20px"
+        flexShrink={0}
       >
-        <CrtOverlay />
+        <BigLogo />
+        <HeaderSysStat />
+      </Flex>
 
-        {/* TOP — logo (left) + vertical sys.stat (right) */}
-        <Flex
+      {/* MAIN — xterm | dashboard */}
+      <Flex flex="1" minH={0} position="relative" zIndex={2}>
+        <Box
+          ref={hostRefCallback}
+          flex="1"
+          minW={0}
           position="relative"
-          zIndex={2}
-          px="18px"
-          pt="10px"
-          pb="8px"
-          align="flex-start"
-          justify="space-between"
-          gap="20px"
-          flexShrink={0}
-        >
-          <BigLogo />
-          <HeaderSysStat />
-        </Flex>
-
-        {/* MAIN — xterm | dashboard */}
-        <Flex flex="1" minH={0} position="relative" zIndex={2}>
-          <Box
-            ref={hostRefCallback}
-            flex="1"
-            minW={0}
-            position="relative"
-            tabIndex={0}
-            onClick={(): void => {
-              lastNodeRef.current
-                ?.querySelector<HTMLTextAreaElement>('.xterm-helper-textarea')
-                ?.focus();
-            }}
-          />
-          <Box w={{ base: '300px', xl: '360px' }} flexShrink={0} minH="100%">
-            <StockDashboard code={previewCode} />
-          </Box>
-        </Flex>
-
-        {/* BOTTOM — tips bar (driven by terminal widget hints) */}
-        <Box position="relative" zIndex={2}>
-          <TipsBar state={state} />
+          tabIndex={0}
+          onClick={(): void => {
+            lastNodeRef.current
+              ?.querySelector<HTMLTextAreaElement>('.xterm-helper-textarea')
+              ?.focus();
+          }}
+        />
+        <Box w={{ base: '300px', xl: '360px' }} flexShrink={0} minH="100%">
+          <StockDashboard code={previewCode} />
         </Box>
       </Flex>
-    </FeatView>
+
+      {/* BOTTOM — tips bar (driven by terminal widget hints) */}
+      <Box position="relative" zIndex={2}>
+        <TipsBar state={state} />
+      </Box>
+    </Flex>
   );
 }
 

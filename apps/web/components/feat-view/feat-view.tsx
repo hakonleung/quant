@@ -20,6 +20,13 @@ interface FeatViewProps {
   /** Custom title slot — when present takes the whole title position. */
   readonly titleSlot?: ReactNode;
   readonly right?: ReactNode;
+  /**
+   * When true, the pane sizes to its content rather than flex-growing
+   * to fill the column. Use for compact panes (single-row sliders,
+   * thin status strips) that would otherwise stretch and starve the
+   * panes below them in the same column.
+   */
+  readonly contentSized?: boolean;
   readonly children: ReactNode;
 }
 
@@ -29,6 +36,7 @@ export function FeatView({
   statusBlink,
   titleSlot,
   right,
+  contentSized,
   children,
 }: FeatViewProps): React.ReactElement {
   const config = FEAT_CONFIG_MAP[feat];
@@ -159,7 +167,13 @@ export function FeatView({
       color={cyber ? 'term.ink2' : 'ink'}
       position={isFullscreen ? 'fixed' : 'relative'}
       flex={
-        isFullscreen ? undefined : bodyOverlay ? '1 1 0' : inlineCollapsed ? '0 0 auto' : '1 1 0'
+        isFullscreen
+          ? undefined
+          : bodyOverlay
+            ? '1 1 0'
+            : inlineCollapsed || contentSized === true
+              ? '0 0 auto'
+              : '1 1 0'
       }
       minH={0}
       display="flex"
@@ -192,7 +206,7 @@ export function FeatView({
         </OverlayBody>
       ) : renderInlineBody ? (
         <Box
-          flex={isMinimized ? '0 0 auto' : '1'}
+          flex={isMinimized || contentSized === true ? '0 0 auto' : '1'}
           minH={0}
           overflowX="hidden"
           overflowY={isMinimized ? 'hidden' : 'auto'}

@@ -23,6 +23,27 @@ export const DEFAULT_VIEWPORT: ChartViewport = {
 export const MIN_CANDLE_W = 2;
 export const MAX_CANDLE_W = 32;
 
+/**
+ * Default number of bars shown on first paint. The user keeps shift-
+ * dragging to reveal older history; this is just the initial framing.
+ */
+export const DEFAULT_VISIBLE_BARS = 75;
+
+/**
+ * Pick a candleW so roughly {@link DEFAULT_VISIBLE_BARS} bars fit in
+ * `viewWidth`. Width depends on actual layout (changes with the right
+ * column drag handle), so the chart re-runs this whenever it has a
+ * fresh `innerW`. Gap follows `clampViewport`'s 25%-of-candleW rule.
+ */
+export function fitVisibleViewport(viewWidth: number, totalBars: number): ChartViewport {
+  if (viewWidth <= 0 || totalBars <= 0) return DEFAULT_VIEWPORT;
+  const target = Math.min(DEFAULT_VISIBLE_BARS, totalBars);
+  // candleW + gap = stride; gap ≈ 0.25 * candleW → stride ≈ 1.25 * candleW.
+  const stride = viewWidth / target;
+  const candleW = Math.max(MIN_CANDLE_W, Math.min(MAX_CANDLE_W, stride / 1.25));
+  return clampViewport({ candleW, gap: 0, panPx: 0 });
+}
+
 export interface VisibleSlice {
   /** Index of the first visible bar in the source array. */
   readonly startIdx: number;
@@ -39,6 +60,16 @@ export function visibleSlice(total: number, vp: ChartViewport, viewWidth: number
   if (total === 0 || stride <= 0) {
     return { startIdx: 0, count: 0, firstX: 0, stride };
   }
+  // Total horizontal space taken by all bars. `total*stride - gap`
+  // because there's no trailing gap after the last bar.
+  const totalSpan = total * stride - vp.gap;
+  // Short series ("次新股" with < N bars): anchor the leftmost bar to
+  // x=0 instead of right-aligning latest. Pan is irrelevant — nothing
+  // older to reveal. This keeps the chart from rendering as a thin
+  // strip floating in the right half of the pane.
+  if (totalSpan <= viewWidth) {
+    return { startIdx: 0, count: total, firstX: 0, stride };
+  }
   // pan-corrected right edge: the latest bar's right pixel.
   // panPx > 0 means the user has dragged to see older bars, so latest
   // slides off to the *right* of the viewport (positive direction).
@@ -51,6 +82,20 @@ export function visibleSlice(total: number, vp: ChartViewport, viewWidth: number
   // x of bar at startIdx: latestLeftX - (total - 1 - startIdx) * stride
   const firstX = latestLeftX - (total - 1 - startIdx) * stride;
   return { startIdx, count, firstX, stride };
+}
+
+/**
+ * Maximum allowed `panPx` for the given series + width — beyond this
+ * the leftmost bar would drift past the left edge into nothing.
+ * Returns 0 for short series (`totalSpan <= viewWidth`), making them
+ * unpannable. The drag handler should clamp against this on every
+ * mouse-move to stop scroll past the start of history.
+ */
+export function maxPanPx(total: number, vp: ChartViewport, viewWidth: number): number {
+  const stride = vp.candleW + vp.gap;
+  if (total === 0 || stride <= 0) return 0;
+  const totalSpan = total * stride - vp.gap;
+  return Math.max(0, totalSpan - viewWidth);
 }
 
 /** Pick a bar index given a mouse X within the SVG, or null if none. */

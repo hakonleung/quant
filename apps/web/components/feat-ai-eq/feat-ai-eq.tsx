@@ -1,5 +1,14 @@
 'use client';
 
+/**
+ * AI.EQ — Single-stock LLM sentiment.
+ *
+ * Cached read (useSentiment) is the default render path; the FETCH
+ * button fires the LLM-backed analyze_one mutation. The collapsed
+ * AI.MD pane below the stdout stream renders the verbatim analyst
+ * write-up when the user expands it.
+ */
+
 import { Box, Flex, Text } from '@chakra-ui/react';
 
 import { Feat } from '../../lib/eqty/feat.js';
@@ -18,7 +27,7 @@ interface Props {
   readonly code: string;
 }
 
-export function FeatAiOut({ code }: Props): React.ReactElement {
+export function FeatAiEq({ code }: Props): React.ReactElement {
   const cached = useSentiment(code);
   const analyze = useAnalyzeSentiment(code);
   const meta = useStockMetaQuery(code);
@@ -67,7 +76,7 @@ export function FeatAiOut({ code }: Props): React.ReactElement {
 
   return (
     <FeatView
-      feat={Feat.AIOut}
+      feat={Feat.AIEq}
       status={tone}
       statusBlink={analyze.isPending || push.isPending}
       titleSlot={
@@ -148,7 +157,7 @@ export function FeatAiOut({ code }: Props): React.ReactElement {
             </Text>
           </Flex>
         </Box>
-        {/* A-2: collapsed by default — header-only line under the stdout
+        {/* AI.MD: collapsed by default — header-only line under the stdout
             stream. Click the restore (▢) control in its header to expand
             and read the verbatim analyst write-up. */}
         <FeatAiMd source={markdownSource} subject={stockLabel} />

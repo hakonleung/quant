@@ -6,6 +6,11 @@
  * Mode is keyed by `Feat` id; the store falls back to the
  * `defaultMinimized` config flag for keys it has never seen, so adding
  * a new feat in `feat.ts` does not require migrating saved state.
+ *
+ * `appMode` is the top-level chrome toggle: `'regular'` mounts the full
+ * workbench (TopBar + columns); `'term'` collapses the chrome and
+ * mounts only TERM.MAIN. The mode persists with the rest of the layout
+ * so a refresh keeps the user where they were.
  */
 
 'use client';
@@ -16,6 +21,7 @@ import { createJSONStorage, persist } from 'zustand/middleware';
 import { idbStorage } from './idb-storage.js';
 
 export type FeatViewMode = 'normal' | 'minimized' | 'fullscreen';
+export type AppMode = 'regular' | 'term';
 
 const LEFT_DEFAULT = 280;
 const RIGHT_DEFAULT = 480;
@@ -36,9 +42,11 @@ interface LayoutState {
   readonly featViewMode: Readonly<Record<string, FeatViewMode>>;
   readonly leftWidth: number;
   readonly rightWidth: number;
+  readonly appMode: AppMode;
   setFeatViewMode(feat: string, mode: FeatViewMode): void;
   setLeftWidth(px: number): void;
   setRightWidth(px: number): void;
+  setAppMode(mode: AppMode): void;
 }
 
 export const useLayoutStore = create<LayoutState>()(
@@ -47,6 +55,7 @@ export const useLayoutStore = create<LayoutState>()(
       featViewMode: {},
       leftWidth: LEFT_DEFAULT,
       rightWidth: RIGHT_DEFAULT,
+      appMode: 'regular',
       setFeatViewMode: (feat, mode) => {
         set((state) => ({ featViewMode: { ...state.featViewMode, [feat]: mode } }));
       },
@@ -56,11 +65,14 @@ export const useLayoutStore = create<LayoutState>()(
       setRightWidth: (px) => {
         set({ rightWidth: clamp(px, RIGHT_MIN, RIGHT_MAX) });
       },
+      setAppMode: (mode) => {
+        set({ appMode: mode });
+      },
     }),
     {
       name: 'eqty-layout',
       storage: createJSONStorage(() => idbStorage('layout')),
-      version: 2,
+      version: 3,
     },
   ),
 );

@@ -19,7 +19,9 @@
  *   - Drag the chart body to pan; +/- overlay zooms by adjusting candle
  *     width.
  *
- * Header actions: add-to-sector dialog.
+ * Header actions: select-sectors dialog (multi-select diff). The
+ * SCR.PAT pattern-match table is embedded inline below the
+ * fundamentals so the pattern range follows the chart's lifecycle.
  */
 
 import { Box, Flex, Text } from '@chakra-ui/react';
@@ -48,7 +50,8 @@ import {
 import { useKline, useStockMetaQuery, useStockSnapshots } from '../../lib/hooks/use-eqty-data.js';
 import { useUiStore } from '../../lib/stores/ui.store.js';
 import { FeatView } from '../feat-view/feat-view.js';
-import { AddToSectorDialog } from '../feat-sec-list/add-to-sector-dialog.js';
+import { ScrPatSection } from '../feat-scr-pat/scr-pat-section.js';
+import { SelectSectorsDialog } from './select-sectors-dialog.js';
 
 const TOTAL_H = totalChartHeight(DEFAULT_PRICE_H, DEFAULT_VOL_H);
 
@@ -66,14 +69,15 @@ export function FeatEqChart({ code }: Props): React.ReactElement {
   const [selectedIdx, setSelectedIdx] = useState<number | null>(null);
   const [hoverIdx, setHoverIdx] = useState<number | null>(null);
   const [hoverPrice, setHoverPrice] = useState<number | null>(null);
-  const [showAddDialog, setShowAddDialog] = useState(false);
+  const [showSectorsDialog, setShowSectorsDialog] = useState(false);
   const setChartRange = useUiStore((s) => s.setChartRange);
   const chartRange = useUiStore((s) => s.chartRange);
 
-  // Reset viewport whenever the underlying series changes.
+  // Reset selection on series change. Viewport auto-fits to the new
+  // series inside `ChartCanvas` (it knows the inner width); we just
+  // clear stale focus state here.
   const seriesKey = bars.length === 0 ? '' : `${bars[0]!.date}-${bars[bars.length - 1]!.date}`;
   useEffect(() => {
-    setVp(DEFAULT_VIEWPORT);
     setSelectedIdx(null);
     setHoverIdx(null);
   }, [seriesKey]);
@@ -130,6 +134,16 @@ export function FeatEqChart({ code }: Props): React.ReactElement {
   const deltaPct =
     focusIdx === null || focusIdx === bars.length - 1 ? null : pctChangeToLatest(bars, focusIdx);
   const daysAgo = focusIdx === null ? null : bars.length - 1 - focusIdx;
+  // Day-over-day change for the focused bar — shown right after the
+  // close so the price always carries its immediate context. First
+  // bar in the series has no predecessor, so it stays null.
+  const dayChgPct = ((): number | null => {
+    if (focusIdx === null || focusIdx <= 0) return null;
+    const prev = bars[focusIdx - 1];
+    const cur = bars[focusIdx];
+    if (prev === undefined || cur === undefined || prev.close === 0) return null;
+    return cur.close / prev.close - 1;
+  })();
 
   return (
     <FeatView
@@ -138,8 +152,8 @@ export function FeatEqChart({ code }: Props): React.ReactElement {
         <ChartHeaderRight
           code={code}
           stockName={stockName}
-          onAddToSector={(): void => {
-            setShowAddDialog(true);
+          onSelectSectors={(): void => {
+            setShowSectorsDialog(true);
           }}
         />
       }
@@ -149,8 +163,11 @@ export function FeatEqChart({ code }: Props): React.ReactElement {
           bar={focusBar}
           deltaPct={deltaPct}
           daysAgo={daysAgo}
+          dayChgPct={dayChgPct}
           selected={selectedIdx !== null}
           hovered={selectedIdx === null && hoverIdx !== null}
+          vp={vp}
+          setVp={setVp}
         />
         <Box flex="1" minH={0}>
           <Box position="relative" h={`${String(TOTAL_H)}px`} bg="panel">
@@ -159,31 +176,29 @@ export function FeatEqChart({ code }: Props): React.ReactElement {
             ) : bars.length === 0 ? (
               <Centered>// no kline data</Centered>
             ) : (
-              <>
-                <ChartCanvas
-                  bars={bars}
-                  vp={vp}
-                  setVp={setVp}
-                  selectedIdx={selectedIdx}
-                  setHoverIdx={setHoverIdx}
-                  hoverPrice={hoverPrice}
-                  setHoverPrice={setHoverPrice}
-                  focusIdx={focusIdx}
-                  committedRange={committedRange}
-                  onBarClick={onBarClick}
-                />
-                <ZoomOverlay vp={vp} setVp={setVp} />
-              </>
+              <ChartCanvas
+                bars={bars}
+                vp={vp}
+                setVp={setVp}
+                selectedIdx={selectedIdx}
+                setHoverIdx={setHoverIdx}
+                hoverPrice={hoverPrice}
+                setHoverPrice={setHoverPrice}
+                focusIdx={focusIdx}
+                committedRange={committedRange}
+                onBarClick={onBarClick}
+              />
             )}
           </Box>
           <FinancialsSection code={code} meta={meta.data ?? null} />
+          <ScrPatSection />
         </Box>
       </Flex>
-      <AddToSectorDialog
-        open={showAddDialog}
+      <SelectSectorsDialog
+        open={showSectorsDialog}
         code={code}
         onClose={(): void => {
-          setShowAddDialog(false);
+          setShowSectorsDialog(false);
         }}
       />
     </FeatView>
@@ -194,75 +209,123 @@ interface FocusProps {
   readonly bar: KlineBar | null;
   readonly deltaPct: number | null;
   readonly daysAgo: number | null;
+  /** Day-over-day percent change for the focused bar — shown next to close. */
+  readonly dayChgPct: number | null;
   readonly selected: boolean;
   readonly hovered: boolean;
+  /** Viewport state — drives the inline zoom controls. */
+  readonly vp: ChartViewport;
+  readonly setVp: (vp: ChartViewport) => void;
 }
 
-function FocusLabel({ bar, deltaPct, daysAgo, selected, hovered }: FocusProps): React.ReactElement {
+function FocusLabel({
+  bar,
+  deltaPct,
+  daysAgo,
+  dayChgPct,
+  selected,
+  hovered,
+  vp,
+  setVp,
+}: FocusProps): React.ReactElement {
   if (bar === null) {
     return (
-      <Box px="14px" py="4px" borderBottomWidth="1px" borderColor="line" bg="panel3">
+      <Flex
+        px="14px"
+        py="4px"
+        borderBottomWidth="1px"
+        borderColor="line"
+        bg="panel3"
+        align="center"
+        justify="space-between"
+      >
         <Text fontFamily="mono" fontSize="10px" color="ink3" letterSpacing="0.12em">
           // no bar
         </Text>
-      </Box>
+        <ZoomControls vp={vp} setVp={setVp} />
+      </Flex>
     );
   }
   const closeColor = bar.close > bar.open ? 'up' : bar.close < bar.open ? 'down' : 'ink2';
   const tag = selected ? `SEL ${bar.date}` : hovered ? `HOV ${bar.date}` : `LATEST ${bar.date}`;
   return (
     <Flex
+      direction="column"
       px="14px"
       py="4px"
+      gap="3px"
       borderBottomWidth="1px"
       borderColor="line"
       bg="panel3"
-      align="center"
-      gap="12px"
       fontFamily="mono"
       fontSize="10px"
       color="ink2"
-      flexWrap="wrap"
     >
-      <Box
-        as="span"
-        px="5px"
-        py={0}
-        borderWidth="1px"
-        borderColor={selected ? 'accent' : 'line'}
-        color={selected ? 'accent' : 'ink3'}
-        bg={selected ? 'accentBg' : 'transparent'}
-        fontSize="9px"
-        fontWeight="700"
-        letterSpacing="0.12em"
-      >
-        {tag}
-      </Box>
-      <Text
-        fontFamily="mono"
-        fontSize="13px"
-        color={closeColor}
-        fontWeight="800"
-        letterSpacing="0.04em"
-      >
-        {bar.close.toFixed(2)}
-      </Text>
-      {daysAgo !== null && deltaPct !== null && (
-        <Stat
-          label={`距今${String(daysAgo)}d`}
-          value={`${deltaPct >= 0 ? '+' : ''}${deltaPct.toFixed(2)}%`}
-          color={deltaPct >= 0 ? 'up' : 'down'}
-          bold
-        />
-      )}
-      <Stat label="换手" value={`${(bar.turnoverRate * 100).toFixed(2)}%`} />
-      <Stat label="H" value={bar.high.toFixed(2)} color="up" />
-      <Stat label="L" value={bar.low.toFixed(2)} color="down" />
-      <Stat label="O" value={bar.open.toFixed(2)} />
-      <MaInline ma="MA5" value={bar.ma5} color={MA_COLORS.ma5} />
-      <MaInline ma="MA10" value={bar.ma10} color={MA_COLORS.ma10} />
-      <MaInline ma="MA20" value={bar.ma20} color={MA_COLORS.ma20} />
-      <MaInline ma="MA60" value={bar.ma60} color={MA_COLORS.ma60} />
+      {/* Row 1 — price · chgPct · 距今涨幅 · 换手/H/L/O · zoom controls. */}
+      <Flex align="center" gap="12px" flexWrap="wrap">
+        <Text
+          fontFamily="mono"
+          fontSize="13px"
+          color={closeColor}
+          fontWeight="800"
+          letterSpacing="0.04em"
+        >
+          {bar.close.toFixed(2)}
+        </Text>
+        {dayChgPct !== null && (
+          <Text
+            fontFamily="mono"
+            fontSize="12px"
+            color={dayChgPct >= 0 ? 'up' : 'down'}
+            fontWeight="700"
+            letterSpacing="0.04em"
+          >
+            {dayChgPct >= 0 ? '+' : ''}
+            {(dayChgPct * 100).toFixed(2)}%
+          </Text>
+        )}
+        {daysAgo !== null && deltaPct !== null && (
+          <Stat
+            label={`距今${String(daysAgo)}d`}
+            value={`${deltaPct >= 0 ? '+' : ''}${deltaPct.toFixed(2)}%`}
+            color={deltaPct >= 0 ? 'up' : 'down'}
+            bold
+          />
+        )}
+        <Stat label="换手" value={`${(bar.turnoverRate * 100).toFixed(2)}%`} />
+        <Stat label="H" value={bar.high.toFixed(2)} color="up" />
+        <Stat label="L" value={bar.low.toFixed(2)} color="down" />
+        <Stat label="O" value={bar.open.toFixed(2)} />
+        {/* `ml="auto"` pins the zoom controls to the right edge no
+            matter how many wrap-rows row 1 spans. */}
+        <Box ml="auto">
+          <ZoomControls vp={vp} setVp={setVp} />
+        </Box>
+      </Flex>
+      {/* Row 2 — focus tag (LATEST / SEL / HOV) + MA5/10/20/60. The
+          tag lives next to the MAs so row 1 stays compact and reads
+          as the price summary; the date / mode tag pairs naturally
+          with the secondary indicator strip. */}
+      <Flex align="center" gap="12px" flexWrap="wrap">
+        <Box
+          as="span"
+          px="5px"
+          py={0}
+          borderWidth="1px"
+          borderColor={selected ? 'accent' : 'line'}
+          color={selected ? 'accent' : 'ink3'}
+          bg={selected ? 'accentBg' : 'transparent'}
+          fontSize="9px"
+          fontWeight="700"
+          letterSpacing="0.12em"
+        >
+          {tag}
+        </Box>
+        <MaInline ma="MA5" value={bar.ma5} color={MA_COLORS.ma5} />
+        <MaInline ma="MA10" value={bar.ma10} color={MA_COLORS.ma10} />
+        <MaInline ma="MA20" value={bar.ma20} color={MA_COLORS.ma20} />
+        <MaInline ma="MA60" value={bar.ma60} color={MA_COLORS.ma60} />
+      </Flex>
     </Flex>
   );
 }
@@ -328,12 +391,20 @@ function Centered({ children }: { children: React.ReactNode }): React.ReactEleme
   );
 }
 
-interface ZoomOverlayProps {
+interface ZoomControlsProps {
   readonly vp: ChartViewport;
   readonly setVp: (vp: ChartViewport) => void;
 }
 
-function ZoomOverlay({ vp, setVp }: ZoomOverlayProps): React.ReactElement {
+/**
+ * Inline +/- zoom buttons. Lives inside `FocusLabel`'s indicator strip
+ * — `Box ml="auto"` on the wrapper pins it to the right edge of the
+ * row regardless of how many wrap-lines the rest of the strip uses.
+ * No absolute positioning, so the controls flow with the bar height
+ * and don't have to fight z-index or `pointerEvents` against the chart
+ * canvas underneath.
+ */
+function ZoomControls({ vp, setVp }: ZoomControlsProps): React.ReactElement {
   const zoomIn = (): void => {
     setVp(clampViewport({ ...vp, candleW: Math.min(MAX_CANDLE_W, vp.candleW * 1.4) }));
   };
@@ -341,13 +412,9 @@ function ZoomOverlay({ vp, setVp }: ZoomOverlayProps): React.ReactElement {
     setVp(clampViewport({ ...vp, candleW: Math.max(MIN_CANDLE_W, vp.candleW / 1.4) }));
   };
   return (
-    <Flex position="absolute" top="6px" right="10px" gap="4px" zIndex={2} pointerEvents="none">
-      <Box pointerEvents="auto">
-        <MonoButton icon="minimize" label="zoom out" onClick={zoomOut} />
-      </Box>
-      <Box pointerEvents="auto">
-        <MonoButton icon="add" label="zoom in" onClick={zoomIn} />
-      </Box>
+    <Flex gap="4px" align="center">
+      <MonoButton icon="minimize" label="zoom out" onClick={zoomOut} />
+      <MonoButton icon="add" label="zoom in" onClick={zoomIn} />
     </Flex>
   );
 }
@@ -355,20 +422,20 @@ function ZoomOverlay({ vp, setVp }: ZoomOverlayProps): React.ReactElement {
 interface HeaderRightProps {
   readonly code: string;
   readonly stockName: string;
-  readonly onAddToSector: () => void;
+  readonly onSelectSectors: () => void;
 }
 
 function ChartHeaderRight({
   code,
   stockName,
-  onAddToSector,
+  onSelectSectors,
 }: HeaderRightProps): React.ReactElement {
   return (
     <Flex align="center" gap="8px">
       <Text>{code}</Text>
       {stockName !== '' && <Text>{stockName}</Text>}
       <FeatViewHeaderRight>
-        <MonoButton icon="star" label="add to sector" onClick={onAddToSector} />
+        <MonoButton icon="star" label="select sectors" onClick={onSelectSectors} />
       </FeatViewHeaderRight>
     </Flex>
   );

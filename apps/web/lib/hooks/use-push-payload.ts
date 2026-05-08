@@ -3,7 +3,7 @@
 /**
  * Shared mutation for the SYS.PUSH test endpoint.
  *
- * Pane-level "push" buttons (AI.OUT, AI.HIST) reuse this so the slack
+ * Pane-level "push" buttons (AI.EQ, AI.SEC) reuse this so the slack
  * delivery surface lives in one place — the BFF echoes back
  * `{dryRun:true}` when no webhook is configured.
  */

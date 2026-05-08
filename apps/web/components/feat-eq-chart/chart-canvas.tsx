@@ -28,12 +28,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { sparseIndices, type MaKey } from '../../lib/fp/kline-chart.js';
 import {
   clampViewport,
+  fitVisibleViewport,
   indexAtX,
+  maxPanPx,
   priceBounds,
   visibleSlice,
   type ChartViewport,
 } from '../../lib/fp/chart-view.js';
-import { palette } from '../../lib/theme/tokens.js';
+import { fonts, palette } from '../../lib/theme/tokens.js';
 
 export const PRICE_AXIS_W = 48;
 export const TOP_PAD = 8;
@@ -41,16 +43,52 @@ export const BOTTOM_PAD = 8;
 export const VOL_GAP = 4;
 export const DATE_AXIS_H = 22;
 
+/**
+ * Tick / label font for chart axes — uses the project's shared `mono`
+ * stack so the chart matches FeatView header chrome and the rest of
+ * the workbench. SVG `<text>` doesn't resolve Chakra theme tokens, so
+ * we pull the literal stack from `lib/theme/tokens` directly. We pass
+ * it as an inline `style.fontFamily` (rather than the legacy
+ * `font-family` attribute) so the browser parses the CSS quoted-name
+ * stack the same way it would for an HTML element — that keeps the
+ * SVG glyphs visually identical to nearby Chakra `Text` chrome.
+ */
+const AXIS_FONT_FAMILY = fonts.mono;
+/** Smaller than 9 — keeps tight vertical spacing for the slim axes. */
+const AXIS_FONT_SIZE = 8;
+/**
+ * Approximate width (px) of a "MM-DD" date label at
+ * {@link AXIS_FONT_SIZE} in the project mono stack. Used by the
+ * date-tick edge-anchor logic so adjacent ticks never collide near
+ * the chart boundaries.
+ */
+const DATE_LABEL_W = 28;
+/** Pre-computed reusable axis-text style — keeps render hot-path tidy. */
+const AXIS_TEXT_STYLE: React.CSSProperties = {
+  fontFamily: AXIS_FONT_FAMILY,
+  fontSize: `${String(AXIS_FONT_SIZE)}px`,
+};
+
 /** Default heights — used by EQ.CHART. */
 export const DEFAULT_PRICE_H = 240;
-export const DEFAULT_VOL_H = 64;
+/**
+ * Volume sub-pane height. Slimmed from 64 → 36 — the volume bars are
+ * informational only and were dominating vertical real estate.
+ */
+export const DEFAULT_VOL_H = 36;
 
 export const MA_COLORS: Readonly<Record<MaKey, string>> = {
-  // Smaller window -> deeper / warmer color.
-  ma5: '#7a3a05',
-  ma10: '#a66610',
-  ma20: '#d59231',
-  ma60: '#e3b975',
+  // One distinct hue per window so overlapping lines stay legible —
+  // the prior monochrome warm scale was unreadable when MA10/20/60
+  // ran near each other.
+  //   MA5  blue    — fast, "current" line
+  //   MA10 amber   — short-term momentum
+  //   MA20 magenta — medium-term, classic 月线
+  //   MA60 green   — long-term, slow
+  ma5: '#3b82f6',
+  ma10: '#f59e0b',
+  ma20: '#ec4899',
+  ma60: '#10b981',
 };
 
 export function totalChartHeight(
@@ -181,7 +219,11 @@ export function ChartCanvas({
       if (drag === null) return;
       const dx = e.clientX - drag.startClientX;
       if (Math.abs(dx) > 2) drag.moved = true;
-      const nextPan = Math.max(0, drag.startPan + dx);
+      // Upper bound: don't pan past the start of the series. Short
+      // series (totalSpan <= innerW) are entirely unpannable —
+      // `maxPanPx` returns 0 so `nextPan` stays at 0.
+      const upper = maxPanPx(bars.length, vp, innerW);
+      const nextPan = Math.min(upper, Math.max(0, drag.startPan + dx));
       setVp(clampViewport({ ...vp, panPx: nextPan }));
     };
     const onWinUp = (): void => {
@@ -194,7 +236,37 @@ export function ChartCanvas({
       window.removeEventListener('mousemove', onWinMove);
       window.removeEventListener('mouseup', onWinUp);
     };
-  }, [interactive, vp, setVp]);
+  }, [interactive, vp, setVp, bars.length, innerW]);
+
+  // Auto-fit candleW so ~`DEFAULT_VISIBLE_BARS` show on first paint.
+  // Triggered once per (series, width-becomes-known) tuple — refusing
+  // to refit on width changes alone preserves any user-initiated
+  // zoom. The series identity uses first/last dates so reordering
+  // within the same range doesn't refit.
+  const seriesKey =
+    bars.length === 0 ? '' : `${bars[0]!.date}-${bars[bars.length - 1]!.date}`;
+  const lastFitRef = useRef<{ key: string; widthKnown: boolean }>({
+    key: '',
+    widthKnown: false,
+  });
+  useEffect(() => {
+    if (!interactive) return;
+    if (innerW <= 0 || bars.length === 0) return;
+    const last = lastFitRef.current;
+    if (last.key === seriesKey && last.widthKnown) return;
+    lastFitRef.current = { key: seriesKey, widthKnown: true };
+    setVp(fitVisibleViewport(innerW, bars.length));
+  }, [interactive, seriesKey, innerW, bars.length, setVp]);
+
+  // Re-clamp existing panPx whenever bars / width change so a series
+  // swap or column resize can't leave the viewport panned past its
+  // new upper bound.
+  useEffect(() => {
+    if (!interactive) return;
+    if (innerW <= 0 || bars.length === 0) return;
+    const upper = maxPanPx(bars.length, vp, innerW);
+    if (vp.panPx > upper) setVp(clampViewport({ ...vp, panPx: upper }));
+  }, [interactive, vp, bars.length, innerW, setVp]);
 
   const onMouseDown = (e: React.MouseEvent<SVGSVGElement>): void => {
     if (!interactive) return;
@@ -257,6 +329,15 @@ export function ChartCanvas({
     const top = scaleY(Math.max(b.open, b.close));
     const bot = scaleY(Math.min(b.open, b.close));
     const isFocused = focusIdx === i;
+    // Chinese-market convention: 阳线 (up, red here) renders hollow —
+    // body has no fill, only a coloured stroke; 阴线 (down, green)
+    // renders solid. Hollow up-candles read as a clearly distinct
+    // shape against solid down-candles even when colours wash out
+    // (low contrast / colour-blindness).
+    const bodyH = Math.max(1, bot - top);
+    const wickX = x + vp.candleW / 2;
+    const highY = scaleY(b.high);
+    const lowY = scaleY(b.low);
     candles.push(
       <g key={`c-${String(i)}`}>
         {isFocused && (
@@ -268,14 +349,29 @@ export function ChartCanvas({
             fill="rgba(184,117,20,0.08)"
           />
         )}
-        <line
-          x1={x + vp.candleW / 2}
-          x2={x + vp.candleW / 2}
-          y1={scaleY(b.high)}
-          y2={scaleY(b.low)}
-          stroke={col}
-        />
-        <rect x={x} y={top} width={vp.candleW} height={Math.max(1, bot - top)} fill={col} />
+        {/* Upper wick: from high down to body top. */}
+        {highY < top && <line x1={wickX} x2={wickX} y1={highY} y2={top} stroke={col} />}
+        {/* Lower wick: from body bottom down to low. Drawing two
+            segments rather than a single high→low wick avoids the
+            wick line crossing the inside of a hollow up-candle body
+            (it would otherwise read as an extra vertical line through
+            the empty rectangle). */}
+        {lowY > top + bodyH && (
+          <line x1={wickX} x2={wickX} y1={top + bodyH} y2={lowY} stroke={col} />
+        )}
+        {up ? (
+          <rect
+            x={x + 0.5}
+            y={top + 0.5}
+            width={Math.max(1, vp.candleW - 1)}
+            height={Math.max(1, bodyH - 1)}
+            fill="none"
+            stroke={col}
+            strokeWidth={1}
+          />
+        ) : (
+          <rect x={x} y={top} width={vp.candleW} height={bodyH} fill={col} />
+        )}
       </g>,
     );
     if (showVolume) {
@@ -354,8 +450,7 @@ export function ChartCanvas({
                 <text
                   x={priceAxisW - 6}
                   y={y + 3}
-                  fontSize="9"
-                  fontFamily="JetBrains Mono"
+                  style={AXIS_TEXT_STYLE}
                   fill={palette.light.ink3}
                   textAnchor="end"
                 >
@@ -392,24 +487,76 @@ export function ChartCanvas({
           {volBars}
 
           {showDateAxis &&
-            dateTickIdx.map((idx) => {
-              const b = bars[idx];
-              if (b === undefined) return null;
-              const x = xForIndex(idx) + vp.candleW / 2;
-              return (
-                <text
-                  key={`dt-${String(idx)}`}
-                  x={x}
-                  y={totalH - 6}
-                  fontSize="9"
-                  fontFamily="JetBrains Mono"
-                  fill={palette.light.ink3}
-                  textAnchor="middle"
-                >
-                  {b.date.slice(5)}
-                </text>
-              );
-            })}
+            (() => {
+              // Visible-pixel span of the focus marker. The previous
+              // collision check compared raw bar positions, but with
+              // anchor switching (start/end) on the edge ticks the
+              // *rendered* label position diverges from the bar's raw
+              // x — so a far-from-focus rightmost tick would still
+              // overlap the marker visually after being anchor-end'd
+              // to `innerW`. We now intersect rendered spans directly.
+              const focusMarkerW = 36;
+              const markerRectHalf = focusMarkerW / 2;
+              const markerSpan: { readonly left: number; readonly right: number } | null =
+                interactive && focusIdx !== null && bars[focusIdx] !== undefined
+                  ? (() => {
+                      const rawCx = xForIndex(focusIdx) + vp.candleW / 2;
+                      const cx = Math.max(
+                        markerRectHalf,
+                        Math.min(innerW - markerRectHalf, rawCx),
+                      );
+                      return { left: cx - markerRectHalf, right: cx + markerRectHalf };
+                    })()
+                  : null;
+              const GAP = 3;
+              return dateTickIdx.map((idx, ti) => {
+                const b = bars[idx];
+                if (b === undefined) return null;
+                const rawX = xForIndex(idx) + vp.candleW / 2;
+                // Edge-aware anchor: leftmost tick anchors to its left
+                // edge, rightmost to its right edge, the rest stay
+                // centred — keeps the labels flush with the chart
+                // bounds without clamping the centre into a neighbour.
+                const isFirst = ti === 0;
+                const isLast = ti === dateTickIdx.length - 1;
+                const textAnchor: 'start' | 'middle' | 'end' = isFirst
+                  ? 'start'
+                  : isLast
+                    ? 'end'
+                    : 'middle';
+                const x = isFirst
+                  ? Math.max(0, rawX - DATE_LABEL_W / 2)
+                  : isLast
+                    ? Math.min(innerW, rawX + DATE_LABEL_W / 2)
+                    : rawX;
+                // Tick label's rendered horizontal span — depends on
+                // anchor, NOT just on rawX.
+                const tickSpan = isFirst
+                  ? { left: x, right: x + DATE_LABEL_W }
+                  : isLast
+                    ? { left: x - DATE_LABEL_W, right: x }
+                    : { left: x - DATE_LABEL_W / 2, right: x + DATE_LABEL_W / 2 };
+                if (
+                  markerSpan !== null &&
+                  tickSpan.left < markerSpan.right + GAP &&
+                  tickSpan.right > markerSpan.left - GAP
+                ) {
+                  return null;
+                }
+                return (
+                  <text
+                    key={`dt-${String(idx)}`}
+                    x={x}
+                    y={totalH - 6}
+                    style={AXIS_TEXT_STYLE}
+                    fill={palette.light.ink3}
+                    textAnchor={textAnchor}
+                  >
+                    {b.date.slice(5)}
+                  </text>
+                );
+              });
+            })()}
 
           {/* Focus date marker — only in interactive mode. */}
           {interactive &&
@@ -417,22 +564,24 @@ export function ChartCanvas({
             bars[focusIdx] !== undefined &&
             (() => {
               const markerW = 36;
-              const cx = xForIndex(focusIdx) + vp.candleW / 2;
+              const rawCx = xForIndex(focusIdx) + vp.candleW / 2;
+              // Pin the marker to the inner pane so the rightmost
+              // bar's highlight isn't clipped at the edge.
+              const cx = Math.max(markerW / 2, Math.min(innerW - markerW / 2, rawCx));
               return (
                 <g>
                   <rect
                     x={cx - markerW / 2}
-                    y={totalH - 18}
+                    y={totalH - 16}
                     width={markerW}
-                    height={14}
+                    height={13}
                     fill={palette.light.amberBg}
                     stroke={palette.light.amber}
                   />
                   <text
                     x={cx}
-                    y={totalH - 8}
-                    fontSize="9"
-                    fontFamily="JetBrains Mono"
+                    y={totalH - 7}
+                    style={AXIS_TEXT_STYLE}
                     fill={palette.light.amberDark}
                     textAnchor="middle"
                     fontWeight="700"
@@ -467,8 +616,7 @@ export function ChartCanvas({
             <text
               x={priceAxisW - 6}
               y={scaleY(hoverPrice) + 3}
-              fontSize="9"
-              fontFamily="JetBrains Mono"
+              style={AXIS_TEXT_STYLE}
               fill={palette.light.amberDark}
               textAnchor="end"
               fontWeight="700"
