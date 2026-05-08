@@ -20,11 +20,12 @@
 
 import { Box } from '@chakra-ui/react';
 
-export const LOGO_STATIC_BODY = `  ██████  ██    ██       //  ██████  ███████
- ██    ██  ██  ██      //   ██    ██ ██
- ██    ██   ████     //     ██    ██ ███████
- ████████  ██  ██   //       ██    ██      ██
-       ██ ██    ██ //         ██████  ███████`;
+export const LOGO_STATIC_BODY = `
+  ██████  ██    ██     // ██████  ███████   
+ ██    ██  ██  ██     //  ██    ██ ██       
+ ██    ██   ████     //    ██    ██ ███████ 
+ ████████  ██  ██   //      ██    ██      ██
+       ██ ██    ██ //        ██████  ███████`;
 
 // Same column grid as STATIC_BODY — only the trailing `_` cell on row 5
 // carries pixels. Blinking the entire <pre> is fine because every other
