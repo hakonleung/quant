@@ -16,7 +16,7 @@
 import { Box, Flex, Input, Text } from '@chakra-ui/react';
 import type { KlineBar, StockMetaDto, StockSnapshotDto } from '@quant/shared';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import {
   appliedNeedsSnapshot,
@@ -901,6 +901,29 @@ function ScrollGrid({
   const removable = onRowRemove !== null;
   const totalWidth = columns.reduce((acc, c) => acc + c.w, 0) + (removable ? DELETE_COL_W : 0);
 
+  // Stable row-level handlers so RowItem's React.memo can bail out for
+  // rows whose props didn't actually change (focus moves between two
+  // rows, sort flips, column resize). The closures below capture
+  // current props through refs so we don't need them in the
+  // dependency list.
+  const onRowClickRef = useRef(onRowClick);
+  const onRowRemoveRef = useRef(onRowRemove);
+  onRowClickRef.current = onRowClick;
+  onRowRemoveRef.current = onRowRemove;
+  const rowsRef = useRef(rows);
+  rowsRef.current = rows;
+  const onSelectByCode = useCallback((code: string): void => {
+    const row = rowsRef.current.find((r) => r.code === code);
+    if (row !== undefined) {
+      onRowClickRef.current(row);
+      scrollRef.current?.focus({ preventScroll: true });
+    }
+  }, []);
+  const onRemoveByCode = useCallback((code: string): void => {
+    onRowRemoveRef.current?.(code);
+  }, []);
+  const removeHandler = removable ? onRemoveByCode : null;
+
   const rowVirtualizer = useVirtualizer({
     count: rows.length,
     getScrollElement: () => scrollRef.current,
@@ -999,21 +1022,8 @@ function ScrollGrid({
                 top={vi.start}
                 h={vi.size}
                 focused={focusedCode !== null && row.code === focusedCode}
-                onClick={(): void => {
-                  onRowClick(row);
-                  // Pull keyboard focus onto the grid so the user can
-                  // step around with the arrow keys without an extra
-                  // Tab. `closest` walks up because RowItem might
-                  // wrap the click target in nested boxes.
-                  scrollRef.current?.focus({ preventScroll: true });
-                }}
-                onRemove={
-                  onRowRemove === null
-                    ? null
-                    : (): void => {
-                        onRowRemove(row.code);
-                      }
-                }
+                onSelect={onSelectByCode}
+                onRemove={removeHandler}
               />
             );
           })}
@@ -1105,20 +1115,25 @@ interface RowItemProps {
   readonly top: number;
   readonly h: number;
   readonly focused: boolean;
-  readonly onClick: () => void;
-  readonly onRemove: (() => void) | null;
+  /** Receives `row.code`; the parent looks up the full row from a ref. */
+  readonly onSelect: (code: string) => void;
+  /** `null` when the active sector isn't user-managed. */
+  readonly onRemove: ((code: string) => void) | null;
 }
 
-function RowItem({
+const RowItem = memo(function RowItem({
   row,
   columns,
   top,
   h,
   focused,
-  onClick,
+  onSelect,
   onRemove,
 }: RowItemProps): React.ReactElement {
   const hasRemove = onRemove !== null;
+  const onClick = (): void => {
+    onSelect(row.code);
+  };
   return (
     <Box
       // `id` + ScrollGrid's `aria-activedescendant` give screen readers
@@ -1160,7 +1175,7 @@ function RowItem({
             label={`remove ${row.code}`}
             onClick={(e: React.MouseEvent<HTMLButtonElement>): void => {
               e.stopPropagation();
-              onRemove();
+              onRemove(row.code);
             }}
           />
         </Box>
@@ -1190,7 +1205,7 @@ function RowItem({
       ))}
     </Box>
   );
-}
+});
 
 function PriceCell({
   pct,
