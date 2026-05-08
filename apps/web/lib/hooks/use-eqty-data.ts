@@ -99,6 +99,13 @@ export function useKlineBulk(
     queryFn: () => listKlineBulk(keyCodes, n),
     enabled,
     staleTime: 60 * 60 * 1000,
+    // Bulk kline can be a few MB per query (universe-wide pull). The
+    // default 5-min retention chains those across rapid sector swaps
+    // and balloons heap. 60 s is short enough that an inactive sector
+    // releases its kline chunk soon after the user moves away, but
+    // long enough that flipping back-and-forth between two sectors
+    // still hits the cache.
+    gcTime: 60 * 1000,
   });
   return useMemo(() => {
     const byCode = new Map<string, readonly KlineBar[]>();
@@ -142,6 +149,11 @@ export function useStockSnapshots(
     queryFn: () => listStockSnapshots(keyCodes).then((rows) => [...rows]),
     enabled,
     staleTime: 60 * 60 * 1000,
+    // Snapshots travel with the universe + applied columns; user can
+    // pivot quickly between sectors. 60 s gcTime is the same trade-off
+    // as bulk-kline above — short enough not to hoard, long enough to
+    // survive one ↔ another flip.
+    gcTime: 60 * 1000,
   });
   return useMemo(() => {
     const byCode = new Map<string, StockSnapshotDto>();
