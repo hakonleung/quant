@@ -17,9 +17,11 @@
  */
 
 import { Box } from '@chakra-ui/react';
-import type { ReactNode } from 'react';
+import { useEffect, type ReactNode } from 'react';
 
+import { useCmdPaletteStore } from '../../lib/stores/cmd-palette.store.js';
 import { useLayoutStore } from '../../lib/stores/layout.store.js';
+import { FeatCmdPalette } from '../feat-cmd-palette/feat-cmd-palette.js';
 import { FeatTermMain } from '../feat-term-main/feat-term-main.js';
 
 import { TopBar } from './top-bar.js';
@@ -30,6 +32,11 @@ interface AppShellProps {
 
 export function AppShell({ children }: AppShellProps): React.ReactElement {
   const mode = useLayoutStore((s) => s.appMode);
+  // Global ⌘K / Ctrl+K opens the command palette anywhere outside
+  // the terminal. The terminal already provides its own command
+  // surface (the prompt) and ⌘K would conflict with xterm's own key
+  // handling. The listener installs once on shell mount.
+  useGlobalCmdKey({ enabled: mode !== 'term' });
 
   if (mode === 'term') {
     // `100dvh` follows the on-screen-keyboard / iOS bottom bar so the
@@ -75,6 +82,30 @@ export function AppShell({ children }: AppShellProps): React.ReactElement {
       <Box flex="1" minH={0}>
         {children}
       </Box>
+      <FeatCmdPalette />
     </Box>
   );
+}
+
+/**
+ * Global Cmd/Ctrl+K listener. Bound at the shell so any focused
+ * surface (other than the terminal) can invoke the palette. We ignore
+ * the shortcut while typing in inputs / contenteditable so the user
+ * can paste with ⌘V → ⌘K muscle memory without surprise.
+ */
+function useGlobalCmdKey({ enabled }: { readonly enabled: boolean }): void {
+  const toggle = useCmdPaletteStore((s) => s.toggle);
+  useEffect(() => {
+    if (!enabled) return;
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key !== 'k' && e.key !== 'K') return;
+      if (!(e.metaKey || e.ctrlKey)) return;
+      e.preventDefault();
+      toggle();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [enabled, toggle]);
 }

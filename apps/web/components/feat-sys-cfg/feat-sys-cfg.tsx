@@ -18,22 +18,26 @@
  * synthetic "all" sector).
  */
 
-import { Box, Flex } from '@chakra-ui/react';
+import { Box, Flex, Text } from '@chakra-ui/react';
 import { useState } from 'react';
 
 import { Feat } from '../../lib/eqty/feat.js';
+import { BUILTIN_PRESETS, useLayoutStore } from '../../lib/stores/layout.store.js';
 import { ColumnManager } from '../feat-eq-list/column-manager.js';
 import { FeatView } from '../feat-view/feat-view.js';
 
-type Section = 'columns';
+type Section = 'presets' | 'columns';
 
 const SECTIONS: ReadonlyArray<{
   readonly id: Section;
   readonly label: string;
-}> = [{ id: 'columns', label: 'columns' }];
+}> = [
+  { id: 'presets', label: 'presets' },
+  { id: 'columns', label: 'columns' },
+];
 
 export function FeatSysCfg(): React.ReactElement {
-  const [section, setSection] = useState<Section>('columns');
+  const [section, setSection] = useState<Section>('presets');
 
   return (
     <FeatView feat={Feat.SysCfg}>
@@ -48,10 +52,72 @@ export function FeatSysCfg(): React.ReactElement {
       >
         <SectionNav active={section} onSelect={setSection} />
         <Box flex="1" minW={0} h="100%" overflow="auto">
+          {section === 'presets' && <PresetsSection />}
           {section === 'columns' && <ColumnManager />}
         </Box>
       </Flex>
     </FeatView>
+  );
+}
+
+function PresetsSection(): React.ReactElement {
+  const activeId = useLayoutStore((s) => s.activePresetId);
+  const apply = useLayoutStore((s) => s.applyPreset);
+  return (
+    <Flex direction="column" p="12px" gap="8px">
+      <Text
+        fontSize="9px"
+        letterSpacing="0.18em"
+        color="term.ink3"
+        textTransform="uppercase"
+        fontWeight="700"
+      >
+        layout presets
+      </Text>
+      {BUILTIN_PRESETS.map((p) => {
+        const selected = activeId === p.id;
+        return (
+          <Box
+            key={p.id}
+            as="button"
+            onClick={(): void => {
+              apply(p.id);
+            }}
+            textAlign="left"
+            p="10px"
+            borderWidth="1px"
+            borderColor={selected ? 'term.green' : 'term.line'}
+            bg={selected ? 'term.bgElev' : 'transparent'}
+            color="term.ink"
+            cursor="pointer"
+            _hover={{ borderColor: 'term.green', color: 'term.green' }}
+          >
+            <Flex align="baseline" gap="8px">
+              <Text fontSize="12px" fontWeight="700" color={selected ? 'term.green' : 'term.ink'}>
+                {p.label}
+              </Text>
+              <Text fontSize="9px" color="term.ink3" letterSpacing="0.12em">
+                {p.id}
+              </Text>
+              {selected && (
+                <Text fontSize="9px" color="term.green" letterSpacing="0.18em" ml="auto">
+                  ACTIVE
+                </Text>
+              )}
+            </Flex>
+            {p.description !== undefined && (
+              <Text fontSize="11px" color="term.ink2" mt="4px" lineHeight="1.5">
+                {p.description}
+              </Text>
+            )}
+          </Box>
+        );
+      })}
+      <Text fontSize="10px" color="term.ink3" mt="4px" lineHeight="1.5">
+        // 提示：拖动列宽或最小化任意面板会清掉 ACTIVE 标记 —
+        // 预设只是一次性的状态注入，之后是用户自由布局。
+      </Text>
+    </Flex>
   );
 }
 

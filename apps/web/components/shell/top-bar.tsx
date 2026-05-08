@@ -19,15 +19,17 @@
  * the same OS chrome. Click to toggle into term mode.
  */
 
-import { Box, Flex } from '@chakra-ui/react';
+import { Box, Flex, Text } from '@chakra-ui/react';
 
 import { runViewTransition } from '../../lib/fp/view-transition.js';
 import { useViewport } from '../../lib/hooks/use-viewport.js';
+import { useCmdPaletteStore } from '../../lib/stores/cmd-palette.store.js';
 import { useLayoutStore } from '../../lib/stores/layout.store.js';
 
 import { FeatChannelLive } from '../feat-channel/feat-channel.js';
 import { FeatSysCfg } from '../feat-sys-cfg/feat-sys-cfg.js';
 import { FeatSysStat } from '../feat-sys-stat/feat-sys-stat.js';
+import { MonoButton } from '../ui/mono-button.js';
 
 import { LogoArt } from './logo-art.js';
 
@@ -64,12 +66,80 @@ export function TopBar(): React.ReactElement {
         </Box>
       )}
       {isMobile && <Box flex="1" minW={0} />}
+      <CmdPaletteTrigger compact={isMobile} />
       <Box w={sideSlot} flex="0 0 auto" display="flex" alignItems="stretch">
         <FeatChannelLive />
       </Box>
       <Box w={sideSlot} flex="0 0 auto" display="flex" alignItems="stretch">
         <FeatSysCfg />
       </Box>
+    </Flex>
+  );
+}
+
+/**
+ * Persistent entry to the command palette. On desktop renders a
+ * pill-shaped chip showing the ⌘K affordance — gives keyboard-blind
+ * users a discoverable trigger and reminds keyboard users of the
+ * shortcut. On mobile collapses to a single search icon since the
+ * topbar has no horizontal slack.
+ */
+interface CmdPaletteTriggerProps {
+  readonly compact: boolean;
+}
+
+function CmdPaletteTrigger({ compact }: CmdPaletteTriggerProps): React.ReactElement {
+  const open = useCmdPaletteStore((s) => s.setOpen);
+  if (compact) {
+    return (
+      <Flex align="center" px="6px" flexShrink={0}>
+        <MonoButton
+          icon="search"
+          label="open command palette"
+          onClick={(): void => {
+            open(true);
+          }}
+        />
+      </Flex>
+    );
+  }
+  return (
+    <Flex
+      as="button"
+      onClick={(): void => {
+        open(true);
+      }}
+      align="center"
+      gap="6px"
+      px="10px"
+      mx="6px"
+      my="8px"
+      borderWidth="1px"
+      borderColor="line"
+      bg="panel2"
+      color="ink3"
+      cursor="pointer"
+      _hover={{ borderColor: 'accent', color: 'accent' }}
+      flexShrink={0}
+      title="command palette (⌘K)"
+      aria-label="open command palette"
+      aria-keyshortcuts="Meta+K Control+K"
+    >
+      <Text fontFamily="mono" fontSize="11px" letterSpacing="0.04em">
+        ⌕ search
+      </Text>
+      <Text
+        fontFamily="mono"
+        fontSize="9px"
+        letterSpacing="0.16em"
+        borderWidth="1px"
+        borderColor="line"
+        px="4px"
+        py="1px"
+        color="ink3"
+      >
+        ⌘K
+      </Text>
     </Flex>
   );
 }
