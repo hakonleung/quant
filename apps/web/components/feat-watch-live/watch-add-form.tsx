@@ -28,50 +28,43 @@
 import { Box, Flex, Input, Text } from '@chakra-ui/react';
 import {
   WATCH_GROUP_NAME_PATTERN,
-  WATCH_TREND_WINDOW_MAX_SEC,
-  WatchGroupCreateSchema,
-  WatchGroupSchema,
-  WatchTaskCreateSchema,
   type WatchBaseline,
-  type WatchCondition,
   type WatchGroup,
-  type WatchMarket,
-  type WatchTaskCreate,
 } from '@quant/shared';
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { z } from 'zod';
+import { useEffect, useMemo, useState } from 'react';
 
 import type { UniverseStock } from '../../lib/hooks/use-stock-universe.js';
 import { useStockUniverse } from '../../lib/hooks/use-stock-universe.js';
 import { useSectorsStore, type Sector } from '../../lib/stores/sectors.store.js';
+import {
+  BASELINE_ITEMS,
+  buildInitialState,
+  describeCondition,
+  fromCondition,
+  INITIAL_CONDITION,
+  INITIAL_STATE,
+  KIND_ITEMS,
+  NEW_GROUP_SENTINEL,
+  OP_ITEMS,
+  secondsToMinuteString,
+  type AddFormState,
+  type ConditionDraft,
+  type Kind,
+  type Op,
+  type PickedStock,
+  type WatchAddInitial,
+} from '../../lib/fp/watch-add-fp.js';
 import { FeatScrNl } from '../feat-scr-nl/feat-scr-nl.js';
 import { MonoButton } from '../ui/mono-button.js';
+
 import { TermSelect } from './term-select.js';
+import { useWatchGroups } from './use-watch-groups.js';
+import { postBatch, postGroup } from './watch-add-api.js';
 
-const KindSchema = z.enum(['pct', 'abs']);
-type Kind = z.infer<typeof KindSchema>;
-const OpSchema = z.enum(['gte', 'lte']);
-type Op = z.infer<typeof OpSchema>;
-
-const KIND_ITEMS = [
-  { label: 'pct', value: 'pct' as const },
-  { label: 'abs', value: 'abs' as const },
-];
-const BASELINE_ITEMS = [
-  { label: 'prev_close', value: 'prev_close' as const },
-  { label: 'day_high', value: 'day_high' as const },
-  { label: 'day_low', value: 'day_low' as const },
-  { label: 'vwap', value: 'vwap' as const },
-  { label: 'trend', value: 'trend' as const },
-];
-const OP_ITEMS = [
-  { label: '≥', value: 'gte' as const },
-  { label: '≤', value: 'lte' as const },
-];
-/** Default trend lookback in **seconds** (1 minute). */
-const DEFAULT_TREND_WINDOW_SEC = 60;
-
-const NEW_GROUP_SENTINEL = '__new__';
+// Re-export the public surface that callers (feat-watch-live, the
+// override flow) import from this module — keeps the public API
+// stable while the implementation lives under lib/fp.
+export type { PickedStock, WatchAddInitial };
 
 const INPUT_STYLE = {
   bg: 'term.bg' as const,
@@ -83,225 +76,17 @@ const INPUT_STYLE = {
   px: '6px',
 };
 
-export interface PickedStock {
-  readonly market: WatchMarket;
-  readonly code: string;
-  readonly name: string;
-}
-
-interface ConditionDraft {
-  readonly kind: Kind;
-  readonly baseline: WatchBaseline;
-  readonly thresholdPct: string;
-  readonly op: Op;
-  readonly thresholdPrice: string;
-  /** Trend lookback in **seconds**; only used when baseline === 'trend'. */
-  readonly windowSec: string;
-}
-
-interface AddFormState {
-  readonly picked: readonly PickedStock[];
-  readonly conditions: readonly ConditionDraft[];
-  /** Display unit on the form is minutes; the wire format is seconds. */
-  readonly intervalMin: string;
-  /** Same — minutes on form, seconds on wire. */
-  readonly pushIntervalMin: string;
-  /** Selected group name when mode === 'existing'; ignored when 'new'. */
-  readonly groupSelection: string;
-  /** New group name typed by the user when mode === 'new'. */
-  readonly newGroupName: string;
-  readonly mode: 'new' | 'existing';
-}
-
-const INITIAL_CONDITION: ConditionDraft = {
-  kind: 'pct',
-  baseline: 'prev_close',
-  thresholdPct: '5',
-  op: 'gte',
-  thresholdPrice: '100',
-  windowSec: String(DEFAULT_TREND_WINDOW_SEC),
-};
-
-const INITIAL_STATE: AddFormState = {
-  picked: [],
-  conditions: [INITIAL_CONDITION],
-  intervalMin: '1',
-  pushIntervalMin: '5',
-  groupSelection: NEW_GROUP_SENTINEL,
-  newGroupName: '',
-  mode: 'new',
-};
-
-function secondsToMinuteString(secs: number): string {
-  if (secs % 60 === 0) return String(secs / 60);
-  return (secs / 60).toFixed(2);
-}
-
-function minuteStringToSeconds(min: string): number {
-  return Math.round(Number(min) * 60);
-}
-
-export interface WatchAddInitial {
-  readonly picked: readonly PickedStock[];
-  readonly conditions: readonly WatchCondition[];
-  readonly intervalSec: number;
-  readonly pushIntervalSec: number;
-}
-
-function fromCondition(c: WatchCondition): ConditionDraft {
-  if (c.kind === 'pct') {
-    return {
-      kind: 'pct',
-      baseline: c.baseline,
-      thresholdPct: c.thresholdPct,
-      op: c.op,
-      thresholdPrice: '100',
-      windowSec: c.window === undefined ? String(DEFAULT_TREND_WINDOW_SEC) : String(c.window),
-    };
-  }
-  return {
-    kind: 'abs',
-    baseline: 'prev_close',
-    thresholdPct: '5',
-    op: c.op,
-    thresholdPrice: c.thresholdPrice,
-    windowSec: String(DEFAULT_TREND_WINDOW_SEC),
-  };
-}
-
-function buildInitialState(initial: WatchAddInitial | undefined): AddFormState {
-  if (!initial) return INITIAL_STATE;
-  return {
-    picked: initial.picked,
-    conditions:
-      initial.conditions.length > 0 ? initial.conditions.map(fromCondition) : [INITIAL_CONDITION],
-    intervalMin: secondsToMinuteString(initial.intervalSec),
-    pushIntervalMin: secondsToMinuteString(initial.pushIntervalSec),
-    groupSelection: NEW_GROUP_SENTINEL,
-    newGroupName: '',
-    mode: 'new',
-  };
-}
-
-function toCondition(c: ConditionDraft): WatchCondition {
-  if (c.kind === 'pct') {
-    if (c.baseline === 'trend') {
-      const w = Math.max(
-        1,
-        Math.min(WATCH_TREND_WINDOW_MAX_SEC, Math.round(Number(c.windowSec) || 0)),
-      );
-      return {
-        kind: 'pct',
-        baseline: 'trend',
-        op: c.op,
-        thresholdPct: c.thresholdPct,
-        window: w,
-      };
-    }
-    return { kind: 'pct', baseline: c.baseline, op: c.op, thresholdPct: c.thresholdPct };
-  }
-  return { kind: 'abs', op: c.op, thresholdPrice: c.thresholdPrice };
-}
-
-function buildDraft(stock: PickedStock, groupName: string): WatchTaskCreate {
-  return WatchTaskCreateSchema.parse({
-    market: stock.market,
-    code: stock.code,
-    name: stock.name,
-    groupName,
-  });
-}
-
 interface AddFormProps {
   readonly initial?: WatchAddInitial;
   /** Called after a successful submit so the parent can refresh group state. */
   readonly onSubmitted?: () => void;
 }
 
-async function postOne(stock: PickedStock, groupName: string): Promise<string | null> {
-  const draft = buildDraft(stock, groupName);
-  const res = await fetch('/api/watch', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(draft),
-  });
-  if (res.ok) return null;
-  const body = await res.text();
-  return `[${stock.market}] ${stock.code} → ${String(res.status)} ${body.slice(0, 100)}`;
-}
-
-async function postBatch(
-  picked: readonly PickedStock[],
-  groupName: string,
-): Promise<readonly string[]> {
-  const errs: string[] = [];
-  for (const stock of picked) {
-    try {
-      const failure = await postOne(stock, groupName);
-      if (failure !== null) errs.push(failure);
-    } catch (e) {
-      errs.push(`[${stock.market}] ${stock.code}: ${e instanceof Error ? e.message : String(e)}`);
-    }
-  }
-  return errs;
-}
-
-async function fetchGroups(): Promise<readonly WatchGroup[]> {
-  const res = await fetch('/api/watch/groups', { cache: 'no-store' });
-  if (!res.ok) throw new Error(`groups list failed: ${String(res.status)}`);
-  const raw: unknown = await res.json();
-  return z.array(WatchGroupSchema).parse(raw);
-}
-
-async function postGroup(state: AddFormState, name: string): Promise<WatchGroup> {
-  const body = WatchGroupCreateSchema.parse({
-    name,
-    conditions: state.conditions.map(toCondition),
-    intervalSec: minuteStringToSeconds(state.intervalMin),
-    pushIntervalSec: minuteStringToSeconds(state.pushIntervalMin),
-  });
-  const res = await fetch('/api/watch/groups', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`group create failed: ${String(res.status)} ${text.slice(0, 100)}`);
-  }
-  return WatchGroupSchema.parse(await res.json());
-}
-
-function useGroups(): {
-  readonly groups: readonly WatchGroup[];
-  readonly refresh: () => void;
-} {
-  const [groups, setGroups] = useState<readonly WatchGroup[]>([]);
-  const [tick, setTick] = useState(0);
-  useEffect(() => {
-    let cancelled = false;
-    void fetchGroups()
-      .then((g) => {
-        if (!cancelled) setGroups(g);
-      })
-      .catch(() => {
-        if (!cancelled) setGroups([]);
-      });
-    return (): void => {
-      cancelled = true;
-    };
-  }, [tick]);
-  const refresh = useCallback((): void => {
-    setTick((t) => t + 1);
-  }, []);
-  return { groups, refresh };
-}
-
 export function WatchAddForm({ initial, onSubmitted }: AddFormProps): React.ReactElement {
   const [state, setState] = useState<AddFormState>(() => buildInitialState(initial));
   const [busy, setBusy] = useState(false);
   const [errs, setErrs] = useState<readonly string[]>([]);
-  const { groups, refresh: refreshGroups } = useGroups();
+  const { groups, refresh: refreshGroups } = useWatchGroups();
 
   // When the user picks an existing group, mirror its conds/intervals
   // into the local state so the read-only display shows the right
@@ -767,17 +552,6 @@ function ConditionRow({
       </Box>
     </Flex>
   );
-}
-
-function describeCondition(c: ConditionDraft): string {
-  const op = c.op === 'gte' ? '≥' : '≤';
-  if (c.kind === 'pct') {
-    if (c.baseline === 'trend') {
-      return `pct trend(${c.windowSec}s) ${op} ${c.thresholdPct}%`;
-    }
-    return `pct ${c.baseline} ${op} ${c.thresholdPct}%`;
-  }
-  return `abs ${op} ${c.thresholdPrice}`;
 }
 
 interface SubmitRowProps extends RowProps {
