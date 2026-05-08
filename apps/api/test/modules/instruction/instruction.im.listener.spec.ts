@@ -7,6 +7,7 @@ import { InstructionRegistry } from '../../../src/modules/instruction/instructio
 import type { InstructionSpec } from '../../../src/modules/instruction/instruction.types.js';
 import type { ChannelService } from '../../../src/modules/channel/channel.service.js';
 import type { InboundMessage } from '../../../src/modules/channel/ports/channel-adapter.port.js';
+import type { AuthService } from '../../../src/modules/auth/auth.service.js';
 
 const focusSpec: InstructionSpec<{ code: string }> = {
   id: instructionId('focus'),
@@ -40,7 +41,21 @@ function build(): {
       return Promise.resolve({ ok: true, output: { text: `focused ${args.code}` } });
     },
   });
-  const listener = new InstructionImListener(reg, exe, channels as unknown as ChannelService);
+  const auth: Pick<AuthService, 'resolveFromIm'> = {
+    resolveFromIm: ({ openId }) =>
+      Promise.resolve({
+        id: `feishu:${openId}`,
+        displayName: openId,
+        source: 'im',
+        imBootstrap: true,
+      }),
+  };
+  const listener = new InstructionImListener(
+    reg,
+    exe,
+    channels as unknown as ChannelService,
+    auth as unknown as AuthService,
+  );
   return { reg, exe, listener, sends };
 }
 

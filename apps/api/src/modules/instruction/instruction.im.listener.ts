@@ -20,6 +20,7 @@ import {
   type InstructionResult,
 } from '@quant/shared';
 
+import { AuthService } from '../auth/auth.service.js';
 import { ChannelService } from '../channel/channel.service.js';
 import { CHANNEL_INBOUND_EVENT } from '../channel/bus/channel-bus.service.js';
 import type { InboundMessage } from '../channel/ports/channel-adapter.port.js';
@@ -37,6 +38,7 @@ export class InstructionImListener {
     @Inject(InstructionRegistry) private readonly registry: InstructionRegistry,
     @Inject(InstructionExecutor) private readonly executor: InstructionExecutor,
     @Inject(ChannelService) private readonly channels: ChannelService,
+    @Inject(AuthService) private readonly auth: AuthService,
   ) {}
 
   @OnEvent(CHANNEL_INBOUND_EVENT)
@@ -78,13 +80,34 @@ export class InstructionImListener {
       const detail = err instanceof ArgvParseError ? err.message : String(err);
       return errResult('parse', detail);
     }
+    const resolved = await this.resolveImUser(msg);
     const ctx: InstructionCtx = {
       traceId,
       source: 'im',
       channelId: msg.channel,
       sender: msg.sender,
       ...(msg.target !== undefined && msg.target.length > 0 ? { target: msg.target } : {}),
+      userId: resolved.userId,
+      imBootstrap: resolved.imBootstrap,
     };
     return this.executor.execute(parsed.id, rawArgs, ctx);
+  }
+
+  /**
+   * Map an inbound IM sender to a canonical userId via `AuthService`.
+   * Feishu senders like `feishu:ou_abc` resolve to userId `feishu:ou_abc`
+   * (auto-creating the UserStore record on first contact). Channels we
+   * don't yet have an OAuth provider for fall back to the legacy
+   * `${channel}:${rest}` shape so the executor at least sees a stable id.
+   */
+  private async resolveImUser(
+    msg: InboundMessage,
+  ): Promise<{ userId: string; imBootstrap: boolean }> {
+    if (msg.channel === 'feishu') {
+      const openId = msg.sender.startsWith('feishu:') ? msg.sender.slice('feishu:'.length) : msg.sender;
+      const user = await this.auth.resolveFromIm({ openId });
+      return { userId: user.id, imBootstrap: user.imBootstrap };
+    }
+    return { userId: msg.sender, imBootstrap: true };
   }
 }

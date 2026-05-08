@@ -40,18 +40,16 @@ export class WatchInstructionHandler extends InstructionRegistrarBase<Args> {
     super(registry);
   }
 
-  execute(_args: Args, _ctx: InstructionCtx): Promise<InstructionResult> {
+  async execute(_args: Args, ctx: InstructionCtx): Promise<InstructionResult> {
     // v1 only ships `list`; the spec's zod enum guarantees `args.sub === 'list'` at runtime,
     // so no extra branch is needed. Add subcommands by widening the enum + the switch below.
-    const tasks = this.watch.list();
-    if (tasks.length === 0) return Promise.resolve(okResult('no watch tasks'));
+    const tasks = await this.watch.list(ctx.userId);
+    if (tasks.length === 0) return okResult('no watch tasks');
     const lines = tasks.map((t) => {
       const status = t.enabled ? 'on' : 'off';
       const remaining = t.remaining === null ? '∞' : String(t.remaining);
       return `  ${t.market}:${t.code.padEnd(8)} ${t.name.padEnd(8)} grp=${t.groupName.padEnd(10)} ${status} hits=${String(t.hitCount)} rem=${remaining}`;
     });
-    return Promise.resolve(
-      okResult(`watch tasks (${String(tasks.length)}):\n${lines.join('\n')}`),
-    );
+    return okResult(`watch tasks (${String(tasks.length)}):\n${lines.join('\n')}`);
   }
 }

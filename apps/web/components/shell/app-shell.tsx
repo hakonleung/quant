@@ -41,11 +41,17 @@ const FeatTermMain = dynamic(
   { ssr: false },
 );
 
-interface AppShellProps {
-  readonly children: ReactNode;
+export interface SessionChipInfo {
+  readonly displayName: string;
+  readonly mode: 'oauth' | 'env' | 'im';
 }
 
-export function AppShell({ children }: AppShellProps): React.ReactElement {
+interface AppShellProps {
+  readonly children: ReactNode;
+  readonly session?: SessionChipInfo;
+}
+
+export function AppShell({ children, session }: AppShellProps): React.ReactElement {
   const mode = useLayoutStore((s) => s.appMode);
   // Global ⌘K / Ctrl+K drops the user into terminal mode anywhere
   // outside it. Inside `term`, xterm owns the key.
@@ -102,7 +108,7 @@ export function AppShell({ children }: AppShellProps): React.ReactElement {
       <a href="#main-content" className="skip-link">
         跳到主内容
       </a>
-      <TopBar />
+      <TopBar session={session} />
       <Box as="main" id="main-content" flex="1" minH={0}>
         {children}
       </Box>

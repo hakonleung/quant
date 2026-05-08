@@ -36,6 +36,8 @@ import type {
 import type { Request, Response } from 'express';
 
 import { ZodValidationPipe } from '../../common/zod-pipe.js';
+import { CurrentUser } from '../auth/current-user.decorator.js';
+import type { AuthenticatedUser } from '../auth/request-with-user.js';
 import {
   LedgerAnalyzeBodySchema,
   LedgerCreateBodySchema,
@@ -64,18 +66,25 @@ export class LedgerController {
   //     correctly. Order matters here. ---
 
   @Get('enriched')
-  enriched(): readonly EnrichedLedgerEntry[] {
-    return this.service.enriched();
+  enriched(@CurrentUser() user: AuthenticatedUser): Promise<readonly EnrichedLedgerEntry[]> {
+    return this.service.enriched(user.id);
   }
 
   @Post('import')
-  async importEntries(@Body(importPipe) body: LedgerImportBody): Promise<LedgerSnapshot> {
-    return this.service.importEntries(body.entries);
+  async importEntries(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body(importPipe) body: LedgerImportBody,
+  ): Promise<LedgerSnapshot> {
+    return this.service.importEntries(user.id, body.entries);
   }
 
   @Get('export')
-  exportEntries(@Res() res: Response): void {
-    const snap: LedgerSnapshot = { entries: this.service.list() as LedgerEntry[] };
+  async exportEntries(
+    @CurrentUser() user: AuthenticatedUser,
+    @Res() res: Response,
+  ): Promise<void> {
+    const entries = await this.service.list(user.id);
+    const snap: LedgerSnapshot = { entries: entries as LedgerEntry[] };
     const today = new Date();
     const stamp = `${String(today.getFullYear())}${String(today.getMonth() + 1).padStart(2, '0')}${String(today.getDate()).padStart(2, '0')}`;
     res.setHeader('content-type', 'application/json; charset=utf-8');
@@ -84,8 +93,8 @@ export class LedgerController {
   }
 
   @Get('analyze')
-  getCachedAnalysis(): LedgerAnalysis {
-    const hit = this.service.cachedAnalysis();
+  async getCachedAnalysis(@CurrentUser() user: AuthenticatedUser): Promise<LedgerAnalysis> {
+    const hit = await this.service.cachedAnalysis(user.id);
     if (hit === null) {
       throw new NotFoundException({
         code: 'NOT_FOUND',
@@ -98,34 +107,42 @@ export class LedgerController {
 
   @Post('analyze')
   async analyze(
+    @CurrentUser() user: AuthenticatedUser,
     @Req() req: Request,
     @Body(analyzePipe) body: LedgerAnalyzeBody,
   ): Promise<LedgerAnalysis> {
     const traceId = (req as Request & { traceId?: string }).traceId ?? '';
-    return this.service.analyze(traceId, body.bypassCache ?? false);
+    return this.service.analyze(user.id, traceId, body.bypassCache ?? false);
   }
 
   @Get()
-  list(): readonly LedgerEntry[] {
-    return this.service.list();
+  list(@CurrentUser() user: AuthenticatedUser): Promise<readonly LedgerEntry[]> {
+    return this.service.list(user.id);
   }
 
   @Post()
-  async create(@Body(createPipe) body: LedgerCreateBody): Promise<LedgerEntry> {
-    return this.service.create(body);
+  async create(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body(createPipe) body: LedgerCreateBody,
+  ): Promise<LedgerEntry> {
+    return this.service.create(user.id, body);
   }
 
   @Patch(':date')
   async patch(
+    @CurrentUser() user: AuthenticatedUser,
     @Param(paramPipe) params: LedgerDateParam,
     @Body(patchPipe) body: LedgerPatchBody,
   ): Promise<LedgerEntry> {
-    return this.service.patch(params.date, body);
+    return this.service.patch(user.id, params.date, body);
   }
 
   @Delete(':date')
   @HttpCode(HttpStatus.NO_CONTENT)
-  async remove(@Param(paramPipe) params: LedgerDateParam): Promise<void> {
-    await this.service.remove(params.date);
+  async remove(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param(paramPipe) params: LedgerDateParam,
+  ): Promise<void> {
+    await this.service.remove(user.id, params.date);
   }
 }

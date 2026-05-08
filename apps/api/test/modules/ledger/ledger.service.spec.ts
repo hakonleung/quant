@@ -6,11 +6,13 @@ import type { LedgerAnalysis, LedgerEntry } from '@quant/shared';
 
 import type { FlightClient } from '../../../src/adapters/flight/flight-client.js';
 import { FrozenClock } from '../../../src/common/clock.js';
+import type { AuthConfigShape } from '../../../src/modules/auth/config/auth.config.js';
 import { LedgerCacheStore } from '../../../src/modules/ledger/ledger-cache.store.js';
 import { LedgerService } from '../../../src/modules/ledger/ledger.service.js';
 import { LedgerStore } from '../../../src/modules/ledger/ledger.store.js';
 
 const FROZEN = new Date('2026-05-08T00:00:00.000Z');
+const USER = 'admin';
 
 interface FakeProxy {
   toJSON(): Record<string, unknown>;
@@ -55,24 +57,28 @@ const SAMPLE_ANALYSIS: LedgerAnalysis = {
   provider: 'moonshot',
 };
 
-async function tmpDir(prefix: string): Promise<string> {
-  return fs.mkdtemp(path.join(os.tmpdir(), prefix));
+async function tmpRoot(): Promise<string> {
+  return fs.mkdtemp(path.join(os.tmpdir(), 'ledger-svc-'));
+}
+
+function cfg(dataRoot: string): AuthConfigShape {
+  return { mode: 'disabled', nextauthSecret: null, dataRoot, adminUserId: 'admin' };
 }
 
 async function setup(seed: readonly LedgerEntry[] = []): Promise<{
   store: LedgerStore;
   cache: LedgerCacheStore;
-  dir: string;
+  root: string;
 }> {
-  const dir = await tmpDir('ledger-svc-');
+  const root = await tmpRoot();
   if (seed.length > 0) {
+    const dir = path.join(root, 'users', USER, '_ledger');
+    await fs.mkdir(dir, { recursive: true });
     await fs.writeFile(path.join(dir, 'entries.json'), JSON.stringify({ entries: seed }));
   }
-  const store = new LedgerStore(dir);
-  const cache = new LedgerCacheStore(dir);
-  await store.load();
-  await cache.load();
-  return { store, cache, dir };
+  const store = new LedgerStore(cfg(root));
+  const cache = new LedgerCacheStore(cfg(root));
+  return { store, cache, root };
 }
 
 describe('LedgerService.create', () => {
@@ -83,7 +89,7 @@ describe('LedgerService.create', () => {
     const { flight } = fakeFlight([]);
     const svc = new LedgerService(store, cache, flight, new FrozenClock(FROZEN));
     await expect(
-      svc.create({ date: '2026-05-01', pnlAmount: '5', closingPosition: '100050' }),
+      svc.create(USER, { date: '2026-05-01', pnlAmount: '5', closingPosition: '100050' }),
     ).rejects.toMatchObject({ code: 'LEDGER_DUPLICATE_DATE' });
   });
 
@@ -91,9 +97,9 @@ describe('LedgerService.create', () => {
     const { store, cache } = await setup();
     const { flight } = fakeFlight([]);
     const svc = new LedgerService(store, cache, flight, new FrozenClock(FROZEN));
-    await expect(svc.create({ date: '2026-05-01', pnlAmount: '5' })).rejects.toMatchObject({
-      code: 'LEDGER_FIRST_NEEDS_CLOSING_POSITION',
-    });
+    await expect(
+      svc.create(USER, { date: '2026-05-01', pnlAmount: '5' }),
+    ).rejects.toMatchObject({ code: 'LEDGER_FIRST_NEEDS_CLOSING_POSITION' });
   });
 
   it('accepts a non-anchor entry without closingPosition once an anchor exists', async () => {
@@ -102,9 +108,10 @@ describe('LedgerService.create', () => {
     ]);
     const { flight } = fakeFlight([]);
     const svc = new LedgerService(store, cache, flight, new FrozenClock(FROZEN));
-    await svc.create({ date: '2026-05-02', pnlAmount: '500' });
-    await store.flushNow();
-    expect(svc.list().map((e) => e.date)).toEqual(['2026-05-01', '2026-05-02']);
+    await svc.create(USER, { date: '2026-05-02', pnlAmount: '500' });
+    await store.flushNow(USER);
+    const list = await svc.list(USER);
+    expect(list.map((e) => e.date)).toEqual(['2026-05-01', '2026-05-02']);
   });
 });
 
@@ -116,7 +123,7 @@ describe('LedgerService.patch', () => {
     ]);
     const { flight } = fakeFlight([]);
     const svc = new LedgerService(store, cache, flight, new FrozenClock(FROZEN));
-    const next = await svc.patch('2026-05-02', { pnlAmount: '700' });
+    const next = await svc.patch(USER, '2026-05-02', { pnlAmount: '700' });
     expect(next.pnlAmount).toBe('700');
   });
 
@@ -126,7 +133,7 @@ describe('LedgerService.patch', () => {
     ]);
     const { flight } = fakeFlight([]);
     const svc = new LedgerService(store, cache, flight, new FrozenClock(FROZEN));
-    await expect(svc.patch('2099-12-31', { pnlAmount: '0' })).rejects.toMatchObject({
+    await expect(svc.patch(USER, '2099-12-31', { pnlAmount: '0' })).rejects.toMatchObject({
       code: 'NOT_FOUND',
     });
   });
@@ -138,7 +145,7 @@ describe('LedgerService.patch', () => {
     ]);
     const { flight } = fakeFlight([]);
     const svc = new LedgerService(store, cache, flight, new FrozenClock(FROZEN));
-    const next = await svc.patch('2026-05-02', { closingPosition: null });
+    const next = await svc.patch(USER, '2026-05-02', { closingPosition: null });
     expect(next.closingPosition).toBeNull();
   });
 });
@@ -151,7 +158,7 @@ describe('LedgerService.remove', () => {
     ]);
     const { flight } = fakeFlight([]);
     const svc = new LedgerService(store, cache, flight, new FrozenClock(FROZEN));
-    await expect(svc.remove('2026-05-01')).rejects.toMatchObject({
+    await expect(svc.remove(USER, '2026-05-01')).rejects.toMatchObject({
       code: 'LEDGER_FIRST_NEEDS_CLOSING_POSITION',
     });
   });
@@ -163,8 +170,9 @@ describe('LedgerService.remove', () => {
     ]);
     const { flight } = fakeFlight([]);
     const svc = new LedgerService(store, cache, flight, new FrozenClock(FROZEN));
-    await svc.remove('2026-05-02');
-    expect(svc.list().map((e) => e.date)).toEqual(['2026-05-01']);
+    await svc.remove(USER, '2026-05-02');
+    const list = await svc.list(USER);
+    expect(list.map((e) => e.date)).toEqual(['2026-05-01']);
   });
 });
 
@@ -176,8 +184,9 @@ describe('LedgerService.importEntries', () => {
     ]);
     const { flight } = fakeFlight([]);
     const svc = new LedgerService(store, cache, flight, new FrozenClock(FROZEN));
-    await svc.importEntries([{ date: '2026-05-02', pnlAmount: '999' }]);
-    expect(svc.list().find((e) => e.date === '2026-05-02')?.pnlAmount).toBe('999');
+    await svc.importEntries(USER, [{ date: '2026-05-02', pnlAmount: '999' }]);
+    const list = await svc.list(USER);
+    expect(list.find((e) => e.date === '2026-05-02')?.pnlAmount).toBe('999');
   });
 });
 
@@ -189,8 +198,8 @@ describe('LedgerService.analyze', () => {
     const { flight, calls } = fakeFlight([{ payload_json: JSON.stringify(SAMPLE_ANALYSIS) }]);
     const svc = new LedgerService(store, cache, flight, new FrozenClock(FROZEN));
 
-    const first = await svc.analyze('t-1');
-    const second = await svc.analyze('t-2');
+    const first = await svc.analyze(USER, 't-1');
+    const second = await svc.analyze(USER, 't-2');
 
     expect(first).toEqual(SAMPLE_ANALYSIS);
     expect(second).toEqual(SAMPLE_ANALYSIS);
@@ -204,8 +213,8 @@ describe('LedgerService.analyze', () => {
     const { flight, calls } = fakeFlight([{ payload_json: JSON.stringify(SAMPLE_ANALYSIS) }]);
     const svc = new LedgerService(store, cache, flight, new FrozenClock(FROZEN));
 
-    await svc.analyze('t-1');
-    await svc.analyze('t-2', true);
+    await svc.analyze(USER, 't-1');
+    await svc.analyze(USER, 't-2', true);
 
     expect(calls.length).toBe(2);
   });
@@ -214,7 +223,7 @@ describe('LedgerService.analyze', () => {
     const { store, cache } = await setup();
     const { flight } = fakeFlight([]);
     const svc = new LedgerService(store, cache, flight, new FrozenClock(FROZEN));
-    await expect(svc.analyze('t-1')).rejects.toMatchObject({ code: 'LLM_FAILED' });
+    await expect(svc.analyze(USER, 't-1')).rejects.toMatchObject({ code: 'LLM_FAILED' });
   });
 
   it('throws LLM_FAILED when Flight returns no rows', async () => {
@@ -223,6 +232,6 @@ describe('LedgerService.analyze', () => {
     ]);
     const { flight } = fakeFlight([]);
     const svc = new LedgerService(store, cache, flight, new FrozenClock(FROZEN));
-    await expect(svc.analyze('t-1')).rejects.toMatchObject({ code: 'LLM_FAILED' });
+    await expect(svc.analyze(USER, 't-1')).rejects.toMatchObject({ code: 'LLM_FAILED' });
   });
 });

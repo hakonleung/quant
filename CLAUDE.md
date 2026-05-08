@@ -288,6 +288,17 @@ apps/web/lib/
 - 所有随机性必须接受 `seed` 参数；默认无种子的随机调用视为 bug。
 - **日线数据入库时**必须预计算并落库：前复权价（`open_qfq/high_qfq/low_qfq/close_qfq`）、基于前复权 close 的 `ma5/ma10/ma20/ma60`。详见 `docs/modules/02-stock-kline.md`。
 
+### 2.9 多用户与鉴权（强制）
+
+- **用户态文件存储统一走 `apps/api/src/common/user-scoped-store.ts` 的 `UserScopedJsonStore<T>`**——按 `data/users/{userId}/...` 分区。新增"用户态"模块（个人账本、自选、个人偏好等）必须复用该工具，不得另写一套 mutex / atomic-write / throttle。
+- **shared market data 留在 `data/<module>/...` 共享目录**：kline / sectors / blacklist / sentiment / ta / meta / watch universe 不按用户分区。
+- **NestJS 控制器获取用户**：始终通过 `@CurrentUser()`（`modules/auth/current-user.decorator.ts`）取 `AuthenticatedUser.id`，**不要**让客户端在 body / query 里传 userId。
+- **Service 方法签名**：所有用户态 service 方法第一参数为 `userId: string`；DTO 不含 userId。
+- **`AUTH_MODE` 开关**：`disabled`（默认）注入 `admin` 用户，`oauth` 走 Feishu。两端共用同一份代码，差异只在 env。
+- **userId 派生**：单一函数 `deriveUserId(provider, externalId, tenantKey)`（在 `modules/auth/ports/oauth-provider.port.ts`）。Web 登录与 IM 入口必须经此派生，保证同一人 → 同一 userId。
+- **IM 命令入口不走 `AuthGuard`**：`AuthService.resolveFromIm` 直接产出 `AuthenticatedUser`，dispatcher 调 service 时第一参数即为 `userId`。详见 `docs/integrations/auth.md`。
+- **Python 服务用户无关**：`services/py/quant_rpc/*` 永远不应出现 `userId` 字段。所有用户分区在 NestJS 帧内完成。
+
 ---
 
 ## 3. 测试（硬性）

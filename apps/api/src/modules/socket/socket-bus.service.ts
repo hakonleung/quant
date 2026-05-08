@@ -1,10 +1,11 @@
 /**
  * In-process publish surface for the realtime gateway.
  *
- * Other modules inject `SocketBus` and call `emit(topic, payload)`; the
- * bus validates against the topic's zod schema (CLAUDE.md §1.2 — no
- * unvalidated outbound traffic) and forwards to the gateway, which
- * fans out to the room subscribed to that topic.
+ * Other modules inject `SocketBus` and call `emit(topic, payload)` for a
+ * public broadcast or `emitTo(userId, topic, payload)` for a user-scoped
+ * room (`user:{userId}`). Both forms validate against the topic's zod
+ * schema (CLAUDE.md §1.2 — no unvalidated outbound traffic) and forward
+ * to the gateway, which fans out to the appropriate room.
  *
  * The gateway registers itself via `setSink(...)` on `onModuleInit` so
  * `SocketBus` stays free of a circular dependency on `SocketGateway`.
@@ -20,6 +21,7 @@ import {
 
 export interface SocketSink {
   publish(topic: SocketTopic, envelope: SocketEnvelope): void;
+  publishTo(userId: string, topic: SocketTopic, envelope: SocketEnvelope): void;
 }
 
 @Injectable()
@@ -32,24 +34,33 @@ export class SocketBus {
   }
 
   emit<T extends SocketTopic>(topic: T, payload: SocketTopicPayload<T>): void {
+    const envelope = this.buildEnvelope(topic, payload);
+    if (envelope === null || this.sink === null) return;
+    this.sink.publish(topic, envelope);
+  }
+
+  emitTo<T extends SocketTopic>(
+    userId: string,
+    topic: T,
+    payload: SocketTopicPayload<T>,
+  ): void {
+    const envelope = this.buildEnvelope(topic, payload);
+    if (envelope === null || this.sink === null) return;
+    this.sink.publishTo(userId, topic, envelope);
+  }
+
+  private buildEnvelope<T extends SocketTopic>(
+    topic: T,
+    payload: SocketTopicPayload<T>,
+  ): SocketEnvelope | null {
     const schema = SOCKET_TOPIC_SCHEMAS[topic];
     const parsed = schema.safeParse(payload);
     if (!parsed.success) {
       this.logger.warn(
         `socket_emit_invalid topic=${topic} err=${parsed.error.errors.map((e) => `${e.path.join('.')}:${e.message}`).join('|')}`,
       );
-      return;
+      return null;
     }
-    if (this.sink === null) {
-      // Gateway not yet ready (boot order) — drop. Snapshots tick at
-      // 1Hz so the next tick lands fine.
-      return;
-    }
-    const envelope: SocketEnvelope = {
-      topic,
-      ts: new Date().toISOString(),
-      payload: parsed.data,
-    };
-    this.sink.publish(topic, envelope);
+    return { topic, ts: new Date().toISOString(), payload: parsed.data };
   }
 }

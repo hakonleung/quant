@@ -17,7 +17,7 @@ async function bootstrap(): Promise<void> {
   app.enableCors({
     origin: corsOriginCallback,
     credentials: true,
-    allowedHeaders: ['content-type', 'x-trace-id'],
+    allowedHeaders: ['content-type', 'x-trace-id', 'authorization', 'cookie'],
     exposedHeaders: ['x-trace-id'],
   });
   const host = process.env['API_HOST'] ?? '127.0.0.1';

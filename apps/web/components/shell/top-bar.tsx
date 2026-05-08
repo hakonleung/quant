@@ -29,7 +29,9 @@ import { FeatChannelLive } from '../feat-channel/feat-channel.js';
 import { FeatSysCfg } from '../feat-sys-cfg/feat-sys-cfg.js';
 import { FeatSysStat } from '../feat-sys-stat/feat-sys-stat.js';
 
+import type { SessionChipInfo } from './app-shell.js';
 import { LogoArt } from './logo-art.js';
+import { UserChip } from './user-chip.js';
 
 const BRAND_HEIGHT = 52;
 const BRAND_HEIGHT_MOBILE = 44;
@@ -38,7 +40,11 @@ const TERM_LOGO_COLOR = '#d4ffe2';
 const TERM_LOGO_GLOW =
   'rgba(155, 242, 182, 0.8) 0px 0px 4px, rgba(155, 242, 182, 0.4) 0px 0px 12px';
 
-export function TopBar(): React.ReactElement {
+interface TopBarProps {
+  readonly session?: SessionChipInfo | undefined;
+}
+
+export function TopBar({ session }: TopBarProps = {}): React.ReactElement {
   const { mode } = useViewport();
   const isMobile = mode === 'mobile';
   // SYS.STAT capsule strip (queue / mem / fps) eats ~360px even
@@ -70,6 +76,11 @@ export function TopBar(): React.ReactElement {
       <Box w={sideSlot} flex="0 0 auto" display="flex" alignItems="stretch">
         <FeatSysCfg />
       </Box>
+      {session !== undefined && (
+        <Box flex="0 0 auto" display="flex" alignItems="stretch">
+          <UserChip displayName={session.displayName} mode={session.mode} />
+        </Box>
+      )}
     </Flex>
   );
 }

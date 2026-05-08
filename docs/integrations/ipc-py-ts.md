@@ -1,5 +1,9 @@
 # IPC — Python ↔ NestJS (Arrow Flight)
 
+> Flight 调用与用户无关：`userId` 只在 NestJS 进程帧内流转（日志、文件路径、socket room），
+> **不**跨 Flight 边界。Python 计算 / LangGraph 服务永远只看到调用方传来的 payload，
+> 不持有用户态。鉴权与多用户分区都是 NestJS 层的事。详见 `docs/integrations/auth.md`。
+
 ## 用途
 
 - NestJS 调 Python 跑筛选 / 形态 / 舆情 / K 线读写。

@@ -1,10 +1,11 @@
 /**
  * Watch master tick (`docs/modules/06-watch.md` §8).
  *
- * Single `setInterval` (5s) ticks every enabled task whose
- * `lastTickAt + intervalSec*1000` has elapsed and whose market is
- * currently open. Quotes are fetched concurrently (`Promise.allSettled`)
- * so a single upstream failure cannot stall the whole batch.
+ * Multi-user: each tick iterates every known user, pulls their tasks,
+ * filters by `(enabled, market open, intervalSec elapsed)`, and fires
+ * quote fetches in one big `Promise.allSettled` batch. The
+ * `WatchQuotePort` adapter dedupes by `(market, code)` so two users
+ * watching the same symbol still cost one upstream call.
  *
  * Hit semantics: a fired evaluation is a *hit* iff **both** gates clear:
  *   - Price gate — `|last - lastHitPrice| / lastHitPrice >= 2 %`, OR
@@ -31,6 +32,7 @@ import {
 } from '@quant/shared';
 import { Decimal } from 'decimal.js';
 import { ChannelService } from '../channel/channel.service.js';
+import { UserStore } from '../auth/user.store.js';
 import { decimalQuoteFromDto } from './domain/decimal-mapper.js';
 import { evaluate, type IntradaySample } from './domain/evaluate.js';
 import { buildPayload } from './domain/format.js';
@@ -52,6 +54,11 @@ interface IntradayBuffer {
   samples: IntradaySample[];
 }
 
+interface UserTask {
+  readonly userId: string;
+  readonly task: WatchTask;
+}
+
 @Injectable()
 export class WatchScheduler implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(WatchScheduler.name);
@@ -59,11 +66,8 @@ export class WatchScheduler implements OnModuleInit, OnModuleDestroy {
   private destroyed = false;
   private tickInFlight: Promise<void> | null = null;
   /**
-   * Per-task intraday sample buffer for the `trend` baseline. Keyed by
-   * `market:code`. In-memory only — not persisted across restarts; a
-   * cold restart re-warms over the next ~maxWindow seconds. Trimmed by
-   * wall-clock window so the buffer's wall span never exceeds
-   * `max(trend.window) + tickInterval` for the task.
+   * Per-(user,task) intraday sample buffer for the `trend` baseline.
+   * Keyed by `userId|market:code`. In-memory only.
    */
   private readonly samples = new Map<string, IntradayBuffer>();
 
@@ -71,10 +75,10 @@ export class WatchScheduler implements OnModuleInit, OnModuleDestroy {
     @Inject(WatchTaskStore) private readonly store: WatchTaskStore,
     @Inject(WATCH_QUOTE_PORT) private readonly port: WatchQuotePort,
     @Inject(ChannelService) private readonly channels: ChannelService,
+    @Inject(UserStore) private readonly users: UserStore,
   ) {}
 
-  async onModuleInit(): Promise<void> {
-    await this.store.load();
+  onModuleInit(): void {
     this.timer = setInterval(() => {
       void this.safeTick();
     }, MASTER_TICK_MS);
@@ -88,7 +92,7 @@ export class WatchScheduler implements OnModuleInit, OnModuleDestroy {
     if (this.tickInFlight !== null) {
       await this.tickInFlight.catch(() => undefined);
     }
-    await this.store.flushNow();
+    await this.store.flushAll();
   }
 
   /** Run one master tick. Coalesces with any in-flight tick. */
@@ -121,10 +125,16 @@ export class WatchScheduler implements OnModuleInit, OnModuleDestroy {
     };
     if (!marketsOpen.a && !marketsOpen.hk && !marketsOpen.us) return;
 
-    const due = this.store.snapshot().filter((t) => this.isDue(t, marketsOpen, nowMs));
+    const due: UserTask[] = [];
+    for (const user of this.users.list()) {
+      const tasks = await this.store.snapshot(user.id);
+      for (const t of tasks) {
+        if (this.isDue(t, marketsOpen, nowMs)) due.push({ userId: user.id, task: t });
+      }
+    }
     if (due.length === 0) return;
 
-    await Promise.allSettled(due.map((t) => this.processOne(t, now, nowMs)));
+    await Promise.allSettled(due.map((u) => this.processOne(u.userId, u.task, now, nowMs)));
   }
 
   private isDue(
@@ -151,19 +161,14 @@ export class WatchScheduler implements OnModuleInit, OnModuleDestroy {
     return Math.min(max, WATCH_TREND_WINDOW_MAX_SEC);
   }
 
-  /**
-   * Append the latest `(ts, price)` to the task's intraday buffer.
-   * Resets the buffer when the trading day rolls over. Trims entries
-   * older than `latestTs - maxWindowSec` so the buffer's wall-clock
-   * span stays bounded. Returns the post-update snapshot for evaluation.
-   */
   private updateSamples(
+    userId: string,
     task: WatchTask,
     now: Date,
     quoteTs: Date,
     last: Decimal,
   ): readonly IntradaySample[] {
-    const key = `${task.market}:${task.code}`;
+    const key = `${userId}|${task.market}:${task.code}`;
     const day = marketTradingDayKey(task.market, now);
     let buf = this.samples.get(key);
     if (buf === undefined || buf.day !== day) {
@@ -173,9 +178,6 @@ export class WatchScheduler implements OnModuleInit, OnModuleDestroy {
     buf.samples.push({ ts: quoteTs, price: last });
     const maxWindowSec = this.maxWindowSecFor(task);
     if (maxWindowSec > 0) {
-      // Keep enough history to cover the largest configured window plus
-      // a one-tick buffer (so trim never strips the very sample the
-      // resolver would pick at the cutoff).
       const cutoffMs = quoteTs.getTime() - (maxWindowSec * 1000 + task.intervalSec * 1000);
       while (buf.samples.length > 0 && buf.samples[0]!.ts.getTime() < cutoffMs) {
         buf.samples.shift();
@@ -184,16 +186,21 @@ export class WatchScheduler implements OnModuleInit, OnModuleDestroy {
     return buf.samples;
   }
 
-  private async processOne(task: WatchTask, now: Date, nowMs: number): Promise<void> {
+  private async processOne(
+    userId: string,
+    task: WatchTask,
+    now: Date,
+    nowMs: number,
+  ): Promise<void> {
     const traceId = newTraceId();
     let quoteDto;
     try {
       quoteDto = await this.port.fetchOne(task.market, task.code, traceId);
     } catch (err) {
       this.logger.warn(
-        `watch_quote_fail market=${task.market} code=${task.code} trace_id=${traceId} err=${String(err)}`,
+        `watch_quote_fail user=${userId} market=${task.market} code=${task.code} trace_id=${traceId} err=${String(err)}`,
       );
-      await this.store.patch(task.market, task.code, (t) => ({
+      await this.store.patch(userId, task.market, task.code, (t) => ({
         ...t,
         lastTickAt: now.toISOString(),
       }));
@@ -204,9 +211,9 @@ export class WatchScheduler implements OnModuleInit, OnModuleDestroy {
     const ageMs = Number.isNaN(quoteTsMs) ? Number.POSITIVE_INFINITY : Math.abs(nowMs - quoteTsMs);
     if (ageMs > STALE_QUOTE_MAX_MS) {
       this.logger.warn(
-        `watch_quote_stale market=${task.market} code=${task.code} ts=${quoteDto.ts} age_ms=${String(ageMs)} trace_id=${traceId}`,
+        `watch_quote_stale user=${userId} market=${task.market} code=${task.code} ts=${quoteDto.ts} age_ms=${String(ageMs)} trace_id=${traceId}`,
       );
-      await this.store.patch(task.market, task.code, (t) => ({
+      await this.store.patch(userId, task.market, task.code, (t) => ({
         ...t,
         lastTickAt: now.toISOString(),
       }));
@@ -215,7 +222,7 @@ export class WatchScheduler implements OnModuleInit, OnModuleDestroy {
 
     const decimalQuote = decimalQuoteFromDto(quoteDto);
     const quoteTs = new Date(quoteTsMs);
-    const intradaySamples = this.updateSamples(task, now, quoteTs, decimalQuote.last);
+    const intradaySamples = this.updateSamples(userId, task, now, quoteTs, decimalQuote.last);
     const matched = task.conditions.filter((c) =>
       evaluate({ quote: decimalQuote, intradaySamples }, c),
     );
@@ -227,7 +234,7 @@ export class WatchScheduler implements OnModuleInit, OnModuleDestroy {
     const nowIso = now.toISOString();
     const nextHitPriceStr = decimalQuote.last.toString();
 
-    await this.store.patch(task.market, task.code, (t) => {
+    await this.store.patch(userId, task.market, task.code, (t) => {
       const baseUpdate: WatchTask = {
         ...t,
         lastTickAt: nowIso,
@@ -262,6 +269,7 @@ export class WatchScheduler implements OnModuleInit, OnModuleDestroy {
             code: task.code,
             name: task.name,
             last: decimalQuote.last.toString(),
+            userId,
           },
         },
         { traceId, source: 'system' },
@@ -269,11 +277,6 @@ export class WatchScheduler implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  /**
-   * Decide whether the price gate clears. New trading day or never-hit
-   * ⇒ always fire; otherwise require ≥ HIT_PRICE_DELTA_PCT % drift
-   * from the previous hit price.
-   */
   private priceTriggersHit(task: WatchTask, now: Date, last: Decimal): boolean {
     if (task.lastHitPrice === null || task.lastPushAt === null) return true;
     const prevDay = marketTradingDayKey(task.market, new Date(task.lastPushAt));
@@ -285,11 +288,6 @@ export class WatchScheduler implements OnModuleInit, OnModuleDestroy {
     return driftPct.gte(HIT_PRICE_DELTA_PCT);
   }
 
-  /**
-   * Decide whether the `pushIntervalSec` time gate clears. No prior
-   * push ⇒ always fire; otherwise require the configured interval to
-   * have elapsed.
-   */
   private timeTriggersHit(task: WatchTask, nowMs: number): boolean {
     if (task.lastPushAt === null) return true;
     const lastMs = Date.parse(task.lastPushAt);

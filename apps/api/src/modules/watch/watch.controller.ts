@@ -21,7 +21,10 @@ import {
   Query,
 } from '@nestjs/common';
 import type { StockBasic, WatchGroup, WatchTask } from '@quant/shared';
+
 import { ZodValidationPipe } from '../../common/zod-pipe.js';
+import { CurrentUser } from '../auth/current-user.decorator.js';
+import type { AuthenticatedUser } from '../auth/request-with-user.js';
 import {
   UniverseQuerySchema,
   WatchGroupCreateSchema,
@@ -49,51 +52,57 @@ const groupParamsPipe = new ZodValidationPipe(WatchGroupParamsSchema);
 export class WatchController {
   constructor(@Inject(WatchService) private readonly service: WatchService) {}
 
-  /*
-   * NOTE on route ordering: the static `groups` / `universe` / `lookup`
-   * paths must be declared *before* the `:market/:code` family below,
-   * otherwise Express's first-match dispatch routes them to the param
-   * handler.
-   */
-
   @Get('groups')
-  listGroups(): readonly WatchGroup[] {
-    return this.service.listGroups();
+  listGroups(@CurrentUser() user: AuthenticatedUser): Promise<readonly WatchGroup[]> {
+    return this.service.listGroups(user.id);
   }
 
   @Post('groups')
-  async createGroup(@Body(groupCreatePipe) body: WatchGroupCreate): Promise<WatchGroup> {
-    return this.service.createGroup(body);
+  async createGroup(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body(groupCreatePipe) body: WatchGroupCreate,
+  ): Promise<WatchGroup> {
+    return this.service.createGroup(user.id, body);
   }
 
   @Delete('groups/:name')
   @HttpCode(HttpStatus.NO_CONTENT)
-  async deleteGroup(@Param(groupParamsPipe) params: WatchGroupParams): Promise<void> {
-    await this.service.deleteGroup(params.name);
+  async deleteGroup(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param(groupParamsPipe) params: WatchGroupParams,
+  ): Promise<void> {
+    await this.service.deleteGroup(user.id, params.name);
   }
 
   @Get()
-  list(): readonly WatchTask[] {
-    return this.service.list();
+  list(@CurrentUser() user: AuthenticatedUser): Promise<readonly WatchTask[]> {
+    return this.service.list(user.id);
   }
 
   @Post()
-  async create(@Body(createPipe) body: WatchTaskCreate): Promise<WatchTask> {
-    return this.service.create(body);
+  async create(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body(createPipe) body: WatchTaskCreate,
+  ): Promise<WatchTask> {
+    return this.service.create(user.id, body);
   }
 
   @Patch(':market/:code')
   async patch(
+    @CurrentUser() user: AuthenticatedUser,
     @Param(paramsPipe) params: WatchTaskParams,
     @Body(patchPipe) body: WatchTaskPatch,
   ): Promise<WatchTask> {
-    return this.service.patch(params.market, params.code, body);
+    return this.service.patch(user.id, params.market, params.code, body);
   }
 
   @Delete(':market/:code')
   @HttpCode(HttpStatus.NO_CONTENT)
-  async delete(@Param(paramsPipe) params: WatchTaskParams): Promise<void> {
-    await this.service.delete(params.market, params.code);
+  async delete(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param(paramsPipe) params: WatchTaskParams,
+  ): Promise<void> {
+    await this.service.delete(user.id, params.market, params.code);
   }
 
   @Get('universe')
@@ -101,12 +110,6 @@ export class WatchController {
     return this.service.getUniverse(query.market);
   }
 
-  /**
-   * Resolve `(market, code)` → `StockBasic`. Used by the frontend to
-   * confirm a ticker before posting a task; 404 means the code is not
-   * in the source of truth (stock-meta for A, on-disk universe for
-   * HK / US).
-   */
   @Get('lookup')
   async lookup(
     @Query(new ZodValidationPipe(WatchTaskParamsSchema)) query: WatchTaskParams,

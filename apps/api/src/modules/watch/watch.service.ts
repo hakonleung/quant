@@ -1,8 +1,9 @@
 /**
  * CRUD + universe orchestration for Watch (`docs/modules/W-0-watch.md` §10).
  *
- * The scheduler talks to the same store directly (no service-layer call
- * needed) — this service is the controller's view.
+ * Every public method takes the userId; the scheduler iterates known
+ * users to build its tick set, and the controller derives the userId
+ * from `@CurrentUser()`.
  */
 
 import { Inject, Injectable, Logger, type OnModuleInit } from '@nestjs/common';
@@ -14,6 +15,8 @@ import {
   type WatchMarket,
   type WatchTask,
 } from '@quant/shared';
+
+import { UserStore } from '../auth/user.store.js';
 import { StockMetaService } from '../stock-meta/stock-meta.service.js';
 import type { WatchGroupCreate, WatchTaskCreate, WatchTaskPatch } from './dto/watch.dto.js';
 import { WatchGroupStore } from './watch-group.store.js';
@@ -31,41 +34,41 @@ export class WatchService implements OnModuleInit {
     @Inject(WatchUniverseStore) private readonly universe: WatchUniverseStore,
     @Inject(WATCH_QUOTE_PORT) private readonly port: WatchQuotePort,
     @Inject(StockMetaService) private readonly stockMeta: StockMetaService,
+    @Inject(UserStore) private readonly users: UserStore,
   ) {}
 
   /**
-   * Lifecycle hook — load group state and seed any groups missing for
-   * legacy tasks. The task store itself is loaded by the scheduler;
-   * `tasks.load()` is idempotent (the `loaded` flag short-circuits)
-   * so calling it here is safe even when the scheduler runs first.
+   * Lifecycle hook — seed legacy groups for every known user. Idempotent;
+   * a user with no legacy tasks contributes zero work.
    */
   async onModuleInit(): Promise<void> {
-    await this.tasks.load();
-    await this.groups.load();
-    const seeded = await this.seedLegacyGroups();
+    let seeded = 0;
+    for (const user of this.users.list()) {
+      seeded += await this.seedLegacyGroups(user.id);
+    }
     if (seeded > 0) {
-      this.logger.log(`seeded ${String(seeded)} legacy watch groups`);
+      this.logger.log(`seeded ${String(seeded)} legacy watch groups across users`);
     }
   }
 
-  list(): readonly WatchTask[] {
-    return this.tasks.list();
+  list(userId: string): Promise<readonly WatchTask[]> {
+    return this.tasks.list(userId);
   }
 
-  listGroups(): readonly WatchGroup[] {
-    return this.groups.list();
+  listGroups(userId: string): Promise<readonly WatchGroup[]> {
+    return this.groups.list(userId);
   }
 
-  getGroup(name: string): WatchGroup {
-    const g = this.groups.get(name);
+  async getGroup(userId: string, name: string): Promise<WatchGroup> {
+    const g = await this.groups.get(userId, name);
     if (g === undefined) {
       throw new QuantError('NOT_FOUND', `watch group ${name} not found`, { name });
     }
     return g;
   }
 
-  async createGroup(payload: WatchGroupCreate): Promise<WatchGroup> {
-    if (this.groups.has(payload.name)) {
+  async createGroup(userId: string, payload: WatchGroupCreate): Promise<WatchGroup> {
+    if (await this.groups.has(userId, payload.name)) {
       throw new QuantError('WATCH_TASK_CONFLICT', `watch group ${payload.name} already exists`, {
         kind: 'group',
         name: payload.name,
@@ -78,37 +81,27 @@ export class WatchService implements OnModuleInit {
       pushIntervalSec: payload.pushIntervalSec,
       createdAt: new Date().toISOString(),
     };
-    await this.groups.upsert(group, false);
+    await this.groups.upsert(userId, group, false);
     return group;
   }
 
-  /**
-   * Cascade delete: drop every task that references this group, then
-   * remove the group config. Order matters — tasks first so the
-   * scheduler never sees a task whose group has vanished.
-   */
-  async deleteGroup(name: string): Promise<void> {
-    if (!this.groups.has(name)) {
+  async deleteGroup(userId: string, name: string): Promise<void> {
+    if (!(await this.groups.has(userId, name))) {
       throw new QuantError('NOT_FOUND', `watch group ${name} not found`, { name });
     }
-    await this.tasks.deleteByGroup(name);
-    await this.groups.delete(name);
+    await this.tasks.deleteByGroup(userId, name);
+    await this.groups.delete(userId, name);
   }
 
-  /**
-   * Seed legacy groups from any tasks that survived the schema migration
-   * with synthesized `groupName`s but no matching entry in `groups.json`.
-   * Idempotent — safe to run on every boot. Conditions / intervals are
-   * copied from the first task that mentions the group.
-   */
-  async seedLegacyGroups(): Promise<number> {
+  async seedLegacyGroups(userId: string): Promise<number> {
     const seen = new Set<string>();
     let added = 0;
-    for (const task of this.tasks.list()) {
+    for (const task of await this.tasks.list(userId)) {
       if (seen.has(task.groupName)) continue;
       seen.add(task.groupName);
-      if (this.groups.has(task.groupName)) continue;
+      if (await this.groups.has(userId, task.groupName)) continue;
       await this.groups.upsert(
+        userId,
         {
           name: task.groupName,
           conditions: task.conditions,
@@ -123,8 +116,8 @@ export class WatchService implements OnModuleInit {
     return added;
   }
 
-  async create(payload: WatchTaskCreate): Promise<WatchTask> {
-    const existing = this.tasks.get(payload.market, payload.code);
+  async create(userId: string, payload: WatchTaskCreate): Promise<WatchTask> {
+    const existing = await this.tasks.get(userId, payload.market, payload.code);
     if (existing !== undefined) {
       throw new QuantError(
         'WATCH_TASK_CONFLICT',
@@ -132,7 +125,7 @@ export class WatchService implements OnModuleInit {
         { market: payload.market, code: payload.code },
       );
     }
-    const group = this.groups.get(payload.groupName);
+    const group = await this.groups.get(userId, payload.groupName);
     if (group === undefined) {
       throw new QuantError(
         'NOT_FOUND',
@@ -159,16 +152,17 @@ export class WatchService implements OnModuleInit {
       hitCount: 0,
       lastHitPrice: null,
     };
-    await this.tasks.upsert(task, false);
+    await this.tasks.upsert(userId, task, false);
     return task;
   }
 
   async patch(
+    userId: string,
     market: WatchTask['market'],
     code: string,
     payload: WatchTaskPatch,
   ): Promise<WatchTask> {
-    const next = await this.tasks.patch(market, code, (current) => ({
+    const next = await this.tasks.patch(userId, market, code, (current) => ({
       ...current,
       ...(payload.name !== undefined ? { name: payload.name } : {}),
       ...(payload.remaining !== undefined ? { remaining: payload.remaining } : {}),
@@ -184,8 +178,8 @@ export class WatchService implements OnModuleInit {
     return next;
   }
 
-  async delete(market: WatchTask['market'], code: string): Promise<void> {
-    const ok = await this.tasks.delete(market, code);
+  async delete(userId: string, market: WatchTask['market'], code: string): Promise<void> {
+    const ok = await this.tasks.delete(userId, market, code);
     if (!ok) {
       throw new QuantError('NOT_FOUND', `watch task ${market}:${code} not found`, {
         market,
@@ -205,13 +199,6 @@ export class WatchService implements OnModuleInit {
     return rows;
   }
 
-  /**
-   * Resolve `(market, code)` to a `StockBasic` so the frontend can
-   * confirm a ticker exists before posting a task. Throws
-   * `WATCH_CODE_NOT_FOUND` (404) when the code is absent from the
-   * source of truth for that market — A-share via stock-meta,
-   * HK/US via the on-disk universe cache.
-   */
   async lookup(market: WatchMarket, code: string): Promise<StockBasic> {
     if (market === 'a') return this.lookupA(code);
     return this.lookupHkUs(market, code);

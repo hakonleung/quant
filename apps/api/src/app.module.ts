@@ -1,6 +1,7 @@
 import { Module, type MiddlewareConsumer, type NestModule } from '@nestjs/common';
 import { HealthController } from './common/health.controller.js';
 import { TraceMiddleware } from './common/trace.middleware.js';
+import { AuthModule } from './modules/auth/auth.module.js';
 import { BlacklistModule } from './modules/blacklist/blacklist.module.js';
 import { ChannelModule } from './modules/channel/channel.module.js';
 import { InstructionModule } from './modules/instruction/instruction.module.js';
@@ -20,6 +21,9 @@ import { WatchModule } from './modules/watch/watch.module.js';
 
 @Module({
   imports: [
+    // AuthModule is global; must come first so the legacy → users/admin
+    // boot-time migration runs before any per-user store loads.
+    AuthModule,
     // Channel must come before InstructionModule so the channel.send
     // handler can inject ChannelService at registration time.
     ChannelModule,

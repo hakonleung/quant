@@ -22,6 +22,10 @@ export interface InstructionCtx {
   readonly sender?: string;
   /** Slack channel id / Feishu chat id where the reply should land. */
   readonly target?: string;
+  /** Resolved internal userId for per-user data scoping. Always set by callers. */
+  readonly userId: string;
+  /** True when the user has only ever been seen via IM, never Web OAuth. */
+  readonly imBootstrap?: boolean;
 }
 
 export interface InstructionHandler<TArgs> {

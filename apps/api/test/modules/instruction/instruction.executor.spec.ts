@@ -6,7 +6,7 @@ import type { InstructionCtx } from '../../../src/modules/instruction/instructio
 import { InstructionRegistry } from '../../../src/modules/instruction/instruction.registry.js';
 import type { InstructionSpec } from '../../../src/modules/instruction/instruction.types.js';
 
-const ctx: InstructionCtx = { traceId: 't1', source: 'socket' };
+const ctx: InstructionCtx = { traceId: 't1', source: 'socket', userId: 'admin' };
 
 const focusSpec: InstructionSpec<{ code: string }> = {
   id: instructionId('focus'),

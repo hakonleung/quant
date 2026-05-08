@@ -55,6 +55,10 @@ data/watch/groups.json
 data/sectors/
 data/sys-cfg/
 data/ta/
+# Per-user data dirs (post auth multi-user split). data/users/{uid}/...
+# holds personal ledger / watch / sys-cfg / AI cache; data/users/_meta/users.json
+# is the user registry. All user state, never source-tracked.
+data/users/
 # Cron-managed A-share noise filter (BL trigger / 15:15 BJT cron).
 # Regenerated on demand; never source-tracked.
 data/blacklist.json

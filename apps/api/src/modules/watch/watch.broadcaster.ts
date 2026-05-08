@@ -1,14 +1,11 @@
 /**
- * Periodically pushes the current watch task list onto the realtime
- * socket bus (`watch.snapshot` topic). Replaces the legacy
- * `GET /api/watch/stream` SSE endpoint — the FE now subscribes via
- * Socket.IO and receives the same payload at the same 1Hz cadence.
+ * Periodically pushes each user's watch task list onto the realtime
+ * socket bus (`watch.snapshot` topic, scoped to `user:{userId}` rooms).
  *
  * Lifecycle:
  *   - `onModuleInit` arms `setInterval`; `onModuleDestroy` clears it.
  *   - The bus drops emits that arrive before the gateway has set its
- *     sink (see `SocketBus.emit`), so booting a few seconds before the
- *     first frame is harmless.
+ *     sink (boot ordering), so the next tick lands fine.
  */
 
 import {
@@ -19,6 +16,7 @@ import {
   type OnModuleInit,
 } from '@nestjs/common';
 
+import { UserStore } from '../auth/user.store.js';
 import { SocketBus } from '../socket/socket-bus.service.js';
 import { WatchService } from './watch.service.js';
 
@@ -32,15 +30,12 @@ export class WatchBroadcaster implements OnModuleInit, OnModuleDestroy {
   constructor(
     @Inject(WatchService) private readonly service: WatchService,
     @Inject(SocketBus) private readonly bus: SocketBus,
+    @Inject(UserStore) private readonly users: UserStore,
   ) {}
 
   onModuleInit(): void {
     this.timer = setInterval(() => {
-      try {
-        this.bus.emit('watch.snapshot', [...this.service.list()]);
-      } catch (err) {
-        this.logger.warn(`watch_broadcast_failed err=${String(err)}`);
-      }
+      void this.broadcast();
     }, TICK_MS);
     this.logger.log(`watch broadcaster armed — tick=${String(TICK_MS)}ms`);
   }
@@ -48,5 +43,16 @@ export class WatchBroadcaster implements OnModuleInit, OnModuleDestroy {
   onModuleDestroy(): void {
     if (this.timer !== null) clearInterval(this.timer);
     this.timer = null;
+  }
+
+  private async broadcast(): Promise<void> {
+    for (const user of this.users.list()) {
+      try {
+        const tasks = await this.service.list(user.id);
+        this.bus.emitTo(user.id, 'watch.snapshot', [...tasks]);
+      } catch (err) {
+        this.logger.warn(`watch_broadcast_failed user=${user.id} err=${String(err)}`);
+      }
+    }
   }
 }

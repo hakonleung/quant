@@ -2,14 +2,19 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import type { SpotQuote, StockBasic, WatchTask, WatchMarket } from '@quant/shared';
-import { WatchScheduler } from '../../../src/modules/watch/watch.scheduler.js';
-import { WatchTaskStore } from '../../../src/modules/watch/watch-task.store.js';
 import type {
   ChannelOutboundRequest,
   ChannelOutboundResponse,
 } from '@quant/shared';
-import type { WatchQuotePort } from '../../../src/modules/watch/domain/watch-port.js';
+
+import type { AuthConfigShape } from '../../../src/modules/auth/config/auth.config.js';
 import type { ChannelService } from '../../../src/modules/channel/channel.service.js';
+import type { UserStore, UserRecord } from '../../../src/modules/auth/user.store.js';
+import { WatchScheduler } from '../../../src/modules/watch/watch.scheduler.js';
+import { WatchTaskStore } from '../../../src/modules/watch/watch-task.store.js';
+import type { WatchQuotePort } from '../../../src/modules/watch/domain/watch-port.js';
+
+const USER = 'admin';
 
 class FakeQuotePort implements WatchQuotePort {
   responses: SpotQuote[] = [];
@@ -41,8 +46,35 @@ class FakeNotifier {
   }
 }
 
-async function tmpDir(): Promise<string> {
+class FakeUserStore {
+  private readonly users: UserRecord[];
+  constructor(ids: readonly string[]) {
+    this.users = ids.map((id) => ({
+      id,
+      provider: 'admin',
+      externalId: id,
+      tenantKey: null,
+      displayName: id,
+      email: null,
+      avatarUrl: null,
+      createdAt: '2026-05-01T00:00:00Z',
+      lastLoginAt: '2026-05-01T00:00:00Z',
+    }));
+  }
+  list(): readonly UserRecord[] {
+    return this.users;
+  }
+  get(id: string): UserRecord | null {
+    return this.users.find((u) => u.id === id) ?? null;
+  }
+}
+
+async function tmpRoot(): Promise<string> {
   return fs.mkdtemp(path.join(os.tmpdir(), 'watch-'));
+}
+
+function cfg(dataRoot: string): AuthConfigShape {
+  return { mode: 'disabled', nextauthSecret: null, dataRoot, adminUserId: 'admin' };
 }
 
 function quote(overrides: Partial<SpotQuote> = {}): SpotQuote {
@@ -82,49 +114,56 @@ function task(overrides: Partial<WatchTask> = {}): WatchTask {
   };
 }
 
-// 2026-05-04 (Mon) 01:30 UTC = 09:30 BJT — A-market open.
 const TICK_TIME = new Date('2026-05-04T01:30:00Z');
 
-async function newScheduler(
+function newScheduler(
   store: WatchTaskStore,
   port: WatchQuotePort,
   notifier: FakeNotifier,
-): Promise<WatchScheduler> {
-  const sched = new WatchScheduler(store, port, notifier as unknown as ChannelService);
-  await store.load();
-  return sched;
+  users: FakeUserStore,
+): WatchScheduler {
+  return new WatchScheduler(
+    store,
+    port,
+    notifier as unknown as ChannelService,
+    users as unknown as UserStore,
+  );
+}
+
+async function buildEnv(seed: WatchTask): Promise<{
+  store: WatchTaskStore;
+  users: FakeUserStore;
+  root: string;
+}> {
+  const root = await tmpRoot();
+  const store = new WatchTaskStore(cfg(root));
+  await store.upsert(USER, seed);
+  const users = new FakeUserStore([USER]);
+  return { store, users, root };
 }
 
 describe('WatchScheduler.tick', () => {
   it('fetches quote and pushes when condition hits (no prior hit)', async () => {
-    const dir = await tmpDir();
-    const store = new WatchTaskStore(dir);
-    await store.load();
-    await store.upsert(task());
-
+    const { store, users } = await buildEnv(task());
     const port = new FakeQuotePort();
     port.responses.push(quote());
     const notifier = new FakeNotifier();
-    const sched = await newScheduler(store, port, notifier);
+    const sched = newScheduler(store, port, notifier, users);
 
     await sched.tick(TICK_TIME);
 
     expect(port.calls).toHaveLength(1);
     expect(notifier.sent).toHaveLength(1);
     expect(notifier.sent[0]?.text).toContain('600000');
-    const after = store.get('a', '600000');
+    const after = await store.get(USER, 'a', '600000');
     expect(after?.hitCount).toBe(1);
     expect(after?.lastHitPrice).toBe('10.5');
     expect(after?.lastPushAt).toBe(TICK_TIME.toISOString());
   });
 
   it('suppresses second hit when last drifts < 2% from lastHitPrice (price gate)', async () => {
-    const dir = await tmpDir();
-    const store = new WatchTaskStore(dir);
-    await store.load();
-    await store.upsert(
+    const { store, users } = await buildEnv(
       task({
-        // Past pushIntervalSec so only the price gate is in play.
         lastPushAt: new Date(TICK_TIME.getTime() - 120_000).toISOString(),
         lastHitPrice: '10.5',
         hitCount: 1,
@@ -133,23 +172,18 @@ describe('WatchScheduler.tick', () => {
     const port = new FakeQuotePort();
     port.responses.push(quote({ last: '10.55' }));
     const notifier = new FakeNotifier();
-    const sched = await newScheduler(store, port, notifier);
+    const sched = newScheduler(store, port, notifier, users);
 
     await sched.tick(TICK_TIME);
 
     expect(notifier.sent).toHaveLength(0);
-    expect(store.get('a', '600000')?.hitCount).toBe(1);
+    expect((await store.get(USER, 'a', '600000'))?.hitCount).toBe(1);
   });
 
   it('suppresses second hit while pushIntervalSec time gate is open', async () => {
-    const dir = await tmpDir();
-    const store = new WatchTaskStore(dir);
-    await store.load();
-    await store.upsert(
+    const { store, users } = await buildEnv(
       task({
-        // 30 s ago — well inside pushIntervalSec=60.
         lastPushAt: new Date(TICK_TIME.getTime() - 30_000).toISOString(),
-        // Price drifted >> 2 % so the price gate alone wouldn't suppress.
         lastHitPrice: '9.5',
         hitCount: 1,
       }),
@@ -157,19 +191,16 @@ describe('WatchScheduler.tick', () => {
     const port = new FakeQuotePort();
     port.responses.push(quote({ last: '10.50' }));
     const notifier = new FakeNotifier();
-    const sched = await newScheduler(store, port, notifier);
+    const sched = newScheduler(store, port, notifier, users);
 
     await sched.tick(TICK_TIME);
 
     expect(notifier.sent).toHaveLength(0);
-    expect(store.get('a', '600000')?.hitCount).toBe(1);
+    expect((await store.get(USER, 'a', '600000'))?.hitCount).toBe(1);
   });
 
   it('fires when both gates clear (drift ≥ 2% AND interval elapsed)', async () => {
-    const dir = await tmpDir();
-    const store = new WatchTaskStore(dir);
-    await store.load();
-    await store.upsert(
+    const { store, users } = await buildEnv(
       task({
         lastPushAt: new Date(TICK_TIME.getTime() - 120_000).toISOString(),
         lastHitPrice: '10.5',
@@ -177,56 +208,46 @@ describe('WatchScheduler.tick', () => {
       }),
     );
     const port = new FakeQuotePort();
-    port.responses.push(quote({ last: '10.71' })); // +2.0 % drift
+    port.responses.push(quote({ last: '10.71' }));
     const notifier = new FakeNotifier();
-    const sched = await newScheduler(store, port, notifier);
+    const sched = newScheduler(store, port, notifier, users);
 
     await sched.tick(TICK_TIME);
 
     expect(notifier.sent).toHaveLength(1);
-    expect(store.get('a', '600000')?.hitCount).toBe(2);
-    expect(store.get('a', '600000')?.lastHitPrice).toBe('10.71');
+    const after = await store.get(USER, 'a', '600000');
+    expect(after?.hitCount).toBe(2);
+    expect(after?.lastHitPrice).toBe('10.71');
   });
 
   it('decrements remaining and disables on hit zero', async () => {
-    const dir = await tmpDir();
-    const store = new WatchTaskStore(dir);
-    await store.load();
-    await store.upsert(task({ remaining: 1 }));
+    const { store, users } = await buildEnv(task({ remaining: 1 }));
     const port = new FakeQuotePort();
     port.responses.push(quote());
     const notifier = new FakeNotifier();
-    const sched = await newScheduler(store, port, notifier);
+    const sched = newScheduler(store, port, notifier, users);
 
     await sched.tick(TICK_TIME);
 
-    const after = store.get('a', '600000');
+    const after = await store.get(USER, 'a', '600000');
     expect(after?.remaining).toBe(0);
     expect(after?.enabled).toBe(false);
   });
 
   it('quote failure bumps lastTickAt without throwing', async () => {
-    const dir = await tmpDir();
-    const store = new WatchTaskStore(dir);
-    await store.load();
-    await store.upsert(task());
+    const { store, users } = await buildEnv(task());
     const port = new FakeQuotePort();
     port.failNext = true;
     const notifier = new FakeNotifier();
-    const sched = await newScheduler(store, port, notifier);
+    const sched = newScheduler(store, port, notifier, users);
 
     await expect(sched.tick(TICK_TIME)).resolves.toBeUndefined();
-    expect(store.get('a', '600000')?.lastTickAt).toBe(TICK_TIME.toISOString());
+    expect((await store.get(USER, 'a', '600000'))?.lastTickAt).toBe(TICK_TIME.toISOString());
     expect(notifier.sent).toHaveLength(0);
   });
 
   it('trend baseline (window in seconds) only fires once a sample is old enough', async () => {
-    const dir = await tmpDir();
-    const store = new WatchTaskStore(dir);
-    await store.load();
-    // window = 30 s; intervalSec = 5. Resolver picks the most recent
-    // sample whose ts ≤ latestTs - 30 s.
-    await store.upsert(
+    const { store, users } = await buildEnv(
       task({
         conditions: [
           { kind: 'pct', baseline: 'trend', op: 'gte', thresholdPct: '5', window: 30 },
@@ -234,40 +255,30 @@ describe('WatchScheduler.tick', () => {
       }),
     );
     const port = new FakeQuotePort();
-    // tick1 (T0)   : last=10.00 — only sample → no fire.
     port.responses.push(quote({ last: '10.00', ts: '2026-05-04T01:30:00Z' }));
-    // tick2 (T0+30s): last=10.10 — sample at T0 is exactly window-old;
-    //               baseline = 10.00, delta = +1 % < 5 → no fire.
     port.responses.push(quote({ last: '10.10', ts: '2026-05-04T01:30:30Z' }));
-    // tick3 (T0+60s): last=10.62 — most recent sample with ts ≤ T0+30s
-    //               is the T0+30s sample (older T0 sample is trimmed by
-    //               the wall-clock buffer). baseline = 10.10,
-    //               delta = (10.62-10.10)/10.10 ≈ 5.15 % ≥ 5 → fire.
     port.responses.push(quote({ last: '10.62', ts: '2026-05-04T01:31:00Z' }));
     const notifier = new FakeNotifier();
-    const sched = await newScheduler(store, port, notifier);
+    const sched = newScheduler(store, port, notifier, users);
 
     await sched.tick(TICK_TIME);
     await sched.tick(new Date(TICK_TIME.getTime() + 30_000));
     await sched.tick(new Date(TICK_TIME.getTime() + 60_000));
 
     expect(notifier.sent).toHaveLength(1);
-    expect(store.get('a', '600000')?.hitCount).toBe(1);
+    expect((await store.get(USER, 'a', '600000'))?.hitCount).toBe(1);
   });
 
   it('treats quote with ts >30 min off server clock as no match', async () => {
-    const dir = await tmpDir();
-    const store = new WatchTaskStore(dir);
-    await store.load();
-    await store.upsert(task());
+    const { store, users } = await buildEnv(task());
     const port = new FakeQuotePort();
     port.responses.push(quote({ ts: '2026-05-04T00:59:00Z' }));
     const notifier = new FakeNotifier();
-    const sched = await newScheduler(store, port, notifier);
+    const sched = newScheduler(store, port, notifier, users);
 
     await sched.tick(TICK_TIME);
 
-    const after = store.get('a', '600000');
+    const after = await store.get(USER, 'a', '600000');
     expect(after?.hitCount).toBe(0);
     expect(after?.lastTickAt).toBe(TICK_TIME.toISOString());
     expect(after?.lastSampleAt).toBeNull();
@@ -275,14 +286,11 @@ describe('WatchScheduler.tick', () => {
   });
 
   it('does not snapshot the task store when every market is closed', async () => {
-    const dir = await tmpDir();
-    const store = new WatchTaskStore(dir);
-    await store.load();
-    await store.upsert(task());
+    const { store, users } = await buildEnv(task());
     const port = new FakeQuotePort();
     port.responses.push(quote());
     const notifier = new FakeNotifier();
-    const sched = await newScheduler(store, port, notifier);
+    const sched = newScheduler(store, port, notifier, users);
 
     await sched.tick(new Date('2026-05-09T05:00:00Z'));
 
@@ -291,14 +299,11 @@ describe('WatchScheduler.tick', () => {
   });
 
   it('skips tasks while market is closed', async () => {
-    const dir = await tmpDir();
-    const store = new WatchTaskStore(dir);
-    await store.load();
-    await store.upsert(task());
+    const { store, users } = await buildEnv(task());
     const port = new FakeQuotePort();
     port.responses.push(quote());
     const notifier = new FakeNotifier();
-    const sched = await newScheduler(store, port, notifier);
+    const sched = newScheduler(store, port, notifier, users);
 
     await sched.tick(new Date('2026-05-09T01:30:00Z'));
 

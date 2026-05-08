@@ -3,9 +3,12 @@ import type { SocketEnvelope, SocketTopic } from '@quant/shared';
 import { SocketBus, type SocketSink } from '../../../src/modules/socket/socket-bus.service.js';
 
 class FakeSink implements SocketSink {
-  published: Array<{ topic: SocketTopic; envelope: SocketEnvelope }> = [];
+  published: Array<{ topic: SocketTopic; envelope: SocketEnvelope; userId?: string }> = [];
   publish(topic: SocketTopic, envelope: SocketEnvelope): void {
     this.published.push({ topic, envelope });
+  }
+  publishTo(userId: string, topic: SocketTopic, envelope: SocketEnvelope): void {
+    this.published.push({ topic, envelope, userId });
   }
 }
 

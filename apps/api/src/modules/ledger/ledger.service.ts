@@ -4,6 +4,10 @@
  *   - CRUD on the persisted entries (uses `LedgerStore`)
  *   - merge-import with full validation
  *   - AI analysis: enrich → hash → cache lookup → Flight call → cache write
+ *
+ * Every public method takes `userId` as the first parameter; the
+ * controller derives it from `@CurrentUser()` and the IM dispatcher
+ * from `AuthService.resolveFromIm()`.
  */
 
 import { Inject, Injectable } from '@nestjs/common';
@@ -39,21 +43,16 @@ export class LedgerService {
     @Inject(CLOCK) private readonly clock: Clock,
   ) {}
 
-  list(): readonly LedgerEntry[] {
-    return this.store.list();
+  async list(userId: string): Promise<readonly LedgerEntry[]> {
+    return this.store.list(userId);
   }
 
-  enriched(): readonly EnrichedLedgerEntry[] {
-    return enrichEntries(this.store.list());
+  async enriched(userId: string): Promise<readonly EnrichedLedgerEntry[]> {
+    return enrichEntries(await this.store.list(userId));
   }
 
-  /**
-   * Insert a new entry. Rejects with `LEDGER_DUPLICATE_DATE` when the
-   * date already exists; rejects with `LEDGER_FIRST_NEEDS_CLOSING_POSITION`
-   * when the new entry would become the earliest and lacks closingPosition.
-   */
-  async create(entry: LedgerEntry): Promise<LedgerEntry> {
-    const existing = this.store.list();
+  async create(userId: string, entry: LedgerEntry): Promise<LedgerEntry> {
+    const existing = await this.store.list(userId);
     if (existing.some((e) => e.date === entry.date)) {
       throw new QuantError(
         'LEDGER_DUPLICATE_DATE',
@@ -62,13 +61,12 @@ export class LedgerService {
       );
     }
     const next = mergeEntries(existing, [entry]);
-    await this.store.replace(next);
+    await this.store.replace(userId, next);
     return entry;
   }
 
-  /** Patch an existing entry. Throws 404 when the date isn't found. */
-  async patch(date: string, body: LedgerPatchBody): Promise<LedgerEntry> {
-    const existing = this.store.list();
+  async patch(userId: string, date: string, body: LedgerPatchBody): Promise<LedgerEntry> {
+    const existing = await this.store.list(userId);
     const idx = existing.findIndex((e) => e.date === date);
     if (idx < 0) {
       throw new QuantError('NOT_FOUND', `ledger entry ${date} not found`, { date });
@@ -88,35 +86,27 @@ export class LedgerService {
     };
     const nextList = [...existing];
     nextList[idx] = merged;
-    await this.store.replace(nextList);
+    await this.store.replace(userId, nextList);
     return merged;
   }
 
-  /**
-   * Delete an entry. The store's `replace` re-validates — if removing
-   * this row promotes a non-anchor entry to first place, the request
-   * fails with `LEDGER_FIRST_NEEDS_CLOSING_POSITION` and the user is
-   * told to set a closingPosition on the new earliest entry first.
-   */
-  async remove(date: string): Promise<void> {
-    const existing = this.store.list();
+  async remove(userId: string, date: string): Promise<void> {
+    const existing = await this.store.list(userId);
     if (!existing.some((e) => e.date === date)) {
       throw new QuantError('NOT_FOUND', `ledger entry ${date} not found`, { date });
     }
     const next = existing.filter((e) => e.date !== date);
-    await this.store.replace(next);
+    await this.store.replace(userId, next);
   }
 
-  /**
-   * Merge import. Imported entries overwrite existing rows on date
-   * collision (per the user-confirmed plan). Validation runs in `replace`.
-   */
-  async importEntries(entries: readonly LedgerEntry[]): Promise<LedgerSnapshot> {
-    const next = mergeEntries(this.store.list(), entries);
-    return this.store.replace(next);
+  async importEntries(
+    userId: string,
+    entries: readonly LedgerEntry[],
+  ): Promise<LedgerSnapshot> {
+    const next = mergeEntries(await this.store.list(userId), entries);
+    return this.store.replace(userId, next);
   }
 
-  /** Read-only validate of an arbitrary candidate snapshot — for term commands. */
   validateCandidate(entries: readonly LedgerEntry[]): void {
     const v = validateLedger(entries);
     if (!v.ok) {
@@ -124,21 +114,15 @@ export class LedgerService {
     }
   }
 
-  /** Cache lookup; returns `null` when the key is cold. */
-  cachedAnalysis(): LedgerAnalysis | null {
-    const enriched = enrichEntries(this.store.list());
+  async cachedAnalysis(userId: string): Promise<LedgerAnalysis | null> {
+    const enriched = enrichEntries(await this.store.list(userId));
     if (enriched.length === 0) return null;
     const window = enriched.slice(-MAX_AI_WINDOW);
-    return this.cache.get(LedgerCacheStore.keyFor(window));
+    return this.cache.get(userId, LedgerCacheStore.keyFor(window));
   }
 
-  /**
-   * Run AI analysis (paid). Honours `bypassCache=true` to force a fresh
-   * Kimi call even when the cache is warm. Empty ledger short-circuits
-   * to a friendly `LLM_FAILED` so the user sees a clear message.
-   */
-  async analyze(traceId: string, bypassCache = false): Promise<LedgerAnalysis> {
-    const enriched = enrichEntries(this.store.list());
+  async analyze(userId: string, traceId: string, bypassCache = false): Promise<LedgerAnalysis> {
+    const enriched = enrichEntries(await this.store.list(userId));
     if (enriched.length === 0) {
       throw new QuantError('LLM_FAILED', 'ledger is empty — nothing to analyze', {});
     }
@@ -146,7 +130,7 @@ export class LedgerService {
     const key = LedgerCacheStore.keyFor(window);
 
     if (!bypassCache) {
-      const hit = this.cache.get(key);
+      const hit = await this.cache.get(userId, key);
       if (hit !== null) return hit;
     }
 
@@ -167,7 +151,7 @@ export class LedgerService {
       throw new QuantError('LLM_FAILED', 'analyze_ledger returned no payload', {});
     }
     const analysis = LedgerAnalysisSchema.parse(payload);
-    await this.cache.put(key, analysis);
+    await this.cache.put(userId, key, analysis);
     return analysis;
   }
 }
@@ -186,6 +170,4 @@ function extractFirstPayload(table: Table): unknown {
   }
 }
 
-// Re-export so the schema is available to test fixtures without importing
-// straight from `@quant/shared` in NestJS spec files.
 export { EnrichedLedgerEntrySchema };

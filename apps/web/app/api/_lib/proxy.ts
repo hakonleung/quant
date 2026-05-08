@@ -6,13 +6,17 @@
  * (default `http://127.0.0.1:3001`). The hop is intentional:
  *
  *   - browser only sees `/api/...` (no CORS, no env var leaks)
- *   - the BFF can reshape / mask Nest's response without touching the
+ *   - the BFF reshapes / masks Nest's response without touching the
  *     gateway code (CLAUDE.md §2.5 — UI plumbing belongs in `lib/`)
+ *   - server-side `getSession()` resolves the user and the BFF mints
+ *     `Authorization: Bearer <jwt>` for the downstream Nest hop
  *
  * Trace IDs are forwarded both ways so log lines stay correlated.
  */
 
 import { TRACE_HEADER, newTraceId } from '@quant/shared';
+
+import { getSession } from '../../../lib/auth/session.js';
 
 const DEFAULT_NEST_BASE = 'http://127.0.0.1:3001';
 
@@ -25,11 +29,13 @@ interface ProxyInit {
   readonly body?: unknown;
 }
 
-/**
- * Proxy a request to NestJS and return its raw `Response`. Use this
- * for routes where the frontend wants the gateway shape verbatim
- * (or for SSE / streaming, where re-encoding would defeat the point).
- */
+async function authHeader(): Promise<Record<string, string>> {
+  const session = await getSession();
+  if (session === null) throw new BffUpstreamError(401, 'unauthenticated');
+  if (session.token === null) return {};
+  return { authorization: `Bearer ${session.token}` };
+}
+
 export async function nestProxy(
   request: Request,
   upstreamPath: string,
@@ -39,6 +45,7 @@ export async function nestProxy(
   const trace = request.headers.get(TRACE_HEADER) ?? newTraceId();
   headers.set(TRACE_HEADER, trace);
   if (init.body !== undefined) headers.set('content-type', 'application/json');
+  for (const [k, v] of Object.entries(await authHeader())) headers.set(k, v);
 
   const fetchInit: RequestInit = {
     method: init.method ?? 'GET',
@@ -54,7 +61,6 @@ export async function nestProxy(
   return new Response(upstream.body, { status: upstream.status, headers: out });
 }
 
-/** Proxy and decode JSON; throw on non-2xx so the route can surface a 502. */
 export async function nestJson<T>(
   request: Request,
   upstreamPath: string,
@@ -65,6 +71,7 @@ export async function nestJson<T>(
   const trace = request.headers.get(TRACE_HEADER) ?? newTraceId();
   headers[TRACE_HEADER] = trace;
   if (init.body !== undefined) headers['content-type'] = 'application/json';
+  Object.assign(headers, await authHeader());
 
   const fetchInit: RequestInit = {
     method: init.method ?? 'GET',
