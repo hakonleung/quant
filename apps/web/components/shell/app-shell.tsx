@@ -17,6 +17,7 @@
  */
 
 import { Box } from '@chakra-ui/react';
+import dynamic from 'next/dynamic';
 import { useEffect, useRef, type ReactNode } from 'react';
 
 import { useCmdPaletteStore } from '../../lib/stores/cmd-palette.store.js';
@@ -24,9 +25,17 @@ import { useLayoutStore } from '../../lib/stores/layout.store.js';
 import { useSettingsStore } from '../../lib/stores/settings.store.js';
 import { FeatCmdPalette } from '../feat-cmd-palette/feat-cmd-palette.js';
 import { FeatNotify } from '../feat-notify/feat-notify.js';
-import { FeatTermMain } from '../feat-term-main/feat-term-main.js';
 
 import { TopBar } from './top-bar.js';
+
+// xterm + the entire `@quant/terminal` engine only run in `term` mode,
+// which is opt-in (toggled from the command palette). Code-split so a
+// user staying on the workbench never downloads the ~70 KB chunk.
+// `ssr: false` because xterm pokes the DOM at module init.
+const FeatTermMain = dynamic(
+  () => import('../feat-term-main/feat-term-main.js').then((m) => ({ default: m.FeatTermMain })),
+  { ssr: false },
+);
 
 interface AppShellProps {
   readonly children: ReactNode;
