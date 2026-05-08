@@ -14,7 +14,7 @@
  */
 
 import { Box, Flex, Input, Text } from '@chakra-ui/react';
-import type { KlineBar, StockMetaDto, StockSnapshotDto } from '@quant/shared';
+import type { StockMetaDto, StockSnapshotDto } from '@quant/shared';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
@@ -24,7 +24,19 @@ import {
   type ColumnKey,
 } from '../../lib/eqty/columns.catalog.js';
 import { Feat } from '../../lib/eqty/feat.js';
-import { deriveStats, type StockStats } from '../../lib/fp/stock-stats.js';
+import {
+  BUILTIN_KEYS,
+  buildRows,
+  compareRows,
+  evidenceColumnKind,
+  evidenceSortKey,
+  flattenEvidence,
+  formatEvidence,
+  formatRelativeTime,
+  toNumberOrNull,
+  type EvidenceColumnKind,
+  type ListRow,
+} from '../../lib/fp/eq-list-fp.js';
 import { useBlacklistSet } from '../../lib/hooks/use-blacklist.js';
 import { useKlineBulk, useStockSnapshots } from '../../lib/hooks/use-eqty-data.js';
 import { useStockList } from '../../lib/hooks/use-stock-list.js';
@@ -41,33 +53,10 @@ import { ConfirmCancelled, useConfirm } from '../../lib/hooks/use-confirm.js';
 
 const DELETE_COL_W = 32;
 
-/**
- * Row payload — flat record so dynamic sectors literally see
- * ``{...stock, ...metrics, ...evidence}`` and arbitrary evidence keys
- * resolve via ``row[key]`` without indirection.
- */
-interface ListRow extends StockStats, Record<string, unknown> {
-  readonly code: string;
-  readonly name: string;
-  readonly statsReady: boolean;
-}
-
-/**
- * Built-in column keys covered by the standard stat columns; evidence
- * keys colliding with these are folded into the standard column rather
- * than producing a duplicate.
- */
-const BUILTIN_KEYS: ReadonlySet<string> = new Set([
-  'name',
-  'code',
-  'price',
-  'chgPct',
-  'turnoverRate',
-  'turnover',
-  'consecUp',
-  'consecUpDays',
-  'statsReady',
-]);
+// `ListRow`, `BUILTIN_KEYS`, `buildRows`, `flattenEvidence`,
+// `formatRelativeTime`, sort comparators and evidence-cell helpers all
+// live in `lib/fp/eq-list-fp.ts` — pure modules with their own unit
+// tests. This file holds only the React layer (state, hooks, JSX).
 
 interface SortState {
   readonly key: string;
@@ -301,53 +290,6 @@ export function FeatEqList(): React.ReactElement {
   );
 }
 
-function buildRows(
-  codes: readonly string[],
-  meta: ReadonlyMap<string, StockMetaDto>,
-  klineByCode: ReadonlyMap<string, readonly KlineBar[]>,
-  evidenceMap: Readonly<Record<string, Readonly<Record<string, unknown>>>> | null,
-): readonly ListRow[] {
-  const rows: ListRow[] = [];
-  for (const code of codes) {
-    const m = meta.get(code);
-    const bars = klineByCode.get(code);
-    const stats = bars === undefined ? null : deriveStats(bars);
-    const rawEvidence = evidenceMap?.[code] ?? {};
-    const evidence = flattenEvidence(rawEvidence);
-    // {...stock, ...evidence, ...metrics} — kline-derived metrics win
-    // last so they override anything the screening evaluator emitted
-    // under the same key (the built-in column already shows the kline
-    // value; the evidence column has been filtered out upstream).
-    const row: Record<string, unknown> = {
-      ...m,
-      ...evidence,
-      code,
-      name: m?.name ?? code,
-      statsReady: stats !== null,
-      price: stats?.price ?? 0,
-      chgPct: stats?.chgPct ?? null,
-      turnoverRate: stats?.turnoverRate ?? null,
-      turnover: stats?.turnover ?? null,
-      consecUpDays: stats?.consecUpDays ?? 0,
-    };
-    rows.push(row as ListRow);
-  }
-  return rows;
-}
-
-/**
- * Flatten one stock's evaluator evidence and coerce numeric strings.
- *
- * The screening service emits a nested shape:
- *
- *     { metrics: { amount: "5.3e9", pct_chg_qfq: "0.034", ... },
- *       window:  ["2025-04-03", "2026-04-30"] }
- *
- * The list-panel renders one column per leaf key, so we lift every
- * dict-valued field's children into the parent and turn decimal-as-
- * string values into numbers for sort + format. Non-dict values
- * (arrays, scalars) pass through unchanged.
- */
 function useUiHydrated(): boolean {
   const [hydrated, setHydrated] = useState(() => useUiStore.persist.hasHydrated());
   useEffect(() => {
@@ -358,39 +300,6 @@ function useUiHydrated(): boolean {
     return unsub;
   }, [hydrated]);
   return hydrated;
-}
-
-function flattenEvidence(
-  raw: Readonly<Record<string, unknown>>,
-): Readonly<Record<string, unknown>> {
-  const out: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries(raw)) {
-    if (isPlainObject(v)) {
-      for (const [inK, inV] of Object.entries(v)) {
-        out[inK] = coerceNumeric(inV);
-      }
-    } else {
-      out[k] = coerceNumeric(v);
-    }
-  }
-  return out;
-}
-
-function isPlainObject(v: unknown): v is Record<string, unknown> {
-  if (v === null || typeof v !== 'object') return false;
-  if (Array.isArray(v)) return false;
-  const proto = Object.getPrototypeOf(v) as unknown;
-  return proto === null || proto === Object.prototype;
-}
-
-function coerceNumeric(v: unknown): unknown {
-  if (typeof v !== 'string') return v;
-  // Decimal-as-string round-tripped from Python; treat as number when
-  // the entire string parses cleanly. Leaves dates / arbitrary text
-  // alone.
-  if (!/^-?\d+(?:\.\d+)?$/.test(v)) return v;
-  const n = Number(v);
-  return Number.isFinite(n) ? n : v;
 }
 
 interface EditableTitleProps {
@@ -593,7 +502,10 @@ function DynamicRefreshBar({ sector }: { sector: Sector }): React.ReactElement {
       flexShrink={0}
     >
       <Text fontFamily="mono" fontSize="10px" color="ink3" letterSpacing="0.14em">
-        last screened: {formatRelativeTime(sector.lastScreenedAt)}
+        {/* eslint-disable-next-line no-restricted-globals -- relative-time
+            display ticks on render; pulling a Clock through props for a
+            cosmetic "Nm ago" label isn't worth the plumbing. */}
+        last screened: {formatRelativeTime(sector.lastScreenedAt, Date.now())}
       </Text>
       <Box flex="1" />
       {error !== null && (
@@ -609,21 +521,6 @@ function DynamicRefreshBar({ sector }: { sector: Sector }): React.ReactElement {
       />
     </Flex>
   );
-}
-
-function formatRelativeTime(iso: string | undefined): string {
-  if (iso === undefined) return '—';
-  const t = Date.parse(iso);
-  if (Number.isNaN(t)) return '—';
-  const diffSec = Math.floor((Date.now() - t) / 1000);
-  if (diffSec < 60) return `${String(diffSec)}s ago`;
-  const diffMin = Math.floor(diffSec / 60);
-  if (diffMin < 60) return `${String(diffMin)}m ago`;
-  const diffH = Math.floor(diffMin / 60);
-  if (diffH < 24) return `${String(diffH)}h ago`;
-  const diffD = Math.floor(diffH / 24);
-  if (diffD < 30) return `${String(diffD)}d ago`;
-  return new Date(t).toISOString().slice(0, 10);
 }
 
 interface ColumnDef {
@@ -828,30 +725,6 @@ function derivedColumn(
   };
 }
 
-type EvidenceColumnKind = 'cny' | 'chgPct' | 'raw';
-
-/**
- * Pick a display formatter for a dynamic-sector evidence key based on
- * the screening evaluator's column-name conventions:
- *
- *   - `amount`               → CNY notional (万 / 亿)
- *   - `*pct*`                → change-pct (signed, two-decimal %)
- *   - `*period_return*`      → change-pct (period total return, fraction)
- *   - `*rate*`               → change-pct (turnover_rate etc., fraction)
- *   - everything else        → raw formatter (numbers / strings / arrays)
- *
- * Match is on lowercased substring so casing variations (`pct_chg_qfq`,
- * `PERIOD_RETURN_240D`, `TurnoverRate`) all hit the right branch.
- */
-function evidenceColumnKind(key: string): EvidenceColumnKind {
-  const k = key.toLowerCase();
-  if (k === 'amount') return 'cny';
-  if (k.includes('pct')) return 'chgPct';
-  if (k.includes('period_return')) return 'chgPct';
-  if (k.includes('rate')) return 'chgPct';
-  return 'raw';
-}
-
 function renderEvidenceCell(kind: EvidenceColumnKind, raw: unknown): React.ReactNode {
   if (kind === 'cny') {
     return <CnyCell value={toNumberOrNull(raw)} />;
@@ -864,16 +737,6 @@ function renderEvidenceCell(kind: EvidenceColumnKind, raw: unknown): React.React
       {formatEvidence(raw)}
     </Text>
   );
-}
-
-function toNumberOrNull(raw: unknown): number | null {
-  if (typeof raw === 'number' && Number.isFinite(raw)) return raw;
-  if (typeof raw === 'string') {
-    if (!/^-?\d+(?:\.\d+)?$/.test(raw)) return null;
-    const n = Number(raw);
-    return Number.isFinite(n) ? n : null;
-  }
-  return null;
 }
 
 interface ScrollGridProps {
@@ -1279,42 +1142,3 @@ function CnyCell({ value }: { value: number | null }): React.ReactElement {
   );
 }
 
-function compareRows(a: ListRow, b: ListRow, key: string): number {
-  const va = sortValue(a, key);
-  const vb = sortValue(b, key);
-  if (va === null && vb === null) return 0;
-  if (va === null) return -1;
-  if (vb === null) return 1;
-  if (typeof va === 'number' && typeof vb === 'number') return va - vb;
-  return String(va).localeCompare(String(vb));
-}
-
-function sortValue(r: ListRow, key: string): number | string | null {
-  if (key === 'name') return r.name;
-  if (key === 'code') return r.code;
-  if (key === 'price') return r.statsReady ? r.price : null;
-  if (key === 'chgPct') return r.chgPct;
-  if (key === 'turnoverRate') return r.turnoverRate;
-  if (key === 'turnover') return r.turnover;
-  if (key === 'consecUp') return r.consecUpDays;
-  if (key.startsWith('ev:')) {
-    const k = key.slice(3);
-    return evidenceSortKey(r[k]);
-  }
-  return null;
-}
-
-function evidenceSortKey(v: unknown): number | string | null {
-  if (typeof v === 'number') return v;
-  if (typeof v === 'boolean') return v ? 1 : 0;
-  if (v === null || v === undefined) return null;
-  return String(v);
-}
-
-function formatEvidence(v: unknown): string {
-  if (v === null || v === undefined) return '—';
-  if (typeof v === 'number') return Number.isInteger(v) ? String(v) : v.toFixed(2);
-  if (typeof v === 'string') return v;
-  if (typeof v === 'boolean') return v ? 'true' : 'false';
-  return JSON.stringify(v);
-}
