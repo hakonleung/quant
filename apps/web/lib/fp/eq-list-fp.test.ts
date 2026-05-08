@@ -30,11 +30,8 @@ const bars: KlineBar[] = [
     low: 1690,
     close: 1740,
     volume: 1_000_000,
-    amount: 1_700_000_000,
-    open_qfq: 1700,
-    high_qfq: 1750,
-    low_qfq: 1690,
-    close_qfq: 1740,
+    turnover: 1_700_000_000,
+    turnoverRate: 0.5,
     ma5: 1730,
     ma10: 1720,
     ma20: 1710,
@@ -47,11 +44,8 @@ const bars: KlineBar[] = [
     low: 1735,
     close: 1750,
     volume: 950_000,
-    amount: 1_660_000_000,
-    open_qfq: 1740,
-    high_qfq: 1760,
-    low_qfq: 1735,
-    close_qfq: 1750,
+    turnover: 1_660_000_000,
+    turnoverRate: 0.45,
     ma5: 1735,
     ma10: 1725,
     ma20: 1715,
@@ -106,8 +100,8 @@ describe('flattenEvidence', () => {
   });
   it('coerces numeric leaf strings into numbers', () => {
     const out = flattenEvidence({ price: '99.5', name: '茅台' });
-    expect(out.price).toBe(99.5);
-    expect(out.name).toBe('茅台');
+    expect(out['price']).toBe(99.5);
+    expect(out['name']).toBe('茅台');
   });
 });
 
@@ -119,9 +113,9 @@ describe('buildRows', () => {
     expect(rows).toHaveLength(1);
     const row = rows[0]!;
     expect(row.code).toBe('600519');
-    expect(row.name).toBe('贵州茅台');
+    expect(row['name']).toBe('贵州茅台');
     expect(row.statsReady).toBe(true);
-    expect(typeof row.price).toBe('number');
+    expect(typeof row['price']).toBe('number');
   });
 
   it('emits a placeholder row when kline is missing', () => {
