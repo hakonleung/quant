@@ -65,9 +65,18 @@ type ClockFn = () => Date;
 // eslint-disable-next-line no-restricted-globals -- only Date bridge in this file; pure formatter takes the resulting Date as input
 const SYSTEM_CLOCK: ClockFn = () => new Date();
 
+/**
+ * Wall-clock string updated once per second. Initial state is empty so
+ * SSR and the first client render emit the same text node — the real
+ * timestamp is filled in by the first effect, after hydration. A
+ * `useState(() => formatClock(now()))` initializer would have run on
+ * both server and client a few ms apart and tripped React's "Text
+ * content does not match server-rendered HTML" hydration check.
+ */
 export function useClock(now: ClockFn = SYSTEM_CLOCK): string {
-  const [iso, setIso] = useState<string>(() => formatClock(now()));
+  const [iso, setIso] = useState<string>('');
   useEffect(() => {
+    setIso(formatClock(now()));
     const t = setInterval(() => {
       setIso(formatClock(now()));
     }, 1000);

@@ -13,13 +13,17 @@
  * still wants the 36px touch targets even though it lays out as
  * `tablet`. We therefore expose both axes and let callers pick.
  *
- * SSR safety: server render assumes `desktop` + fine pointer (the
- * dominant historical viewport). The first client effect reconciles
- * with the real `matchMedia` result. Components that change layout on
- * `mode` should accept the brief flash or render `null` until mounted.
+ * SSR safety: server renders assume `desktop` + fine pointer (the
+ * dominant historical viewport) and **the first client render returns
+ * the same snapshot** so React's hydration text-content check passes.
+ * The reconcile to the real `matchMedia` result happens in the first
+ * effect (post-commit), at which point a re-render flips into the
+ * actual mode. Earlier the hook used `useSyncExternalStore` with a
+ * different `getSnapshot` value, which produced "Text content does
+ * not match server-rendered HTML" warnings on tablet / mobile widths.
  */
 
-import { useSyncExternalStore } from 'react';
+import { useEffect, useState } from 'react';
 
 export type ViewportMode = 'mobile' | 'tablet' | 'desktop';
 
@@ -47,45 +51,29 @@ function readSnapshot(): ViewportSnapshot {
   return { mode, width, coarsePointer };
 }
 
-let cached: ViewportSnapshot = SSR_SNAPSHOT;
-
-function getSnapshot(): ViewportSnapshot {
-  // Memoise so React's `useSyncExternalStore` snapshot equality check
-  // returns the *same* reference between renders when nothing changed —
-  // otherwise every render counts as an external store update and
-  // forces every consumer to re-render.
-  const next = readSnapshot();
-  if (
-    cached.mode === next.mode &&
-    cached.width === next.width &&
-    cached.coarsePointer === next.coarsePointer
-  ) {
-    return cached;
-  }
-  cached = next;
-  return cached;
-}
-
-function getServerSnapshot(): ViewportSnapshot {
-  return SSR_SNAPSHOT;
-}
-
-function subscribe(notify: () => void): () => void {
-  if (typeof window === 'undefined') return () => undefined;
-  // resize fires for both width and (on iOS) on-screen-keyboard show.
-  // The pointer media-query rarely fires post-load but we still listen
-  // so plugged-in mice / detached keyboards swap into fine pointer.
-  const pointerMq = window.matchMedia('(pointer: coarse)');
-  window.addEventListener('resize', notify);
-  pointerMq.addEventListener('change', notify);
-  return () => {
-    window.removeEventListener('resize', notify);
-    pointerMq.removeEventListener('change', notify);
-  };
+function snapshotEqual(a: ViewportSnapshot, b: ViewportSnapshot): boolean {
+  return a.mode === b.mode && a.width === b.width && a.coarsePointer === b.coarsePointer;
 }
 
 export function useViewport(): ViewportSnapshot {
-  return useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
+  const [snap, setSnap] = useState<ViewportSnapshot>(SSR_SNAPSHOT);
+  useEffect(() => {
+    const update = (): void => {
+      setSnap((prev) => {
+        const next = readSnapshot();
+        return snapshotEqual(prev, next) ? prev : next;
+      });
+    };
+    update();
+    const pointerMq = window.matchMedia('(pointer: coarse)');
+    window.addEventListener('resize', update);
+    pointerMq.addEventListener('change', update);
+    return () => {
+      window.removeEventListener('resize', update);
+      pointerMq.removeEventListener('change', update);
+    };
+  }, []);
+  return snap;
 }
 
 /** Convenience boolean for shell-level layout swaps. */
