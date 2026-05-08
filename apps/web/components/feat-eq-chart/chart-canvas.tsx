@@ -25,17 +25,26 @@ import { Box } from '@chakra-ui/react';
 import type { KlineBar } from '@quant/shared';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import { sparseIndices, type MaKey } from '../../lib/fp/kline-chart.js';
+import { type MaKey } from '../../lib/fp/kline-chart.js';
+import {
+  buildMaPath,
+  computeCandleGeometry,
+  dateAxisTickIndices,
+  maxVolumeIn,
+  priceAxisTicks,
+  type CandleGeometry,
+} from '../../lib/fp/chart-render-helpers.js';
 import {
   clampViewport,
   fitVisibleViewport,
-  indexAtX,
   maxPanPx,
   priceBounds,
   visibleSlice,
   type ChartViewport,
 } from '../../lib/fp/chart-view.js';
 import { fonts, palette } from '../../lib/theme/tokens.js';
+
+import { useChartPointer } from './use-chart-pointer.js';
 
 export const PRICE_AXIS_W = 48;
 export const TOP_PAD = 8;
@@ -90,17 +99,6 @@ export const MA_COLORS: Readonly<Record<MaKey, string>> = {
   ma20: '#ec4899',
   ma60: '#10b981',
 };
-
-/** Euclidean distance between two pointer positions. Module-level so
- *  the hot-path doesn't reallocate it on every move. */
-function pointerDistance(
-  a: { readonly clientX: number; readonly clientY: number },
-  b: { readonly clientX: number; readonly clientY: number },
-): number {
-  const dx = a.clientX - b.clientX;
-  const dy = a.clientY - b.clientY;
-  return Math.hypot(dx, dy);
-}
 
 export function totalChartHeight(
   priceH: number,
@@ -214,28 +212,24 @@ export function ChartCanvas({
     [slice],
   );
 
-  const dragRef = useRef<{
-    startClientX: number;
-    startPan: number;
-    moved: boolean;
-  } | null>(null);
-  // Active pointers (mouse / pen / touch). The map lets us spot the
-  // moment a second finger lands and pivot the gesture from "pan" to
-  // "pinch-zoom". Cleared on pointerup / pointercancel.
-  const pointersRef = useRef<Map<number, { clientX: number; clientY: number }>>(new Map());
-  const pinchRef = useRef<{
-    startDist: number;
-    startCandleW: number;
-    /** Bar index under the pinch midpoint when the gesture began —
-     *  we keep that bar pinned to its original screen X so the user
-     *  zooms *into* whatever they're holding. */
-    anchorIdx: number | null;
-    anchorScreenX: number;
-  } | null>(null);
-
-  // Drag-pan via window listeners is no longer required — pointer
-  // capture (set in onPointerDown) keeps move/up events firing on the
-  // SVG even after the finger leaves the chart bounds.
+  // Pointer / pinch state and handlers live in the dedicated hook so
+  // this file stays under the 400-line ceiling. The dragRef is exposed
+  // so the cursor can flip to `grabbing` while a pan is active.
+  const { onPointerDown, onPointerMove, onPointerUp, onPointerCancel, onPointerLeave, dragRef } =
+    useChartPointer({
+      interactive,
+      bars,
+      slice,
+      vp,
+      setVp,
+      innerW,
+      priceH,
+      priceAxisW,
+      inverseY,
+      ...(setHoverIdx !== undefined ? { setHoverIdx } : {}),
+      ...(setHoverPrice !== undefined ? { setHoverPrice } : {}),
+      ...(onBarClick !== undefined ? { onBarClick } : {}),
+    });
 
   // Auto-fit candleW so ~`DEFAULT_VISIBLE_BARS` show on first paint.
   // Triggered once per (series, width-becomes-known) tuple — refusing
@@ -267,276 +261,108 @@ export function ChartCanvas({
     if (vp.panPx > upper) setVp(clampViewport({ ...vp, panPx: upper }));
   }, [interactive, vp, bars.length, innerW, setVp]);
 
-  /**
-   * Pointer events unify mouse / pen / touch. Single-pointer drag
-   * pans (existing behaviour); two-pointer drag pinches to adjust
-   * `candleW`. Touch interactions never paint a hover crosshair —
-   * touch has no hover semantics and the persistent crosshair would
-   * just look like a stuck artifact after a tap.
-   */
-  const onPointerDown = (e: React.PointerEvent<SVGSVGElement>): void => {
-    if (!interactive) return;
-    pointersRef.current.set(e.pointerId, { clientX: e.clientX, clientY: e.clientY });
-    // setPointerCapture keeps move/up events firing on the SVG even
-    // when the pointer leaves its bounds — replaces the previous
-    // window-level mouse listeners.
-    e.currentTarget.setPointerCapture(e.pointerId);
+  // ----- pre-compute renderables (all memoised) -----
+  // Candle / volume geometry depends on the visible slice + viewport
+  // + price scale; recomputing it on every mouse-move-driven hover
+  // re-render dominated the chart's hot path. Memoising drops the
+  // hover path to a near-no-op render.
+  const volMax = useMemo(
+    () => maxVolumeIn(bars, slice.startIdx, slice.count),
+    [bars, slice.startIdx, slice.count],
+  );
+  const candleGeom: readonly CandleGeometry[] = useMemo(
+    () =>
+      computeCandleGeometry({
+        bars,
+        sliceStartIdx: slice.startIdx,
+        sliceCount: slice.count,
+        stride: slice.stride,
+        firstX: slice.firstX,
+        candleW: vp.candleW,
+        scaleY,
+        priceH,
+        volH: effVolH,
+        volGap: effVolGap,
+        volMax,
+      }),
+    [bars, slice, vp.candleW, scaleY, priceH, effVolH, effVolGap, volMax],
+  );
+  const maPaths: Record<MaKey, string> = useMemo(
+    () => ({
+      ma5: buildMaPath(bars, slice.startIdx, slice.count, slice.stride, slice.firstX, vp.candleW, scaleY, 'ma5'),
+      ma10: buildMaPath(bars, slice.startIdx, slice.count, slice.stride, slice.firstX, vp.candleW, scaleY, 'ma10'),
+      ma20: buildMaPath(bars, slice.startIdx, slice.count, slice.stride, slice.firstX, vp.candleW, scaleY, 'ma20'),
+      ma60: buildMaPath(bars, slice.startIdx, slice.count, slice.stride, slice.firstX, vp.candleW, scaleY, 'ma60'),
+    }),
+    [bars, slice, vp.candleW, scaleY],
+  );
+  const priceTicks = useMemo(() => priceAxisTicks(bounds.min, bounds.max, 5), [bounds]);
+  const dateTickIdx = useMemo(
+    () => dateAxisTickIndices(slice.startIdx, slice.count),
+    [slice.startIdx, slice.count],
+  );
 
-    if (pointersRef.current.size === 2) {
-      // Pivot single-pointer drag → pinch.
-      dragRef.current = null;
-      const [a, b] = [...pointersRef.current.values()];
-      if (a !== undefined && b !== undefined) {
-        const startDist = pointerDistance(a, b);
-        if (startDist > 0) {
-          const rect = e.currentTarget.getBoundingClientRect();
-          const midX = (a.clientX + b.clientX) / 2 - rect.left - priceAxisW;
-          const anchorIdx = indexAtX(midX, slice, bars.length);
-          pinchRef.current = {
-            startDist,
-            startCandleW: vp.candleW,
-            anchorIdx,
-            anchorScreenX: midX,
-          };
-        }
-      }
-      return;
-    }
-    if (pointersRef.current.size > 2) return; // ignore extra fingers
-
-    // Single-pointer = drag-pan. Same gesture for mouse and one-finger
-    // touch; the existing pan logic was already pointer-agnostic.
-    dragRef.current = {
-      startClientX: e.clientX,
-      startPan: vp.panPx,
-      moved: false,
-    };
-  };
-
-  const onPointerMove = (e: React.PointerEvent<SVGSVGElement>): void => {
-    if (!interactive) return;
-    const rec = pointersRef.current.get(e.pointerId);
-    if (rec !== undefined) {
-      pointersRef.current.set(e.pointerId, { clientX: e.clientX, clientY: e.clientY });
-    }
-
-    const pinch = pinchRef.current;
-    if (pinch !== null && pointersRef.current.size === 2) {
-      const [a, b] = [...pointersRef.current.values()];
-      if (a === undefined || b === undefined) return;
-      const dist = pointerDistance(a, b);
-      if (dist <= 0) return;
-      const ratio = dist / pinch.startDist;
-      const nextCandleW = pinch.startCandleW * ratio;
-      const nextVp = clampViewport({ ...vp, candleW: nextCandleW });
-      // Anchor: keep the bar under the original midpoint at the same
-      // screen X by adjusting panPx — without this, pinching would
-      // always zoom around the right edge (latest bar) and the user
-      // would lose whatever they pinched.
-      if (pinch.anchorIdx !== null) {
-        const stride = nextVp.candleW + nextVp.gap;
-        const totalSpan = bars.length * stride - nextVp.gap;
-        const upper = Math.max(0, totalSpan - innerW);
-        const desiredFirstX =
-          pinch.anchorScreenX - (pinch.anchorIdx - 0) * stride;
-        const desiredLatestRightX = desiredFirstX + bars.length * stride - nextVp.gap;
-        const nextPan = Math.min(upper, Math.max(0, desiredLatestRightX - innerW));
-        setVp({ ...nextVp, panPx: nextPan });
-      } else {
-        setVp(nextVp);
-      }
-      return;
-    }
-
-    const drag = dragRef.current;
-    if (drag !== null) {
-      const dx = e.clientX - drag.startClientX;
-      if (Math.abs(dx) > 2) drag.moved = true;
-      const upper = maxPanPx(bars.length, vp, innerW);
-      const nextPan = Math.min(upper, Math.max(0, drag.startPan + dx));
-      setVp(clampViewport({ ...vp, panPx: nextPan }));
-      return;
-    }
-
-    // Hover crosshair — mouse / pen only. Touch never produces a
-    // "hover" without a contact, so suppressing this branch on touch
-    // avoids leaving a stuck crosshair after a tap.
-    if (e.pointerType === 'touch') return;
-    const rect = e.currentTarget.getBoundingClientRect();
-    const x = e.clientX - rect.left - priceAxisW;
-    const y = e.clientY - rect.top;
-    if (x >= 0 && y >= 0 && y <= priceH) {
-      const idx = indexAtX(x, slice, bars.length);
-      setHoverIdx?.(idx);
-      setHoverPrice?.(inverseY(y));
-    } else {
-      setHoverIdx?.(null);
-      setHoverPrice?.(null);
-    }
-  };
-
-  const onPointerUp = (e: React.PointerEvent<SVGSVGElement>): void => {
-    if (!interactive) return;
-    const wasPinching = pinchRef.current !== null;
-    pointersRef.current.delete(e.pointerId);
-    try {
-      e.currentTarget.releasePointerCapture(e.pointerId);
-    } catch {
-      /* pointer was already released */
-    }
-
-    if (pointersRef.current.size < 2) {
-      pinchRef.current = null;
-    }
-
-    // After lifting one finger of a pinch, keep the remaining finger
-    // active as a fresh drag — anchored to its current position so
-    // there's no jump.
-    if (wasPinching && pointersRef.current.size === 1) {
-      const [remaining] = [...pointersRef.current.values()];
-      if (remaining !== undefined) {
-        dragRef.current = {
-          startClientX: remaining.clientX,
-          startPan: vp.panPx,
-          moved: true,
-        };
-      }
-      return;
-    }
-
-    const drag = dragRef.current;
-    if (pointersRef.current.size === 0) {
-      dragRef.current = null;
-    }
-    // Click / tap commit — only when the gesture didn't move (≤2 px).
-    if (drag === null || drag.moved) return;
-    const rect = e.currentTarget.getBoundingClientRect();
-    const x = e.clientX - rect.left - priceAxisW;
-    const y = e.clientY - rect.top;
-    if (x < 0 || y < 0 || y > priceH) return;
-    const idx = indexAtX(x, slice, bars.length);
-    if (idx === null) return;
-    onBarClick?.(idx);
-  };
-
-  const onPointerCancel = (e: React.PointerEvent<SVGSVGElement>): void => {
-    if (!interactive) return;
-    pointersRef.current.delete(e.pointerId);
-    if (pointersRef.current.size < 2) pinchRef.current = null;
-    if (pointersRef.current.size === 0) dragRef.current = null;
-  };
-
-  const onPointerLeave = (e: React.PointerEvent<SVGSVGElement>): void => {
-    if (!interactive) return;
-    // Touch pointers don't have a "left the canvas" hover state.
-    if (e.pointerType === 'touch') return;
-    setHoverIdx?.(null);
-    setHoverPrice?.(null);
-  };
-
-  // ----- pre-compute renderables -----
-  const candles: React.ReactNode[] = [];
-  const volBars: React.ReactNode[] = [];
-  let volMax = 0;
-  for (let i = slice.startIdx; i < slice.startIdx + slice.count; i += 1) {
-    const b = bars[i];
-    if (b === undefined) continue;
-    if (b.volume > volMax) volMax = b.volume;
-  }
-
-  for (let i = slice.startIdx; i < slice.startIdx + slice.count; i += 1) {
-    const b = bars[i];
-    if (b === undefined) continue;
-    const x = xForIndex(i);
-    const up = b.close >= b.open;
-    const col = up ? palette.light.up : palette.light.down;
-    const top = scaleY(Math.max(b.open, b.close));
-    const bot = scaleY(Math.min(b.open, b.close));
-    const isFocused = focusIdx === i;
-    // Chinese-market convention: 阳线 (up, red here) renders hollow —
-    // body has no fill, only a coloured stroke; 阴线 (down, green)
-    // renders solid. Hollow up-candles read as a clearly distinct
-    // shape against solid down-candles even when colours wash out
-    // (low contrast / colour-blindness).
-    const bodyH = Math.max(1, bot - top);
-    const wickX = x + vp.candleW / 2;
-    const highY = scaleY(b.high);
-    const lowY = scaleY(b.low);
-    candles.push(
-      <g key={`c-${String(i)}`}>
-        {isFocused && (
-          <rect
-            x={x - 1}
-            y={0}
-            width={vp.candleW + 2}
-            height={priceH + effVolGap + effVolH}
-            fill="rgba(184,117,20,0.08)"
-          />
-        )}
-        {/* Upper wick: from high down to body top. */}
-        {highY < top && <line x1={wickX} x2={wickX} y1={highY} y2={top} stroke={col} />}
-        {/* Lower wick: from body bottom down to low. Drawing two
-            segments rather than a single high→low wick avoids the
-            wick line crossing the inside of a hollow up-candle body
-            (it would otherwise read as an extra vertical line through
-            the empty rectangle). */}
-        {lowY > top + bodyH && (
-          <line x1={wickX} x2={wickX} y1={top + bodyH} y2={lowY} stroke={col} />
-        )}
-        {up ? (
-          <rect
-            x={x + 0.5}
-            y={top + 0.5}
-            width={Math.max(1, vp.candleW - 1)}
-            height={Math.max(1, bodyH - 1)}
-            fill="none"
-            stroke={col}
-            strokeWidth={1}
-          />
-        ) : (
-          <rect x={x} y={top} width={vp.candleW} height={bodyH} fill={col} />
-        )}
-      </g>,
-    );
-    if (showVolume) {
-      const vh = volMax === 0 ? 0 : (b.volume / volMax) * (volH - 4);
-      volBars.push(
+  // Render arrays — cheap maps over the memoised geometry; only the
+  // focus-highlighted candle / hovered volume bar's opacity changes
+  // when focusIdx flips, but React's diff handles that at the JSX
+  // level since the underlying geometry is reference-stable.
+  const candles: React.ReactNode[] = candleGeom.map((c) => (
+    <g key={`c-${String(c.idx)}`}>
+      {focusIdx === c.idx && (
         <rect
-          key={`v-${String(i)}`}
-          x={x}
-          y={priceH + VOL_GAP + (volH - vh)}
+          x={c.x - 1}
+          y={0}
+          width={vp.candleW + 2}
+          height={priceH + effVolGap + effVolH}
+          fill="rgba(184,117,20,0.08)"
+        />
+      )}
+      {c.highY < c.top && (
+        <line
+          x1={c.wickX}
+          x2={c.wickX}
+          y1={c.highY}
+          y2={c.top}
+          stroke={c.isUp ? palette.light.up : palette.light.down}
+        />
+      )}
+      {c.lowY > c.top + c.bodyH && (
+        <line
+          x1={c.wickX}
+          x2={c.wickX}
+          y1={c.top + c.bodyH}
+          y2={c.lowY}
+          stroke={c.isUp ? palette.light.up : palette.light.down}
+        />
+      )}
+      {c.isUp ? (
+        <rect
+          x={c.x + 0.5}
+          y={c.top + 0.5}
+          width={Math.max(1, vp.candleW - 1)}
+          height={Math.max(1, c.bodyH - 1)}
+          fill="none"
+          stroke={palette.light.up}
+          strokeWidth={1}
+        />
+      ) : (
+        <rect x={c.x} y={c.top} width={vp.candleW} height={c.bodyH} fill={palette.light.down} />
+      )}
+    </g>
+  ));
+  const volBars: React.ReactNode[] = showVolume
+    ? candleGeom.map((c) => (
+        <rect
+          key={`v-${String(c.idx)}`}
+          x={c.x}
+          y={c.volY}
           width={vp.candleW}
-          height={Math.max(1, vh)}
-          fill={col}
-          opacity={focusIdx === null || focusIdx === i ? 0.85 : 0.4}
-        />,
-      );
-    }
-  }
-
-  const maPaths: Record<MaKey, string> = { ma5: '', ma10: '', ma20: '', ma60: '' };
-  (['ma5', 'ma10', 'ma20', 'ma60'] as const).forEach((k) => {
-    let started = false;
-    for (let i = slice.startIdx; i < slice.startIdx + slice.count; i += 1) {
-      const b = bars[i];
-      if (b === undefined) continue;
-      const v = b[k];
-      if (v === null) continue;
-      const x = xForIndex(i) + vp.candleW / 2;
-      const y = scaleY(v).toFixed(1);
-      maPaths[k] += `${started ? 'L' : 'M'}${String(x.toFixed(1))},${y} `;
-      started = true;
-    }
-  });
-
-  const priceTickCount = 5;
-  const priceTicks: number[] = [];
-  for (let i = 0; i < priceTickCount; i += 1) {
-    priceTicks.push(bounds.min + ((bounds.max - bounds.min) / (priceTickCount - 1)) * i);
-  }
-
-  const targetDateTicks = Math.max(2, Math.min(8, Math.round(slice.count / 12)));
-  const dateTickIdx = sparseIndices(slice.count, targetDateTicks).map((k) => slice.startIdx + k);
+          height={Math.max(1, c.volH)}
+          fill={c.isUp ? palette.light.up : palette.light.down}
+          opacity={focusIdx === null || focusIdx === c.idx ? 0.85 : 0.4}
+        />
+      ))
+    : [];
 
   return (
     <Box ref={wrapRef} w="100%" h={`${String(totalH)}px`} position="relative">
