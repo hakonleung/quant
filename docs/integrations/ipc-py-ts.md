@@ -51,6 +51,8 @@ ArrowFlightClient (apps/api/src/adapters/)  ───> quant_rpc/server.py
 | watch      | `watch.quote_one`                                                               | 单只盘中行情（含 `amount` / `volume`） |
 | watch      | `watch.universe_refresh`                                                        | 整组刷新                            |
 | blacklist  | `compute_ashare_blacklist`                                                      | 重算 A 股噪音黑名单（cron 触发）      |
+| ta         | `get_cached_ta_one` / `analyze_ta_one`                                          | 单只 90D 量价 AI 分析（cache + paid，Kimi Pro 优先）  |
+| ledger     | `analyze_ledger`                                                                | 个人账本 30 日 AI 复盘（paid，Kimi Pro 优先）；入参 `entries: list[{date, pnl_amount, closing_position, closing_provided, cash_flow, derived_daily_pct}]`，最多 30 条；返回 `payload_json` 单行表（camelCase 与 `LedgerAnalysisSchema` 对齐） |
 
 ## 错误契约
 

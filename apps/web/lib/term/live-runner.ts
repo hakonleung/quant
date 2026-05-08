@@ -22,7 +22,13 @@
  */
 
 import { z } from 'zod';
-import { QuantError, WatchTaskSchema } from '@quant/shared';
+import {
+  enrichEntries,
+  QuantError,
+  validateLedger,
+  WatchTaskSchema,
+  type LedgerEntry,
+} from '@quant/shared';
 import {
   MockCache,
   type DataActionConfig,
@@ -34,15 +40,21 @@ import {
 
 import { apiGet, apiPost } from '../api/client.js';
 import {
+  analyzeLedger,
   analyzeManySentiment,
   analyzeSentiment,
   analyzeTa,
+  createLedgerEntry,
+  deleteLedgerEntry,
+  getCachedLedgerAnalysis,
   getCachedMarketSentiment,
   getCachedSentiment,
   getCachedTaAnalysis,
   getStockMeta,
   listKline,
+  listLedgerEntries,
   listStockSnapshots,
+  patchLedgerEntry,
   runNlScreen,
 } from '../api/endpoints.js';
 import { fetchSectors, putSectors } from '../api/sectors.js';
@@ -90,6 +102,9 @@ const REVALIDATE_AFTER: Readonly<Record<string, readonly RevalidateScope[]>> = {
   'sector.refreshDynamic': ['sectors'],
   'watch.upsert': ['watch'],
   'watch.remove': ['watch'],
+  'ledger.upsert': ['ledger'],
+  'ledger.remove': ['ledger'],
+  'analyze.ledger': ['ledger'],
 };
 
 type Fetcher = (args: never, signal: AbortSignal) => unknown | Promise<unknown>;
@@ -268,6 +283,47 @@ function buildFetchers(deps: LiveRunnerDeps): Record<string, Fetcher> {
         throw new QuantError('WATCH_CODE_NOT_FOUND', `watch ${market}/${code} not found`);
       }
       return { market, code };
+    },
+
+    'ledger.list': async () => {
+      const entries = await listLedgerEntries();
+      const validation = validateLedger(entries);
+      if (!validation.ok) {
+        // Server-validated; should never happen unless someone hand-edited
+        // the JSON file under our feet. Surface so the user can fix it.
+        throw new QuantError(validation.error.code, validation.error.message);
+      }
+      return enrichEntries(entries);
+    },
+
+    'ledger.upsert': async ({ entry }: { entry: LedgerEntry }) => {
+      // Try create first; if the date already exists, fall through to PATCH.
+      try {
+        return await createLedgerEntry(entry);
+      } catch {
+        const body: { pnlAmount?: string; closingPosition?: string | null } = {
+          pnlAmount: entry.pnlAmount,
+        };
+        if (entry.closingPosition !== undefined) {
+          body.closingPosition = entry.closingPosition ?? null;
+        } else {
+          body.closingPosition = null;
+        }
+        return patchLedgerEntry(entry.date, body);
+      }
+    },
+
+    'ledger.remove': async ({ date }: { date: string }) => {
+      await deleteLedgerEntry(date);
+      return { date };
+    },
+
+    'analyze.ledger': async ({ force }: { force?: boolean }) => {
+      if (force !== true) {
+        const cached = await getCachedLedgerAnalysis();
+        if (cached !== null) return cached;
+      }
+      return analyzeLedger(force === true);
     },
   };
 }

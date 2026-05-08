@@ -30,6 +30,7 @@ from quant_core.errors import QuantError
 from quant_core.ports.stock_meta_source import StockMetaSource
 from quant_core.services.financials_service import FinancialsService
 from quant_core.services.kline_service import KlineService
+from quant_core.services.ledger_service import LedgerService
 from quant_core.services.news_sentiment_service import NewsSentimentService
 from quant_core.services.nl_to_dsl_service import NlToDslService
 from quant_core.services.pattern_service import PatternService
@@ -58,6 +59,7 @@ from quant_rpc.ops.financials import (
 )
 from quant_rpc.ops.kline import ListKlineWatermarksHandler, SyncKlineForCodeHandler
 from quant_rpc.ops.kline_read import ListKlineBulkLastNHandler, ListKlineForCodeHandler
+from quant_rpc.ops.ledger import AnalyzeLedgerHandler
 from quant_rpc.ops.nl_screen import NlScreenHandler
 from quant_rpc.ops.pattern import FindSimilarPatternsHandler
 from quant_rpc.ops.screen_ops import NlToDslHandler, ScreenRunHandler
@@ -188,6 +190,18 @@ def main() -> int:
         ta_service = None
         log.warning("ta LLM not configured — analyze_ta ops disabled: %s", exc)
 
+    # Personal-ledger AI analysis. Same Kimi-Pro-preferred chain as ``ta``;
+    # if no LLM keys are present, the service is left None and the gateway
+    # surfaces a clear ``LLM_FAILED`` for the analyze op.
+    ledger_service: LedgerService | None
+    try:
+        ledger_chain = build_llm_client_chain(prefer_provider="moonshot")
+        ledger_service = LedgerService(llm=ledger_chain, clock=clock)
+        log.info("ledger service ready (chain: %s)", ledger_chain.name)
+    except QuantError as exc:
+        ledger_service = None
+        log.warning("ledger LLM not configured — analyze_ledger op disabled: %s", exc)
+
     registry = HandlerRegistry()
     registry.register(GetStockMetaBatchHandler(meta_service))
     registry.register(ListByIndustryHandler(meta_service))
@@ -209,6 +223,7 @@ def main() -> int:
     registry.register(AnalyzeManyStockSentimentHandler(sentiment_service))
     registry.register(GetCachedTaOneHandler(ta_cache, clock))
     registry.register(AnalyzeTaOneHandler(ta_service))
+    registry.register(AnalyzeLedgerHandler(ledger_service))
     watch_source = AKShareWatchSource()
     watch_service = WatchQuoteService(quotes=watch_source, universe=watch_source)
     registry.register(WatchQuoteOneHandler(watch_service))

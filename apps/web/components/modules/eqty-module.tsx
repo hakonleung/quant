@@ -45,6 +45,7 @@ import { FeatEqList } from '../feat-eq-list/feat-eq-list.js';
 import { FeatAiSec } from '../feat-ai-sec/feat-ai-sec.js';
 import { FeatSecList } from '../feat-sec-list/feat-sec-list.js';
 import { FeatAiEq } from '../feat-ai-eq/feat-ai-eq.js';
+import { FeatLedger } from '../feat-ledger/feat-ledger.js';
 import { FeatWatchLive } from '../feat-watch-live/feat-watch-live.js';
 
 export function EqtyModule(): React.ReactElement {
@@ -79,6 +80,7 @@ export function EqtyModule(): React.ReactElement {
       <Column width={`${String(rightWidth)}px`}>
         <FeatAiSec />
         {code !== null && <FeatAiEq code={code} />}
+        <FeatLedger />
         <FeatWatchLive />
       </Column>
     </Flex>

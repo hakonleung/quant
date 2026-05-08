@@ -47,6 +47,11 @@ export const MONO_ICON_MAP = {
   restore: { glyph: '▢', scale: 1.1, mt: -0.5 },
   up: { glyph: '↑' },
   down: { glyph: '↓' },
+  edit: { glyph: '✎', scale: 1.1 },
+  close: { glyph: '×' },
+  upload: { glyph: '↥', scale: 1.2 },
+  download: { glyph: '↧', scale: 1.2 },
+  ai: { glyph: '✺', scale: 1.1 },
 } as const satisfies Record<string, MonoIconConfig>;
 
 export type MonoIconKey = keyof typeof MONO_ICON_MAP;

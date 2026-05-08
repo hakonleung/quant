@@ -5,6 +5,7 @@ import { BlacklistModule } from './modules/blacklist/blacklist.module.js';
 import { ChannelCommandService } from './modules/channel/channel-command.service.js';
 import { ChannelModule } from './modules/channel/channel.module.js';
 import { KlineModule } from './modules/kline/kline.module.js';
+import { LedgerModule } from './modules/ledger/ledger.module.js';
 import { OrchestrationModule } from './modules/orchestration/orchestration.module.js';
 import { PatternModule } from './modules/pattern/pattern.module.js';
 import { ScreenModule } from './modules/screen/screen.module.js';
@@ -27,6 +28,7 @@ import { WatchModule } from './modules/watch/watch.module.js';
     StockMetaModule,
     OrchestrationModule,
     KlineModule,
+    LedgerModule,
     SentimentModule,
     ScreenModule,
     PatternModule,

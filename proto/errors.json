@@ -73,6 +73,24 @@
       "description": "Watch task with the same (market, code) already exists."
     },
     {
+      "name": "LEDGER_DUPLICATE_DATE",
+      "number": 205,
+      "http": 409,
+      "description": "Ledger entry for the given date already exists."
+    },
+    {
+      "name": "LEDGER_FIRST_NEEDS_CLOSING_POSITION",
+      "number": 206,
+      "http": 409,
+      "description": "Earliest ledger entry must include closingPosition (anchor for derived chain)."
+    },
+    {
+      "name": "LEDGER_INVALID_ENTRY",
+      "number": 207,
+      "http": 400,
+      "description": "Ledger entry payload failed semantic validation (date / decimal shape)."
+    },
+    {
       "name": "PATTERN_REFERENCE_LOOKAHEAD",
       "number": 300,
       "http": 400,

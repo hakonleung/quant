@@ -2,9 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { ALL_ACTIONS, findAction, listActions } from '../actions/registry.js';
 
 describe('action registry', () => {
-  it('exposes 16 unique action ids (golden)', () => {
+  it('exposes 20 unique action ids (golden)', () => {
     const ids = ALL_ACTIONS.map((a) => a.id);
-    expect(ids.length).toBe(16);
+    expect(ids.length).toBe(20);
     expect(new Set(ids).size).toBe(ids.length);
   });
 

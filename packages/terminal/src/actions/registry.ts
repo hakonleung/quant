@@ -6,7 +6,16 @@
  * Live runners attach behavior on top.
  */
 
-import { TaAnalysisSchema, type TaAnalysis } from '@quant/shared';
+import {
+  EnrichedLedgerEntrySchema,
+  LedgerAnalysisSchema,
+  LedgerEntrySchema,
+  TaAnalysisSchema,
+  type EnrichedLedgerEntry,
+  type LedgerAnalysis,
+  type LedgerEntry,
+  type TaAnalysis,
+} from '@quant/shared';
 import { z } from 'zod';
 import type { DataActionConfig } from './types.js';
 
@@ -310,6 +319,48 @@ export const watchRemoveAction: DataActionConfig<
   invalidates: () => [['watch.list']],
 };
 
+// ---------- ledger ----------
+
+export const ledgerListAction: DataActionConfig<
+  Record<string, never>,
+  readonly EnrichedLedgerEntry[]
+> = {
+  id: 'ledger.list',
+  kind: 'read',
+  summary: 'List the personal ledger as enriched entries (chain filled).',
+  args: z.object({}).strict(),
+  result: z.array(EnrichedLedgerEntrySchema),
+  cacheKey: () => ['ledger.list'],
+};
+
+export const ledgerUpsertAction: DataActionConfig<{ entry: LedgerEntry }, LedgerEntry> = {
+  id: 'ledger.upsert',
+  kind: 'write',
+  summary: 'Create or update one ledger entry.',
+  args: z.object({ entry: LedgerEntrySchema }),
+  result: LedgerEntrySchema,
+  invalidates: () => [['ledger.list'], ['analyze.ledger']],
+};
+
+export const ledgerRemoveAction: DataActionConfig<{ date: string }, { date: string }> = {
+  id: 'ledger.remove',
+  kind: 'write',
+  summary: 'Delete one ledger entry by date.',
+  args: z.object({ date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/u) }),
+  result: z.object({ date: z.string() }),
+  invalidates: () => [['ledger.list'], ['analyze.ledger']],
+};
+
+export const analyzeLedgerAction: DataActionConfig<{ force?: boolean }, LedgerAnalysis> = {
+  id: 'analyze.ledger',
+  kind: 'paid',
+  summary: '30-day personal ledger AI review (LLM, Kimi Pro).',
+  args: z.object({ force: z.boolean().optional() }),
+  result: LedgerAnalysisSchema,
+  cacheKey: () => ['analyze.ledger'],
+  invalidates: () => [['analyze.ledger']],
+};
+
 export const ALL_ACTIONS = [
   stockListAction,
   stockInfoAction,
@@ -327,6 +378,10 @@ export const ALL_ACTIONS = [
   watchListAction,
   watchUpsertAction,
   watchRemoveAction,
+  ledgerListAction,
+  ledgerUpsertAction,
+  ledgerRemoveAction,
+  analyzeLedgerAction,
 ] as const;
 
 const byId = new Map<string, DataActionConfig<unknown, unknown>>();

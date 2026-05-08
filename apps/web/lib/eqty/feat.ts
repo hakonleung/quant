@@ -45,6 +45,9 @@ export const Feat = {
 
   // TERM — keyboard-driven command surface
   Terminal: 'TERM.MAIN',
+
+  // LDG — personal ledger (daily P/L journal + AI review)
+  Ledger: 'LDG.MAIN',
 } as const;
 
 export type Feat = (typeof Feat)[keyof typeof Feat];
@@ -82,4 +85,5 @@ export const FEAT_CONFIG_MAP: Readonly<Record<Feat, FeatConfig>> = {
   [Feat.WatchLive]: { gridArea: 'R3', cyber: true, defaultMinimized: true },
   [Feat.ChannelLive]: { cyber: true, defaultMinimized: true, bodyOverlay: true },
   [Feat.Terminal]: { cyber: true, defaultMinimized: true },
+  [Feat.Ledger]: { defaultMinimized: true },
 };

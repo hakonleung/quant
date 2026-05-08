@@ -9,6 +9,7 @@ import { cacheCommand } from './cache.js';
 import { clearCommand } from './clear.js';
 import { focusCommand } from './focus.js';
 import { helpCommand } from './help.js';
+import { ledgerCommand } from './ledger.js';
 import { sectorCommand } from './sector.js';
 import { stockCommand } from './stock.js';
 import { screenCommand } from './screen.js';
@@ -22,6 +23,7 @@ export {
   clearCommand,
   focusCommand,
   helpCommand,
+  ledgerCommand,
   sectorCommand,
   stockCommand,
   screenCommand,
@@ -36,6 +38,7 @@ export function createDefaultRegistry(): CommandRegistry {
   r.register(sectorCommand);
   r.register(analyzeCommand);
   r.register(watchCommand);
+  r.register(ledgerCommand);
   r.register(screenCommand);
   r.register(updateCommand);
   r.register(cacheCommand);

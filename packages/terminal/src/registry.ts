@@ -33,7 +33,15 @@ export interface UiStoreShim {
  *   watch      — watch tasks (mostly SSE-driven; included for symmetry)
  *   all        — everything above
  */
-export type RevalidateScope = 'meta' | 'kline' | 'sentiment' | 'ta' | 'sectors' | 'watch' | 'all';
+export type RevalidateScope =
+  | 'meta'
+  | 'kline'
+  | 'sentiment'
+  | 'ta'
+  | 'sectors'
+  | 'watch'
+  | 'ledger'
+  | 'all';
 
 export interface CommandStores {
   readonly ui: UiStoreShim;

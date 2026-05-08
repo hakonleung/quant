@@ -9,6 +9,9 @@
 
 import {
   KlineBarSchema,
+  LedgerAnalysisSchema,
+  LedgerEntrySchema,
+  LedgerSnapshotSchema,
   MarketSentimentSchema,
   NlScreenResultSchema,
   NlToDslResultSchema,
@@ -19,6 +22,9 @@ import {
   StockSnapshotDtoSchema,
   TaAnalysisSchema,
   type KlineBar,
+  type LedgerAnalysis,
+  type LedgerEntry,
+  type LedgerSnapshot,
   type MarketSentiment,
   type NlScreenResult,
   type NlToDslResult,
@@ -192,6 +198,82 @@ export async function analyzeTa(code: string, bypassCache = false): Promise<TaAn
   return apiPost(`/api/ta/analyze_one`, bypassCache ? { code, bypassCache } : { code }, (raw) =>
     TaAnalysisSchema.parse(raw),
   );
+}
+
+// ---------- ledger ----------
+
+const LedgerEntryListSchema = z.array(LedgerEntrySchema);
+
+export async function listLedgerEntries(): Promise<readonly LedgerEntry[]> {
+  return safeList(`/api/ledger`, LedgerEntrySchema);
+}
+
+export async function createLedgerEntry(entry: LedgerEntry): Promise<LedgerEntry> {
+  return apiPost(`/api/ledger`, entry, (raw) => LedgerEntrySchema.parse(raw));
+}
+
+export async function patchLedgerEntry(
+  date: string,
+  body: { pnlAmount?: string; closingPosition?: string | null },
+): Promise<LedgerEntry> {
+  // Spread is the cleanest way to satisfy `exactOptionalPropertyTypes:true`
+  // — fields stay omitted instead of explicitly `undefined`.
+  const payload: Record<string, unknown> = {};
+  if (body.pnlAmount !== undefined) payload['pnlAmount'] = body.pnlAmount;
+  if (Object.prototype.hasOwnProperty.call(body, 'closingPosition')) {
+    payload['closingPosition'] = body.closingPosition ?? null;
+  }
+  return apiPatch(
+    `/api/ledger/${encodeURIComponent(date)}`,
+    payload,
+    (raw) => LedgerEntrySchema.parse(raw),
+  );
+}
+
+export async function deleteLedgerEntry(date: string): Promise<void> {
+  await apiDelete(`/api/ledger/${encodeURIComponent(date)}`);
+}
+
+export async function importLedger(entries: readonly LedgerEntry[]): Promise<LedgerSnapshot> {
+  return apiPost(
+    `/api/ledger/import`,
+    { entries: [...entries] },
+    (raw) => LedgerSnapshotSchema.parse(raw),
+  );
+}
+
+/** Direct download — does not parse, returns the URL the browser should hit. */
+export const LEDGER_EXPORT_URL = '/api/ledger/export';
+
+export async function getCachedLedgerAnalysis(): Promise<LedgerAnalysis | null> {
+  return safeOne(`/api/ledger/analyze`, LedgerAnalysisSchema);
+}
+
+export async function analyzeLedger(bypassCache = false): Promise<LedgerAnalysis> {
+  return apiPost(
+    `/api/ledger/analyze`,
+    bypassCache ? { bypassCache } : {},
+    (raw) => LedgerAnalysisSchema.parse(raw),
+  );
+}
+
+// ledger entry-list export for callers that want to revalidate their cache
+// without parsing the raw entries again.
+export { LedgerEntryListSchema };
+
+async function apiPatch<T>(path: string, body: unknown, parse: (raw: unknown) => T): Promise<T> {
+  const res = await fetch(path, {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(`${path} → ${String(res.status)}`);
+  return parse((await res.json()) as unknown);
+}
+
+async function apiDelete(path: string): Promise<void> {
+  const res = await fetch(path, { method: 'DELETE' });
+  if (!res.ok) throw new Error(`${path} → ${String(res.status)}`);
 }
 
 async function safeList<T>(path: string, schema: z.ZodType<T>): Promise<readonly T[]> {
