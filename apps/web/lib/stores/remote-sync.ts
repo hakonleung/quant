@@ -84,7 +84,10 @@ export function shallowArrayEqual<T>(a: readonly T[], b: readonly T[]): boolean 
   return true;
 }
 
-export function jsonEqual<T>(a: T, b: T): boolean {
-  if (a === b) return true;
-  return JSON.stringify(a) === JSON.stringify(b);
-}
+// Re-export so existing call sites keep their import path while the
+// implementation lives in `lib/fp/` (CLAUDE.md §2.5.1 — pure-function
+// core asset). Replaced the historical JSON.stringify-based comparator;
+// `structuralEqual` short-circuits on first divergence with no string
+// allocation, which kept the debounce timer accurate when sectors with
+// embedded `evidence` records grew past a few hundred KB.
+export { structuralEqual as jsonEqual } from '../fp/structural-equal.js';
