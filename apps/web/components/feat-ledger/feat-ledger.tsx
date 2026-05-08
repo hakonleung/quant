@@ -13,6 +13,7 @@ import { Box, Flex, Text } from '@chakra-ui/react';
 import { LEDGER_EXPORT_URL } from '../../lib/api/endpoints.js';
 import { Feat } from '../../lib/eqty/feat.js';
 import { ConfirmCancelled, useConfirm } from '../../lib/hooks/use-confirm.js';
+import { notify } from '../../lib/stores/notify.store.js';
 import {
   useLedgerAnalyzeMutation,
   useLedgerCachedAnalysis,
@@ -97,10 +98,13 @@ export function FeatLedger(): React.ReactElement {
         cancelLabel: '取消',
       });
       await mutations.remove.mutateAsync(date);
+      notify.success({ title: `已删除 ${date}` });
     } catch (err) {
       // ConfirmCancelled is the user clicking "cancel" — not an error.
       if (err instanceof ConfirmCancelled) return;
-      setActionError(err instanceof Error ? err.message : String(err));
+      const message = err instanceof Error ? err.message : String(err);
+      setActionError(message);
+      notify.error({ title: '删除失败', body: message });
     }
   };
 
@@ -134,8 +138,11 @@ export function FeatLedger(): React.ReactElement {
     setAiOpen(true);
     try {
       await analyze.mutateAsync(force);
+      if (force) notify.success({ title: 'AI 复盘完成', body: '已替换缓存内容。' });
     } catch (err) {
-      setActionError(err instanceof Error ? err.message : String(err));
+      const message = err instanceof Error ? err.message : String(err);
+      setActionError(message);
+      notify.error({ title: 'AI 复盘失败', body: message });
     }
   };
 

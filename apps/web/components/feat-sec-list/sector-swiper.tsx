@@ -168,6 +168,14 @@ export function SectorSwiper({ children, height = 40 }: Props): React.ReactEleme
       >
         {children}
       </Flex>
+      {/* Edge fades — gradient overlays on each side that hint at
+          scrollable content beyond the chevron pill. They light up
+          only when the corresponding direction is actually available
+          so a fully-scrolled-to-end strip doesn't draw a phantom
+          shadow. `pointer-events: none` keeps clicks falling through
+          to the chips underneath. */}
+      {canPrev && <EdgeFade side="left" />}
+      {canNext && <EdgeFade side="right" />}
       {canPrev && (
         <NavPill
           dir="prev"
@@ -185,6 +193,28 @@ export function SectorSwiper({ children, height = 40 }: Props): React.ReactEleme
         />
       )}
     </Box>
+  );
+}
+
+function EdgeFade({ side }: { readonly side: 'left' | 'right' }): React.ReactElement {
+  return (
+    <Box
+      position="absolute"
+      top={0}
+      bottom={0}
+      width="36px"
+      left={side === 'left' ? 0 : 'auto'}
+      right={side === 'right' ? 0 : 'auto'}
+      pointerEvents="none"
+      zIndex={0}
+      aria-hidden="true"
+      style={{
+        background:
+          side === 'left'
+            ? 'linear-gradient(to right, var(--chakra-colors-panel) 0%, rgba(0,0,0,0) 100%)'
+            : 'linear-gradient(to left, var(--chakra-colors-panel) 0%, rgba(0,0,0,0) 100%)',
+      }}
+    />
   );
 }
 

@@ -81,12 +81,21 @@ interface StatProps {
 function Stat({ label, value, tone = 'flat', muted = false }: StatProps): React.ReactElement {
   // 涨红跌绿: positive → up (red), negative → down (green).
   const color = tone === 'pos' ? 'up' : tone === 'neg' ? 'down' : muted ? 'ink3' : 'ink';
+  // Redundant glyph so the up / down state is legible without colour
+  // — covers the ~8% of users with red-green colour-blindness and
+  // anyone reading on an e-ink / monochrome screen.
+  const glyph = tone === 'pos' ? '▲' : tone === 'neg' ? '▼' : '';
   return (
     <Box>
       <Text fontSize="9px" letterSpacing="0.16em" color="ink3" fontFamily="mono">
         {label.toUpperCase()}
       </Text>
       <Text fontSize="13px" color={color} fontFamily="mono" fontWeight="600">
+        {glyph !== '' && (
+          <Text as="span" mr="3px" aria-hidden="true">
+            {glyph}
+          </Text>
+        )}
         {value}
       </Text>
     </Box>

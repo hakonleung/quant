@@ -10,7 +10,7 @@
  * so the user never lands on a blank pane without an explanation.
  */
 
-import { Box, Flex, Text } from '@chakra-ui/react';
+import { Box, Flex } from '@chakra-ui/react';
 
 import { useUiStore } from '../../lib/stores/ui.store.js';
 import { FeatAiEq } from '../feat-ai-eq/feat-ai-eq.js';
@@ -21,6 +21,7 @@ import { FeatLedger } from '../feat-ledger/feat-ledger.js';
 import { FeatSecList } from '../feat-sec-list/feat-sec-list.js';
 import { FeatWatchLive } from '../feat-watch-live/feat-watch-live.js';
 import { MobileTabBar } from '../shell/mobile-tab-bar.js';
+import { EmptyState } from '../ui/empty-state.js';
 
 export function EqtyModuleMobile(): React.ReactElement {
   const tab = useUiStore((s) => s.mobileTab);
@@ -50,18 +51,5 @@ export function EqtyModuleMobile(): React.ReactElement {
 }
 
 function EmptyChart(): React.ReactElement {
-  return (
-    <Flex flex="1" align="center" justify="center" px="20px">
-      <Text
-        fontFamily="mono"
-        fontSize="12px"
-        color="ink3"
-        textAlign="center"
-        letterSpacing="0.04em"
-        lineHeight="1.6"
-      >
-        请先在 LIST 标签里选中一只股票
-      </Text>
-    </Flex>
-  );
+  return <EmptyState title="未选中股票" body={'切到 LIST 标签，点一只\n股票后再回来。'} />;
 }

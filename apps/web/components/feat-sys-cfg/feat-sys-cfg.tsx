@@ -23,21 +23,23 @@ import { useState } from 'react';
 
 import { Feat } from '../../lib/eqty/feat.js';
 import { BUILTIN_PRESETS, useLayoutStore } from '../../lib/stores/layout.store.js';
+import { useSettingsStore, type ThemeMode } from '../../lib/stores/settings.store.js';
 import { ColumnManager } from '../feat-eq-list/column-manager.js';
 import { FeatView } from '../feat-view/feat-view.js';
 
-type Section = 'presets' | 'columns';
+type Section = 'theme' | 'presets' | 'columns';
 
 const SECTIONS: ReadonlyArray<{
   readonly id: Section;
   readonly label: string;
 }> = [
+  { id: 'theme', label: 'theme' },
   { id: 'presets', label: 'presets' },
   { id: 'columns', label: 'columns' },
 ];
 
 export function FeatSysCfg(): React.ReactElement {
-  const [section, setSection] = useState<Section>('presets');
+  const [section, setSection] = useState<Section>('theme');
 
   return (
     <FeatView feat={Feat.SysCfg}>
@@ -52,11 +54,87 @@ export function FeatSysCfg(): React.ReactElement {
       >
         <SectionNav active={section} onSelect={setSection} />
         <Box flex="1" minW={0} h="100%" overflow="auto">
+          {section === 'theme' && <ThemeSection />}
           {section === 'presets' && <PresetsSection />}
           {section === 'columns' && <ColumnManager />}
         </Box>
       </Flex>
     </FeatView>
+  );
+}
+
+interface ThemeOption {
+  readonly id: ThemeMode;
+  readonly label: string;
+  readonly description: string;
+}
+
+const THEME_OPTIONS: readonly ThemeOption[] = [
+  {
+    id: 'light',
+    label: '浅色（日间）',
+    description: '默认 — 浅灰底 + 琥珀点缀，盘中长时间可读。',
+  },
+  {
+    id: 'dark',
+    label: '深色（夜盘）',
+    description:
+      '深色工作台（≠ TERM 的极客绿）— 仍是琥珀点缀，更柔和的 up / down 配色，弱光环境减少眩光。',
+  },
+];
+
+function ThemeSection(): React.ReactElement {
+  const theme = useSettingsStore((s) => s.theme);
+  const setTheme = useSettingsStore((s) => s.setTheme);
+  return (
+    <Flex direction="column" p="12px" gap="8px">
+      <Text
+        fontSize="9px"
+        letterSpacing="0.18em"
+        color="term.ink3"
+        textTransform="uppercase"
+        fontWeight="700"
+      >
+        theme
+      </Text>
+      {THEME_OPTIONS.map((opt) => {
+        const selected = theme === opt.id;
+        return (
+          <Box
+            key={opt.id}
+            as="button"
+            onClick={(): void => {
+              setTheme(opt.id);
+            }}
+            textAlign="left"
+            p="10px"
+            borderWidth="1px"
+            borderColor={selected ? 'term.green' : 'term.line'}
+            bg={selected ? 'term.bgElev' : 'transparent'}
+            color="term.ink"
+            cursor="pointer"
+            _hover={{ borderColor: 'term.green', color: 'term.green' }}
+          >
+            <Flex align="baseline" gap="8px">
+              <Text fontSize="12px" fontWeight="700" color={selected ? 'term.green' : 'term.ink'}>
+                {opt.label}
+              </Text>
+              {selected && (
+                <Text fontSize="9px" color="term.green" letterSpacing="0.18em" ml="auto">
+                  ACTIVE
+                </Text>
+              )}
+            </Flex>
+            <Text fontSize="11px" color="term.ink2" mt="4px" lineHeight="1.5">
+              {opt.description}
+            </Text>
+          </Box>
+        );
+      })}
+      <Text fontSize="10px" color="term.ink3" mt="4px" lineHeight="1.5">
+        // 首次访问读系统 prefers-color-scheme，之后这里的选择会写回 sys-cfg。
+      </Text>
+    </Flex>
   );
 }
 

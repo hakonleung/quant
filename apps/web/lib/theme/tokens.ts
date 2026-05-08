@@ -32,6 +32,36 @@ export const palette = {
     greenBg: '#e8f6ee',
     badgeBg: '#eef0f4',
   },
+  /**
+   * Dark workbench palette — distinct from `term.*` which carries the
+   * neon-CRT aesthetic. The dark workbench is meant to read as the
+   * regular pro UI under low-light / night-shift conditions: neutral
+   * graphite surfaces, the same amber accent (slightly brighter for
+   * AAA contrast against panel), softer up / down hues so a sea of
+   * red on the screening list doesn't strain the eye.
+   */
+  dark: {
+    bg: '#0d1014',
+    panel: '#11151b',
+    panel2: '#161b22',
+    panel3: '#1a2129',
+    line: '#1f2731',
+    line2: '#2a3340',
+    hover: '#1c232c',
+    ink: '#e6ebf2',
+    ink2: '#a8b2c0',
+    ink3: '#6f7888',
+    amber: '#e29e3a',
+    amberDark: '#c9852a',
+    amberBg: '#3a2810',
+    up: '#ff5566',
+    down: '#3fbf86',
+    blue: '#5aa0ff',
+    violet: '#9d80ff',
+    green: '#3fbf86',
+    greenBg: '#0f2a1d',
+    badgeBg: '#1a2129',
+  },
   term: {
     bg: '#06080a',
     panel: '#0a0e10',

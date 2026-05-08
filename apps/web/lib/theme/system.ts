@@ -69,8 +69,13 @@ const config = defineConfig({
       bg: '{colors.bg}',
       color: '{colors.ink}',
       fontFamily: '{fonts.body}',
-      fontSize: '12px',
-      lineHeight: '1.45',
+      // 13 px on the workbench is the legibility sweet spot — the
+      // dense table chrome stays compact, but body prose / form
+      // labels regain enough x-height to read for hours. Mobile gets
+      // a 1-px nudge in `app/layout.tsx` so the touch reading
+      // distance compensates for thumb-eye geometry.
+      fontSize: '13px',
+      lineHeight: '1.5',
     },
     '*': { boxSizing: 'border-box' },
     '.num, .mono': {

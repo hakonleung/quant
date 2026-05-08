@@ -17,11 +17,13 @@
  */
 
 import { Box } from '@chakra-ui/react';
-import { useEffect, type ReactNode } from 'react';
+import { useEffect, useRef, type ReactNode } from 'react';
 
 import { useCmdPaletteStore } from '../../lib/stores/cmd-palette.store.js';
 import { useLayoutStore } from '../../lib/stores/layout.store.js';
+import { useSettingsStore } from '../../lib/stores/settings.store.js';
 import { FeatCmdPalette } from '../feat-cmd-palette/feat-cmd-palette.js';
+import { FeatNotify } from '../feat-notify/feat-notify.js';
 import { FeatTermMain } from '../feat-term-main/feat-term-main.js';
 
 import { TopBar } from './top-bar.js';
@@ -37,6 +39,11 @@ export function AppShell({ children }: AppShellProps): React.ReactElement {
   // surface (the prompt) and ⌘K would conflict with xterm's own key
   // handling. The listener installs once on shell mount.
   useGlobalCmdKey({ enabled: mode !== 'term' });
+  // Reflect the persisted theme into a data-attribute on <html> so
+  // the CSS-var override in layout.tsx flips every Chakra colour
+  // token at once. The seeding pass also resolves `prefers-color-
+  // scheme` for first-time visitors before any pixel paints.
+  useThemeAttribute();
 
   if (mode === 'term') {
     // `100dvh` follows the on-screen-keyboard / iOS bottom bar so the
@@ -56,13 +63,13 @@ export function AppShell({ children }: AppShellProps): React.ReactElement {
         }}
       >
         <FeatTermMain />
+        <FeatNotify />
       </Box>
     );
   }
 
   return (
     <Box
-      as="main"
       h="100dvh"
       bg="bg"
       display="flex"
@@ -78,11 +85,18 @@ export function AppShell({ children }: AppShellProps): React.ReactElement {
         paddingRight: 'env(safe-area-inset-right)',
       }}
     >
+      {/* Visually-hidden until focused — the only Tab stop above the
+          topbar so keyboard users skip the ASCII brand + sys capsules
+          and land in the live workbench. */}
+      <a href="#main-content" className="skip-link">
+        跳到主内容
+      </a>
       <TopBar />
-      <Box flex="1" minH={0}>
+      <Box as="main" id="main-content" flex="1" minH={0}>
         {children}
       </Box>
       <FeatCmdPalette />
+      <FeatNotify />
     </Box>
   );
 }
@@ -108,4 +122,30 @@ function useGlobalCmdKey({ enabled }: { readonly enabled: boolean }): void {
       window.removeEventListener('keydown', onKey);
     };
   }, [enabled, toggle]);
+}
+
+/**
+ * Sync persisted theme → `<html data-theme="...">`. On first paint,
+ * seed the store from `prefers-color-scheme` so a user landing on
+ * the workbench from a system-dark device gets the dark workbench
+ * without a light flash.
+ */
+function useThemeAttribute(): void {
+  const theme = useSettingsStore((s) => s.theme);
+  const setTheme = useSettingsStore((s) => s.setTheme);
+  // Seed from system preference once. The settings store hydrates
+  // from the backend asynchronously; until then we use the OS hint
+  // so the first paint is correct on every visit.
+  const seededRef = useRef(false);
+  useEffect(() => {
+    if (seededRef.current) return;
+    seededRef.current = true;
+    if (typeof window === 'undefined') return;
+    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    if (prefersDark && theme === 'light') setTheme('dark');
+  }, [theme, setTheme]);
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    document.documentElement.dataset['theme'] = theme;
+  }, [theme]);
 }
