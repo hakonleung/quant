@@ -4,7 +4,7 @@
  *
  *   client.emit('subscribe',   { topics: ['watch.snapshot', ...] })
  *   client.emit('unsubscribe', { topics: [...] })
- *   client.emit('command',     { kind: 'channel.send', ... })  // TODO surface
+ *   client.emit('command',     { id: 'channel.send', args: {...} })
  *   server.emit('event',       { topic, ts, payload })
  *
  * Subscribed clients are placed in a Socket.IO room named after the

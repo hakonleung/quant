@@ -21,6 +21,7 @@ import { FlightWatchAdapter, WATCH_FLIGHT_CLIENT } from './flight-watch.adapter.
 import { WatchGroupStore } from './watch-group.store.js';
 import { WATCH_DATA_DIR, WatchTaskStore } from './watch-task.store.js';
 import { WatchUniverseStore } from './watch-universe.store.js';
+import { WatchInstructionHandler } from './instructions/watch.handler.js';
 import { WatchBroadcaster } from './watch.broadcaster.js';
 import { WatchController } from './watch.controller.js';
 import { WatchScheduler } from './watch.scheduler.js';
@@ -54,6 +55,7 @@ const DEFAULT_DATA_DIR = '../../data/watch';
     WatchService,
     WatchScheduler,
     WatchBroadcaster,
+    WatchInstructionHandler,
   ],
   exports: [WatchService, WatchScheduler],
 })

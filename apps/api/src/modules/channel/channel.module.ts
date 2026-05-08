@@ -15,11 +15,11 @@ import { EventEmitterModule } from '@nestjs/event-emitter';
 
 import { ChannelOutboundProcessor } from './bus/outbound.processor.js';
 import { ChannelBus, CHANNEL_OUTBOUND_QUEUE } from './bus/channel-bus.service.js';
-import { ChannelCommandService } from './channel-command.service.js';
 import { ChannelController } from './channel.controller.js';
 import { ChannelRegistry } from './channel.registry.js';
 import { ChannelService } from './channel.service.js';
 import { CHANNEL_CONFIG, loadChannelConfig } from './config/channel.config.js';
+import { ChannelSendHandler } from './instructions/channel-send.handler.js';
 
 @Module({
   imports: [
@@ -45,8 +45,8 @@ import { CHANNEL_CONFIG, loadChannelConfig } from './config/channel.config.js';
     ChannelBus,
     ChannelOutboundProcessor,
     ChannelService,
-    ChannelCommandService,
+    ChannelSendHandler,
   ],
-  exports: [ChannelService, ChannelCommandService],
+  exports: [ChannelService],
 })
 export class ChannelModule {}

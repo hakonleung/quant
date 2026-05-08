@@ -17,7 +17,7 @@ NestJS API process
 │  ├─ bus/outbound.processor.ts              # BullMQ Worker：发送、写 activity
 │  ├─ channel.registry.ts                    # 生命周期 + inbound 路由
 │  ├─ channel.service.ts                     # 公共门面（broadcast / send）
-│  ├─ channel-command.service.ts             # 实现 SocketCommandHandler
+│  ├─ instructions/channel-send.handler.ts   # 注册 channel.send InstructionSpec
 │  └─ channel.controller.ts                  # POST /api/channel/send  GET /api/channel/list
 └─ Redis (BullMQ) ── 队列名 channel.outbound
 ```
@@ -39,10 +39,18 @@ NestJS API process
    - 通过 `SocketBus.emit('channel.activity', ...)` 推前端。
    - 通过 `EventEmitter2.emit('channel.inbound', ...)`/`channel.inbound:<id>` 让其它 module 用 `@OnEvent` 订阅。
 
-### 前端 → 后端命令（TODO 体验）
+### 前端 → 后端命令
 
-- 前端 socket `command` 包 `{ kind: 'channel.send', channel, text, target? }`；服务端 `ChannelCommandService` 直接调 `ChannelService.send(...)`。
-- 当前未在 UI 暴露入口（feat-channel 暂为只读 feed）；schema / 通道完整、写第一个调用点即可启用。
+- 前端 socket `command` 包 `{ id: 'channel.send', args: { channel, text, target? } }`；服务端 `SocketInstructionAdapter` → `InstructionExecutor` → `ChannelSendHandler.execute` → `ChannelService.send(...)`。所有 socket 命令都经统一 [`InstructionRegistry`](./15-instructions.md)，没有 channel 专属分支。
+- 当前未在 UI 暴露入口（feat-channel 暂为只读 feed）；写第一个调用点即可启用。
+
+### IM 入站 → 指令回复闭环
+
+1. Slack/Feishu 入站消息经 `ChannelBus.publishInbound` 发出 `channel.inbound` 事件。
+2. `InstructionImListener`（`apps/api/src/modules/instruction/instruction.im.listener.ts`）订阅该事件 → 用共享 `parseInstructionLine(text, knownIds, { requirePrefix: true })` 解析。
+3. 没有 `/` 前缀的消息直接静默忽略；匹配到 spec 则交给 `InstructionExecutor` 执行。
+4. 结果 `formatResult(...)` 后通过 `ChannelService.send(channel, { kind: 'instruction.reply', target: msg.target ?? msg.sender }, ...)` 回推到同一频道。
+5. 用户在 Slack/Feishu 发 `/help`、`/focus 600519`、`/watch list` 等都能立即收到机器人回复。
 
 ## 配置（`apps/api/.env`）
 
@@ -68,7 +76,7 @@ NestJS API process
 
 - `apps/api/test/modules/channel/channel-config.spec.ts`：env 解析（缺 token、未启用、白名单过滤）。
 - `apps/api/test/modules/channel/channel.service.spec.ts`：广播 / 单发 / 与 registry 取交集 / 元数据透传。
-- `apps/api/test/modules/channel/channel-command.service.spec.ts`：socket 命令路由 + ping。
+- `apps/api/test/modules/instruction/*`：socket / IM / executor 单测（覆盖 channel.send + ping + IM 静默 + parse 错回复）。
 - adapter 单测 mock SDK；inbound 长连接走端到端契约测试（参考 `docs/integrations/ipc-py-ts.md`）。
 
 ## 复用 / 兼容

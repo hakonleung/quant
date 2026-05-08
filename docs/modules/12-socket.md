@@ -3,7 +3,7 @@
 ## 功能
 
 - 统一的 FE↔BE 实时通信通道，**替换** 原 `/api/watch/stream`、`/api/orchestration/queue/stream` 两路 SSE。
-- 双向：服务端推送（任务快照、队列快照、channel activity）+ 客户端命令（`channel.send`、`ping`，可扩展）。
+- 双向：服务端推送（任务快照、队列快照、channel activity）+ 客户端命令（任意已注册的 `InstructionSpec`，参见 [`15-instructions.md`](./15-instructions.md)）。
 - 单一 Socket.IO gateway，对应客户端 `socket.io-client` 单例；按 topic 分 Room，订阅者按 `subscribe` 入 room，只收订阅过的事件。
 
 ## 进程拓扑
@@ -14,7 +14,7 @@ Browser (Next dev :3000)
   │  WebSocket  (cross-origin, same-host different-port allowed by CORS)
   ▼
 NestJS API (:3001)
-  ├─ SocketModule.forRoot({ commandHandler: ChannelCommandService })
+  ├─ SocketModule.forRoot({ commandHandler: SocketInstructionAdapter })
   │  ├─ SocketBus       # 其它 module 注入它发布事件
   │  ├─ SocketGateway   # @WebSocketGateway，订阅、命令、事件分发
   │  └─ corsOriginCallback
@@ -40,9 +40,11 @@ NestJS API (:3001)
 ```
 client → server  subscribe   { topics: string[] }            ack: { ok, subscribed[] }
 client → server  unsubscribe { topics: string[] }            ack: { ok, unsubscribed[] }
-client → server  command     { kind: 'channel.send' | 'ping', ... }  ack: { ok, error?, detail? }
+client → server  command     { id: '<instruction-id>', args: {...} }  ack: { ok, error?, detail? }
 server → client  event       { topic, ts, payload }
 ```
+
+命令分派经 `SocketInstructionAdapter` → `InstructionExecutor.execute(id, args, { source: 'socket' })`，与 IM 入站走同一注册表（`docs/modules/15-instructions.md`）。
 
 CORS 通过 `apps/api/src/modules/socket/cors-origin.ts`：
 

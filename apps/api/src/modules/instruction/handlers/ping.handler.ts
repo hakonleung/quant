@@ -1,0 +1,32 @@
+import { Inject, Injectable } from '@nestjs/common';
+import { instructionId, okResult, type InstructionResult } from '@quant/shared';
+import { z } from 'zod';
+
+import type { InstructionCtx } from '../instruction.port.js';
+import { InstructionRegistrarBase } from '../instruction.provider.js';
+import { InstructionRegistry } from '../instruction.registry.js';
+import type { InstructionSpec } from '../instruction.types.js';
+
+const argsSchema = z.record(z.string()).default({});
+type Args = z.infer<typeof argsSchema>;
+
+@Injectable()
+export class PingHandler extends InstructionRegistrarBase<Args> {
+  readonly spec: InstructionSpec<Args> = {
+    id: instructionId('ping'),
+    summary: 'Round-trip latency probe; echoes args + traceId.',
+    argsSchema,
+  };
+
+  constructor(@Inject(InstructionRegistry) registry: InstructionRegistry) {
+    super(registry);
+  }
+
+  execute(args: Args, ctx: InstructionCtx): Promise<InstructionResult> {
+    const echo = Object.entries(args)
+      .map(([k, v]) => `${k}=${v}`)
+      .join(' ');
+    const tail = echo.length > 0 ? ` ${echo}` : '';
+    return Promise.resolve(okResult(`pong${tail} traceId=${ctx.traceId}`));
+  }
+}

@@ -10,6 +10,12 @@
  * surface. The toggle is driven by the persisted `appMode` slice in
  * `useLayoutStore`.
  *
+ * The terminal is the single instruction surface for the FE: a global
+ * ⌘K / Ctrl+K shortcut switches `appMode` to `term` so any keyboard
+ * user can drop into a command prompt from anywhere in the shell.
+ * Inside the terminal we leave the shortcut to xterm so the user can
+ * paste with ⌘V → ⌘K muscle memory.
+ *
  * Lives at the layout boundary so children only mount when the mode
  * actually shows them. That keeps the workbench's TanStack-Query
  * subscriptions and zustand selectors from running while the user is
@@ -20,17 +26,15 @@ import { Box } from '@chakra-ui/react';
 import dynamic from 'next/dynamic';
 import { useEffect, useRef, type ReactNode } from 'react';
 
-import { useCmdPaletteStore } from '../../lib/stores/cmd-palette.store.js';
 import { useLayoutStore } from '../../lib/stores/layout.store.js';
 import { useSettingsStore } from '../../lib/stores/settings.store.js';
-import { FeatCmdPalette } from '../feat-cmd-palette/feat-cmd-palette.js';
 import { FeatNotify } from '../feat-notify/feat-notify.js';
 
 import { TopBar } from './top-bar.js';
 
 // xterm + the entire `@quant/terminal` engine only run in `term` mode,
-// which is opt-in (toggled from the command palette). Code-split so a
-// user staying on the workbench never downloads the ~70 KB chunk.
+// which is opt-in (toggled from the topbar TERM chip or ⌘K). Code-split
+// so a user staying on the workbench never downloads the ~70 KB chunk.
 // `ssr: false` because xterm pokes the DOM at module init.
 const FeatTermMain = dynamic(
   () => import('../feat-term-main/feat-term-main.js').then((m) => ({ default: m.FeatTermMain })),
@@ -43,10 +47,8 @@ interface AppShellProps {
 
 export function AppShell({ children }: AppShellProps): React.ReactElement {
   const mode = useLayoutStore((s) => s.appMode);
-  // Global ⌘K / Ctrl+K opens the command palette anywhere outside
-  // the terminal. The terminal already provides its own command
-  // surface (the prompt) and ⌘K would conflict with xterm's own key
-  // handling. The listener installs once on shell mount.
+  // Global ⌘K / Ctrl+K drops the user into terminal mode anywhere
+  // outside it. Inside `term`, xterm owns the key.
   useGlobalCmdKey({ enabled: mode !== 'term' });
   // Reflect the persisted theme into a data-attribute on <html> so
   // the CSS-var override in layout.tsx flips every Chakra colour
@@ -104,7 +106,6 @@ export function AppShell({ children }: AppShellProps): React.ReactElement {
       <Box as="main" id="main-content" flex="1" minH={0}>
         {children}
       </Box>
-      <FeatCmdPalette />
       <FeatNotify />
     </Box>
   );
@@ -112,25 +113,28 @@ export function AppShell({ children }: AppShellProps): React.ReactElement {
 
 /**
  * Global Cmd/Ctrl+K listener. Bound at the shell so any focused
- * surface (other than the terminal) can invoke the palette. We ignore
- * the shortcut while typing in inputs / contenteditable so the user
- * can paste with ⌘V → ⌘K muscle memory without surprise.
+ * surface outside `term` mode can drop into the terminal. The
+ * `term` mode disables it so xterm keeps the shortcut for itself.
+ *
+ * The mode setter is read off the store inside the effect (rather than
+ * via a `useLayoutStore((s) => s.setAppMode)` selector) so we avoid
+ * destructuring a method off the state object — the linter's
+ * unbound-method rule trips on that pattern.
  */
 function useGlobalCmdKey({ enabled }: { readonly enabled: boolean }): void {
-  const toggle = useCmdPaletteStore((s) => s.toggle);
   useEffect(() => {
     if (!enabled) return;
     const onKey = (e: KeyboardEvent): void => {
       if (e.key !== 'k' && e.key !== 'K') return;
       if (!(e.metaKey || e.ctrlKey)) return;
       e.preventDefault();
-      toggle();
+      useLayoutStore.getState().setAppMode('term');
     };
     window.addEventListener('keydown', onKey);
     return () => {
       window.removeEventListener('keydown', onKey);
     };
-  }, [enabled, toggle]);
+  }, [enabled]);
 }
 
 /**

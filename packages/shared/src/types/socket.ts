@@ -77,26 +77,21 @@ export const SocketSubscribeRequestSchema = z
 export type SocketSubscribeRequest = z.infer<typeof SocketSubscribeRequestSchema>;
 
 /**
- * Client → server command (TODO surface). The gateway accepts and acks
- * but no UI uses it yet; design space is locked here so future commands
- * stay schema-validated from day one.
+ * Client → server command. Routed through the shared instruction
+ * registry on the BE side: `id` matches a registered `InstructionSpec`
+ * (e.g. `channel.send`, `ping`, `focus`, `screen`, ...). `args` is a
+ * loose object validated against the spec's zod `argsSchema` after
+ * dispatch.
+ *
+ * The registry is the single source of truth — adding a new socket
+ * command no longer requires editing this schema.
  */
-export const SocketCommandSchema = z.discriminatedUnion('kind', [
-  z
-    .object({
-      kind: z.literal('channel.send'),
-      channel: z.enum(['slack', 'feishu']),
-      text: z.string().min(1).max(16000),
-      target: z.string().min(1).optional(),
-    })
-    .strict(),
-  z
-    .object({
-      kind: z.literal('ping'),
-      payload: z.string().max(256).optional(),
-    })
-    .strict(),
-]);
+export const SocketCommandSchema = z
+  .object({
+    id: z.string().min(1).max(64),
+    args: z.record(z.unknown()).default({}),
+  })
+  .strict();
 export type SocketCommand = z.infer<typeof SocketCommandSchema>;
 
 export const SocketCommandAckSchema = z
