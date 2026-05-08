@@ -3,24 +3,29 @@
  *
  *   const state = useSocketTopic('watch.snapshot', WatchSnapshotPayloadSchema);
  *
- * Lifecycle:
- *   - on mount: emit `subscribe { topics: [topic] }` on the singleton
- *     socket, register an `event` listener that filters by topic, parse
- *     the payload via the supplied zod schema, and yield it.
- *   - on unmount: emit `unsubscribe` and remove the listener so a
- *     remounted hook does not double-subscribe.
+ * Lifecycle (handled by the singleton in `socket-client.ts`):
+ *   - on mount: bump the topic's ref count; the first subscriber emits
+ *     `subscribe { topics: [topic] }`, later ones piggy-back. The
+ *     dispatcher fans events out to every per-topic handler.
+ *   - on unmount: decrement; the final unsubscriber emits
+ *     `unsubscribe`, so no stale subscription survives a fast
+ *     remount/unmount cycle.
  *
- * Connection status (`connecting | open | error`) drives the FeatView
- * status dot uniformly across panes.
+ * Schema identity (the second argument) is intentionally **not** in the
+ * effect dependency list — schemas are typically module-level constants
+ * but callers occasionally inline `z.object(...)`, which would otherwise
+ * tear the socket subscription down on every render. The hook reads
+ * the latest schema through a ref so each event uses the current value
+ * without paying for a subscribe / unsubscribe round-trip.
  */
 
 'use client';
 
-import { SocketEnvelopeSchema, type SocketTopic } from '@quant/shared';
+import { type SocketTopic } from '@quant/shared';
 import { useEffect, useRef, useState } from 'react';
 import type { z } from 'zod';
 
-import { getSocket } from './socket-client.js';
+import { getSocket, subscribeTopic } from './socket-client.js';
 
 export type SocketStreamState<T> =
   | { readonly status: 'connecting'; readonly snapshot: null }
@@ -36,17 +41,16 @@ export function useSocketTopic<S extends z.ZodTypeAny>(
     status: 'connecting',
     snapshot: null,
   });
-  const stateRef = useRef(state);
-  stateRef.current = state;
+
+  // Always validate against the latest schema reference without forcing
+  // a new subscription when the caller passes an inline schema literal.
+  const schemaRef = useRef(schema);
+  schemaRef.current = schema;
 
   useEffect(() => {
     const socket = getSocket();
-
-    const onEvent = (raw: unknown): void => {
-      const env = SocketEnvelopeSchema.safeParse(raw);
-      if (!env.success) return;
-      if (env.data.topic !== topic) return;
-      const parsed = schema.safeParse(env.data.payload);
+    const unsubscribe = subscribeTopic(topic, (payload) => {
+      const parsed: z.SafeParseReturnType<unknown, T> = schemaRef.current.safeParse(payload);
       if (!parsed.success) {
         setState((prev) => ({
           status: 'error',
@@ -56,11 +60,8 @@ export function useSocketTopic<S extends z.ZodTypeAny>(
         return;
       }
       setState({ status: 'open', snapshot: parsed.data });
-    };
+    });
 
-    const onConnect = (): void => {
-      socket.emit('subscribe', { topics: [topic] });
-    };
     const onDisconnect = (): void => {
       setState((prev) => ({
         status: 'error',
@@ -68,23 +69,13 @@ export function useSocketTopic<S extends z.ZodTypeAny>(
         message: 'disconnected',
       }));
     };
-
-    if (socket.connected) {
-      socket.emit('subscribe', { topics: [topic] });
-    }
-    socket.on('connect', onConnect);
     socket.on('disconnect', onDisconnect);
-    socket.on('event', onEvent);
 
     return (): void => {
-      socket.off('connect', onConnect);
       socket.off('disconnect', onDisconnect);
-      socket.off('event', onEvent);
-      if (socket.connected) {
-        socket.emit('unsubscribe', { topics: [topic] });
-      }
+      unsubscribe();
     };
-  }, [topic, schema]);
+  }, [topic]);
 
   return state;
 }
