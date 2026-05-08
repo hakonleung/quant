@@ -908,6 +908,52 @@ function ScrollGrid({
     overscan: 12,
   });
 
+  // Cache the row index for the currently-focused code so the keyboard
+  // handler can step ±1 in O(1). `-1` means "no focus yet" — the first
+  // arrow press lands on row 0.
+  const focusedIndex = useMemo(() => {
+    if (focusedCode === null) return -1;
+    return rows.findIndex((r) => r.code === focusedCode);
+  }, [rows, focusedCode]);
+
+  // ArrowUp/Down step focus through the sorted rows when the grid (or
+  // any of its descendants) has keyboard focus. PageUp/Down jump 10
+  // rows; Home/End snap to the ends. The handler also auto-scrolls
+  // the new focus row into view via the virtualizer.
+  const onKeyDown = (e: React.KeyboardEvent<HTMLDivElement>): void => {
+    if (rows.length === 0) return;
+    const cur = focusedIndex < 0 ? -1 : focusedIndex;
+    let next: number | null = null;
+    switch (e.key) {
+      case 'ArrowDown':
+        next = cur < 0 ? 0 : Math.min(rows.length - 1, cur + 1);
+        break;
+      case 'ArrowUp':
+        next = cur < 0 ? 0 : Math.max(0, cur - 1);
+        break;
+      case 'PageDown':
+        next = cur < 0 ? 0 : Math.min(rows.length - 1, cur + 10);
+        break;
+      case 'PageUp':
+        next = cur < 0 ? 0 : Math.max(0, cur - 10);
+        break;
+      case 'Home':
+        next = 0;
+        break;
+      case 'End':
+        next = rows.length - 1;
+        break;
+      default:
+        return;
+    }
+    if (next === null || next === cur) return;
+    e.preventDefault();
+    const target = rows[next];
+    if (target === undefined) return;
+    onRowClick(target);
+    rowVirtualizer.scrollToIndex(next, { align: 'auto' });
+  };
+
   if (rows.length === 0) {
     return (
       <Box flex="1" overflow="auto" px="14px" py="14px">
@@ -919,7 +965,22 @@ function ScrollGrid({
   }
 
   return (
-    <Box ref={scrollRef} flex="1" overflow="auto" position="relative">
+    <Box
+      ref={scrollRef}
+      flex="1"
+      overflow="auto"
+      position="relative"
+      tabIndex={0}
+      role="listbox"
+      aria-label="股票列表"
+      aria-activedescendant={focusedCode !== null ? `eqlist-row-${focusedCode}` : undefined}
+      onKeyDown={onKeyDown}
+      // Focus ring is muted to match the dense workbench look. The
+      // outline is what tells keyboard users the grid is listening for
+      // ArrowUp/Down.
+      _focus={{ outline: 'none' }}
+      _focusVisible={{ boxShadow: '0 0 0 1px var(--chakra-colors-accent) inset' }}
+    >
       <Box w={`${String(totalWidth)}px`} minW="100%">
         <ColumnHeader columns={columns} sort={sort} setSort={setSort} removable={removable} />
         <Box
@@ -940,6 +1001,11 @@ function ScrollGrid({
                 focused={focusedCode !== null && row.code === focusedCode}
                 onClick={(): void => {
                   onRowClick(row);
+                  // Pull keyboard focus onto the grid so the user can
+                  // step around with the arrow keys without an extra
+                  // Tab. `closest` walks up because RowItem might
+                  // wrap the click target in nested boxes.
+                  scrollRef.current?.focus({ preventScroll: true });
                 }}
                 onRemove={
                   onRowRemove === null
@@ -1055,6 +1121,10 @@ function RowItem({
   const hasRemove = onRemove !== null;
   return (
     <Box
+      // `id` + ScrollGrid's `aria-activedescendant` give screen readers
+      // a stable handle on the keyboard-focused row without moving DOM
+      // focus off the grid container.
+      id={`eqlist-row-${row.code}`}
       position="absolute"
       top={0}
       left={0}
@@ -1070,7 +1140,8 @@ function RowItem({
       cursor="pointer"
       _hover={focused ? {} : { bg: 'hover' }}
       onClick={onClick}
-      role="group"
+      role="option"
+      aria-selected={focused}
     >
       {hasRemove && (
         <Box

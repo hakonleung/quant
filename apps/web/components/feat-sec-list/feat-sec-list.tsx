@@ -181,14 +181,23 @@ function SectorChip({
     return count === 0 ? null : sum / count;
   })();
 
+  // Two-row chip: sector name (compact) on top, pct underneath. The
+  // vertical layout cuts the chip's horizontal footprint roughly in
+  // half compared with the previous one-row design (name + pct + gaps
+  // shared a single line), so more sectors fit inside the same swiper
+  // viewport. Padding shrinks slightly to compensate for the added
+  // height — net pane height is unchanged.
   return (
     <Flex
       as="li"
       role="button"
       onClick={onClick}
-      align="center"
-      gap="6px"
-      px="10px"
+      direction="column"
+      align="flex-start"
+      justify="center"
+      gap="1px"
+      px="8px"
+      py="4px"
       borderRightWidth="1px"
       borderColor="line2"
       bg={selected ? 'accentBg' : 'panel'}
@@ -200,27 +209,39 @@ function SectorChip({
       whiteSpace="nowrap"
       data-testid={`sector-chip-${sector.id}`}
     >
-      {isDynamic && (
+      <Flex align="center" gap="4px" w="100%">
+        {isDynamic && (
+          <Text
+            fontFamily="mono"
+            fontSize="8px"
+            fontWeight="700"
+            letterSpacing="0.14em"
+            color="accent"
+            aria-label="dynamic sector"
+          >
+            [D]
+          </Text>
+        )}
         <Text
           fontFamily="mono"
-          fontSize="9px"
-          fontWeight="700"
-          letterSpacing="0.14em"
-          color="accent"
-          aria-label="dynamic sector"
+          fontSize="10px"
+          color={selected ? 'ink' : 'ink2'}
+          fontWeight={selected ? '700' : '500'}
+          letterSpacing="0.04em"
         >
-          [D]
+          {sector.name}
         </Text>
-      )}
-      <Text
-        fontFamily="mono"
-        fontSize="12px"
-        color={selected ? 'ink' : 'ink2'}
-        fontWeight={selected ? '700' : '500'}
-        letterSpacing="0.04em"
-      >
-        {sector.name}
-      </Text>
+        {onDelete !== undefined && (
+          <MonoButton
+            icon="delete"
+            label={`delete sector ${sector.name}`}
+            onClick={(e: React.MouseEvent<HTMLButtonElement>): void => {
+              e.stopPropagation();
+              onDelete();
+            }}
+          />
+        )}
+      </Flex>
       {avgChgPct !== null ? (
         <Text fontFamily="mono" fontSize="11px" color={avgChgPct >= 0 ? 'up' : 'down'}>
           {avgChgPct >= 0 ? '+' : ''}
@@ -230,16 +251,6 @@ function SectorChip({
         <Text fontFamily="mono" fontSize="11px" color="ink3">
           —
         </Text>
-      )}
-      {onDelete !== undefined && (
-        <MonoButton
-          icon="delete"
-          label={`delete sector ${sector.name}`}
-          onClick={(e: React.MouseEvent<HTMLButtonElement>): void => {
-            e.stopPropagation();
-            onDelete();
-          }}
-        />
       )}
     </Flex>
   );
