@@ -152,6 +152,7 @@ describe('sentimentToTerm', () => {
       theme: '行业景气复苏',
       driver: '需求边际改善',
       cachedAt: '2026-04-30T01:00:00.000Z',
+      result: 'analyst writeup',
     });
   });
 

@@ -192,26 +192,36 @@ function formatSentimentDetail(s: {
   theme: string;
   driver: string | null;
   cachedAt: string;
+  result: string;
 }): string {
-  // Detail mode: same fields plus framing prose so the pager has more
-  // than five lines to scroll through. This is the read-only document
-  // view; production code should pass an LLM-rendered narrative when
-  // available (`Sentiment.result` from the API).
-  return [
-    `# ${s.code} sentiment — detail`,
+  // Detail mode: header line of vitals followed by the verbatim LLM
+  // analyst write-up (`Sentiment.result`). When the cached payload
+  // predates the two-step pipeline `result` is empty — fall back to a
+  // skeleton so the pager has something to show + a hint that detail
+  // is unavailable. The narrative is appended *after* the vitals block
+  // so a `q` on the first frame still gives the user the headline data
+  // even on a tiny viewport.
+  const header = [
+    `# ${s.code} sentiment`,
     '',
     `score    : ${formatScore(s.score)}`,
     `theme    : ${s.theme}`,
     `driver   : ${s.driver ?? '—'}`,
     `cached   : ${s.cachedAt}`,
     '',
-    '## Reading',
-    '',
-    'Brief mode renders the cached summary inline.',
-    'Detail mode (this view) shows the same data in a',
-    'pageable document. Use j/k or arrows to scroll,',
-    'space for one viewport, / to search, q to close.',
-  ].join('\n');
+  ];
+  const body = s.result.trim();
+  if (body.length === 0) {
+    return [
+      ...header,
+      '## detail unavailable',
+      '',
+      'this cached entry predates the two-step pipeline that emits',
+      `the analyst write-up. run \`analyze ${s.code} --force\` to`,
+      'regenerate (paid).',
+    ].join('\n');
+  }
+  return [...header, body].join('\n');
 }
 
 function formatMarketSentiment(
@@ -231,22 +241,57 @@ function formatMarketSentiment(
 }
 
 function formatMarketSentimentDetail(
-  s: { codes: readonly string[]; score: number; themes: readonly string[]; cachedAt: string },
+  s: {
+    codes: readonly string[];
+    score: number;
+    themes: readonly string[];
+    cachedAt: string;
+    marketTrendSummary: string;
+    themeClusters: readonly {
+      label: string;
+      memberCount: number;
+      heatScore: number;
+      summary: string;
+    }[];
+    caveats: readonly string[];
+  },
   label: string,
 ): string {
-  return [
+  // Detail view layers the LLM-rendered narrative + per-cluster
+  // summaries on top of the brief vitals. Cluster heat scores are
+  // shown so the user can see which themes are driving the average.
+  const out: string[] = [
     `# sector ${label} — aggregate sentiment`,
     '',
     `members  : ${String(s.codes.length)}`,
     `score    : ${formatScore(s.score)}`,
     `cached   : ${s.cachedAt}`,
     '',
-    '## Themes',
-    ...(s.themes.length === 0 ? ['—'] : s.themes.map((t) => `  · ${t}`)),
-    '',
-    '## Members',
-    ...s.codes.map((c) => `  ${c}`),
-  ].join('\n');
+  ];
+  const trend = s.marketTrendSummary.trim();
+  if (trend.length > 0) {
+    out.push('## Trend', '', trend, '');
+  }
+  if (s.themeClusters.length > 0) {
+    out.push('## Themes');
+    for (const c of s.themeClusters) {
+      out.push(
+        '',
+        `### ${c.label}  (${String(c.memberCount)} codes, heat=${c.heatScore.toFixed(2)})`,
+      );
+      const summary = c.summary.trim();
+      if (summary.length > 0) out.push('', summary);
+    }
+    out.push('');
+  } else if (s.themes.length > 0) {
+    // Legacy payload — only labels, no narrative.
+    out.push('## Themes', ...s.themes.map((t) => `  · ${t}`), '');
+  }
+  if (s.caveats.length > 0) {
+    out.push('## Caveats', ...s.caveats.map((c) => `  ! ${c}`), '');
+  }
+  out.push('## Members', ...s.codes.map((c) => `  ${c}`));
+  return out.join('\n');
 }
 
 function formatScore(score: number): string {

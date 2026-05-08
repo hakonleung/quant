@@ -80,6 +80,10 @@ export function sentimentToTerm(s: SharedSentiment): TermSentiment {
     theme: s.theme,
     driver: s.driver.length === 0 ? null : s.driver,
     cachedAt: s.cachedAt,
+    // `result` is the LLM analyst write-up rendered by the pager in
+    // `analyze … detail` mode. Pre-pipeline cache entries have an
+    // empty string here — the detail formatter handles that case.
+    result: s.result,
   };
 }
 
@@ -98,6 +102,17 @@ export function marketSentimentToTerm(
     score: clamp(avg, -1, 1),
     themes: s.themeClusters.map((t) => t.label),
     cachedAt: s.fetchedAt,
+    // Carry the rich narrative + per-cluster summaries so the pager
+    // can render the sector detail view. The legacy summary projection
+    // (label-only `themes` array) stays so brief mode is unaffected.
+    marketTrendSummary: s.marketTrendSummary,
+    themeClusters: s.themeClusters.map((t) => ({
+      label: t.label,
+      memberCount: t.memberCount,
+      heatScore: t.heatScore,
+      summary: t.summary,
+    })),
+    caveats: [...s.caveats],
   };
 }
 

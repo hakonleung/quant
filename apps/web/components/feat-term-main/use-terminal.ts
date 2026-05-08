@@ -529,7 +529,10 @@ function renderFooter(term: Terminal, state: TerminalState, mem: RenderMem): str
   const spin = SPINNER_FRAMES[mem.spinnerTick % SPINNER_FRAMES.length] ?? '·';
 
   if (state.phase === 'interactive' && state.active !== null) {
-    return state.active.widget.render(state.active.state, cols);
+    // Pass live `term.rows` so size-aware widgets (pager) can fit
+    // their body to the actual viewport instead of the historical
+    // hard-coded 16-row default.
+    return state.active.widget.render(state.active.state, cols, term.rows);
   }
   if (state.phase === 'cancelling') {
     return paint(`${spin} cancelling…`, ANSI.yellow);

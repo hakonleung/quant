@@ -54,7 +54,15 @@ export interface InteractiveWidget<S, R> {
   readonly title: string;
   readonly initialState: S;
   readonly hints: (state: S) => readonly KeyHint[];
-  readonly render: (state: S, width: number) => string;
+  /**
+   * `width` is the terminal column count, `rows` (when provided) is the
+   * visible row count. Widgets that paint a fixed-height body (e.g.
+   * the pager) should resize themselves to `rows` so the body never
+   * scrolls off-screen on a small viewport (mobile term, split panes).
+   * Older widgets ignore `rows` — keeping it optional preserves their
+   * existing render signatures.
+   */
+  readonly render: (state: S, width: number, rows?: number) => string;
   readonly handleKey: (state: S, key: KeySpec) => WidgetStep<S, R>;
   /** Called when the session is frozen into history. */
   readonly snapshot: (state: S) => string;

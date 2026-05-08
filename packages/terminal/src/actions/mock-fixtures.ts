@@ -123,6 +123,19 @@ export function fixtureSentiment(code: string): Sentiment {
     theme: '行业景气复苏',
     driver: '需求边际改善',
     cachedAt: new Date().toISOString(),
+    // Synthetic markdown body so the pager has something to render in
+    // detail mode under the mock runner. Real runs read this from the
+    // Python sentiment.result field.
+    result: [
+      `## ${code} 综合复盘（mock）`,
+      '',
+      '- 行业景气进入复苏中段，季度环比改善确认。',
+      '- 资金面：北上 + 内资双轮驱动，主力席位换手放大。',
+      '- 风险：近端涨幅过快，注意波动率回归。',
+      '',
+      '> 这是 mock runner 生成的占位文本；切到 live runner 后会替换为',
+      '> 真实的 LLM 分析全文。',
+    ].join('\n'),
   };
 }
 
@@ -163,6 +176,22 @@ export function fixtureMarketSentiment(codes: readonly string[]): MarketSentimen
     score: round(avg),
     themes: ['行业景气复苏', '资金流入'],
     cachedAt: new Date().toISOString(),
+    marketTrendSummary: '板块呈温和复苏态势，主线题材集中在景气改善 + 资金面共振；短期关注波动率回归。',
+    themeClusters: [
+      {
+        label: '行业景气复苏',
+        memberCount: Math.max(1, Math.floor(codes.length * 0.6)),
+        heatScore: round(avg),
+        summary: '需求端环比改善确认，价格 / 量同步上行。',
+      },
+      {
+        label: '资金流入',
+        memberCount: Math.max(1, Math.floor(codes.length * 0.4)),
+        heatScore: round(avg * 0.8),
+        summary: '北上 + 内资换手率放大，主力席位活跃度提升。',
+      },
+    ],
+    caveats: ['mock fixture — replace with real Python output for live runs'],
   };
 }
 

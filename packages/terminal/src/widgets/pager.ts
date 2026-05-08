@@ -62,11 +62,26 @@ export function pager(cfg: PagerConfig): InteractiveWidget<PagerState, CommitRes
     title: cfg.title,
     initialState,
     hints: (s) => buildHints(s),
-    render: (s) => renderBody(cfg, s),
+    // The bridge passes the live `rows` value so the pager keeps the
+    // status bar glued to the bottom of whatever viewport it has —
+    // hardcoded 16 rows used to overflow on mobile term and underuse
+    // a wide desktop term. Subtract 2 for the title + status lines.
+    render: (s, _w, rows) => renderBody(cfg, withRowsHint(s, rows)),
     snapshot: (s) => snapshot(cfg, s),
     handleKey: (s, key) => handleKey(cfg, s, key),
     commit: (resolution) => resolution,
   } as InteractiveWidget<PagerState, CommitResolution>;
+}
+
+/** Re-derive the visible viewport from the current term rows. The
+ *  state's persisted `viewportRows` only acts as a floor — any time
+ *  the term resizes (mobile keyboard pop, window resize) we let the
+ *  larger of the two win so the body doesn't shrink mid-read. */
+function withRowsHint(state: PagerState, rows: number | undefined): PagerState {
+  if (rows === undefined) return state;
+  const next = Math.max(4, rows - 2);
+  if (next === state.viewportRows) return state;
+  return { ...state, viewportRows: next };
 }
 
 function buildHints(state: PagerState): readonly KeyHint[] {

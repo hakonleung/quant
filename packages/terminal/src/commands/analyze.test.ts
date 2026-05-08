@@ -54,6 +54,7 @@ const fakeSentiment = {
   theme: 'liquor',
   driver: 'earnings',
   cachedAt: '2026-05-06T08:00:00.000Z',
+  result: '## 茅台\n\n白酒板块龙头，季度业绩稳健。',
 };
 
 const argv = (positional: readonly string[], flags: Record<string, string | boolean> = {}) =>

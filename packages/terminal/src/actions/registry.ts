@@ -82,14 +82,34 @@ const sentimentSchema = z.object({
   theme: z.string(),
   driver: z.string().nullable(),
   cachedAt: z.string(),
+  /**
+   * Verbatim LLM analyst write-up (markdown). The pager renders this
+   * in `analyze … detail` mode. Empty string when the cached sentiment
+   * predates the two-step pipeline; the formatter falls back to a
+   * skeletal summary in that case.
+   */
+  result: z.string().default(''),
 });
 export type Sentiment = z.infer<typeof sentimentSchema>;
+
+const themeClusterSchema = z.object({
+  label: z.string(),
+  memberCount: z.number().int().nonnegative(),
+  heatScore: z.number(),
+  summary: z.string(),
+});
+export type ThemeCluster = z.infer<typeof themeClusterSchema>;
 
 const marketSentimentSchema = z.object({
   codes: z.array(codeSchema),
   score: z.number().min(-1).max(1),
   themes: z.array(z.string()),
   cachedAt: z.string(),
+  /** LLM-rendered narrative for the whole sector, used by the pager. */
+  marketTrendSummary: z.string().default(''),
+  /** Per-cluster details so detail mode can show heat-ranked themes. */
+  themeClusters: z.array(themeClusterSchema).default([]),
+  caveats: z.array(z.string()).default([]),
 });
 export type MarketSentiment = z.infer<typeof marketSentimentSchema>;
 
