@@ -24,7 +24,9 @@ v1 全部本地文件，无 Redis、无外部数据库。所有缓存目录在 `
 | ------------------ | ------------------------------- | ------------------------------------------------ | ------------------------------------------------ |
 | stock-meta         | `data/meta/stocks.parquet`      | 单文件全宇宙                                     | 手动 / BJT 15:15 cron 替换                       |
 | kline              | `data/kline/<code>.parquet`     | 一股一文件                                       | 增量（按 watermark）                             |
-| sentiment          | `data/sentiment/<code>.parquet` | code 或 codes_hash                               | 2 交易日                                         |
+| sentiment (stock)  | `data/sentiment/stock/{code}.json`     | 单股一文件（slim `Sentiment` view）       | `(asof, windowDays)` 等值；asof 默认当日 UTC，跨日自动失效 |
+| sentiment (market) | `data/sentiment/market/{hash}.json`    | 多股聚合；hash = sha256(排序后 codes)     | 同上                                                       |
+| ta                 | `data/ta/{code}.json`                  | 单股一文件（`TaAnalysis`）                | `(code, asof)` 等值；asof = 最新一根 K 线日期              |
 | sectors            | `data/sectors/*.json`           | 单板块一文件（NestJS 持久化，commit d6af5b4）    | 手动编辑 / UI 写入                               |
 | sys-cfg            | `data/sys-cfg/*.json`           | 单条配置一文件（dark mode / Slack webhook 等）   | 手动 / UI                                        |
 | blacklist          | `data/blacklist.json`           | 单文件 `{codes, asof, universeSize, computedAt}` | cron 每日 15:15 BJT 全量重算 (`12-blacklist.md`) |
