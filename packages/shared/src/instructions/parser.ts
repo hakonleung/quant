@@ -50,6 +50,25 @@ export function parseInstructionLine(
   const head = match[1] ?? '';
   const rest = (match[2] ?? '').trim();
 
+  // Subcommand resolution: when `<head> <sub> ...` and `<head>.<sub>` is a
+  // registered id (ASCII alias / canonical), prefer it over the bare head.
+  // This lets the FE terminal's `sector show <id>` syntax map to the
+  // backend's dotted `sector.show` handler without a separate registry
+  // concept. `head` itself does not need to be registered for the dotted
+  // form to win; if `head.sub` is unknown we fall back to head-only.
+  if (rest.length > 0) {
+    const subMatch = /^(\S+)(?:\s+([\s\S]*))?$/u.exec(rest);
+    if (subMatch !== null) {
+      const sub = subMatch[1] ?? '';
+      const subRest = (subMatch[2] ?? '').trim();
+      const dotted = `${head}.${sub}`;
+      const dottedCanonical = knownIds.get(dotted);
+      if (dottedCanonical !== undefined) {
+        return { ok: true, id: instructionId(dottedCanonical), rest: subRest };
+      }
+    }
+  }
+
   const canonical = knownIds.get(head);
   if (canonical === undefined) return { ok: false, reason: 'not-found' };
 

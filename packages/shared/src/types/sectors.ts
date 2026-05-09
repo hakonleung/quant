@@ -14,7 +14,13 @@ export const SectorKindSchema = z.enum(['user', 'dynamic']);
 export type SectorKind = z.infer<typeof SectorKindSchema>;
 
 export const SectorSchema = z.object({
-  id: z.string().min(1),
+  /**
+   * Stable backend-assigned `s{n}` id; empty string on input signals "new
+   * record — assign on persist". The store rewrites any non-`s{n}` value
+   * during load (one-shot migration) and during PUT (per-record), so on
+   * disk every record always has a non-empty `s{n}` id.
+   */
+  id: z.string(),
   name: z.string().min(1),
   kind: SectorKindSchema,
   count: z.number().int().nonnegative(),

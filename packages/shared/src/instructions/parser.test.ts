@@ -10,6 +10,9 @@ const KNOWN = new Map<string, string>([
   ['channel.echo', 'channel.echo'],
   ['screen', 'screen'],
   ['筛选', 'screen'],
+  ['sector', 'sector'],
+  ['sector.show', 'sector.show'],
+  ['sector.list', 'sector.list'],
 ]);
 
 describe('parseInstructionLine', () => {
@@ -84,6 +87,42 @@ describe('parseInstructionLine', () => {
 
   it('returns empty for bare slash without requirePrefix', () => {
     expect(parseInstructionLine('/', KNOWN)).toEqual({ ok: false, reason: 'empty' });
+  });
+
+  it('routes `<head> <sub>` to the dotted id when registered', () => {
+    const r = parseInstructionLine('sector show s1', KNOWN);
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.id).toBe('sector.show');
+      expect(r.rest).toBe('s1');
+    }
+  });
+
+  it('prefers dotted form even when bare head is registered', () => {
+    const r = parseInstructionLine('sector list', KNOWN);
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.id).toBe('sector.list');
+      expect(r.rest).toBe('');
+    }
+  });
+
+  it('falls back to head when sub is not a registered subcommand', () => {
+    const r = parseInstructionLine('sector add foo', KNOWN);
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.id).toBe('sector');
+      expect(r.rest).toBe('add foo');
+    }
+  });
+
+  it('strips slash for dotted subcommand form', () => {
+    const r = parseInstructionLine('/sector show s1', KNOWN);
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.id).toBe('sector.show');
+      expect(r.rest).toBe('s1');
+    }
   });
 
   it('preserves multi-token rest verbatim', () => {

@@ -50,6 +50,12 @@ export function useSectorsRemoteSync(): void {
     },
     select: (s) => s.sectors,
     equal: jsonEqual,
-    save: (rows) => putSectors(rows),
+    save: async (rows) => {
+      // Backend rewrites any client-supplied non-`s{n}` id during PUT.
+      // Apply the canonical response so optimistic state (e.g.
+      // `setActiveSector(tempId)`) reconciles to the assigned `s{n}`.
+      const saved = await putSectors(rows);
+      useSectorsStore.getState().setSectors(saved);
+    },
   });
 }

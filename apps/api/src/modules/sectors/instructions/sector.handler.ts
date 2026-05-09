@@ -19,6 +19,7 @@ export class SectorInstructionHandler extends InstructionRegistrarBase<Args> {
     summaryCn: '查看自定义板块及成分数(含已发布的公共板块)',
     group: 'market',
     argsSchema,
+    aliases: [instructionId('sector.list')],
     imAliases: ['板块'],
   };
 

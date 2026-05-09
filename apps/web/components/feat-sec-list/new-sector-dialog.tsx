@@ -13,11 +13,9 @@ import { Box, Button, Flex, Input, Text } from '@chakra-ui/react';
 import type { NlScreenResult, ScreenMatchView } from '@quant/shared';
 import { useState } from 'react';
 
-import { makeSectorId } from '../../lib/fp/sector-id.js';
 import { useCurrentUserId } from '../../lib/hooks/use-current-user.js';
 import { useNlScreen } from '../../lib/hooks/use-nl-screen.js';
 import { useSectorsStore, type Sector } from '../../lib/stores/sectors.store.js';
-import { useUiStore } from '../../lib/stores/ui.store.js';
 import { DslTree } from '../dsl/dsl-tree.js';
 
 type Tab = 'user' | 'dynamic';
@@ -34,7 +32,6 @@ export function NewSectorDialog({ open, onClose }: Props): React.ReactElement | 
   const [preview, setPreview] = useState<NlScreenResult | null>(null);
   const screen = useNlScreen();
   const upsert = useSectorsStore((s) => s.upsert);
-  const setActiveSector = useUiStore((s) => s.setActiveSector);
   const currentUserId = useCurrentUserId() ?? '';
 
   if (!open) return null;
@@ -67,9 +64,11 @@ export function NewSectorDialog({ open, onClose }: Props): React.ReactElement | 
   const saveUser = (): void => {
     const t = title.trim();
     if (t.length === 0) return;
-    const id = makeSectorId(t);
+    // Empty id signals "new record — let backend assign s{n}". The remote
+    // sync hook applies the canonical response, after which the user can
+    // pick the freshly assigned sector from the list.
     const s: Sector = {
-      id,
+      id: '',
       name: t,
       kind: 'user',
       count: 0,
@@ -80,18 +79,16 @@ export function NewSectorDialog({ open, onClose }: Props): React.ReactElement | 
       published: false,
     };
     upsert(s);
-    setActiveSector(id);
     closeAndReset();
   };
 
   const saveDynamic = (): void => {
     const t = title.trim();
     if (t.length === 0 || preview === null) return;
-    const id = makeSectorId(t);
     const evidence = matchesToEvidence(preview.matches);
     const codes = preview.matches.map((m) => m.code);
     const s: Sector = {
-      id,
+      id: '',
       name: t,
       kind: 'dynamic',
       count: codes.length,
@@ -108,7 +105,6 @@ export function NewSectorDialog({ open, onClose }: Props): React.ReactElement | 
       published: false,
     };
     upsert(s);
-    setActiveSector(id);
     closeAndReset();
   };
 

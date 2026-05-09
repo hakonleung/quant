@@ -48,9 +48,7 @@ export const sectorCommand: CommandSpec = {
   },
 };
 
-async function currentUserId(
-  ctx: Parameters<CommandSpec['run']>[1],
-): Promise<string | null> {
+async function currentUserId(ctx: Parameters<CommandSpec['run']>[1]): Promise<string | null> {
   try {
     const me = await ctx.actions.run(userMeAction, {}, { signal: ctx.signal });
     return me.data.userId;
@@ -395,7 +393,8 @@ function addUserConfirm(
       void (async (): Promise<void> => {
         const me = await currentUserId(ctx);
         const sector: Sector = {
-          id: name.toLowerCase().replace(/\s+/gu, '-'),
+          // Empty id → backend assigns s{n} during PUT.
+          id: '',
           name,
           kind: 'user',
           count: codes.length,
@@ -431,7 +430,8 @@ function addDynamicConfirm(ctx: Parameters<CommandSpec['run']>[1], name: string,
         const codes = r.data.matches.map((m) => m.code);
         const me = await currentUserId(ctx);
         const sector: Sector = {
-          id: name.toLowerCase().replace(/\s+/gu, '-'),
+          // Empty id → backend assigns s{n} during PUT.
+          id: '',
           name,
           kind: 'dynamic',
           count: codes.length,

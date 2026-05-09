@@ -22,6 +22,7 @@ import { atomicWriteJson, readJsonOr } from '../watch/domain/atomic-json.js';
 export const SECTORS_DATA_DIR = Symbol('SECTORS_DATA_DIR');
 
 const LEGACY_OWNER_ID = 'admin';
+const SEQ_ID_RE = /^s(\d+)$/u;
 
 @Injectable()
 export class SectorsStore implements OnModuleInit {
@@ -29,6 +30,7 @@ export class SectorsStore implements OnModuleInit {
   private sectors: readonly Sector[] = [];
   private mutexChain: Promise<unknown> = Promise.resolve();
   private loaded = false;
+  private nextSeq = 1;
 
   constructor(@Inject(SECTORS_DATA_DIR) private readonly dataDir: string) {}
 
@@ -45,16 +47,37 @@ export class SectorsStore implements OnModuleInit {
       if (this.loaded) return;
       const raw = await readJsonOr<unknown>(this.file, []);
       const migrated = migrateLegacy(raw);
-      const parsed = SectorsListSchema.safeParse(migrated);
+      const { records: reseqRecords, idMutated } = reseqIds(migrated);
+      const parsed = SectorsListSchema.safeParse(reseqRecords);
       if (!parsed.success) {
         this.logger.warn(`sectors.json failed validation, starting empty: ${parsed.error.message}`);
         this.loaded = true;
         return;
       }
       this.sectors = parsed.data;
+      this.nextSeq = computeNextSeq(this.sectors);
       this.loaded = true;
+      if (idMutated) {
+        await atomicWriteJson(this.file, this.sectors);
+        this.logger.log(
+          `migrated sector ids to s{n}, wrote ${String(this.sectors.length)} records`,
+        );
+      }
       this.logger.log(`loaded ${String(this.sectors.length)} sectors`);
     });
+  }
+
+  /**
+   * Allocate the next `s{n}` id under the store mutex. Caller must already
+   * be inside `withLock` (use `assignNewIdAndUpsert` for the public path).
+   */
+  private allocId(): string {
+    while (this.sectors.some((s) => s.id === `s${String(this.nextSeq)}`)) {
+      this.nextSeq += 1;
+    }
+    const id = `s${String(this.nextSeq)}`;
+    this.nextSeq += 1;
+    return id;
   }
 
   list(): readonly Sector[] {
@@ -82,12 +105,17 @@ export class SectorsStore implements OnModuleInit {
   async replaceForUser(userId: string, incoming: readonly Sector[]): Promise<readonly Sector[]> {
     return this.withLock(async () => {
       const byId = new Map(this.sectors.map((s) => [s.id, s] as const));
-      validateOwnership(userId, incoming, byId);
+      // Sectors with empty / non-`s{n}` ids are new — allocate before
+      // ownership validation so the FORBIDDEN check sees stable ids.
+      const stamped: Sector[] = incoming.map((s) =>
+        s.id.length > 0 && SEQ_ID_RE.test(s.id) ? s : { ...s, id: this.allocId() },
+      );
+      validateOwnership(userId, stamped, byId);
       const next: Sector[] = [];
       for (const s of this.sectors) {
         if (s.createdBy !== userId) next.push(s);
       }
-      for (const candidate of incoming) {
+      for (const candidate of stamped) {
         next.push(mergeForOwner(userId, candidate, byId.get(candidate.id)));
       }
       this.sectors = next;
@@ -99,16 +127,19 @@ export class SectorsStore implements OnModuleInit {
   /**
    * Upsert a single sector. Owner of an existing record is preserved; the
    * caller is responsible for owner checks (use `requireOwner` first).
+   * If `sector.id` is empty / non-`s{n}` a fresh id is allocated.
    */
   async upsert(sector: Sector): Promise<Sector> {
     return this.withLock(async () => {
-      const idx = this.sectors.findIndex((s) => s.id === sector.id);
+      const id = sector.id.length > 0 && SEQ_ID_RE.test(sector.id) ? sector.id : this.allocId();
+      const stamped: Sector = sector.id === id ? sector : { ...sector, id };
+      const idx = this.sectors.findIndex((s) => s.id === id);
       const next = [...this.sectors];
-      if (idx >= 0) next[idx] = sector;
-      else next.push(sector);
+      if (idx >= 0) next[idx] = stamped;
+      else next.push(stamped);
       this.sectors = next;
       await atomicWriteJson(this.file, this.sectors);
-      return sector;
+      return stamped;
     });
   }
 
@@ -151,6 +182,53 @@ function migrateLegacy(raw: unknown): unknown {
   });
 }
 
+/**
+ * Reassign any non-`s{n}` id to the next free `s{n}`, scanning records in
+ * disk order (deterministic). Existing `s{n}` ids are preserved; the
+ * counter steps over them so we never collide.
+ */
+function isRecord(x: unknown): x is Record<string, unknown> {
+  return typeof x === 'object' && x !== null;
+}
+
+function reseqIds(raw: unknown): { records: unknown; idMutated: boolean } {
+  if (!Array.isArray(raw)) return { records: raw, idMutated: false };
+  const taken = new Set<string>();
+  for (const item of raw) {
+    if (!isRecord(item)) continue;
+    const id = item['id'];
+    if (typeof id === 'string' && SEQ_ID_RE.test(id)) taken.add(id);
+  }
+  let nextSeq = 1;
+  const allocate = (): string => {
+    while (taken.has(`s${String(nextSeq)}`)) nextSeq += 1;
+    const id = `s${String(nextSeq)}`;
+    taken.add(id);
+    nextSeq += 1;
+    return id;
+  };
+  let mutated = false;
+  const out: unknown[] = raw.map((item: unknown) => {
+    if (!isRecord(item)) return item;
+    const id = item['id'];
+    if (typeof id === 'string' && SEQ_ID_RE.test(id)) return item;
+    mutated = true;
+    return { ...item, id: allocate() };
+  });
+  return { records: out, idMutated: mutated };
+}
+
+function computeNextSeq(sectors: readonly Sector[]): number {
+  let max = 0;
+  for (const s of sectors) {
+    const m = SEQ_ID_RE.exec(s.id);
+    if (m === null) continue;
+    const n = Number.parseInt(m[1] ?? '', 10);
+    if (Number.isFinite(n) && n > max) max = n;
+  }
+  return max + 1;
+}
+
 function validateOwnership(
   userId: string,
   incoming: readonly Sector[],
@@ -175,11 +253,7 @@ function validateOwnership(
   }
 }
 
-function mergeForOwner(
-  userId: string,
-  candidate: Sector,
-  existing: Sector | undefined,
-): Sector {
+function mergeForOwner(userId: string, candidate: Sector, existing: Sector | undefined): Sector {
   return {
     ...candidate,
     createdBy: userId,

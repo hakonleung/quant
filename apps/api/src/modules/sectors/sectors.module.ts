@@ -8,6 +8,8 @@ import {
   SectorUnpublishInstructionHandler,
 } from './instructions/sector-publish.handler.js';
 import { SectorRefreshInstructionHandler } from './instructions/sector-refresh.handler.js';
+import { SectorRmInstructionHandler } from './instructions/sector-rm.handler.js';
+import { SectorShowInstructionHandler } from './instructions/sector-show.handler.js';
 import { SectorsController } from './sectors.controller.js';
 import { SectorsService } from './sectors.service.js';
 import { SECTORS_DATA_DIR, SectorsStore } from './sectors.store.js';
@@ -37,6 +39,8 @@ const DEFAULT_FLIGHT_TARGET = '127.0.0.1:8815';
     SectorPublishInstructionHandler,
     SectorUnpublishInstructionHandler,
     SectorRefreshInstructionHandler,
+    SectorShowInstructionHandler,
+    SectorRmInstructionHandler,
   ],
   exports: [SectorsStore, SectorsService],
 })

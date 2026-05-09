@@ -2,11 +2,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 
-import {
-  BadRequestException,
-  ForbiddenException,
-  NotFoundException,
-} from '@nestjs/common';
+import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import type { Sector } from '@quant/shared';
 
 import { SectorsController } from '../../../src/modules/sectors/sectors.controller.js';
@@ -50,7 +46,7 @@ async function tmpDir(): Promise<string> {
 const FROZEN = new Date('2026-05-04T07:15:00.000Z');
 
 const baseDynamic: Sector = {
-  id: 'dyn-abc123',
+  id: 's1',
   name: '90日龙头',
   kind: 'dynamic',
   count: 2,
@@ -70,7 +66,7 @@ const baseDynamic: Sector = {
 };
 
 const userSector: Sector = {
-  id: 'user-x',
+  id: 's2',
   name: 'manual',
   kind: 'user',
   count: 1,
@@ -168,23 +164,20 @@ describe('SectorsController.publish', () => {
 
   it('NotFound when the sector does not exist', async () => {
     const { ctrl } = await freshController([], fakeFlight(null));
-    await expect(
-      ctrl.publish(adminUser, 'missing', { published: true }),
-    ).rejects.toBeInstanceOf(NotFoundException);
+    await expect(ctrl.publish(adminUser, 'missing', { published: true })).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
   });
 });
 
 describe('SectorsController.list', () => {
   it('non-owner sees only published others + own', async () => {
-    const aliceOwn: Sector = { ...userSector, id: 'alice-own', createdBy: 'alice' };
-    const adminPub: Sector = { ...userSector, id: 'admin-pub', createdBy: 'admin', published: true };
-    const adminPriv: Sector = { ...userSector, id: 'admin-priv', createdBy: 'admin' };
-    const { ctrl } = await freshController(
-      [aliceOwn, adminPub, adminPriv],
-      fakeFlight(null),
-    );
+    const aliceOwn: Sector = { ...userSector, id: 's10', createdBy: 'alice' };
+    const adminPub: Sector = { ...userSector, id: 's11', createdBy: 'admin', published: true };
+    const adminPriv: Sector = { ...userSector, id: 's12', createdBy: 'admin' };
+    const { ctrl } = await freshController([aliceOwn, adminPub, adminPriv], fakeFlight(null));
     const out = ctrl.list(aliceUser);
-    expect(out.sectors.map((s) => s.id).sort()).toEqual(['admin-pub', 'alice-own']);
+    expect(out.sectors.map((s) => s.id).sort()).toEqual(['s10', 's11']);
   });
 });
 
