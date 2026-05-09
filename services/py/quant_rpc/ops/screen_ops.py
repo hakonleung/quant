@@ -56,24 +56,37 @@ from quant_core.domain.types.universe_screen import (
 )
 from quant_core.errors import QuantError
 
-from quant_rpc.ops.nl_screen import (
-    PAYLOAD_SCHEMA,
-    _normalise,
-    _opt_iso_date,
-    _rank_to_jsonable,
-    _require_str,
-    _screen_plan_to_jsonable,
-    _universe_plan_to_jsonable,
-)
+PAYLOAD_SCHEMA: Final[pa.Schema] = pa.schema([("payload_json", pa.string())])
+
+
+def _normalise(obj: Any) -> Any:
+    """Recursively coerce dataclass-asdict output into JSON-encodable
+    primitives. Mirrors the helper that used to live in nl_screen.py
+    (now removed — NL→DSL is in NestJS)."""
+    from datetime import date as date_cls
+    from datetime import datetime
+    from decimal import Decimal
+    from enum import Enum
+
+    if isinstance(obj, dict):
+        return {k: _normalise(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [_normalise(v) for v in obj]
+    if isinstance(obj, (date_cls, datetime)):
+        return obj.isoformat()
+    if isinstance(obj, Enum):
+        return obj.value
+    if isinstance(obj, Decimal):
+        return str(obj)
+    return obj
+
 
 if TYPE_CHECKING:
     from quant_core.ports.stock_meta_repo import StockMetaRepo
-    from quant_core.services.nl_to_dsl_service import NlToDslService
     from quant_core.services.screen_service import ScreenService
     from quant_core.services.universe_screen_service import UniverseScreenService
 
 
-_NL_TO_DSL_OP: Final[str] = "nl_to_dsl"
 _SCREEN_RUN_OP: Final[str] = "screen_run"
 
 _COMPARE_OPS: Final[frozenset[str]] = frozenset(("gt", "lt", "gte", "lte", "eq", "neq"))
@@ -327,41 +340,6 @@ def _parse_rank(raw: object) -> RankSpec | None:
 # ---------------------------------------------------------------------------
 # handlers
 # ---------------------------------------------------------------------------
-
-
-class NlToDslHandler:
-    """``nl_to_dsl`` — translate NL → AST without executing the screen."""
-
-    op = _NL_TO_DSL_OP
-    schema = PAYLOAD_SCHEMA
-
-    __slots__ = ("_clock", "_translator")
-
-    def __init__(self, translator: NlToDslService | None, clock: Any) -> None:
-        self._translator = translator
-        self._clock = clock
-
-    def execute(self, args: Mapping[str, object]) -> pa.Table:
-        if self._translator is None:
-            raise QuantError(
-                "LLM_FAILED",
-                "NL translator is not configured (no API key in env)",
-                {"reason": "no_provider"},
-            )
-        nl = _require_str(args, "nl")
-        asof = _opt_iso_date(args, "asof") or self._clock.now().date()
-        translation = self._translator.translate(nl, asof=asof)
-        payload = {
-            "nl": nl,
-            "asof": asof.isoformat(),
-            "screenPlan": _screen_plan_to_jsonable(translation.screen_plan),
-            "universePlan": _universe_plan_to_jsonable(translation.universe_plan),
-            "rank": _rank_to_jsonable(translation.rank),
-        }
-        return pa.Table.from_pylist(
-            [{"payload_json": json.dumps(payload, ensure_ascii=False)}],
-            schema=PAYLOAD_SCHEMA,
-        )
 
 
 class ScreenRunHandler:

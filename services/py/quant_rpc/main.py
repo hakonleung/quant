@@ -30,9 +30,7 @@ from quant_core.errors import QuantError
 from quant_core.ports.stock_meta_source import StockMetaSource
 from quant_core.services.financials_service import FinancialsService
 from quant_core.services.kline_service import KlineService
-from quant_core.services.ledger_service import LedgerService
 from quant_core.services.news_sentiment_service import NewsSentimentService
-from quant_core.services.nl_to_dsl_service import NlToDslService
 from quant_core.services.pattern_service import PatternService
 from quant_core.services.screen_service import ScreenService
 from quant_core.services.source_chain import SourceChain
@@ -59,10 +57,8 @@ from quant_rpc.ops.financials import (
 )
 from quant_rpc.ops.kline import ListKlineWatermarksHandler, SyncKlineForCodeHandler
 from quant_rpc.ops.kline_read import ListKlineBulkLastNHandler, ListKlineForCodeHandler
-from quant_rpc.ops.ledger import AnalyzeLedgerHandler
-from quant_rpc.ops.nl_screen import NlScreenHandler
 from quant_rpc.ops.pattern import FindSimilarPatternsHandler
-from quant_rpc.ops.screen_ops import NlToDslHandler, ScreenRunHandler
+from quant_rpc.ops.screen_ops import ScreenRunHandler
 from quant_rpc.ops.sentiment import (
     AnalyzeManyStockSentimentHandler,
     AnalyzeOneStockSentimentHandler,
@@ -141,16 +137,9 @@ def main() -> int:
         enricher=AKShareFinancialsPerStockEnricher(),
     )
 
-    # NL→DSL translator shares the aggregator LLM (cheap tier when
-    # available). Without API keys we degrade the same way sentiment
-    # does — only `nl_screen` calls fail with a clear error.
-    nl_translator: NlToDslService | None
-    try:
-        nl_translator = NlToDslService(build_llm_client(use_flash=True))
-        log.info("nl translator ready")
-    except QuantError as exc:
-        nl_translator = None
-        log.warning("nl translator disabled — LLM not configured: %s", exc)
+    # NL→DSL has migrated to NestJS (apps/api/src/modules/screen/nl-to-dsl.service.ts);
+    # Python no longer carries the translator or its prompt. Only the
+    # AST-execution `screen_run` op is served from this process.
 
     sentiment_root = root / "sentiment"
     sentiment_cache = ParquetSentimentCache(sentiment_root, clock)
@@ -190,17 +179,9 @@ def main() -> int:
         ta_service = None
         log.warning("ta LLM not configured — analyze_ta ops disabled: %s", exc)
 
-    # Personal-ledger AI analysis. Same Kimi-Pro-preferred chain as ``ta``;
-    # if no LLM keys are present, the service is left None and the gateway
-    # surfaces a clear ``LLM_FAILED`` for the analyze op.
-    ledger_service: LedgerService | None
-    try:
-        ledger_chain = build_llm_client_chain(prefer_provider="moonshot")
-        ledger_service = LedgerService(llm=ledger_chain, clock=clock)
-        log.info("ledger service ready (chain: %s)", ledger_chain.name)
-    except QuantError as exc:
-        ledger_service = None
-        log.warning("ledger LLM not configured — analyze_ledger op disabled: %s", exc)
+    # Ledger AI analysis migrated to NestJS LedgerService (calls
+    # LlmService.completeJson directly); the matching `analyze_ledger`
+    # Flight op + Python LedgerService are gone.
 
     registry = HandlerRegistry()
     registry.register(GetStockMetaBatchHandler(meta_service))
@@ -223,7 +204,6 @@ def main() -> int:
     registry.register(AnalyzeManyStockSentimentHandler(sentiment_service))
     registry.register(GetCachedTaOneHandler(ta_cache, clock))
     registry.register(AnalyzeTaOneHandler(ta_service))
-    registry.register(AnalyzeLedgerHandler(ledger_service))
     watch_source = AKShareWatchSource()
     watch_service = WatchQuoteService(quotes=watch_source, universe=watch_source)
     registry.register(WatchQuoteOneHandler(watch_service))
@@ -238,20 +218,9 @@ def main() -> int:
         )
     )
     registry.register(GetLatestTradeDayHandler(clock))
-    registry.register(
-        NlScreenHandler(
-            translator=nl_translator,
-            screen_service=screen_service,
-            universe_service=universe_service,
-            meta_repo=meta_repo,
-            clock=clock,
-        )
-    )
-    # Decoupled twins: expose translation and execution as independent
-    # ops. The frontend orchestrates the two through the BFF — see
-    # apps/web/lib/hooks/use-nl-screen.ts. ``nl_screen`` is kept for
-    # back-compat callers that want one round-trip.
-    registry.register(NlToDslHandler(translator=nl_translator, clock=clock))
+    # NL→DSL lives in NestJS now (apps/api/src/modules/screen/nl-to-dsl.service.ts);
+    # only AST execution stays here. The legacy `nl_screen` + `nl_to_dsl`
+    # ops have been removed.
     registry.register(
         ScreenRunHandler(
             screen_service=screen_service,
