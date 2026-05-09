@@ -63,16 +63,19 @@ export function buildWatchHitCard(text: string, meta: WatchHitMeta): FeishuCard 
   const isDown = pctLine.includes('large_green_square') || /^-\d/.test(pctLine.trim());
   const headerTpl: FeishuCard['header']['template'] = isUp ? 'red' : isDown ? 'green' : 'grey';
 
-  const cleanPct = stripSlackMrkdwn(pctLine).trim();
+  // Card has its own colored header + dedicated price slot, so strip the
+  // square-emoji cue and the trailing price out of the percent line —
+  // they'd otherwise duplicate what the header colour and `priceLine`
+  // already convey.
+  const cleanPct = stripSlackMrkdwn(pctLine);
+  const pctMatch = cleanPct.match(/[+-]?\d+(?:\.\d+)?%/);
+  const pctText = pctMatch !== null ? pctMatch[0] : cleanPct.trim();
   const summaryColor = isUp ? 'red' : isDown ? 'green' : 'grey';
   const summaryMd =
-    `**${name}** \`${code}\`\n` +
-    `<font color='${summaryColor}'>${cleanPct}</font>` +
+    `<font color='${summaryColor}'>${pctText}</font>` +
     (priceLine.length > 0 ? `   ${priceLine}` : '');
 
-  const elements: unknown[] = [
-    { tag: 'div', text: { tag: 'lark_md', content: summaryMd } },
-  ];
+  const elements: unknown[] = [{ tag: 'div', text: { tag: 'lark_md', content: summaryMd } }];
   if (condsLine.length > 0) {
     elements.push({ tag: 'hr' });
     elements.push({
@@ -85,7 +88,7 @@ export function buildWatchHitCard(text: string, meta: WatchHitMeta): FeishuCard 
     config: { wide_screen_mode: true },
     header: {
       template: headerTpl,
-      title: { tag: 'plain_text', content: `WATCH · ${name} ${code}`.trim() },
+      title: { tag: 'plain_text', content: `WATCH · [${market}]${name} ${code}`.trim() },
     },
     elements,
   };
@@ -105,9 +108,7 @@ export function buildFeishuCard(message: {
       template: 'blue',
       title: { tag: 'plain_text', content: message.title ?? message.kind ?? 'NOTICE' },
     },
-    elements: [
-      { tag: 'div', text: { tag: 'lark_md', content: stripSlackMrkdwn(message.text) } },
-    ],
+    elements: [{ tag: 'div', text: { tag: 'lark_md', content: stripSlackMrkdwn(message.text) } }],
   };
 }
 
