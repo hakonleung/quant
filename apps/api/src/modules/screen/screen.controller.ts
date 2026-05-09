@@ -10,8 +10,9 @@
  *
  * Why three: `nl2dsl` and `run` are the truly decoupled APIs. The combined
  * `/nl` op is retained so existing callers that want a one-round-trip
- * `NL → matches` pipeline don't pay an extra hop. The Python Flight gateway
- * exposes matching ops `nl_screen` / `nl_to_dsl` / `screen_run`.
+ * `NL → matches` pipeline don't pay an extra hop. The NL→DSL translation
+ * runs in NestJS via `LlmService`; the executable AST is then dispatched
+ * through the Python `screen_run` Flight op (computation only, no LLM).
  *
  * Why POST: the underlying `nl2dsl` op invokes a paid LLM call; the
  * `run` op mutates a Polars compute pool. Both need POST per the
@@ -32,6 +33,8 @@ import type { Request } from 'express';
 import { z } from 'zod';
 
 import { ZodValidationPipe } from '../../common/zod-pipe.js';
+import { CurrentUser } from '../auth/current-user.decorator.js';
+import type { AuthenticatedUser } from '../auth/request-with-user.js';
 import { ScreenService } from './screen.service.js';
 
 const NlBodySchema = z
@@ -61,20 +64,28 @@ export class ScreenController {
   constructor(@Inject(ScreenService) private readonly screen: ScreenService) {}
 
   @Post('nl')
-  async run(@Req() req: Request, @Body(nlBodyPipe) body: NlBody): Promise<NlScreenResult> {
+  async run(
+    @Req() req: Request,
+    @CurrentUser() user: AuthenticatedUser,
+    @Body(nlBodyPipe) body: NlBody,
+  ): Promise<NlScreenResult> {
     const traceId = (req as Request & { traceId?: string }).traceId ?? '';
     try {
-      return await this.screen.runNl(body.nl, body.asof, traceId);
+      return await this.screen.runNl(body.nl, body.asof, { userId: user.id, traceId });
     } catch (err) {
       throw mapToHttp(err, body.nl);
     }
   }
 
   @Post('nl2dsl')
-  async nl2dsl(@Req() req: Request, @Body(nlBodyPipe) body: NlBody): Promise<NlToDslResult> {
+  async nl2dsl(
+    @Req() req: Request,
+    @CurrentUser() user: AuthenticatedUser,
+    @Body(nlBodyPipe) body: NlBody,
+  ): Promise<NlToDslResult> {
     const traceId = (req as Request & { traceId?: string }).traceId ?? '';
     try {
-      return await this.screen.nlToDsl(body.nl, body.asof, traceId);
+      return await this.screen.nlToDsl(body.nl, body.asof, { userId: user.id, traceId });
     } catch (err) {
       throw mapToHttp(err, body.nl);
     }

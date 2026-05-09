@@ -68,7 +68,10 @@ export class ScreenInstructionHandler extends InstructionRegistrarBase<Args> {
 
   async execute(args: Args, ctx: InstructionCtx): Promise<InstructionResult> {
     try {
-      const result = await this.screen.runNl(args.q, args.asof, ctx.traceId);
+      const result = await this.screen.runNl(args.q, args.asof, {
+        userId: ctx.userId,
+        traceId: ctx.traceId,
+      });
       return okResult(formatResult(result));
     } catch (err) {
       if (err instanceof QuantError) return errResult('handler', err.message);
