@@ -7,6 +7,7 @@ import { ChannelModule } from './modules/channel/channel.module.js';
 import { InstructionModule } from './modules/instruction/instruction.module.js';
 import { SocketInstructionAdapter } from './modules/instruction/socket-instruction.adapter.js';
 import { KlineModule } from './modules/kline/kline.module.js';
+import { AgentModule } from './modules/agent/agent.module.js';
 import { LedgerModule } from './modules/ledger/ledger.module.js';
 import { LlmModule } from './modules/llm/llm.module.js';
 import { OrchestrationModule } from './modules/orchestration/orchestration.module.js';
@@ -52,6 +53,7 @@ import { WatchModule } from './modules/watch/watch.module.js';
     SectorsModule,
     SysCfgModule,
     TaModule,
+    AgentModule,
   ],
   controllers: [HealthController],
   providers: [TraceMiddleware],
