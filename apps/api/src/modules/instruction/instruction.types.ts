@@ -66,6 +66,22 @@ export interface InstructionSpec<TArgs> {
    */
   readonly imAliases?: readonly string[];
   readonly mode?: InstructionMode;
+  /**
+   * `true` when the instruction triggers a paid external LLM call (or a
+   * cache-write that performs one). The `/agent` loop uses this:
+   *   - the user pays a one-time confirmation before /agent starts;
+   *   - any tool call inside the loop with `costsCredits=true` triggers
+   *     a per-tool confirmation card / widget.
+   * Help renders a `[$]` tag against these instructions.
+   */
+  readonly costsCredits?: boolean;
+  /**
+   * `true` when the instruction performs a write that is not trivially
+   * reversible (cache regeneration, blacklist refresh, …). Mirrors the
+   * `costsCredits` confirmation behaviour inside the `/agent` loop, and
+   * help renders a `[!]` tag.
+   */
+  readonly destructive?: boolean;
 }
 
 /**

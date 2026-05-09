@@ -16,8 +16,10 @@
 
 import { z } from 'zod';
 
+import { AgentToolCallProposalSchema } from '../instructions/agent-tool-call.js';
 import { InstructionResultSchema } from '../instructions/result.js';
 import { ChannelActivitySchema } from './channel.js';
+import { ChatTokenUsageSchema } from './llm.js';
 import { QueueSnapshotSchema } from './queue-status.js';
 import { WatchTaskSchema } from './watch.js';
 
@@ -80,6 +82,65 @@ export type InstructionAsyncCompletedPayload = z.infer<
 >;
 
 /**
+ * One frame in the `instruction.agent.delta` stream. The agent loop
+ * (`apps/api/src/modules/agent/agent.service.ts`) emits these in order:
+ *
+ *   - `step`         — gray "▶ /focus 600519" line preceding each tool call
+ *   - `tool_result`  — collapsible per-tool result for transparency
+ *   - `confirm`      — pause: list of tool calls awaiting user approval
+ *                       (term widget / Feishu button card)
+ *   - `text`         — incremental delta of the streamed final answer
+ *   - `done`         — closing frame with cumulative token usage + cost
+ *
+ * Frames are scoped per `jobId` so the FE / IM listener can route them
+ * to the originating prompt (term scrollback row, IM thread).
+ */
+export const InstructionAgentDeltaPayloadSchema = z.discriminatedUnion('kind', [
+  z
+    .object({
+      kind: z.literal('step'),
+      jobId: z.string().min(1),
+      message: z.string(),
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal('tool_result'),
+      jobId: z.string().min(1),
+      toolId: z.string().min(1),
+      ok: z.boolean(),
+      summary: z.string(),
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal('confirm'),
+      jobId: z.string().min(1),
+      correlationId: z.string().min(1),
+      toolCalls: AgentToolCallProposalSchema.array().min(1),
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal('text'),
+      jobId: z.string().min(1),
+      chunk: z.string(),
+      done: z.boolean(),
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal('done'),
+      jobId: z.string().min(1),
+      tokenUsage: ChatTokenUsageSchema,
+      cnyCost: z.number().nonnegative(),
+      toolCallCount: z.number().int().nonnegative(),
+    })
+    .strict(),
+]);
+export type InstructionAgentDeltaPayload = z.infer<typeof InstructionAgentDeltaPayloadSchema>;
+
+/**
  * Single source of truth for the topic registry. Used by `SocketBus` to
  * validate emits and by `useSocketTopic` to validate inbound frames.
  *
@@ -94,6 +155,7 @@ export const SOCKET_TOPIC_SCHEMAS = {
   'instruction.async.started': InstructionAsyncStartedPayloadSchema,
   'instruction.async.progress': InstructionAsyncProgressPayloadSchema,
   'instruction.async.completed': InstructionAsyncCompletedPayloadSchema,
+  'instruction.agent.delta': InstructionAgentDeltaPayloadSchema,
 } as const satisfies Readonly<Record<string, z.ZodTypeAny>>;
 
 export type SocketTopic = keyof typeof SOCKET_TOPIC_SCHEMAS;

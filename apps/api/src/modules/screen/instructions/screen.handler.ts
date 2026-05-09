@@ -57,6 +57,7 @@ export class ScreenInstructionHandler extends InstructionRegistrarBase<Args> {
     positional: ['q'],
     imAliases: ['筛选', '选股'],
     mode: 'async',
+    costsCredits: true,
   };
 
   constructor(

@@ -42,6 +42,7 @@ export class UpdateInstructionHandler extends InstructionRegistrarBase<Args> {
     argsSchema,
     positional: ['target'],
     imAliases: ['更新'],
+    destructive: true,
   };
 
   constructor(

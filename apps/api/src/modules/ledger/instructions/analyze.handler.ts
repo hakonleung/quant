@@ -59,6 +59,7 @@ export class AnalyzeInstructionHandler extends InstructionRegistrarBase<Args> {
     argsSchema,
     imAliases: ['分析'],
     mode: 'async',
+    costsCredits: true,
   };
 
   constructor(
