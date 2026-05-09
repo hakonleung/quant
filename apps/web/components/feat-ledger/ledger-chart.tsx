@@ -61,7 +61,7 @@ export function LedgerChart({ enriched, mode, today }: LedgerChartProps): React.
   if (series === null) {
     return (
       <Flex flex="1" align="center" justify="center" minH="180px">
-        <Text fontSize="11px" color="ink3" fontFamily="mono">
+        <Text fontSize="11px" color="term.ink3" fontFamily="mono">
           {enriched.length === 0 ? '暂无数据' : '至少需要 2 条记录才能绘图'}
         </Text>
       </Flex>
@@ -261,10 +261,10 @@ function HoverInfoBox({ tooltip }: { readonly tooltip: ChartTooltip }): React.Re
       py="2px"
       fontSize="10px"
       fontFamily="mono"
-      color="ink"
-      bg="panel"
+      color="term.ink"
+      bg="term.panel"
       border="1px solid"
-      borderColor="line"
+      borderColor="term.line"
       whiteSpace="nowrap"
       pointerEvents="none"
       lineHeight="1.3"

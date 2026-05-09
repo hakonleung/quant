@@ -11,6 +11,12 @@ export interface OutboundMessage {
   readonly target?: string;
   readonly title?: string;
   readonly text: string;
+  /**
+   * Job kind — adapters may use this to switch between plain text and
+   * native rich formats (e.g. Feishu interactive cards for `watch.hit`).
+   * Mirrors the `kind` carried on the outbound job / activity row.
+   */
+  readonly kind?: string;
   readonly meta?: Readonly<Record<string, unknown>>;
 }
 

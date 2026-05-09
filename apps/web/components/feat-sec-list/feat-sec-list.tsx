@@ -1,7 +1,7 @@
 'use client';
 
 import { Flex, Text } from '@chakra-ui/react';
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 
 import { Feat } from '../../lib/eqty/feat.js';
 import { useBlacklistSet } from '../../lib/hooks/use-blacklist.js';
@@ -11,9 +11,7 @@ import { useStockList } from '../../lib/hooks/use-stock-list.js';
 import { useSectorsStore, type Sector } from '../../lib/stores/sectors.store.js';
 import { ALL_SECTOR_ID, useUiStore } from '../../lib/stores/ui.store.js';
 import { FeatView } from '../feat-view/feat-view.js';
-import { FeatViewHeaderRight } from '../feat-view/feat-view-header.js';
 import { MonoButton } from '../ui/mono-button.js';
-import { NewSectorDialog } from './new-sector-dialog.js';
 import { SectorSwiper } from './sector-swiper.js';
 
 /**
@@ -35,13 +33,18 @@ export const ANALYZE_MAX_CODES = 50;
  * list would be premature here — `SectorSwiper` covers the swiper-style
  * drag / snap / nav-button affordances natively.
  */
-export function FeatSecList(): React.ReactElement {
+interface FeatSecListProps {
+  /** Hosted inside MKT — render content only, no FeatView chrome and no
+   *  pane-level "new sector" right slot (the parent owns those). */
+  readonly bare?: boolean;
+}
+
+export function FeatSecList({ bare }: FeatSecListProps = {}): React.ReactElement {
   const sectors = useSectorsStore((s) => s.sectors);
   const removeSector = useSectorsStore((s) => s.remove);
   const activeSectorId = useUiStore((s) => s.activeSectorId);
   const setActiveSector = useUiStore((s) => s.setActiveSector);
   const universe = useStockList();
-  const [dialogOpen, setDialogOpen] = useState(false);
   const { guard, comp: confirmComp } = useConfirm();
 
   const onDelete = (sector: Sector): void => {
@@ -105,22 +108,11 @@ export function FeatSecList(): React.ReactElement {
   const dynRows = sectors.filter((r) => r.kind === 'dynamic');
   const orderedSectors: readonly Sector[] = [allSector, ...userRows, ...dynRows];
 
+  // The "+ new sector" trigger lives in the parent MKT pane's
+  // FeatView header (parent owns the dialog state); this component
+  // only renders the chip swiper itself.
   return (
-    <FeatView
-      feat={Feat.SectorList}
-      contentSized
-      right={
-        <FeatViewHeaderRight>
-          <MonoButton
-            icon="add"
-            label="new sector"
-            onClick={(): void => {
-              setDialogOpen(true);
-            }}
-          />
-        </FeatViewHeaderRight>
-      }
-    >
+    <FeatView feat={Feat.Mkt} bare={bare ?? false} contentSized>
       <SectorSwiper height={40}>
         {orderedSectors.map((s) => (
           <SectorChip
@@ -141,12 +133,6 @@ export function FeatSecList(): React.ReactElement {
           />
         ))}
       </SectorSwiper>
-      <NewSectorDialog
-        open={dialogOpen}
-        onClose={(): void => {
-          setDialogOpen(false);
-        }}
-      />
       {confirmComp}
     </FeatView>
   );

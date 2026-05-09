@@ -17,6 +17,7 @@ import {
   type ChartViewport,
   type VisibleSlice,
 } from '../../lib/fp/chart-view.js';
+import { useSettingsStore } from '../../lib/stores/settings.store.js';
 import { INNER_BOTTOM, INNER_TOP, PRICE_AXIS_W } from './ledger-chart-layers.js';
 
 export function useResizeWidth(initial: number): {
@@ -141,6 +142,11 @@ function useDragPan({
   innerW,
 }: DragArgs): (e: React.MouseEvent<SVGSVGElement>) => void {
   const dragRef = useRef<{ startClientX: number; startPan: number } | null>(null);
+  // Drag direction is shared with EQ.CHART via Sys.Cfg so the two
+  // surfaces always feel the same. `natural` (default): drag left →
+  // reveal older bars on the left (panPx grows when cursor moves left).
+  const dragDirection = useSettingsStore((s) => s.dragDirection);
+  const dragSign = dragDirection === 'natural' ? -1 : 1;
   // Bind window listeners so the gesture survives leaving the SVG and
   // mouse-up always lands.
   useEffect(() => {
@@ -148,10 +154,8 @@ function useDragPan({
       const drag = dragRef.current;
       if (drag === null) return;
       const dx = e.clientX - drag.startClientX;
-      // Cursor moves right (dx > 0) → reveal older bars on the left,
-      // i.e. *decrease* panPx (undo previous pan).
       const upper = maxPanPx(seriesCount, vp, innerW);
-      const next = Math.min(upper, Math.max(0, drag.startPan - dx));
+      const next = Math.min(upper, Math.max(0, drag.startPan + dragSign * dx));
       setVp(clampViewport({ ...vp, panPx: next }));
     };
     const onUp = (): void => {
@@ -165,7 +169,7 @@ function useDragPan({
       window.removeEventListener('mousemove', onMove);
       window.removeEventListener('mouseup', onUp);
     };
-  }, [vp, seriesCount, innerW, setVp, setIsDragging]);
+  }, [vp, seriesCount, innerW, setVp, setIsDragging, dragSign]);
   return useCallback(
     (e: React.MouseEvent<SVGSVGElement>): void => {
       dragRef.current = { startClientX: e.clientX, startPan: vp.panPx };

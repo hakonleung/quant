@@ -17,7 +17,7 @@ export function LedgerAiPanel({
   if (loading) {
     return (
       <Flex p="14px" align="center" justify="center" minH="120px">
-        <Text fontSize="11px" color="ink3" fontFamily="mono">
+        <Text fontSize="11px" color="term.ink3" fontFamily="mono">
           AI 分析中…
         </Text>
       </Flex>
@@ -35,7 +35,7 @@ export function LedgerAiPanel({
   if (analysis === null) {
     return (
       <Flex p="14px" align="center" justify="center" minH="120px">
-        <Text fontSize="11px" color="ink3" fontFamily="mono">
+        <Text fontSize="11px" color="term.ink3" fontFamily="mono">
           点击 ANALYZE 对最近 30 日记录进行复盘
         </Text>
       </Flex>
@@ -53,7 +53,7 @@ export function LedgerAiPanel({
           body={analysis.recommendations.map((r, i) => `${String(i + 1)}. ${r}`).join('\n')}
         />
       )}
-      <Text fontSize="9px" color="ink3" fontFamily="mono" letterSpacing="0.12em">
+      <Text fontSize="9px" color="term.ink3" fontFamily="mono" letterSpacing="0.12em">
         {`${analysis.windowStart} → ${analysis.windowEnd}  ·  ${analysis.provider || 'unknown'}  ·  ${String(analysis.entryCount)} 条`}
       </Text>
     </Flex>
@@ -79,7 +79,7 @@ function Block({
       >
         {label}
       </Text>
-      <Text fontSize="12px" color="ink" whiteSpace="pre-wrap" lineHeight="1.5">
+      <Text fontSize="12px" color="term.ink" whiteSpace="pre-wrap" lineHeight="1.5">
         {body}
       </Text>
     </Box>

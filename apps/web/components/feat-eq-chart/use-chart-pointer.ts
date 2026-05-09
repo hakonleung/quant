@@ -29,6 +29,7 @@ import {
   type ChartViewport,
   type VisibleSlice,
 } from '../../lib/fp/chart-view.js';
+import { useSettingsStore } from '../../lib/stores/settings.store.js';
 
 interface DragState {
   startClientX: number;
@@ -97,6 +98,11 @@ export function useChartPointer(args: ChartPointerArgs): ChartPointerHandlers {
   const dragRef = useRef<DragState | null>(null);
   const pinchRef = useRef<PinchState | null>(null);
   const pointersRef = useRef<Map<number, { clientX: number; clientY: number }>>(new Map());
+  // `natural` (default): cursor and panned content move in the *same*
+  // direction (drag left → reveal older bars on the left). `inverted`
+  // mirrors the pre-2026-05 behaviour for users who prefer it.
+  const dragDirection = useSettingsStore((s) => s.dragDirection);
+  const dragSign = dragDirection === 'natural' ? -1 : 1;
 
   const onPointerDown = (e: ReactPointerEvent<SVGSVGElement>): void => {
     if (!interactive) return;
@@ -148,7 +154,7 @@ export function useChartPointer(args: ChartPointerArgs): ChartPointerHandlers {
       const dx = e.clientX - drag.startClientX;
       if (Math.abs(dx) > 2) drag.moved = true;
       const upper = maxPanPx(bars.length, vp, innerW);
-      const nextPan = Math.min(upper, Math.max(0, drag.startPan + dx));
+      const nextPan = Math.min(upper, Math.max(0, drag.startPan + dragSign * dx));
       setVp(clampViewport({ ...vp, panPx: nextPan }));
       return;
     }

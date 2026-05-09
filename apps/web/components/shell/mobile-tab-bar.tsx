@@ -26,8 +26,8 @@ const TABS: readonly TabSpec[] = [
   { id: 'list', label: 'LIST' },
   { id: 'chart', label: 'CHART' },
   { id: 'ai', label: 'AI' },
-  { id: 'ledger', label: 'LDG' },
-  { id: 'watch', label: 'WATCH' },
+  { id: 'sys', label: 'SYS' },
+  { id: 'usr', label: 'USR' },
 ];
 
 export function MobileTabBar(): React.ReactElement {

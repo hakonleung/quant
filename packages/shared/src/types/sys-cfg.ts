@@ -25,10 +25,21 @@ export type SlackTarget = z.infer<typeof SlackTargetSchema>;
  * the literal union here would couple Sys.Cfg to E-1's column catalog,
  * which is owned by the web app.
  */
+/**
+ * Chart pan direction:
+ *   - `natural`  : drag left → reveal content on the left (older bars).
+ *                  Cursor and content move in the *same* direction.
+ *   - `inverted` : drag left → reveal content on the right (newer bars).
+ *                  Cursor moves opposite the panned content.
+ */
+export const DragDirectionSchema = z.enum(['natural', 'inverted']);
+export type DragDirection = z.infer<typeof DragDirectionSchema>;
+
 export const SysCfgSchema = z.object({
   theme: ThemeModeSchema,
   slackTargets: z.array(SlackTargetSchema),
   appliedColumns: z.array(z.string()),
+  dragDirection: DragDirectionSchema.default('inverted'),
 });
 export type SysCfg = z.infer<typeof SysCfgSchema>;
 
@@ -36,4 +47,5 @@ export const DEFAULT_SYS_CFG: SysCfg = {
   theme: 'light',
   slackTargets: [],
   appliedColumns: [],
+  dragDirection: 'inverted',
 };

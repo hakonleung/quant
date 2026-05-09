@@ -85,17 +85,18 @@ export async function listKlineBulk(
 }
 
 /**
- * meta + price-derived metrics for the given codes. Empty `codes` short-
- * circuits to `[]` without hitting the network — the snapshot endpoint
- * does not support full-universe expansion (would issue 5500 kline
- * lookups). Caller is responsible for keeping the list sized to the
- * visible viewport.
+ * meta + price-derived metrics for the given codes. Mirrors
+ * `listKlineBulk` semantics: an empty `codes` array means **the full
+ * universe** (server expands to every stock-meta code). The previous
+ * "empty → []" short-circuit silently broke EQ.LIST whenever the active
+ * sector held more codes than the URL line could carry — for the
+ * synthetic `All` sector we now emit one Flight call instead of
+ * stuffing ~5500 codes into a 30 KB query string.
  */
 export async function listStockSnapshots(
   codes: readonly string[],
 ): Promise<readonly StockSnapshotDto[]> {
-  if (codes.length === 0) return [];
-  const q = codes.map(encodeURIComponent).join(',');
+  const q = codes.length === 0 ? '' : codes.map(encodeURIComponent).join(',');
   return safeList(`/api/stocks/snapshots?codes=${q}`, StockSnapshotDtoSchema);
 }
 

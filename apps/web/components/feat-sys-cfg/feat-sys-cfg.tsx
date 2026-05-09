@@ -23,26 +23,36 @@ import { useState } from 'react';
 
 import { Feat } from '../../lib/eqty/feat.js';
 import { BUILTIN_PRESETS, useLayoutStore } from '../../lib/stores/layout.store.js';
-import { useSettingsStore, type ThemeMode } from '../../lib/stores/settings.store.js';
+import {
+  useSettingsStore,
+  type DragDirection,
+  type ThemeMode,
+} from '../../lib/stores/settings.store.js';
 import { ColumnManager } from '../feat-eq-list/column-manager.js';
 import { FeatView } from '../feat-view/feat-view.js';
 
-type Section = 'theme' | 'presets' | 'columns';
+type Section = 'theme' | 'gestures' | 'presets' | 'columns';
 
 const SECTIONS: ReadonlyArray<{
   readonly id: Section;
   readonly label: string;
 }> = [
   { id: 'theme', label: 'theme' },
+  { id: 'gestures', label: 'gestures' },
   { id: 'presets', label: 'presets' },
   { id: 'columns', label: 'columns' },
 ];
 
-export function FeatSysCfg(): React.ReactElement {
+interface FeatSysCfgProps {
+  /** Hosted inside USR.MAIN as a tab — drop the FeatView chrome. */
+  readonly bare?: boolean;
+}
+
+export function FeatSysCfg({ bare }: FeatSysCfgProps = {}): React.ReactElement {
   const [section, setSection] = useState<Section>('theme');
 
   return (
-    <FeatView feat={Feat.SysCfg}>
+    <FeatView feat={Feat.SysCfg} bare={bare ?? false}>
       <Flex
         h="420px"
         maxH="60vh"
@@ -55,6 +65,7 @@ export function FeatSysCfg(): React.ReactElement {
         <SectionNav active={section} onSelect={setSection} />
         <Box flex="1" minW={0} h="100%" overflow="auto">
           {section === 'theme' && <ThemeSection />}
+          {section === 'gestures' && <GesturesSection />}
           {section === 'presets' && <PresetsSection />}
           {section === 'columns' && <ColumnManager />}
         </Box>
@@ -133,6 +144,80 @@ function ThemeSection(): React.ReactElement {
       })}
       <Text fontSize="10px" color="term.ink3" mt="4px" lineHeight="1.5">
         // 首次访问读系统 prefers-color-scheme，之后这里的选择会写回 sys-cfg。
+      </Text>
+    </Flex>
+  );
+}
+
+interface DragOption {
+  readonly id: DragDirection;
+  readonly label: string;
+  readonly description: string;
+}
+
+const DRAG_OPTIONS: readonly DragOption[] = [
+  {
+    id: 'inverted',
+    label: '反向（默认）',
+    description: '左拖拽显示右边内容 — 经典桌面滚动条手感，内容相对光标反向滑动。',
+  },
+  {
+    id: 'natural',
+    label: '同向',
+    description: '左拖拽显示左边内容 — 抓住的内容跟随光标移动，类似触摸板/移动端。',
+  },
+];
+
+function GesturesSection(): React.ReactElement {
+  const direction = useSettingsStore((s) => s.dragDirection);
+  const setDirection = useSettingsStore((s) => s.setDragDirection);
+  return (
+    <Flex direction="column" p="12px" gap="8px">
+      <Text
+        fontSize="9px"
+        letterSpacing="0.18em"
+        color="term.ink3"
+        textTransform="uppercase"
+        fontWeight="700"
+      >
+        chart drag
+      </Text>
+      {DRAG_OPTIONS.map((opt) => {
+        const selected = direction === opt.id;
+        return (
+          <Box
+            key={opt.id}
+            as="button"
+            onClick={(): void => {
+              setDirection(opt.id);
+            }}
+            textAlign="left"
+            p="10px"
+            borderWidth="1px"
+            borderColor={selected ? 'term.green' : 'term.line'}
+            bg={selected ? 'term.bgElev' : 'transparent'}
+            color="term.ink"
+            cursor="pointer"
+            _hover={{ borderColor: 'term.green', color: 'term.green' }}
+          >
+            <Flex align="baseline" gap="8px">
+              <Text fontSize="12px" fontWeight="700" color={selected ? 'term.green' : 'term.ink'}>
+                {opt.label}
+              </Text>
+              {selected && (
+                <Text fontSize="9px" color="term.green" letterSpacing="0.18em" ml="auto">
+                  ACTIVE
+                </Text>
+              )}
+            </Flex>
+            <Text fontSize="11px" color="term.ink2" mt="4px" lineHeight="1.5">
+              {opt.description}
+            </Text>
+          </Box>
+        );
+      })}
+      <Text fontSize="10px" color="term.ink3" mt="4px" lineHeight="1.5">
+        // 影响 EQ.CHART 与 LDG.MAIN 的日线 / 累计图拖拽方向。
       </Text>
     </Flex>
   );

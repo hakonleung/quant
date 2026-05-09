@@ -16,6 +16,7 @@ import { Logger } from '@nestjs/common';
 import * as Lark from '@larksuiteoapi/node-sdk';
 
 import type { FeishuConfig } from '../config/channel.config.js';
+import { pickCard, stripSlackMrkdwn } from './feishu-card.js';
 import type {
   ChannelAdapter,
   InboundHandler,
@@ -98,20 +99,35 @@ export class FeishuChannelAdapter implements ChannelAdapter {
     if (target === '') {
       throw new Error('feishu_send_no_target: set CHANNEL_FEISHU_DEFAULT_CHAT_ID or pass target');
     }
-    const text = message.title !== undefined ? `${message.title}\n${message.text}` : message.text;
+    const card = pickCard(message);
     if (this.dryRun) {
+      const preview = card !== null ? `card<${message.kind ?? 'unknown'}>` : message.text.slice(0, 80);
       this.logger.log(
-        `feishu_send_dryrun trace_id=${traceId} target=${target} text=${text.slice(0, 80)}`,
+        `feishu_send_dryrun trace_id=${traceId} target=${target} preview=${preview}`,
       );
       return { status: 'dryrun', target };
     }
+    const data =
+      card !== null
+        ? {
+            receive_id: target,
+            msg_type: 'interactive',
+            content: JSON.stringify(card),
+          }
+        : {
+            receive_id: target,
+            msg_type: 'text',
+            content: JSON.stringify({
+              text: stripSlackMrkdwn(
+                message.title !== undefined
+                  ? `${message.title}\n${message.text}`
+                  : message.text,
+              ),
+            }),
+          };
     const res = await this.client.im.message.create({
       params: { receive_id_type: 'chat_id' },
-      data: {
-        receive_id: target,
-        msg_type: 'text',
-        content: JSON.stringify({ text }),
-      },
+      data,
     });
     const messageId =
       typeof res.data?.message_id === 'string' ? res.data.message_id : null;

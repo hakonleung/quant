@@ -62,11 +62,24 @@ class FakePort implements StockMetaPort {
       peg: null,
       gross_margin_ttm: null,
     };
+    const baseReturns = {
+      ret_5d: null,
+      ret_10d: null,
+      ret_20d: null,
+      ret_90d: null,
+      ret_250d: null,
+    };
     return Promise.resolve(
       codes
         .map((c) => this.byCode[c])
         .filter((m): m is StockMetaDto => m !== undefined)
-        .map((meta) => ({ meta, price: null, asof: null, derived: baseDerived })),
+        .map((meta) => ({
+          meta,
+          price: null,
+          asof: null,
+          derived: baseDerived,
+          returns: baseReturns,
+        })),
     );
   }
 }

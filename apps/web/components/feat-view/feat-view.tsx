@@ -46,6 +46,24 @@ interface FeatViewProps {
    * panes below them in the same column.
    */
   readonly contentSized?: boolean;
+  /**
+   * Embedded mode: skip the FeatView chrome (header, status, controls,
+   * minimize/fullscreen state) entirely and just render `children`. Use
+   * when a feat component needs to be hosted inside another FeatView
+   * (e.g. as one of USR.MAIN's tabs) without doubling up on the pane
+   * frame.
+   */
+  readonly bare?: boolean;
+  /**
+   * Tall, two-row header that matches the topbar logo height. Window
+   * controls sit on the first row's right edge; `right` fills the rest
+   * of the first row, `rightSecondary` (only meaningful with
+   * `tallHeader`) fills the second row.
+   */
+  readonly tallHeader?: boolean;
+  /** Second-row content for the tall header. Ignored when `tallHeader`
+   *  is false. */
+  readonly rightSecondary?: ReactNode;
   readonly children: ReactNode;
 }
 
@@ -56,8 +74,12 @@ export function FeatView({
   titleSlot,
   right,
   contentSized,
+  bare,
+  tallHeader,
+  rightSecondary,
   children,
 }: FeatViewProps): React.ReactElement {
+  if (bare === true) return <>{children}</>;
   const config = FEAT_CONFIG_MAP[feat];
   const cyber = config.cyber ?? false;
   const gridArea = config.gridArea;
@@ -220,8 +242,10 @@ export function FeatView({
         {...(statusBlink !== undefined ? { statusBlink } : {})}
         titleSlot={titleSlot}
         right={right}
+        rightSecondary={rightSecondary}
         cyber={cyber}
         mode={mode}
+        tall={tallHeader ?? false}
         onMinimize={minimize}
         onRestore={restore}
         onFullscreen={goFullscreen}
@@ -296,27 +320,31 @@ interface FeatViewHeaderProps {
   readonly statusBlink?: boolean;
   readonly titleSlot?: ReactNode;
   readonly right?: ReactNode;
+  readonly rightSecondary?: ReactNode;
   readonly cyber: boolean;
   readonly mode: FeatViewMode;
+  readonly tall: boolean;
   readonly onMinimize: () => void;
   readonly onRestore: () => void;
   readonly onFullscreen: () => void;
   readonly onExitFullscreen: () => void;
 }
 
-function FeatViewHeader({
-  id,
-  status,
-  statusBlink,
-  titleSlot,
-  right,
-  cyber,
-  mode,
-  onMinimize,
-  onRestore,
-  onFullscreen,
-  onExitFullscreen,
-}: FeatViewHeaderProps): React.ReactElement {
+function FeatViewHeader(props: FeatViewHeaderProps): React.ReactElement {
+  if (props.tall) return <FeatViewHeaderTall {...props} />;
+  const {
+    id,
+    status,
+    statusBlink,
+    titleSlot,
+    right,
+    cyber,
+    mode,
+    onMinimize,
+    onRestore,
+    onFullscreen,
+    onExitFullscreen,
+  } = props;
   return (
     <Flex
       align="center"
@@ -376,6 +404,108 @@ function FeatViewHeader({
           onExitFullscreen={onExitFullscreen}
         />
       </HStack>
+    </Flex>
+  );
+}
+
+/**
+ * Two-row header used by SYS / USR — height matches the topbar logo
+ * (52px desktop / 44px mobile).
+ *
+ * Row 1: id + status + titleSlot + `right` (primary content)
+ *        + window controls (always pinned to the right).
+ * Row 2: `rightSecondary` content (web vitals on SYS, tabs on USR).
+ */
+function FeatViewHeaderTall({
+  id,
+  status,
+  statusBlink,
+  titleSlot,
+  right,
+  rightSecondary,
+  cyber,
+  mode,
+  onMinimize,
+  onRestore,
+  onFullscreen,
+  onExitFullscreen,
+}: FeatViewHeaderProps): React.ReactElement {
+  return (
+    <Flex
+      direction="column"
+      px="10px"
+      py="2px"
+      h={{ base: '44px', md: '52px' }}
+      bg={cyber ? 'term.panel' : 'panel'}
+      borderBottomWidth="2px"
+      borderBottomColor={cyber ? 'term.green' : 'accent'}
+      flexShrink={0}
+      color={cyber ? 'term.ink3' : 'ink3'}
+      justify="space-between"
+    >
+      <Flex align="center" gap="8px" flexShrink={0} minW={0}>
+        <Text
+          fontFamily="mono"
+          fontSize="11px"
+          letterSpacing="0.18em"
+          fontWeight="700"
+          color={cyber ? 'term.green' : 'accent'}
+          whiteSpace="nowrap"
+          flexShrink={0}
+        >
+          {id}
+        </Text>
+        {status !== undefined && (
+          <Box flexShrink={0}>
+            <FeatViewStatus tone={status} blink={statusBlink ?? false} />
+          </Box>
+        )}
+        {titleSlot !== undefined && <Box flexShrink={0}>{titleSlot}</Box>}
+        {right !== undefined && (
+          <Flex
+            align="center"
+            gap="6px"
+            fontFamily="mono"
+            fontSize="10px"
+            letterSpacing="0.06em"
+            flex="1"
+            minW={0}
+            overflow="hidden"
+          >
+            {right}
+          </Flex>
+        )}
+        <HStack
+          ml="auto"
+          gap="10px"
+          fontFamily="mono"
+          fontSize="10px"
+          letterSpacing="0.06em"
+          color={cyber ? 'term.ink3' : 'ink3'}
+          flexShrink={0}
+        >
+          <FeatViewControls
+            cyber={cyber}
+            mode={mode}
+            onMinimize={onMinimize}
+            onRestore={onRestore}
+            onFullscreen={onFullscreen}
+            onExitFullscreen={onExitFullscreen}
+          />
+        </HStack>
+      </Flex>
+      <Flex
+        align="center"
+        gap="6px"
+        fontFamily="mono"
+        fontSize="10px"
+        letterSpacing="0.06em"
+        flexShrink={0}
+        minW={0}
+        overflow="hidden"
+      >
+        {rightSecondary}
+      </Flex>
     </Flex>
   );
 }

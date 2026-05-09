@@ -51,7 +51,13 @@ import { ScrollGrid } from './scroll-grid.js';
 // tests. This file holds only the React layer (state, hooks, JSX).
 
 
-export function FeatEqList(): React.ReactElement {
+interface FeatEqListProps {
+  /** Hosted inside MKT as the lower body — render content only, no
+   *  FeatView chrome (the parent owns the pane frame). */
+  readonly bare?: boolean;
+}
+
+export function FeatEqList({ bare }: FeatEqListProps = {}): React.ReactElement {
   const activeSectorId = useUiStore((s) => s.activeSectorId);
   const setFocusCode = useUiStore((s) => s.setFocusCode);
   const focusCode = useUiStore((s) => s.focusCode);
@@ -138,8 +144,14 @@ export function FeatEqList(): React.ReactElement {
   }, [filteredRows, sort]);
 
   const appliedColumns = useSettingsStore((s) => s.appliedColumns);
-  const snapshots = useStockSnapshots(codes, {
-    enabled: appliedNeedsSnapshot(appliedColumns),
+  // For the synthetic "All" sector we send empty codes — the snapshot
+  // endpoint expands to the full universe server-side (mirroring
+  // kline/bulk). Stuffing ~5500 codes into the query string would
+  // overflow Express's header budget and silently strand every
+  // snapshot-derived column with no data (the bug this branch fixes).
+  const snapshotCodes: readonly string[] = isAll ? [] : codes;
+  const snapshots = useStockSnapshots(snapshotCodes, {
+    enabled: appliedNeedsSnapshot(appliedColumns) && (isAll || snapshotCodes.length > 0),
   });
   const columns: readonly ColumnDef[] = useMemo(
     () => buildColumns(appliedColumns, evidenceKeys, snapshots.byCode),
@@ -227,7 +239,8 @@ export function FeatEqList(): React.ReactElement {
         : 'green';
   return (
     <FeatView
-      feat={Feat.EquityList}
+      feat={Feat.Mkt}
+      bare={bare ?? false}
       status={listTone}
       statusBlink={isLoading || klineBatch.isLoading}
       titleSlot={

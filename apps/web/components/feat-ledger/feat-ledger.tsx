@@ -34,7 +34,12 @@ import { LedgerSummaryBar } from './ledger-summary-bar.js';
 
 type Tab = 'list' | 'daily' | 'cumulative';
 
-export function FeatLedger(): React.ReactElement {
+interface FeatLedgerProps {
+  /** Hosted inside USR.MAIN as a tab — drop the FeatView chrome. */
+  readonly bare?: boolean;
+}
+
+export function FeatLedger({ bare }: FeatLedgerProps = {}): React.ReactElement {
   const { entries, enriched, error } = useLedgerEnriched();
   const mutations = useLedgerMutations();
   const cachedAnalysis = useLedgerCachedAnalysis();
@@ -147,14 +152,18 @@ export function FeatLedger(): React.ReactElement {
   };
 
   return (
-    <FeatView feat={Feat.Ledger} {...(status !== undefined ? { status } : {})}>
+    <FeatView
+      feat={Feat.Ledger}
+      bare={bare ?? false}
+      {...(status !== undefined ? { status } : {})}
+    >
       <Flex
         px="10px"
         py="4px"
         gap="6px"
         align="center"
         borderBottomWidth="1px"
-        borderColor="line"
+        borderColor="term.line"
         flexShrink={0}
       >
         <TabButton active={tab === 'list'} onClick={(): void => setTab('list')}>
@@ -224,7 +233,7 @@ export function FeatLedger(): React.ReactElement {
       {(aiOpen || cachedAnalysis.data !== null) && (
         <Box
           borderTopWidth="1px"
-          borderColor="line"
+          borderColor="term.line"
           flexShrink={0}
           display="flex"
           flexDirection="column"
@@ -238,7 +247,7 @@ export function FeatLedger(): React.ReactElement {
             gap="10px"
             align="center"
             borderBottomWidth="1px"
-            borderColor="line"
+            borderColor="term.line"
             flexShrink={0}
           >
             <Text
@@ -318,9 +327,9 @@ function TabButton({ active, onClick, children }: TabButtonProps): React.ReactEl
       fontSize="10px"
       fontFamily="mono"
       letterSpacing="0.12em"
-      color={active ? 'accent' : 'ink3'}
+      color={active ? 'term.green' : 'term.ink3'}
       borderBottomWidth="1px"
-      borderColor={active ? 'accent' : 'transparent'}
+      borderColor={active ? 'term.green' : 'transparent'}
       cursor="pointer"
       onClick={onClick}
     >

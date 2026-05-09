@@ -91,12 +91,31 @@ export const StockDerivedMetricsSchema = z
 
 export type StockDerivedMetrics = z.infer<typeof StockDerivedMetricsSchema>;
 
+/**
+ * Period-return windows surfaced by EQ.LIST. Values are decimal strings
+ * representing the fractional change against `close_qfq` N trading bars
+ * ago (e.g. `"0.0532"` for +5.32 %). `null` when the kline history is
+ * shorter than the requested window.
+ */
+export const StockReturnsSchema = z
+  .object({
+    ret_5d: decimalStringOrNull,
+    ret_10d: decimalStringOrNull,
+    ret_20d: decimalStringOrNull,
+    ret_90d: decimalStringOrNull,
+    ret_250d: decimalStringOrNull,
+  })
+  .strict();
+
+export type StockReturns = z.infer<typeof StockReturnsSchema>;
+
 export const StockSnapshotDtoSchema = z
   .object({
     meta: StockMetaDtoSchema,
     price: decimalStringOrNull,
     asof: isoDate.nullable(),
     derived: StockDerivedMetricsSchema,
+    returns: StockReturnsSchema,
   })
   .strict();
 

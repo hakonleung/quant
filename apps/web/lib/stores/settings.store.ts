@@ -11,7 +11,7 @@
 
 'use client';
 
-import type { SlackTarget, SysCfg, ThemeMode } from '@quant/shared';
+import type { DragDirection, SlackTarget, SysCfg, ThemeMode } from '@quant/shared';
 import { useEffect, useRef } from 'react';
 import { create } from 'zustand';
 
@@ -24,25 +24,31 @@ import {
 } from '../eqty/columns.catalog.js';
 import { jsonEqual } from './remote-sync.js';
 
-export type { ThemeMode, SlackTarget };
+export type { ThemeMode, SlackTarget, DragDirection };
 
 interface SettingsState {
   readonly theme: ThemeMode;
   readonly slackTargets: readonly SlackTarget[];
   /** E-1 list applied columns, in render order. */
   readonly appliedColumns: readonly ColumnKey[];
+  readonly dragDirection: DragDirection;
   setTheme(theme: ThemeMode): void;
   addSlackTarget(target: SlackTarget): void;
   removeSlackTarget(channel: string): void;
   setAppliedColumns(keys: readonly ColumnKey[]): void;
+  setDragDirection(direction: DragDirection): void;
 }
 
 export const useSettingsStore = create<SettingsState>()((set) => ({
   theme: 'light',
   slackTargets: [],
   appliedColumns: DEFAULT_APPLIED_COLUMNS,
+  dragDirection: 'inverted',
   setTheme: (theme) => {
     set({ theme });
+  },
+  setDragDirection: (direction) => {
+    set({ dragDirection: direction });
   },
   addSlackTarget: (target) => {
     set((state) => {
@@ -74,6 +80,7 @@ function snapshotCfg(): SysCfg {
     theme: s.theme,
     slackTargets: [...s.slackTargets],
     appliedColumns: [...s.appliedColumns],
+    dragDirection: s.dragDirection,
   };
 }
 
@@ -91,6 +98,7 @@ function applyCfg(cfg: SysCfg): void {
     theme: cfg.theme,
     slackTargets: cfg.slackTargets,
     appliedColumns: filtered.length === 0 ? DEFAULT_APPLIED_COLUMNS : filtered,
+    dragDirection: cfg.dragDirection,
   });
 }
 

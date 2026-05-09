@@ -51,6 +51,7 @@ export class ChannelService {
     const activityIds: string[] = [];
     const message: OutboundMessage = {
       text: request.text,
+      kind: request.kind,
       ...(request.title !== undefined ? { title: request.title } : {}),
       ...(request.target !== undefined ? { target: request.target } : {}),
       ...(request.meta !== undefined ? { meta: request.meta } : {}),

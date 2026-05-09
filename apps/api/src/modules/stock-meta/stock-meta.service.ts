@@ -43,7 +43,11 @@ export class StockMetaService {
     codes: readonly string[],
     traceId: string,
   ): Promise<readonly StockSnapshotDto[]> {
-    if (codes.length === 0) return [];
+    // Empty `codes` is **not** an error — it tells the Python Flight
+    // server to expand to the full universe. The `kline/bulk` route uses
+    // the same convention, and EQ.LIST's `All` sector relies on it to
+    // avoid a 30 KB query string. Adapter / Python side enforces the
+    // server-side cap.
     return this.port.listSnapshots(codes, traceId);
   }
 }

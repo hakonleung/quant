@@ -14,11 +14,12 @@ const ListSchema = z.array(StockSnapshotDtoSchema);
 export async function GET(request: Request): Promise<Response> {
   const traceId = readTrace(request);
   try {
+    // Mirrors `kline/bulk` semantics: an empty `codes=` value tells the
+    // Python Flight server to expand to the full universe. The previous
+    // short-circuit here returned `[]` and silently stranded every
+    // snapshot-derived column on the EQ.LIST `All` sector view.
     const url = new URL(request.url);
     const codes = url.searchParams.get('codes') ?? '';
-    if (codes.length === 0) {
-      return Response.json([], { headers: { [TRACE_HEADER]: traceId } });
-    }
     const rows: readonly StockSnapshotDto[] = await nestJson(
       request,
       `/api/stocks/snapshots?codes=${encodeURIComponent(codes)}`,

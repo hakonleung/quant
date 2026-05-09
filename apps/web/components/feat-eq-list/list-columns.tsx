@@ -153,6 +153,16 @@ function makeAppliedColumn(
         ),
         sortValue: (r) => r.consecUpDays,
       };
+    case 'ret5d':
+      return returnColumn('ret5d', '5D%', snapshotByCode, (s) => s.returns.ret_5d);
+    case 'ret10d':
+      return returnColumn('ret10d', '10D%', snapshotByCode, (s) => s.returns.ret_10d);
+    case 'ret20d':
+      return returnColumn('ret20d', '20D%', snapshotByCode, (s) => s.returns.ret_20d);
+    case 'ret90d':
+      return returnColumn('ret90d', '90D%', snapshotByCode, (s) => s.returns.ret_90d);
+    case 'ret250d':
+      return returnColumn('ret250d', '250D%', snapshotByCode, (s) => s.returns.ret_250d);
     case 'mktCap':
       return derivedColumn('mktCap', '总市值', 110, snapshotByCode, (d) => d.mkt_cap, 'cny');
     case 'floatMktCap':
@@ -231,6 +241,37 @@ function derivedColumn(
       );
     },
     sortValue: (r) => sortValue(r.code),
+  };
+}
+
+/**
+ * Period-return column. Server returns the *fractional* change against
+ * `close_qfq` N bars ago (e.g. `"0.0532"` for +5.32 %). Pass the raw
+ * fraction straight to {@link ChgPctCell} — that cell already scales by
+ * 100; multiplying here too would render +5.32 % as +532 %.
+ */
+function returnColumn(
+  key: ColumnKey,
+  label: string,
+  snapshotByCode: ReadonlyMap<string, StockSnapshotDto>,
+  pick: (snap: StockSnapshotDto) => string | null,
+): ColumnDef {
+  const fraction = (code: string): number | null => {
+    const snap = snapshotByCode.get(code);
+    if (snap === undefined) return null;
+    const raw = pick(snap);
+    if (raw === null) return null;
+    const n = Number(raw);
+    return Number.isFinite(n) ? n : null;
+  };
+  const spec = getColumnSpec(key);
+  return {
+    key: spec.key,
+    label,
+    w: 80,
+    align: 'right',
+    render: (r) => <ChgPctCell value={fraction(r.code)} />,
+    sortValue: (r) => fraction(r.code),
   };
 }
 

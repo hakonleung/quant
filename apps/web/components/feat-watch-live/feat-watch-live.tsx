@@ -129,7 +129,12 @@ function useGroupConfigs(): {
   return { groups, refresh };
 }
 
-export function FeatWatchLive(): React.ReactElement {
+interface FeatWatchLiveProps {
+  /** Hosted inside USR.MAIN as a tab — drop the FeatView chrome. */
+  readonly bare?: boolean;
+}
+
+export function FeatWatchLive({ bare }: FeatWatchLiveProps = {}): React.ReactElement {
   const state = useWatchStream();
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
   const [groupBusy, setGroupBusy] = useState<ReadonlySet<string>>(new Set());
@@ -285,6 +290,7 @@ export function FeatWatchLive(): React.ReactElement {
   return (
     <FeatView
       feat={Feat.WatchLive}
+      bare={bare ?? false}
       status={state.kind === 'open' ? 'green' : state.kind === 'error' ? 'red' : 'idle'}
     >
       <Flex

@@ -106,6 +106,13 @@ describe('snapshotToTerm', () => {
         peg: null,
         gross_margin_ttm: null,
       },
+      returns: {
+        ret_5d: null,
+        ret_10d: null,
+        ret_20d: null,
+        ret_90d: null,
+        ret_250d: null,
+      },
     });
     expect(out.code).toBe('600519');
     expect(out.price).toBe(1402.5);
@@ -127,6 +134,13 @@ describe('snapshotToTerm', () => {
         pb: null,
         peg: null,
         gross_margin_ttm: null,
+      },
+      returns: {
+        ret_5d: null,
+        ret_10d: null,
+        ret_20d: null,
+        ret_90d: null,
+        ret_250d: null,
       },
     });
     expect(out.price).toBeNull();

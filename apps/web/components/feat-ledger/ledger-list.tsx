@@ -62,7 +62,7 @@ function EmptyState({
 }): React.ReactElement {
   return (
     <Flex ref={hostRef} flex="1" align="center" justify="center" minH="120px">
-      <Text fontSize="11px" color="ink3" fontFamily="mono">
+      <Text fontSize="11px" color="term.ink3" fontFamily="mono">
         暂无记录
       </Text>
     </Flex>
@@ -125,14 +125,14 @@ function Header({ tier }: HeaderProps): React.ReactElement {
   return (
     <Flex
       borderBottomWidth="1px"
-      borderColor="line"
+      borderColor="term.line"
       px="10px"
       py="4px"
       gap="12px"
       fontFamily="mono"
       fontSize="9px"
       letterSpacing="0.12em"
-      color="ink3"
+      color="term.ink3"
       flexShrink={0}
     >
       <HeaderCell w="84px">DATE</HeaderCell>
@@ -197,7 +197,10 @@ function Row({
 }: RowProps): React.ReactElement {
   const pnlD = new Decimal(entry.pnlAmount);
   // 涨红跌绿: positive PnL → up (red), negative → down (green).
-  const pnlTone = pnlD.isPositive() && !pnlD.isZero() ? 'up' : pnlD.isNegative() ? 'down' : 'ink';
+  // LDG renders inside the cyber USR pane — neutral PnL must use
+  // `term.ink`; plain `ink` resolves to near-black on the term panel.
+  const pnlTone =
+    pnlD.isPositive() && !pnlD.isZero() ? 'up' : pnlD.isNegative() ? 'down' : 'term.ink';
   return (
     <Flex
       position="absolute"
@@ -209,8 +212,9 @@ function Row({
       px="10px"
       gap="12px"
       borderBottomWidth="1px"
-      borderColor="line"
-      _hover={{ bg: 'panel2' }}
+      borderColor="term.line"
+      color="term.ink"
+      _hover={{ bg: 'term.bgElev' }}
     >
       <Box w="84px" flexShrink={0}>
         {entry.date}
@@ -245,7 +249,7 @@ function OptionalCells({ entry, tier, pctTone }: OptionalCellsProps): React.Reac
         {!entry.closingProvided && <DerivedBadge title="链式推导值" />}
       </Flex>
       {tier === 'wide' && (
-        <Flex w="80px" justify="flex-end" align="center" gap="4px" flexShrink={0} color="ink3">
+        <Flex w="80px" justify="flex-end" align="center" gap="4px" flexShrink={0} color="term.ink3">
           <Text fontSize="11px">{cashFlowDisplay}</Text>
           {/* CASHFLOW is itself a derived field. `~` mirrors CLOSING. */}
           {!cashFlow.isZero() && <DerivedBadge title="派生字段：Δclosing − pnlAmount" />}
@@ -290,10 +294,10 @@ function DerivedBadge({ title }: { readonly title: string }): React.ReactElement
     <Text
       as="span"
       fontSize="8px"
-      color="ink3"
+      color="term.ink3"
       letterSpacing="0.1em"
       border="1px dashed"
-      borderColor="line"
+      borderColor="term.line"
       px="2px"
       title={title}
       aria-label={title}

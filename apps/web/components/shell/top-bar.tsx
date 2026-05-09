@@ -25,13 +25,11 @@ import { runViewTransition } from '../../lib/fp/view-transition.js';
 import { useViewport } from '../../lib/hooks/use-viewport.js';
 import { useLayoutStore } from '../../lib/stores/layout.store.js';
 
-import { FeatChannelLive } from '../feat-channel/feat-channel.js';
-import { FeatSysCfg } from '../feat-sys-cfg/feat-sys-cfg.js';
-import { FeatSysStat } from '../feat-sys-stat/feat-sys-stat.js';
+import { FeatSysMain } from '../feat-sys-main/feat-sys-main.js';
+import { FeatUsrMain } from '../feat-usr-main/feat-usr-main.js';
 
 import type { SessionChipInfo } from './app-shell.js';
 import { LogoArt } from './logo-art.js';
-import { UserChip } from './user-chip.js';
 
 const BRAND_HEIGHT = 52;
 const BRAND_HEIGHT_MOBILE = 44;
@@ -47,13 +45,13 @@ interface TopBarProps {
 export function TopBar({ session }: TopBarProps = {}): React.ReactElement {
   const { mode } = useViewport();
   const isMobile = mode === 'mobile';
-  // SYS.STAT capsule strip (queue / mem / fps) eats ~360px even
-  // collapsed; on mobile it pushes Channel/SysCfg off-screen, so we
-  // drop it from the topbar — the user can still get queue progress
-  // from the in-pane status badges. Channel + SysCfg shrink to icon-
-  // sized chips since their bodies are bodyOverlay anchored to the
-  // header rect, the inline width only affects the chip click target.
-  const sideSlot = isMobile ? '96px' : '220px';
+  // SYS.MAIN capsule strip (queue / mem / fps) eats ~360px even
+  // collapsed; on mobile it pushes USR.MAIN off-screen, so we drop the
+  // strip from the topbar there — queue progress is still available via
+  // the in-pane status badges. USR.MAIN's tab strip shrinks to a chip-
+  // sized affordance since its body is bodyOverlay anchored to the
+  // header rect.
+  const sideSlot = isMobile ? '96px' : '260px';
   return (
     <Flex
       minH={`${String(isMobile ? BRAND_HEIGHT_MOBILE : BRAND_HEIGHT)}px`}
@@ -63,22 +61,18 @@ export function TopBar({ session }: TopBarProps = {}): React.ReactElement {
       align="stretch"
       style={{ paddingTop: 'env(safe-area-inset-top)' }}
     >
-      <Brand compact={isMobile} />
+      <Brand compact={isMobile} stretch={isMobile} />
       {!isMobile && (
         <Box flex="1" minW={0} display="flex" alignItems="stretch">
-          <FeatSysStat />
+          <FeatSysMain />
         </Box>
       )}
-      {isMobile && <Box flex="1" minW={0} />}
-      <Box w={sideSlot} flex="0 0 auto" display="flex" alignItems="stretch">
-        <FeatChannelLive />
-      </Box>
-      <Box w={sideSlot} flex="0 0 auto" display="flex" alignItems="stretch">
-        <FeatSysCfg />
-      </Box>
-      {session !== undefined && (
-        <Box flex="0 0 auto" display="flex" alignItems="stretch">
-          <UserChip displayName={session.displayName} mode={session.mode} />
+      {/* SYS + USR move to bottom-tab nav on mobile — the topbar
+        * collapses to just the brand mark (filling the row) and the
+        * user chip lives inside USR's tall header on desktop. */}
+      {!isMobile && (
+        <Box w={sideSlot} flex="0 0 auto" display="flex" alignItems="stretch">
+          <FeatUsrMain session={session} />
         </Box>
       )}
     </Flex>
@@ -87,9 +81,12 @@ export function TopBar({ session }: TopBarProps = {}): React.ReactElement {
 
 interface BrandProps {
   readonly compact?: boolean;
+  /** Fill the available row width — used on mobile where SYS / USR move
+   *  to the bottom nav and the topbar collapses to just the brand. */
+  readonly stretch?: boolean;
 }
 
-function Brand({ compact = false }: BrandProps): React.ReactElement {
+function Brand({ compact = false, stretch = false }: BrandProps): React.ReactElement {
   const setAppMode = useLayoutStore((s) => s.setAppMode);
   const onToggle = (): void => {
     runViewTransition(typeof document === 'undefined' ? null : document, () => {
@@ -111,6 +108,8 @@ function Brand({ compact = false }: BrandProps): React.ReactElement {
       pr={compact ? '12px' : '20px'}
       display="flex"
       alignItems="center"
+      flex={stretch ? '1' : undefined}
+      justifyContent={stretch ? 'flex-start' : undefined}
       flexShrink={0}
       cursor="pointer"
       border="0"

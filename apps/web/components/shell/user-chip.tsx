@@ -15,14 +15,23 @@ interface UserChipProps {
 
 export function UserChip({ displayName, mode }: UserChipProps): React.ReactElement {
   return (
-    <Flex h="100%" align="center" px="10px" gap="8px" fontSize="11px" color="textMuted">
+    <Flex
+      align="center"
+      gap="8px"
+      fontFamily="mono"
+      fontSize="11px"
+      color="term.ink2"
+      letterSpacing="0.06em"
+    >
       <Box
         as="span"
         title={mode === 'env' ? 'AUTH_MODE=disabled' : 'logged in'}
-        maxW="120px"
+        maxW="160px"
         overflow="hidden"
         textOverflow="ellipsis"
         whiteSpace="nowrap"
+        color="term.ink"
+        fontWeight="600"
       >
         {displayName}
       </Box>
@@ -37,6 +46,8 @@ export function UserChip({ displayName, mode }: UserChipProps): React.ReactEleme
               background: 'transparent',
               fontSize: '11px',
               padding: 0,
+              fontFamily: 'inherit',
+              letterSpacing: 'inherit',
             }}
           >
             登出

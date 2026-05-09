@@ -54,13 +54,13 @@ export function YAxisLayer({
               x2={width}
               y1={y}
               y2={y}
-              stroke={palette.light.line2}
+              stroke={palette.term.line}
             />
             <text
               x={PRICE_AXIS_W - 6}
               y={y + 3}
               style={AXIS_TEXT_STYLE}
-              fill={palette.light.ink3}
+              fill={palette.term.ink3}
               textAnchor="end"
             >
               {fmtAxisY(v)}
@@ -74,7 +74,7 @@ export function YAxisLayer({
           x2={width}
           y1={yFor(0)}
           y2={yFor(0)}
-          stroke={palette.light.line}
+          stroke={palette.term.line}
         />
       )}
     </g>
@@ -119,7 +119,7 @@ export function XAxisLayer({
             x={cx}
             y={PRICE_H + DATE_AXIS_H - 5}
             style={AXIS_TEXT_STYLE}
-            fill={palette.light.ink3}
+            fill={palette.term.ink3}
             textAnchor={anchor}
           >
             {dateAt(i).slice(5)}

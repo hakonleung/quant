@@ -42,12 +42,9 @@ import { useViewport } from '../../lib/hooks/use-viewport.js';
 import { LAYOUT_LIMITS, useLayoutStore } from '../../lib/stores/layout.store.js';
 import { useUiStore } from '../../lib/stores/ui.store.js';
 import { FeatEqChart } from '../feat-eq-chart/feat-eq-chart.js';
-import { FeatEqList } from '../feat-eq-list/feat-eq-list.js';
 import { FeatAiSec } from '../feat-ai-sec/feat-ai-sec.js';
-import { FeatSecList } from '../feat-sec-list/feat-sec-list.js';
+import { FeatMkt } from '../feat-mkt/feat-mkt.js';
 import { FeatAiEq } from '../feat-ai-eq/feat-ai-eq.js';
-import { FeatLedger } from '../feat-ledger/feat-ledger.js';
-import { FeatWatchLive } from '../feat-watch-live/feat-watch-live.js';
 
 import { EqtyModuleMobile } from './eqty-module-mobile.js';
 
@@ -72,8 +69,7 @@ function EqtyModuleDesktop(): React.ReactElement {
   return (
     <Flex h="100%" bg="line" gap="0" align="stretch">
       <Column width={`${String(leftWidth)}px`}>
-        <FeatSecList />
-        <FeatEqList />
+        <FeatMkt />
       </Column>
       <Divider
         getNext={(dx, start): number => start + dx}
@@ -94,8 +90,6 @@ function EqtyModuleDesktop(): React.ReactElement {
       <Column width={`${String(rightWidth)}px`}>
         <FeatAiSec />
         {code !== null && <FeatAiEq code={code} />}
-        <FeatLedger />
-        <FeatWatchLive />
       </Column>
     </Flex>
   );

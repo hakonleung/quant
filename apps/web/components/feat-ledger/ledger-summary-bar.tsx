@@ -41,8 +41,8 @@ export function LedgerSummaryBar({ enriched, today }: LedgerSummaryBarProps): Re
 
   if (summary.empty) {
     return (
-      <Flex px="10px" py="8px" borderBottomWidth="1px" borderColor="line" flexShrink={0}>
-        <Text fontSize="11px" color="ink3" fontFamily="mono">
+      <Flex px="10px" py="8px" borderBottomWidth="1px" borderColor="term.line" flexShrink={0}>
+        <Text fontSize="11px" color="term.ink3" fontFamily="mono">
           账本为空，先添加首条记录（必须包含当日收盘仓位）。
         </Text>
       </Flex>
@@ -55,7 +55,7 @@ export function LedgerSummaryBar({ enriched, today }: LedgerSummaryBarProps): Re
       py="8px"
       gap="16px"
       borderBottomWidth="1px"
-      borderColor="line"
+      borderColor="term.line"
       flexWrap="wrap"
       flexShrink={0}
     >
@@ -79,15 +79,18 @@ interface StatProps {
 }
 
 function Stat({ label, value, tone = 'flat', muted = false }: StatProps): React.ReactElement {
-  // 涨红跌绿: positive → up (red), negative → down (green).
-  const color = tone === 'pos' ? 'up' : tone === 'neg' ? 'down' : muted ? 'ink3' : 'ink';
+  // 涨红跌绿: positive → up (red), negative → down (green). LDG renders
+  // inside the USR (cyber) frame, so the neutral / muted tones must use
+  // the term-themed inks — `ink` resolves to near-black on the light
+  // base palette, which is unreadable on the dark term panel.
+  const color = tone === 'pos' ? 'up' : tone === 'neg' ? 'down' : muted ? 'term.ink3' : 'term.ink';
   // Redundant glyph so the up / down state is legible without colour
   // — covers the ~8% of users with red-green colour-blindness and
   // anyone reading on an e-ink / monochrome screen.
   const glyph = tone === 'pos' ? '▲' : tone === 'neg' ? '▼' : '';
   return (
     <Box>
-      <Text fontSize="9px" letterSpacing="0.16em" color="ink3" fontFamily="mono">
+      <Text fontSize="9px" letterSpacing="0.16em" color="term.ink3" fontFamily="mono">
         {label.toUpperCase()}
       </Text>
       <Text fontSize="13px" color={color} fontFamily="mono" fontWeight="600">

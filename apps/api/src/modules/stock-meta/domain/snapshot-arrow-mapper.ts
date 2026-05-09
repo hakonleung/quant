@@ -42,6 +42,11 @@ interface RowAccess {
   readonly pb?: unknown;
   readonly peg?: unknown;
   readonly gross_margin_ttm?: unknown;
+  readonly ret_5d?: unknown;
+  readonly ret_10d?: unknown;
+  readonly ret_20d?: unknown;
+  readonly ret_90d?: unknown;
+  readonly ret_250d?: unknown;
 }
 
 export function arrowTableToStockSnapshotDtos(table: Table): StockSnapshotDto[] {
@@ -77,6 +82,13 @@ export function arrowTableToStockSnapshotDtos(table: Table): StockSnapshotDto[] 
         pb: optionalString(row.pb),
         peg: optionalString(row.peg),
         gross_margin_ttm: optionalString(row.gross_margin_ttm),
+      },
+      returns: {
+        ret_5d: optionalString(row.ret_5d),
+        ret_10d: optionalString(row.ret_10d),
+        ret_20d: optionalString(row.ret_20d),
+        ret_90d: optionalString(row.ret_90d),
+        ret_250d: optionalString(row.ret_250d),
       },
     };
     out.push(StockSnapshotDtoSchema.parse(candidate));

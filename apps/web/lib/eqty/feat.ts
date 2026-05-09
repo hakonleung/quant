@@ -3,12 +3,13 @@
  *
  * Each `Feat` value is a `[MODULE].[FEATURE]` string displayed in the
  * pane header (e.g. `EQ.CHART`). Module abbreviations:
- *   - SEC    sector / collection
- *   - EQ     equity (price chart, list)
+ *   - MKT    market overview (sector roster + equity list)
+ *   - EQ     equity chart
  *   - SCR    screening (NL search, pattern match)
  *   - AI     LLM insight surface
- *   - SYS    system (status, push)
- *   - WATCH  live watch tasks
+ *   - SYS    system (status + activity feed + watch outputs)
+ *   - USR    user surface (ledger / watch tasks / config) — single
+ *            FeatView, three tabs in the header
  *
  * `FEAT_CONFIG_MAP` is the single source of truth for static pane
  * metadata — grid placement and the `cyber` skin flag. The header
@@ -16,16 +17,15 @@
  */
 
 export const Feat = {
-  // SEC — sector / collection
-  SectorList: 'SEC.LIST',
+  // MKT — market overview (sector roster + equity list, one pane)
+  Mkt: 'MKT',
 
-  // EQ — equity
-  EquityChart: 'EQ.CHART',
-  EquityList: 'EQ.LIST',
+  // EQ — equity chart
+  EquityChart: 'EQ',
 
   // SCR — screening
   ScreenNL: 'SEARCH',
-  ScreenPattern: 'SCR.PAT',
+  ScreenPattern: 'PAT',
   ScreenDsl: 'SCR.DSL',
 
   // AI — LLM surface (AI.SEC = sector aggregate, AI.EQ = single stock)
@@ -33,21 +33,21 @@ export const Feat = {
   AISec: 'AI.SEC',
   AIMd: 'AI.MD',
 
-  // SYS — system
-  SysStat: 'SYS.STAT',
-  SysCfg: 'SYS.CFG',
+  // SYS — unified status + IM activity + watch outputs
+  SysMain: 'SYS',
 
-  // WATCH — live watch tasks
+  // USR — single pane, three tabs (LDG / WATCH / CFG)
+  UsrMain: 'USR',
+  // Internal sub-feat ids — rendered only as the active-tab label
+  // inside USR.MAIN (and as the standalone feat when used outside the
+  // merged pane, if any consumer ever needs that). They never receive
+  // their own grid slot or persisted view-mode entry.
+  Ledger: 'LDG.MAIN',
   WatchLive: 'WATCH.LIVE',
-
-  // CHN — unified system + IM activity feed (replaces SYS.PUSH)
-  ChannelLive: 'CHN.LIVE',
+  SysCfg: 'SYS.CFG',
 
   // TERM — keyboard-driven command surface
   Terminal: 'TERM.MAIN',
-
-  // LDG — personal ledger (daily P/L journal + AI review)
-  Ledger: 'LDG.MAIN',
 } as const;
 
 export type Feat = (typeof Feat)[keyof typeof Feat];
@@ -67,10 +67,9 @@ export interface FeatConfig {
 }
 
 export const FEAT_CONFIG_MAP: Readonly<Record<Feat, FeatConfig>> = {
-  [Feat.SectorList]: { gridArea: 'L' },
+  [Feat.Mkt]: { gridArea: 'L' },
 
   [Feat.EquityChart]: { gridArea: 'CMID' },
-  [Feat.EquityList]: {},
 
   [Feat.ScreenNL]: { cyber: true },
   [Feat.ScreenPattern]: { defaultMinimized: true },
@@ -80,10 +79,18 @@ export const FEAT_CONFIG_MAP: Readonly<Record<Feat, FeatConfig>> = {
   [Feat.AISec]: { cyber: true, gridArea: 'R1' },
   [Feat.AIMd]: { cyber: true, defaultMinimized: true },
 
-  [Feat.SysStat]: { cyber: true, defaultMinimized: true, bodyOverlay: true },
-  [Feat.SysCfg]: { cyber: true, defaultMinimized: true, bodyOverlay: true },
-  [Feat.WatchLive]: { gridArea: 'R3', cyber: true, defaultMinimized: true },
-  [Feat.ChannelLive]: { cyber: true, defaultMinimized: true, bodyOverlay: true },
+  [Feat.SysMain]: { cyber: true, defaultMinimized: true, bodyOverlay: true },
+  // USR lives only in the topbar — narrow chrome with no inline space,
+  // so its body floats as a bodyOverlay dropdown. Removed from the
+  // workbench right column (was the bottom-right pane) to avoid two
+  // mount points fighting for the same persisted view-mode.
+  [Feat.UsrMain]: { cyber: true, defaultMinimized: true, bodyOverlay: true },
   [Feat.Terminal]: { cyber: true, defaultMinimized: true },
+  // Sub-feats (rendered as labels inside USR.MAIN). Any pane that
+  // mounts them standalone would inherit `defaultMinimized: true` so
+  // they don't fight USR.MAIN for vertical space if both happen to be
+  // present during a transitional render.
   [Feat.Ledger]: { defaultMinimized: true },
+  [Feat.WatchLive]: { cyber: true, defaultMinimized: true },
+  [Feat.SysCfg]: { cyber: true, defaultMinimized: true, bodyOverlay: true },
 };

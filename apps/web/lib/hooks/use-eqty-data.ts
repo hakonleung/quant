@@ -143,7 +143,10 @@ export function useStockSnapshots(
   opts: UseStockSnapshotsOptions = {},
 ): SnapshotsState {
   const keyCodes = useMemo(() => [...new Set(codes)].sort(), [codes]);
-  const enabled = (opts.enabled ?? true) && keyCodes.length > 0;
+  // Caller is in charge of gating the empty-codes case via `enabled` —
+  // the FE convention now mirrors `kline/bulk` where an empty list
+  // means "full universe expansion server-side", not "skip the call".
+  const enabled = opts.enabled ?? keyCodes.length > 0;
   const query = useQuery<readonly StockSnapshotDto[]>({
     queryKey: ['stock.snapshots', keyCodes.join(',')] as const,
     queryFn: () => listStockSnapshots(keyCodes).then((rows) => [...rows]),

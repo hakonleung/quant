@@ -21,12 +21,18 @@ import { ZodValidationPipe } from '../../common/zod-pipe.js';
 import type { RequestWithTraceId } from '../../common/trace.middleware.js';
 import { GetBatchQuerySchema, type GetBatchQuery } from './dto/get-batch.dto.js';
 import { ListByIndustryQuerySchema, type ListByIndustryQuery } from './dto/list-by-industry.dto.js';
+import {
+  ListSnapshotsQuerySchema,
+  type ListSnapshotsQuery,
+} from './dto/list-snapshots.dto.js';
 import { StockMetaService } from './stock-meta.service.js';
 
 const getBatchPipe = new ZodValidationPipe(GetBatchQuerySchema);
 const listByIndustryPipe = new ZodValidationPipe(ListByIndustryQuerySchema);
-// Snapshot accepts the same `?codes=` shape as /batch — re-use the schema.
-const snapshotsPipe = new ZodValidationPipe(GetBatchQuerySchema);
+// Snapshots accept an empty `codes=` (full-universe expansion at the
+// Python Flight layer) — `/batch` rejects empties, so the schemas must
+// stay distinct.
+const snapshotsPipe = new ZodValidationPipe(ListSnapshotsQuerySchema);
 
 @Controller('stocks')
 export class StockMetaController {
@@ -57,7 +63,7 @@ export class StockMetaController {
   @Get('snapshots')
   async listSnapshots(
     @Req() req: Request,
-    @Query(snapshotsPipe) query: GetBatchQuery,
+    @Query(snapshotsPipe) query: ListSnapshotsQuery,
   ): Promise<readonly StockSnapshotDto[]> {
     return this.service.listSnapshots(query.codes, traceId(req));
   }

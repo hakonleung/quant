@@ -23,7 +23,7 @@ export const ALL_SECTOR_ID = 'all';
  * concurrently, so this slice has no effect on viewports ≥ 768px — it
  * only routes the single-Feat-at-a-time mobile shell.
  */
-export type MobileTab = 'list' | 'chart' | 'ai' | 'ledger' | 'watch';
+export type MobileTab = 'list' | 'chart' | 'ai' | 'sys' | 'usr';
 export const MOBILE_TAB_DEFAULT: MobileTab = 'list';
 
 /**
