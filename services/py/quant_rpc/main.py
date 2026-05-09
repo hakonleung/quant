@@ -21,25 +21,20 @@ from pathlib import Path
 
 from quant_cache.file_kv_store import FileKeyValueStore
 from quant_cache.parquet_kline_repo import ParquetKlineRepo
-from quant_cache.parquet_sentiment_cache import ParquetSentimentCache
 from quant_cache.parquet_stock_meta_repo import ParquetStockMetaRepo
-from quant_cache.parquet_ta_cache import ParquetTaCache
 from quant_core.adapters.clock import SystemClock
 from quant_core.adapters.pattern.dtw_engine import DTWPatternEngine
 from quant_core.errors import QuantError
 from quant_core.ports.stock_meta_source import StockMetaSource
 from quant_core.services.financials_service import FinancialsService
 from quant_core.services.kline_service import KlineService
-from quant_core.services.news_sentiment_service import NewsSentimentService
 from quant_core.services.pattern_service import PatternService
 from quant_core.services.screen_service import ScreenService
 from quant_core.services.source_chain import SourceChain
 from quant_core.services.stock_meta_service import StockMetaService
 from quant_core.services.stock_meta_sync_service import StockMetaSyncService
-from quant_core.services.ta_service import TaService
 from quant_core.services.universe_screen_service import UniverseScreenService
 from quant_core.services.watch_quote_service import WatchQuoteService
-from quant_io.llm.providers import build_llm_client, build_llm_client_chain
 from quant_io.sources.akshare_financials import (
     AKShareFinancialsBulkSource,
     AKShareFinancialsPerStockEnricher,
@@ -59,12 +54,6 @@ from quant_rpc.ops.kline import ListKlineWatermarksHandler, SyncKlineForCodeHand
 from quant_rpc.ops.kline_read import ListKlineBulkLastNHandler, ListKlineForCodeHandler
 from quant_rpc.ops.pattern import FindSimilarPatternsHandler
 from quant_rpc.ops.screen_ops import ScreenRunHandler
-from quant_rpc.ops.sentiment import (
-    AnalyzeManyStockSentimentHandler,
-    AnalyzeOneStockSentimentHandler,
-    GetCachedMarketSentimentHandler,
-    GetCachedStockSentimentHandler,
-)
 from quant_rpc.ops.stock_meta import (
     GetStockMetaBatchHandler,
     ListAllHandler,
@@ -76,7 +65,6 @@ from quant_rpc.ops.stock_meta_admin import (
     SyncFullHandler,
 )
 from quant_rpc.ops.stock_snapshot import ListStockSnapshotsHandler
-from quant_rpc.ops.ta import AnalyzeTaOneHandler, GetCachedTaOneHandler
 from quant_rpc.ops.trading_calendar import GetLatestTradeDayHandler
 from quant_rpc.ops.watch import WatchQuoteOneHandler, WatchUniverseRefreshHandler
 from quant_rpc.server import QuantFlightServer
@@ -141,47 +129,10 @@ def main() -> int:
     # Python no longer carries the translator or its prompt. Only the
     # AST-execution `screen_run` op is served from this process.
 
-    sentiment_root = root / "sentiment"
-    sentiment_cache = ParquetSentimentCache(sentiment_root, clock)
-    # Construct LLM clients lazily — without provider keys the server
-    # still serves cached reads (GET); only the analyze ops fail with a
-    # clear ``LLM_NOT_CONFIGURED`` error code.
-    sentiment_service: NewsSentimentService | None
-    try:
-        sentiment_service = NewsSentimentService(
-            search_llm=build_llm_client(need_web_search=True),
-            aggregator_llm=build_llm_client(use_flash=True),
-            cache=sentiment_cache,
-            meta_repo=meta_repo,
-            clock=clock,
-        )
-        log.info("sentiment service ready")
-    except QuantError as exc:
-        sentiment_service = None
-        log.warning("sentiment LLM not configured — analyze ops disabled: %s", exc)
-
-    # ``ta`` (technical-analysis, beta) — Kimi Pro is preferred but the
-    # fallback chain reaches qwen / deepseek if Moonshot is offline.
-    ta_root = root / "ta"
-    ta_cache = ParquetTaCache(ta_root, clock)
-    ta_service: TaService | None
-    try:
-        ta_chain = build_llm_client_chain(prefer_provider="moonshot")
-        ta_service = TaService(
-            llm=ta_chain,
-            kline_service=kline_service,
-            cache=ta_cache,
-            meta_repo=meta_repo,
-            clock=clock,
-        )
-        log.info("ta service ready (chain: %s)", ta_chain.name)
-    except QuantError as exc:
-        ta_service = None
-        log.warning("ta LLM not configured — analyze_ta ops disabled: %s", exc)
-
-    # Ledger AI analysis migrated to NestJS LedgerService (calls
-    # LlmService.completeJson directly); the matching `analyze_ledger`
-    # Flight op + Python LedgerService are gone.
+    # All LLM-using flows (NL→DSL, ledger analyze, TA analyze, news
+    # sentiment, agent loop) live in NestJS now. Python kline / meta /
+    # pattern / blacklist / watch / financials remain — they are all
+    # pure compute / IO over the parquet store.
 
     registry = HandlerRegistry()
     registry.register(GetStockMetaBatchHandler(meta_service))
@@ -198,12 +149,6 @@ def main() -> int:
     registry.register(ListKlineWatermarksHandler(meta_repo, kline_repo))
     registry.register(ListKlineForCodeHandler(kline_service))
     registry.register(ListKlineBulkLastNHandler(kline_service, meta_repo))
-    registry.register(GetCachedStockSentimentHandler(sentiment_cache, clock))
-    registry.register(AnalyzeOneStockSentimentHandler(sentiment_service))
-    registry.register(GetCachedMarketSentimentHandler(sentiment_cache, clock))
-    registry.register(AnalyzeManyStockSentimentHandler(sentiment_service))
-    registry.register(GetCachedTaOneHandler(ta_cache, clock))
-    registry.register(AnalyzeTaOneHandler(ta_service))
     watch_source = AKShareWatchSource()
     watch_service = WatchQuoteService(quotes=watch_source, universe=watch_source)
     registry.register(WatchQuoteOneHandler(watch_service))

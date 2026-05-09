@@ -145,6 +145,47 @@ export class LlmService {
     }
   }
 
+  /**
+   * Synchronous web-search wrapper. Drains the streaming finalize
+   * iterator into a single buffered string + cumulative usage frame.
+   * Used by the sentiment service's analyst pass — it wants a verbatim
+   * plain-text write-up, not chunks.
+   */
+  async completeWithWebSearch(
+    args: { readonly system: string; readonly user: string },
+    ctx: LlmCallContext,
+    opts: ResolveOptions = { scope: ctx.scope, needWebSearch: true },
+  ): Promise<{
+    readonly text: string;
+    readonly usage: ChatTokenUsage;
+    readonly provider: string;
+    readonly model: string;
+  }> {
+    const resolved = this.resolve(opts);
+    let buffered = '';
+    let usage: ChatTokenUsage = ZERO_USAGE;
+    for await (const chunk of this.chatStreamFinalize(
+      {
+        messages: [
+          { role: 'system', content: args.system },
+          { role: 'user', content: args.user },
+        ],
+        webSearch: true,
+      },
+      ctx,
+      opts,
+    )) {
+      if (chunk.delta.length > 0) buffered += chunk.delta;
+      if (chunk.usage) usage = chunk.usage;
+    }
+    return {
+      text: buffered,
+      usage,
+      provider: resolved.row.provider,
+      model: resolved.model,
+    };
+  }
+
   /** JSON-mode single-shot. Returns raw text, token usage, and resolved provider identity. */
   async completeJson(
     args: { readonly system: string; readonly user: string },

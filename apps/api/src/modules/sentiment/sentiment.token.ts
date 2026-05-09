@@ -1,2 +1,2 @@
-/** DI token for the sentiment module's Flight client. */
-export const SENTIMENT_FLIGHT_CLIENT = Symbol('SENTIMENT_FLIGHT_CLIENT');
+/** DI tokens for the sentiment module. */
+export const SENTIMENT_DATA_DIR = Symbol('SENTIMENT_DATA_DIR');

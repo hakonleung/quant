@@ -1,15 +1,19 @@
 /**
  * HTTP routes for technical analysis (beta).
  *
- *   GET  /api/ta/analyze_one?code=xxx  → cached read; 404 on miss
+ *   GET  /api/ta/analyze_one?code=xxx   → cached read; 404 on miss
  *   POST /api/ta/analyze_one {code,...} → fresh analysis (LLM, paid)
  *   POST /api/ta/analyze_many {codes,...} → sector fan-out + LLM summary
  *
- * Sector fan-out is intentionally NestJS-side (not Python): per-stock TA
- * is already an `analyze_ta_one` Flight call with its own cache, and the
- * sector summary is one extra `LlmService.completeJson` call. Keeping
- * the orchestration here avoids a new Python RPC handler (CLAUDE.md
- * §2.5.2 Rule of Three — first multi-stock TA caller).
+ * The full pipeline runs in NestJS (kline read via Flight, meta via the
+ * stock-meta service, prompt + LLM via LlmService, cache via the
+ * file-per-code TaCacheStore). The Python `analyze_ta_one` /
+ * `get_cached_ta_one` Flight ops were retired with the TA migration —
+ * see `apps/api/src/modules/ta/ta.service.ts` for the orchestration.
+ *
+ * Sector fan-out concurrency is bounded by the body schema's `codes`
+ * array cap (50). Each member call hits TaCacheStore first; the LLM
+ * sector summary is one extra `LlmService.completeJson` call.
  */
 
 import {
@@ -29,17 +33,14 @@ import {
   type TaSectorAnalysis,
   type TaSectorMember,
 } from '@quant/shared';
-import { Table } from 'apache-arrow';
 import { z } from 'zod';
 import type { Request } from 'express';
 
-import { FlightClient } from '../../adapters/flight/flight-client.js';
 import { CLOCK, type Clock } from '../../common/clock.js';
 import { CurrentUser } from '../auth/current-user.decorator.js';
 import type { AuthenticatedUser } from '../auth/request-with-user.js';
 import { LlmService } from '../llm/llm.service.js';
 import { ZodValidationPipe } from '../../common/zod-pipe.js';
-import { mapTaAnalysisToView } from './domain/payload-mapper.js';
 import {
   AnalyzeTaOneBodySchema,
   AnalyzeTaOneQuerySchema,
@@ -47,7 +48,7 @@ import {
   type AnalyzeTaOneQuery,
 } from './dto/ta.dto.js';
 import { buildSectorSummaryPrompt } from './prompts/sector-summary.prompt.js';
-import { TA_FLIGHT_CLIENT } from './ta.token.js';
+import { TaService } from './ta.service.js';
 
 const queryPipe = new ZodValidationPipe(AnalyzeTaOneQuerySchema);
 const bodyPipe = new ZodValidationPipe(AnalyzeTaOneBodySchema);
@@ -66,7 +67,7 @@ const manyBodyPipe = new ZodValidationPipe(AnalyzeTaManyBodySchema);
 @Controller('ta')
 export class TaController {
   constructor(
-    @Inject(TA_FLIGHT_CLIENT) private readonly flight: FlightClient,
+    @Inject(TaService) private readonly ta: TaService,
     @Inject(LlmService) private readonly llm: LlmService,
     @Inject(CLOCK) private readonly clock: Clock,
   ) {}
@@ -77,36 +78,28 @@ export class TaController {
     @Query(queryPipe) query: AnalyzeTaOneQuery,
   ): Promise<TaAnalysis> {
     const traceId = traceOf(req);
-    const result = await this.flight.doGet('get_cached_ta_one', { code: query.code }, { traceId });
-    const payload = extractFirstPayload(result.value);
-    if (payload === null) {
+    const cached = await this.ta.getCached(query.code, traceId);
+    if (cached === null) {
       throw new NotFoundException({
         code: 'NOT_FOUND',
         message: `no cached ta for ${query.code}`,
         details: { code: query.code },
       });
     }
-    return mapTaAnalysisToView(payload);
+    return cached;
   }
 
   @Post('analyze_one')
   async analyzeOne(
     @Req() req: Request,
+    @CurrentUser() user: AuthenticatedUser,
     @Body(bodyPipe) body: AnalyzeTaOneBody,
   ): Promise<TaAnalysis> {
     const traceId = traceOf(req);
-    const args: Record<string, unknown> = { code: body.code };
-    if (body.bypassCache !== undefined) args['bypass_cache'] = body.bypassCache;
-    const result = await this.flight.doGet('analyze_ta_one', args, { traceId });
-    const payload = extractFirstPayload(result.value);
-    if (payload === null) {
-      throw new BadRequestException({
-        code: 'LLM_FAILED',
-        message: 'analyze_ta_one returned no payload',
-        details: { code: body.code },
-      });
-    }
-    return mapTaAnalysisToView(payload);
+    return this.ta.analyzeOne(body.code, body.bypassCache === true, {
+      userId: user.id,
+      traceId,
+    });
   }
 
   @Post('analyze_many')
@@ -117,22 +110,14 @@ export class TaController {
   ): Promise<TaSectorAnalysis> {
     const traceId = traceOf(req);
     const codes = [...body.codes];
+    const ctx = { userId: user.id, traceId } as const;
 
-    // Fan-out per-stock TA — each call is cached on the Python side, so
-    // a re-run of a sector that's seen recent activity hits cache for
-    // every member. Concurrency is bounded by `Promise.all` of N items
+    // Per-stock fan-out — each call hits the local cache first, so a
+    // re-run of a sector that's seen recent activity is mostly cache
+    // reads. Concurrency is bounded by `Promise.all` over N items
     // (caller cap = 50 in the body schema).
     const settled = await Promise.allSettled(
-      codes.map(async (code) => {
-        const args: Record<string, unknown> = { code };
-        if (body.bypassCache === true) args['bypass_cache'] = true;
-        const result = await this.flight.doGet('analyze_ta_one', args, { traceId });
-        const payload = extractFirstPayload(result.value);
-        if (payload === null) {
-          throw new Error(`empty payload for ${code}`);
-        }
-        return mapTaAnalysisToView(payload);
-      }),
+      codes.map((code) => this.ta.analyzeOne(code, body.bypassCache === true, ctx)),
     );
 
     const members: TaSectorMember[] = [];
@@ -259,18 +244,4 @@ function avgConfidence(
     count += 1;
   }
   return count === 0 ? 0 : sum / count;
-}
-
-function extractFirstPayload(table: Table): unknown {
-  if (table.numRows === 0) return null;
-  const proxy = table.get(0);
-  if (proxy === null) return null;
-  const row = proxy.toJSON() as { payload_json?: unknown };
-  const json = row.payload_json;
-  if (typeof json !== 'string' || json.length === 0) return null;
-  try {
-    return JSON.parse(json);
-  } catch {
-    return null;
-  }
 }

@@ -1,29 +1,36 @@
 /**
- * Composition root for the sentiment feature
- * (modules/06-sentiment-analysis.md + modules/07-frontend.md §4.2).
+ * Composition root for the sentiment feature (modules/05-sentiment.md).
  *
- * Owns its own Flight channel — separate from kline / stock-meta — so a
- * long-running LLM call cannot head-of-line block other reads.
+ * The full pipeline (web-search analyst pass + JSON aggregator + theme
+ * cluster + market synth + cache) runs in NestJS. The Python sentiment
+ * service / Flight ops / parquet cache were retired with the migration;
+ * the only Python touchpoint left for sentiment is `StockMetaService`,
+ * which is read-only.
  */
 
 import { Module } from '@nestjs/common';
 
-import { FlightClient } from '../../adapters/flight/flight-client.js';
+import { SYSTEM_CLOCK_PROVIDER } from '../../common/clock.js';
+import { LlmModule } from '../llm/llm.module.js';
+import { StockMetaModule } from '../stock-meta/stock-meta.module.js';
+import { NewsSentimentService } from './news-sentiment.service.js';
+import { SentimentCacheStore } from './sentiment-cache.store.js';
 import { SentimentController } from './sentiment.controller.js';
-import { SENTIMENT_FLIGHT_CLIENT } from './sentiment.token.js';
+import { SENTIMENT_DATA_DIR } from './sentiment.token.js';
 
-const DEFAULT_FLIGHT_TARGET = '127.0.0.1:8815';
+const DEFAULT_DATA_DIR = '../../data';
 
 @Module({
+  imports: [LlmModule, StockMetaModule],
   controllers: [SentimentController],
   providers: [
     {
-      provide: SENTIMENT_FLIGHT_CLIENT,
-      useFactory: (): FlightClient => {
-        const target = process.env['QUANT_FLIGHT_TARGET'] ?? DEFAULT_FLIGHT_TARGET;
-        return new FlightClient(target);
-      },
+      provide: SENTIMENT_DATA_DIR,
+      useFactory: (): string => process.env['QUANT_DATA_ROOT'] ?? DEFAULT_DATA_DIR,
     },
+    SYSTEM_CLOCK_PROVIDER,
+    SentimentCacheStore,
+    NewsSentimentService,
   ],
 })
 export class SentimentModule {}
