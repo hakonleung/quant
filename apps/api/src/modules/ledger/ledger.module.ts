@@ -2,6 +2,8 @@ import { Module } from '@nestjs/common';
 
 import { FlightClient } from '../../adapters/flight/flight-client.js';
 import { SYSTEM_CLOCK_PROVIDER } from '../../common/clock.js';
+import { AnalyzeInstructionHandler } from './instructions/analyze.handler.js';
+import { LedgerInstructionHandler } from './instructions/ledger.handler.js';
 import { LedgerCacheStore } from './ledger-cache.store.js';
 import { LedgerController } from './ledger.controller.js';
 import { LedgerService } from './ledger.service.js';
@@ -24,6 +26,8 @@ const DEFAULT_FLIGHT_TARGET = '127.0.0.1:8815';
     LedgerStore,
     LedgerCacheStore,
     LedgerService,
+    LedgerInstructionHandler,
+    AnalyzeInstructionHandler,
   ],
   exports: [LedgerStore, LedgerService],
 })

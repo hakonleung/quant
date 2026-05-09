@@ -20,9 +20,7 @@
 
 import { BadRequestException, Body, Controller, Inject, Post, Req } from '@nestjs/common';
 import {
-  NlScreenResultSchema,
-  NlToDslResultSchema,
-  ScreenRunResultSchema,
+  QuantError,
   ScreenPlanAstSchema,
   UniversePlanAstSchema,
   RankSpecSchema,
@@ -31,12 +29,10 @@ import {
   type ScreenRunResult,
 } from '@quant/shared';
 import type { Request } from 'express';
-import type { Table } from 'apache-arrow';
 import { z } from 'zod';
 
-import { FlightClient } from '../../adapters/flight/flight-client.js';
 import { ZodValidationPipe } from '../../common/zod-pipe.js';
-import { SCREEN_FLIGHT_CLIENT } from './screen.token.js';
+import { ScreenService } from './screen.service.js';
 
 const NlBodySchema = z
   .object({
@@ -62,86 +58,51 @@ const runBodyPipe = new ZodValidationPipe(RunBodySchema);
 
 @Controller('screen')
 export class ScreenController {
-  constructor(@Inject(SCREEN_FLIGHT_CLIENT) private readonly flight: FlightClient) {}
+  constructor(@Inject(ScreenService) private readonly screen: ScreenService) {}
 
   @Post('nl')
   async run(@Req() req: Request, @Body(nlBodyPipe) body: NlBody): Promise<NlScreenResult> {
     const traceId = (req as Request & { traceId?: string }).traceId ?? '';
-    const args: Record<string, unknown> = { nl: body.nl };
-    if (body.asof !== undefined) args['asof'] = body.asof;
-    const payload = await this.callOp('nl_screen', args, { traceId });
-    if (payload === null) {
-      throw new BadRequestException({
-        code: 'NL_TRANSLATION_FAILED',
-        message: 'nl_screen returned no payload',
-        details: { nl: body.nl },
-      });
+    try {
+      return await this.screen.runNl(body.nl, body.asof, traceId);
+    } catch (err) {
+      throw mapToHttp(err, body.nl);
     }
-    return NlScreenResultSchema.parse(payload);
   }
 
   @Post('nl2dsl')
   async nl2dsl(@Req() req: Request, @Body(nlBodyPipe) body: NlBody): Promise<NlToDslResult> {
     const traceId = (req as Request & { traceId?: string }).traceId ?? '';
-    const args: Record<string, unknown> = { nl: body.nl };
-    if (body.asof !== undefined) args['asof'] = body.asof;
-    const payload = await this.callOp('nl_to_dsl', args, { traceId });
-    if (payload === null) {
-      throw new BadRequestException({
-        code: 'NL_TRANSLATION_FAILED',
-        message: 'nl_to_dsl returned no payload',
-        details: { nl: body.nl },
-      });
+    try {
+      return await this.screen.nlToDsl(body.nl, body.asof, traceId);
+    } catch (err) {
+      throw mapToHttp(err, body.nl);
     }
-    return NlToDslResultSchema.parse(payload);
   }
 
   @Post('run')
   async runScreen(@Req() req: Request, @Body(runBodyPipe) body: RunBody): Promise<ScreenRunResult> {
     const traceId = (req as Request & { traceId?: string }).traceId ?? '';
-    // Flight args are flat primitives — nested AST goes through as a
-    // JSON string and the python op deserialises it back to a domain
-    // object (see services/py/quant_rpc/ops/screen_ops.py).
-    const args: Record<string, unknown> = {
-      screen_plan: JSON.stringify(body.screenPlan),
-    };
-    if (body.universePlan !== undefined && body.universePlan !== null) {
-      args['universe_plan'] = JSON.stringify(body.universePlan);
+    try {
+      return await this.screen.runDsl(
+        body.screenPlan,
+        body.universePlan ?? null,
+        body.rank ?? null,
+        traceId,
+      );
+    } catch (err) {
+      throw mapToHttp(err, body.screenPlan);
     }
-    if (body.rank !== undefined && body.rank !== null) {
-      args['rank'] = JSON.stringify(body.rank);
-    }
-    const payload = await this.callOp('screen_run', args, { traceId });
-    if (payload === null) {
-      throw new BadRequestException({
-        code: 'DSL_INVALID',
-        message: 'screen_run returned no payload',
-        details: {},
-      });
-    }
-    return ScreenRunResultSchema.parse(payload);
-  }
-
-  private async callOp(
-    op: string,
-    args: Record<string, unknown>,
-    opts: { readonly traceId: string },
-  ): Promise<unknown | null> {
-    const result = await this.flight.doGet(op, args, opts);
-    return extractFirstPayload(result.value);
   }
 }
 
-function extractFirstPayload(table: Table): unknown | null {
-  if (table.numRows === 0) return null;
-  const proxy = table.get(0);
-  if (proxy === null) return null;
-  const row = proxy.toJSON() as { payload_json?: unknown };
-  const json = row.payload_json;
-  if (typeof json !== 'string' || json.length === 0) return null;
-  try {
-    return JSON.parse(json);
-  } catch {
-    return null;
+function mapToHttp(err: unknown, contextValue: unknown): unknown {
+  if (err instanceof QuantError) {
+    return new BadRequestException({
+      code: err.code,
+      message: err.message,
+      details: err.code === 'NL_TRANSLATION_FAILED' ? { nl: contextValue } : {},
+    });
   }
+  return err;
 }

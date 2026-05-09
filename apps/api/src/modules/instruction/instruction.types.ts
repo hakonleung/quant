@@ -26,6 +26,17 @@ import type { z } from 'zod';
  * always feeds `safeParse` a `Record<string, unknown>` from the argv
  * tokenizer, so `unknown` is the honest input contract.
  */
+/**
+ * Execution mode:
+ *   - `sync` (default): handler runs inline; the result reaches the IM
+ *     reply / socket ack within a single request/response.
+ *   - `async`: handler runs on the `instruction.async` BullMQ worker
+ *     (`InstructionAsyncProcessor`). The IM listener immediately replies
+ *     with a "started" card and pushes a "completed" card later when the
+ *     worker finishes. Used for LLM-bound or otherwise multi-second ops.
+ */
+export type InstructionMode = 'sync' | 'async';
+
 export interface InstructionSpec<TArgs> {
   readonly id: InstructionId;
   readonly summary: string;
@@ -33,6 +44,7 @@ export interface InstructionSpec<TArgs> {
   readonly argsSchema: z.ZodType<TArgs, z.ZodTypeDef, unknown>;
   readonly positional?: readonly string[];
   readonly aliases?: readonly InstructionId[];
+  readonly mode?: InstructionMode;
 }
 
 /**

@@ -49,6 +49,8 @@ export class HelpHandler extends InstructionRegistrarBase<Args> {
     const list = this.registry.list();
     const sorted = [...list].sort((a, b) => a.spec.id.localeCompare(b.spec.id));
     const body = sorted.map((e) => `  ${e.spec.id.padEnd(18)} ${e.spec.summary}`).join('\n');
-    return Promise.resolve(okResult(`registered instructions (${String(sorted.length)}):\n${body}`));
+    return Promise.resolve(
+      okResult(`registered instructions (${String(sorted.length)}):\n${body}`),
+    );
   }
 }

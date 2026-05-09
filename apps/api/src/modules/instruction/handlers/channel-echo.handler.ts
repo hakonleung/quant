@@ -2,6 +2,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import { instructionId, okResult, type InstructionResult } from '@quant/shared';
 import { z } from 'zod';
 
+import { INSTRUCTION_CONFIG, type InstructionConfig } from '../instruction.config.js';
 import type { InstructionCtx } from '../instruction.port.js';
 import { InstructionRegistrarBase } from '../instruction.provider.js';
 import { InstructionRegistry } from '../instruction.registry.js';
@@ -14,12 +15,19 @@ type Args = z.infer<typeof argsSchema>;
 export class ChannelEchoHandler extends InstructionRegistrarBase<Args> {
   readonly spec: InstructionSpec<Args> = {
     id: instructionId('channel.echo'),
-    summary: 'Echo args back through the same IM channel (debug).',
+    summary: 'Echo args back through the same IM channel. (debug)',
     argsSchema,
   };
 
-  constructor(@Inject(InstructionRegistry) registry: InstructionRegistry) {
+  constructor(
+    @Inject(InstructionRegistry) registry: InstructionRegistry,
+    @Inject(INSTRUCTION_CONFIG) private readonly cfg: InstructionConfig,
+  ) {
     super(registry);
+  }
+
+  protected override shouldRegister(): boolean {
+    return this.cfg.debugInstructionsEnabled;
   }
 
   execute(args: Args, ctx: InstructionCtx): Promise<InstructionResult> {

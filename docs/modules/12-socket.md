@@ -27,13 +27,18 @@ NestJS API (:3001)
 
 唯一来源：`packages/shared/src/types/socket.ts` 的 `SOCKET_TOPIC_SCHEMAS`。
 
-| Topic              | Payload                          | 来源                                |
-| ------------------ | -------------------------------- | ----------------------------------- |
-| `watch.snapshot`   | `WatchTask[]` (1Hz)              | `WatchBroadcaster`                  |
-| `queue.snapshot`   | `QueueSnapshot` (1Hz)            | `QueueBroadcaster`                  |
-| `channel.activity` | `ChannelActivity`（事件即推）    | `ChannelBus.publishActivity/Inbound`|
+| Topic                         | Payload                            | 来源                                         |
+| ----------------------------- | ---------------------------------- | -------------------------------------------- |
+| `watch.snapshot`              | `WatchTask[]` (1Hz)                | `WatchBroadcaster`                           |
+| `queue.snapshot`              | `QueueSnapshot` (1Hz)              | `QueueBroadcaster`                           |
+| `channel.activity`            | `ChannelActivity`（事件即推）      | `ChannelBus.publishActivity/Inbound`         |
+| `instruction.async.started`   | `InstructionAsyncStartedPayload`   | `InstructionAsyncProcessor`（emitTo userId） |
+| `instruction.async.progress`  | `InstructionAsyncProgressPayload`  | handler 主动 emit（v1.5 暂未使用）           |
+| `instruction.async.completed` | `InstructionAsyncCompletedPayload` | `InstructionAsyncProcessor`（emitTo userId） |
 
 新增 topic = 在 `SOCKET_TOPIC_SCHEMAS` 加一行，前端 `useSocketTopic('<topic>', schema)` 即可消费。
+`instruction.async.*` 走 `emitTo(userId, …)`：socket 客户端只收到自己 userId 触发的 job 进度
+（IM 触发的 job 同时由 listener 经 `ChannelService.send` 推回原 IM 频道，见 `docs/modules/15-instructions.md`）。
 
 ## 协议
 
@@ -60,11 +65,11 @@ CORS 通过 `apps/api/src/modules/socket/cors-origin.ts`：
 
 迁移完成的消费方：
 
-| 旧 SSE                                  | 新 Socket topic    | 入口                                                   |
-| --------------------------------------- | ------------------ | ------------------------------------------------------ |
-| `/api/watch/stream`                     | `watch.snapshot`   | `feat-watch-live` 内 `useWatchStream`                  |
-| `/api/orchestration/queue/stream`       | `queue.snapshot`   | `apps/web/lib/hooks/use-queue-stream.ts`               |
-| `/api/watch/stream`（live-runner 一次） | （改为 GET）       | `apps/web/lib/term/live-runner.ts` 改用 `apiGet('/api/watch')` |
+| 旧 SSE                                  | 新 Socket topic  | 入口                                                           |
+| --------------------------------------- | ---------------- | -------------------------------------------------------------- |
+| `/api/watch/stream`                     | `watch.snapshot` | `feat-watch-live` 内 `useWatchStream`                          |
+| `/api/orchestration/queue/stream`       | `queue.snapshot` | `apps/web/lib/hooks/use-queue-stream.ts`                       |
+| `/api/watch/stream`（live-runner 一次） | （改为 GET）     | `apps/web/lib/term/live-runner.ts` 改用 `apiGet('/api/watch')` |
 
 旧的 BFF SSE proxy（`apps/web/app/api/{watch,orchestration/queue}/stream/route.ts`）已删除。
 

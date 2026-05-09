@@ -14,6 +14,10 @@ import {
 } from '@quant/shared';
 import { z } from 'zod';
 
+import {
+  INSTRUCTION_CONFIG,
+  type InstructionConfig,
+} from '../../instruction/instruction.config.js';
 import type { InstructionCtx } from '../../instruction/instruction.port.js';
 import { InstructionRegistrarBase } from '../../instruction/instruction.provider.js';
 import { InstructionRegistry } from '../../instruction/instruction.registry.js';
@@ -35,16 +39,21 @@ type Args = z.infer<typeof argsSchema>;
 export class ChannelSendHandler extends InstructionRegistrarBase<Args> {
   readonly spec: InstructionSpec<Args> = {
     id: instructionId('channel.send'),
-    summary: 'Send a manual outbound message to slack/feishu.',
+    summary: 'Send a manual outbound message to slack/feishu. (debug)',
     argsSchema,
     positional: ['channel', 'text'],
   };
 
   constructor(
     @Inject(InstructionRegistry) registry: InstructionRegistry,
+    @Inject(INSTRUCTION_CONFIG) private readonly cfg: InstructionConfig,
     @Inject(ChannelService) private readonly channels: ChannelService,
   ) {
     super(registry);
+  }
+
+  protected override shouldRegister(): boolean {
+    return this.cfg.debugInstructionsEnabled;
   }
 
   async execute(args: Args, ctx: InstructionCtx): Promise<InstructionResult> {

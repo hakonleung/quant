@@ -24,6 +24,7 @@ import type {
   OutboundMessage,
   OutboundResult,
 } from '../ports/channel-adapter.port.js';
+import { pickBlocks } from './slack-card.js';
 
 interface SlackEventEnvelope {
   readonly ack: () => Promise<void>;
@@ -131,7 +132,21 @@ export class SlackChannelAdapter implements ChannelAdapter {
       return { status: 'dryrun', target };
     }
     const text = message.title !== undefined ? `*${message.title}*\n${message.text}` : message.text;
-    const res = await this.web.chat.postMessage({ channel: target, text });
+    // `text` is always sent — Slack uses it for notification previews
+    // (mobile push, desktop banner) and for older clients that don't
+    // render Block Kit. `blocks` carries the rich rendering when we
+    // have one for this message kind.
+    const blocks = pickBlocks({
+      ...(message.title !== undefined ? { title: message.title } : {}),
+      text: message.text,
+      ...(message.kind !== undefined ? { kind: message.kind } : {}),
+      ...(message.meta !== undefined ? { meta: message.meta } : {}),
+    });
+    const payload =
+      blocks !== null
+        ? { channel: target, text, blocks: [...blocks.blocks] }
+        : { channel: target, text };
+    const res = await this.web.chat.postMessage(payload);
     return {
       status: 'sent',
       target,

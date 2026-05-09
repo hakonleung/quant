@@ -27,7 +27,17 @@ export abstract class InstructionRegistrarBase<TArgs>
   constructor(@Inject(InstructionRegistry) protected readonly registry: InstructionRegistry) {}
 
   onModuleInit(): void {
+    if (!this.shouldRegister()) return;
     this.registry.register(this.spec, this);
+  }
+
+  /**
+   * Subclasses can return false to skip registration (e.g. dev-only
+   * debug handlers gated on `INSTRUCTION_DEBUG_ENABLED`). Defaults to
+   * true so the common case stays one-line.
+   */
+  protected shouldRegister(): boolean {
+    return true;
   }
 
   abstract execute(args: TArgs, ctx: InstructionCtx): Promise<InstructionResult>;

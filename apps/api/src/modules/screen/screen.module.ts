@@ -9,7 +9,9 @@
 import { Module } from '@nestjs/common';
 
 import { FlightClient } from '../../adapters/flight/flight-client.js';
+import { ScreenInstructionHandler } from './instructions/screen.handler.js';
 import { ScreenController } from './screen.controller.js';
+import { ScreenService } from './screen.service.js';
 import { SCREEN_FLIGHT_CLIENT } from './screen.token.js';
 
 const DEFAULT_FLIGHT_TARGET = '127.0.0.1:8815';
@@ -24,6 +26,9 @@ const DEFAULT_FLIGHT_TARGET = '127.0.0.1:8815';
         return new FlightClient(target);
       },
     },
+    ScreenService,
+    ScreenInstructionHandler,
   ],
+  exports: [ScreenService],
 })
 export class ScreenModule {}
