@@ -27,13 +27,11 @@
 | ------- | --------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
 | Schema  | `packages/shared/src/types/ledger.ts`               | `LedgerEntry` / `LedgerSnapshot` / `EnrichedLedgerEntry` / `LedgerAnalysis`                         |
 | FP      | `packages/shared/src/fp/ledger.ts`                  | `validateLedger` / `enrichEntries` / `mergeEntries` + summary helpers（纯函数，零 IO）              |
-| Domain  | `services/py/quant_core/domain/types/ledger.py`     | `EnrichedLedgerEntry` / `LedgerAnalysis` 数据类                                                     |
-| Prompt  | `services/py/quant_core/prompts/ledger_prompts.py`  | 中文提示词，CSV 表头 + closing_provided / cash_flow 显式标志                                        |
-| Service | `services/py/quant_core/services/ledger_service.py` | 单步 LLM 流：prompt → call → JSON-decode → `LedgerAnalysis`                                         |
-| RPC     | `services/py/quant_rpc/ops/ledger.py`               | `analyze_ledger` Flight op；payload_json 走 camelCase 与 TS schema 对齐                             |
+| Domain  | `services/py/quant_core/domain/types/ledger.py`     | `EnrichedLedgerEntry` / `LedgerAnalysis` 数据类（仅 schema 镜像，已无 LLM 路径）                    |
+| Prompt  | `apps/api/src/modules/ledger/prompts/analyze.prompt.ts` | 中文 system + user prompt（CSV 表头 + closing_provided / cash_flow 显式标志）                       |
 | Persist | `apps/api/src/modules/ledger/ledger.store.ts`       | `data/_ledger/entries.json`，atomic `tmp+rename` + 1Hz 节流                                         |
 | Cache   | `apps/api/src/modules/ledger/ledger-cache.store.ts` | `data/_ledger/ai-cache.json`，键 = SHA-256(最近 30 enriched)                                        |
-| Service | `apps/api/src/modules/ledger/ledger.service.ts`     | CRUD + 校验 + Flight 调用 + 缓存读写                                                                |
+| Service | `apps/api/src/modules/ledger/ledger.service.ts`     | CRUD + 校验 + 直接调 `LlmService.completeJson(scope='analyze')` + JSON→`LedgerAnalysis` 解码 + 缓存读写。Python `ledger_service` / `analyze_ledger` op 已弃用 |
 | API     | `apps/api/src/modules/ledger/ledger.controller.ts`  | REST：list / enriched / create / patch / delete / import / export / analyze (GET cache, POST fresh) |
 | BFF     | `apps/web/app/api/ledger/**`                        | Next.js → NestJS 透传（含 `[date]` 动态段、import / export / analyze）                              |
 | Hooks   | `apps/web/lib/hooks/use-ledger.ts`                  | react-query 包装：list / enriched / mutations / cached + analyze                                    |
@@ -52,12 +50,14 @@
 | `LEDGER_FIRST_NEEDS_CLOSING_POSITION` | 409  | 最早条目缺 `closingPosition`（含"删除导致新首条无锚"场景）          |
 | `LEDGER_INVALID_ENTRY`                | 400  | 字段语义校验失败（保留位，目前 zod 在 `INVALID_ARGUMENT` 中已覆盖） |
 
-## AI 分析（`analyze_ledger`）
+## AI 分析（NestJS `LedgerService.analyze`）
 
-- 选择 LLM：`build_llm_client_chain(prefer_provider="moonshot")`，无 Kimi key 时退到 qwen / deepseek。
+- 选择 LLM：`LlmService` 走 catalog 顺序（默认 `LLM_PROVIDER`，Qwen → DeepSeek → Moonshot），可选 env 覆盖。
 - 输入：最近 ≤ 30 条 enriched 条目，CSV 表头 `date,pnl_amount,closing_position,closing_provided,cash_flow,daily_pct`。
-- 输出 schema（`LedgerAnalysisSchema`）：`summary` / `operationStyle` / `marketView` / `recommendations[]`，外加 `windowStart` / `windowEnd` / `entryCount` / `provider` / `generatedAt`。
+- 输出 schema（`LedgerAnalysisSchema`）：`summary` / `operationStyle` / `marketView` / `recommendations[]`（≤5 条），外加 `windowStart` / `windowEnd` / `entryCount` / `provider` / `generatedAt`。
 - 缓存：服务端按 enriched payload 的 SHA-256 命中；用户每次编辑 / 删除 / 导入都会改变 hash → 自动失效。
+- 计费：每次 LLM 调用写入 `data/users/{userId}/llm-ledger.json`（scope `analyze`），由 `/usr` 汇总。
+- `/analyze` spec 标 `costsCredits=true`，被 `/agent` 提议时会触发二次确认。
 - 强刷：`POST /api/ledger/analyze {bypassCache:true}` 或 term `ledger analyze --force`。
 
 ## 测试

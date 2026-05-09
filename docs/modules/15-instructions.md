@@ -68,9 +68,12 @@
 | `sector`  | `sectors/instructions/sector.handler.ts`   | sync      | 列用户自定义板块                                                                          |
 | `watch`   | `watch/instructions/watch.handler.ts`      | sync      | `watch list`（别名 `watch.list`）—— 列 watch 任务                                         |
 | `ledger`  | `ledger/instructions/ledger.handler.ts`    | sync      | `/ledger sub=summary\|list [limit=N]`：基于 `LedgerService.enriched` 输出汇总或近 N 条    |
-| `analyze` | `ledger/instructions/analyze.handler.ts`   | **async** | `/analyze [fresh=1]`：调 `LedgerService.analyze`（LLM）；走 `instruction.async` 通道      |
-| `update`  | `blacklist/instructions/update.handler.ts` | sync      | `/update target=blacklist`：调 `BlacklistService.refresh`，回 size/asof/universe          |
-| `screen`  | `screen/instructions/screen.handler.ts`    | **async** | `/screen "<NL>" [asof=YYYY-MM-DD]`：调 `ScreenService.runNl`（LLM + 计算）；走 async 通道 |
+| `analyze` | `ledger/instructions/analyze.handler.ts`   | **async** | `/analyze [fresh=1]` `[$]`：调 `LedgerService.analyze`（LLM in NestJS）；走 `instruction.async` 通道 |
+| `update`  | `blacklist/instructions/update.handler.ts` | sync      | `/update target=blacklist` `[!]`：调 `BlacklistService.refresh`，回 size/asof/universe   |
+| `screen`  | `screen/instructions/screen.handler.ts`    | **async** | `/screen "<NL>" [asof=YYYY-MM-DD]` `[$]`：NestJS 端 NL→DSL + Flight `screen_run`；走 async 通道 |
+| `agent`   | `agent/instructions/agent.handler.ts`      | sync      | `/agent <prompt>` `[$]`：自然语言总入口，多步 tool-use 循环 + 流式收尾；首次返回 `confirm-required` 让 IM 出付费卡，term 出 confirmPrompt |
+| `agent.confirm` | `agent/instructions/agent-confirm.handler.ts` | sync | `/agent.confirm correlationId=… approve=1\|0`：续派被付费/破坏性工具暂停的循环；只接 `correlationId` 所属的同一 userId |
+| `usr`     | `instruction/handlers/usr.handler.ts`      | sync      | 显示用户身份 + LLM ledger 累计（今日 / 本月 / 总计 + per-scope CNY） |
 
 #### 调试 / 内部指令（`INSTRUCTION_DEBUG_ENABLED=1` 才注册）
 
@@ -89,6 +92,9 @@
 ```
 
 - IM 端要求 `/` 前缀（避免普通聊天误触发）；term / socket 端不要前缀。
+- **IM 兜底**：allowlist 内的 sender 发的裸消息（无 `/`，且不匹配任何已注册 id / 别名）会被自动路由到 `/agent q="<原文>"`；非 allowlist 仍沉默。
+- **`InstructionSpec` 元数据**：`costsCredits=true`（外部付费 LLM）渲染为 `[$]`；`destructive=true`（不可逆写）渲染为 `[!]`。`/agent` 循环按这两个 flag 决定是否在工具调用前暂停等用户确认。
+- **`InstructionResult.error.code`** 新增 `confirm-required`：付费指令在缺 `confirm` 时返回；IM 列表器把它映射成 `agent.paid_confirm` 卡 kind 而不是红色 error。
 - `k=v` 对应 spec 的 zod 字段；位置参数按 `spec.positional` 顺序填入对应 key（已被 `k=v` 占用的 key 跳过）。
 - 双引号包裹的值支持 `\"` 与 `\\` 转义；超过 `positional` 数量的多余位置参数静默丢弃，由 `argsSchema` 决定是否报错。
 
@@ -127,6 +133,8 @@
 | `instruction.async.started`   | `buildInstructionAsyncStartedCard`   | `buildInstructionAsyncStartedBlocks`   |
 | `instruction.async.completed` | `buildInstructionAsyncCompletedCard` | `buildInstructionAsyncCompletedBlocks` |
 | `watch.hit`                   | `buildWatchHitCard`                  | `buildWatchHitBlocks`                  |
+| `agent.paid_confirm`          | `buildAgentPaidConfirmCard`（紫色 header；含 `/agent confirm=1 q="…"` 复制粘贴提示） | — Slack 走纯文本兜底 |
+| `agent.tool_proposal`         | `buildAgentToolProposalCard`（紫色 header；含 `agent.confirm correlationId=… approve=1\|0`） | — Slack 走纯文本兜底 |
 
 - IM listener 在每条 `channels.send` 上挂 `meta = { ok, instructionId, code?, jobId?, durationMs? }`，由 adapter 端的 `pickCard` / `pickBlocks` 路由到对应 builder。
 - 飞书 header 模板：sync 成功 `green`、失败 `red`；async started `orange`；async completed 与 sync 同色。
@@ -154,6 +162,9 @@ IM /analyze ──► InstructionExecutor.dispatch
 ```
 
 - spec 加 `mode: 'async'` 即可走该通道；handler 不感知队列。
+- `/agent` **不**走 BullMQ：它是 sync trigger handler（立即 ack）+ 后台 detached loop，
+  循环过程通过 `instruction.agent.delta` socket topic 增量推帧（term 渲染流式输出，IM
+  把 `step` / `tool_result` / `confirm` 帧再翻成 `agent.tool_proposal` 卡）。
 - BullMQ `attempts=1`：长 LLM 操作自带超时/重试语义，避免重复付费 API 调用。
 - socket topics（`packages/shared/src/types/socket.ts`）：`instruction.async.started` /
   `instruction.async.progress` / `instruction.async.completed`。`progress` 当前不被
@@ -178,9 +189,11 @@ IM /analyze ──► InstructionExecutor.dispatch
 ## 暂不做
 
 - 流式中间 `instruction.async.progress` 心跳由 handler 主动 emit；processor 不自动产生
-  进度帧。
-- LangGraph / 多步指令编排：spec 仍是单 handler；多步留给 v2。
-- Slack 交互按钮（块上的 button → callback）：当前仅 blocks 渲染。
+  进度帧。`/agent` 走独立的 `instruction.agent.delta` 通道，不复用这条。
+- 飞书 / Slack interactive button → server callback（v1 用 paste-back 命令做软兜底；
+  飞书 `card.action.trigger` 长连接钩子留待 v1.5）。
+- LangGraph 编排：`/agent` 循环目前是 NestJS 直管的 while loop；多 agent 分支或长任务
+  断点恢复才迁到 `services/py/quant_workflow/`（反向 RPC 调 NestJS `LlmService`）。
 - 装饰器 + DiscoveryModule 扫描：handler 数 < 15 还不必要。
 - 跨进程统一的 `InstructionSpec` 类型：等到出现第三个消费者（CLI / Electron）再抽（§2.5.2 Rule of Three）。
 - 持久化 IM 续推映射：`pendingByJobId` 是内存 Map，进程重启会丢；socket 端可走 topic 自取。

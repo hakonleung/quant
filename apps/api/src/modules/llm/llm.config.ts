@@ -1,7 +1,7 @@
 /**
  * Module-local config for the NestJS LLM client.
  *
- * Two layers:
+ * Two-layer override:
  *   - `LLM_*`        — default provider used by every consumer
  *                      (`/screen` NL→DSL, `/analyze`, future agent loop).
  *   - `AGENT_LLM_*`  — optional override applied only when a consumer asks
@@ -10,9 +10,18 @@
  *                      moving the cheaper default off Deepseek.
  *
  * The provider catalog (which models exist, which support web search,
- * what the OpenAI-compatible base URL is) is design-time data and lives
- * in `providers.ts`; only the API key + per-deploy overrides come from
- * env. Mirrors the Python convention this module replaces.
+ * what the OpenAI-compatible base URL is, which env var carries the API
+ * key) lives in `providers.ts`. **API keys come from the per-provider
+ * `*_API_KEY` envs** the catalog already declares — we deliberately do
+ * NOT re-expose them via `LLM_API_KEY` etc. The only knobs here are:
+ *
+ *   - `LLM_PROVIDER` / `AGENT_LLM_PROVIDER`  — pin a catalog row
+ *   - `LLM_MODEL`    / `AGENT_LLM_MODEL`     — override `model_pro`
+ *   - `LLM_REQUEST_TIMEOUT_MS`               — operational tuning
+ *
+ * For "I want to talk to a totally bespoke OpenAI-compatible endpoint
+ * that isn't in the catalog" the right answer is to add a row in
+ * `providers.ts`, not invent a parallel env hatch.
  */
 
 import { z } from 'zod';
@@ -37,30 +46,20 @@ const numberFromEnv = (raw: string | undefined, fallback: number, key: string): 
 const rawSchema = z
   .object({
     provider: z.string().optional(),
-    apiKey: z.string().optional(),
-    baseUrl: z.string().optional(),
     model: z.string().optional(),
     requestTimeoutMs: z.number().int().positive().optional(),
     agentProvider: z.string().optional(),
-    agentApiKey: z.string().optional(),
-    agentBaseUrl: z.string().optional(),
     agentModel: z.string().optional(),
-    agentWebSearchKind: z.enum(['moonshot_tool', 'qwen_extra_body']).optional(),
   })
   .strict();
 
 /**
- * One resolved provider override. `provider` is the catalog key (e.g.
- * `moonshot`, `qwen`, `deepseek`); when both `apiKey` and `baseUrl` are
- * set, the catalog row's defaults are bypassed and the call goes to the
- * caller-supplied endpoint instead.
+ * Resolved per-scope override. Both fields optional: missing fields fall
+ * back to the catalog row's defaults.
  */
 export interface LlmProviderOverride {
   readonly provider?: string;
-  readonly apiKey?: string;
-  readonly baseUrl?: string;
   readonly model?: string;
-  readonly webSearchKind?: 'moonshot_tool' | 'qwen_extra_body';
 }
 
 export interface LlmConfig {
@@ -75,53 +74,28 @@ export interface LlmConfig {
 export function loadLlmConfig(env: NodeJS.ProcessEnv = process.env): LlmConfig {
   const parsed = rawSchema.parse({
     provider: env['LLM_PROVIDER'],
-    apiKey: env['LLM_API_KEY'],
-    baseUrl: env['LLM_BASE_URL'],
     model: env['LLM_MODEL'],
     requestTimeoutMs:
       env['LLM_REQUEST_TIMEOUT_MS'] === undefined
         ? undefined
         : numberFromEnv(env['LLM_REQUEST_TIMEOUT_MS'], DEFAULT_TIMEOUT_MS, 'LLM_REQUEST_TIMEOUT_MS'),
     agentProvider: env['AGENT_LLM_PROVIDER'],
-    agentApiKey: env['AGENT_LLM_API_KEY'],
-    agentBaseUrl: env['AGENT_LLM_BASE_URL'],
     agentModel: env['AGENT_LLM_MODEL'],
-    agentWebSearchKind: env['AGENT_LLM_WEB_SEARCH_KIND'] as
-      | 'moonshot_tool'
-      | 'qwen_extra_body'
-      | undefined,
   });
   return {
-    default: buildOverride({
-      provider: parsed.provider,
-      apiKey: parsed.apiKey,
-      baseUrl: parsed.baseUrl,
-      model: parsed.model,
-    }),
-    agent: buildOverride({
-      provider: parsed.agentProvider,
-      apiKey: parsed.agentApiKey,
-      baseUrl: parsed.agentBaseUrl,
-      model: parsed.agentModel,
-      webSearchKind: parsed.agentWebSearchKind,
-    }),
+    default: buildOverride({ provider: parsed.provider, model: parsed.model }),
+    agent: buildOverride({ provider: parsed.agentProvider, model: parsed.agentModel }),
     requestTimeoutMs: parsed.requestTimeoutMs ?? DEFAULT_TIMEOUT_MS,
   };
 }
 
 function buildOverride(raw: {
   provider: string | undefined;
-  apiKey: string | undefined;
-  baseUrl: string | undefined;
   model: string | undefined;
-  webSearchKind?: 'moonshot_tool' | 'qwen_extra_body' | undefined;
 }): LlmProviderOverride {
   const out: { -readonly [K in keyof LlmProviderOverride]: LlmProviderOverride[K] } = {};
   if (nonEmpty(raw.provider)) out.provider = raw.provider;
-  if (nonEmpty(raw.apiKey)) out.apiKey = raw.apiKey;
-  if (nonEmpty(raw.baseUrl)) out.baseUrl = raw.baseUrl;
   if (nonEmpty(raw.model)) out.model = raw.model;
-  if (raw.webSearchKind !== undefined) out.webSearchKind = raw.webSearchKind;
   return out;
 }
 

@@ -43,12 +43,7 @@ import {
 import { OpenAiCompatibleLlmClient } from './adapters/openai-compatible.client.js';
 import { LlmLedgerRecorder } from './ledger/llm-ledger.recorder.js';
 import { LLM_CONFIG, type LlmConfig, type LlmProviderOverride } from './llm.config.js';
-import {
-  findProviderRow,
-  LLM_PROVIDERS,
-  type LlmProviderRow,
-  type WebSearchKind,
-} from './providers.js';
+import { findProviderRow, LLM_PROVIDERS, type LlmProviderRow } from './providers.js';
 
 const ZERO_USAGE: ChatTokenUsage = { input: 0, output: 0, total: 0 };
 
@@ -56,8 +51,6 @@ interface ResolvedProvider {
   readonly row: LlmProviderRow;
   readonly model: string;
   readonly apiKey: string;
-  readonly baseUrl: string;
-  readonly webSearchKind: WebSearchKind | undefined;
 }
 
 export interface ResolveOptions {
@@ -198,11 +191,11 @@ export class LlmService {
     const override =
       opts.scope === 'agent' && hasOverride(this.cfg.agent) ? this.cfg.agent : this.cfg.default;
     const row = pickRow(override, opts);
-    const apiKey = resolveKey(row, override);
+    const apiKey = process.env[row.apiKeyEnv];
     if (apiKey === undefined || apiKey === '') {
       throw new QuantError(
         'LLM_FAILED',
-        `no API key set for provider ${row.provider} (env ${row.apiKeyEnv} or override empty)`,
+        `no API key set for provider ${row.provider} (env ${row.apiKeyEnv})`,
         { provider: row.provider, scope: opts.scope, env_key: row.apiKeyEnv },
       );
     }
@@ -210,22 +203,20 @@ export class LlmService {
       row,
       model: override.model ?? row.modelPro,
       apiKey,
-      baseUrl: override.baseUrl ?? row.baseUrl,
-      webSearchKind: override.webSearchKind ?? row.webSearchKind,
     };
   }
 
   private getClient(r: ResolvedProvider): OpenAiCompatibleLlmClient {
-    const key = `${r.row.provider}|${r.model}|${r.baseUrl}|${r.webSearchKind ?? '-'}`;
+    const key = `${r.row.provider}|${r.model}`;
     let cached = this.clientCache.get(key);
     if (cached !== undefined) return cached;
     cached = new OpenAiCompatibleLlmClient({
       providerRow: r.row,
       model: r.model,
       apiKey: r.apiKey,
-      baseUrl: r.baseUrl,
+      baseUrl: r.row.baseUrl,
       requestTimeoutMs: this.cfg.requestTimeoutMs,
-      webSearchKind: r.webSearchKind,
+      ...(r.row.webSearchKind !== undefined ? { webSearchKind: r.row.webSearchKind } : {}),
     });
     this.clientCache.set(key, cached);
     return cached;
@@ -282,7 +273,7 @@ export class LlmService {
 // ---------------------------------------------------------------------------
 
 function hasOverride(o: LlmProviderOverride): boolean {
-  return o.provider !== undefined || o.apiKey !== undefined || o.baseUrl !== undefined;
+  return o.provider !== undefined || o.model !== undefined;
 }
 
 function pickRow(override: LlmProviderOverride, opts: ResolveOptions): LlmProviderRow {
@@ -302,18 +293,10 @@ function pickRow(override: LlmProviderOverride, opts: ResolveOptions): LlmProvid
     const key = process.env[cand.apiKeyEnv];
     if (typeof key === 'string' && key.length > 0) return cand;
   }
-  // Last resort — return first candidate; resolveKey() will throw a
+  // Last resort — return first candidate; resolve() will throw a
   // helpful error pointing at the missing env var.
   if (candidates[0] === undefined) {
     throw new QuantError('LLM_FAILED', 'provider catalog is empty', { count: 0 });
   }
   return candidates[0];
-}
-
-function resolveKey(
-  row: LlmProviderRow,
-  override: LlmProviderOverride,
-): string | undefined {
-  if (override.apiKey !== undefined && override.apiKey.length > 0) return override.apiKey;
-  return process.env[row.apiKeyEnv];
 }

@@ -25,11 +25,11 @@
                                                   └──────────────┘
 ```
 
-| 进程       | 职责                                                                           | 不做                                 |
-| ---------- | ------------------------------------------------------------------------------ | ------------------------------------ |
-| Next.js    | UI、SSR、用户交互；`feat-term-main` 内嵌 xterm.js 终端宿主                     | 直接调外部数据源 / LLM               |
-| NestJS     | HTTP 路由、参数校验、BJT 15:15 cron、内存队列、Arrow Flight client、Slack 推送 | 重计算、调外部数据源、调 LLM         |
-| Python svc | 数据拉取与缓存写入、筛选 / 形态 / 舆情计算、LLM 调用                           | 直接处理 HTTP（一律走 Arrow Flight） |
+| 进程       | 职责                                                                                                                       | 不做                                 |
+| ---------- | -------------------------------------------------------------------------------------------------------------------------- | ------------------------------------ |
+| Next.js    | UI、SSR、用户交互；`feat-term-main` 内嵌 xterm.js 终端宿主                                                                 | 直接调外部数据源 / LLM               |
+| NestJS     | HTTP 路由、参数校验、BJT 15:15 cron、内存队列、Arrow Flight client、Slack 推送、**外部 LLM 客户端（OpenAI 兼容，per-user 计费 ledger）** | 重计算、调外部数据源                 |
+| Python svc | 数据拉取与缓存写入、筛选 / 形态 / 舆情计算                                                                                 | 直接处理 HTTP；调外部 LLM（v1 残余 ta / news_sentiment 待迁出） |
 
 > v1 单机本地，`apps/api` 监听 `127.0.0.1`，无鉴权；任务队列内存实现（NestJS 进程内），重启即清空——长任务以幂等可重入设计。
 
@@ -65,9 +65,8 @@ docs/              工程文档（本目录）
 
 ```
 用户输入 → web POST /api/screen/nl
-  → NestJS NlScreenController（zod 校验 + 生成 trace_id）
-  → Arrow Flight: nl_to_dsl
-    → quant_core.NlToDslService → LLM (OpenAI-compat) → ScreenPlan JSON
+  → NestJS ScreenController（zod 校验 + 生成 trace_id + @CurrentUser）
+  → NestJS NlToDslService → LlmService.completeJson（OpenAI 兼容） → ScreenPlanAst
   → Arrow Flight: screen_run
     → quant_core.ScreenService
        → ParquetKlineRepo（DuckDB 读取需要的列）

@@ -31,6 +31,7 @@ v1 全部本地文件，无 Redis、无外部数据库。所有缓存目录在 `
 | watch tasks        | `data/watch/*.json`             | 按 market 分组                                   | 进程内为准                                       |
 | watch quotes / hit | `data/_state/watch:<...>.json`  | FileKeyValueStore                                | 盘中刷新覆盖                                     |
 | notify dedupe      | `data/_state/notify:<sha>.json` | 一事件一 KV                                      | 1 小时                                           |
+| llm ledger         | `data/users/{userId}/llm-ledger.json` | `UserScopedJsonStore` append-only；每次 LLM 调用一条记录 | 不过期（v1 仅展示，无配额上限）                  |
 
 ## 演进
 

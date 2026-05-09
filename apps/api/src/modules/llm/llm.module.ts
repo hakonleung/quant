@@ -27,8 +27,11 @@ const DEFAULT_DATA_DIR = '../../data';
       useFactory: (): LlmConfig => loadLlmConfig(process.env),
     },
     {
+      // Reuse the global QUANT_DATA_ROOT so the LLM ledger lands under
+      // the same per-user tree (data/users/{userId}/...) every other
+      // user-scoped store uses. Auth module also reads this var.
       provide: LLM_LEDGER_DATA_DIR,
-      useFactory: (): string => process.env['QUANT_LLM_LEDGER_DIR'] ?? DEFAULT_DATA_DIR,
+      useFactory: (): string => process.env['QUANT_DATA_ROOT'] ?? DEFAULT_DATA_DIR,
     },
     UserLlmLedgerStore,
     LlmLedgerRecorder,

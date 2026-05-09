@@ -35,6 +35,7 @@ NestJS API (:3001)
 | `instruction.async.started`   | `InstructionAsyncStartedPayload`   | `InstructionAsyncProcessor`（emitTo userId） |
 | `instruction.async.progress`  | `InstructionAsyncProgressPayload`  | handler 主动 emit（v1.5 暂未使用）           |
 | `instruction.async.completed` | `InstructionAsyncCompletedPayload` | `InstructionAsyncProcessor`（emitTo userId） |
+| `instruction.agent.delta`     | `InstructionAgentDeltaPayload`（5-kind union：`step` / `tool_result` / `confirm` / `text` / `done`） | `AgentService` 循环中 emitTo userId — 终端用来流式渲染 `/agent` |
 
 新增 topic = 在 `SOCKET_TOPIC_SCHEMAS` 加一行，前端 `useSocketTopic('<topic>', schema)` 即可消费。
 `instruction.async.*` 走 `emitTo(userId, …)`：socket 客户端只收到自己 userId 触发的 job 进度

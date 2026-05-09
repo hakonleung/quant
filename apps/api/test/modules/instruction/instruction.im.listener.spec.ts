@@ -239,17 +239,19 @@ describe('InstructionImListener.onInbound — async path', () => {
  * route to /agent (which then short-circuits with confirm-required when
  * not yet confirmed). Non-allowlisted senders stay silent regardless.
  */
-const agentSpec: InstructionSpec<{ q: string; confirm?: boolean }> = {
+const agentArgsSchema = z
+  .object({
+    q: z.string(),
+    confirm: z.union([z.string(), z.boolean()]).optional(),
+  })
+  .strict();
+
+const agentSpec: InstructionSpec<z.infer<typeof agentArgsSchema>> = {
   id: instructionId('agent'),
   summary: 'agent',
   summaryCn: 'agent',
   group: 'system',
-  argsSchema: z
-    .object({
-      q: z.string(),
-      confirm: z.union([z.string(), z.boolean()]).optional(),
-    })
-    .strict(),
+  argsSchema: agentArgsSchema,
   positional: ['q'],
   imAliases: ['助手'],
   costsCredits: true,
