@@ -52,6 +52,8 @@ describe('MockActionRunner', () => {
       meta: '',
       chgPct: null,
       codes: ['600519'],
+      createdBy: 'admin',
+      published: false,
     };
     await runner.run(sectorUpsertAction, { sector }, { signal: noSignal });
     const after = await runner.run(sectorListAction, {}, { signal: noSignal });

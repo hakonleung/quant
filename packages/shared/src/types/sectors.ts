@@ -32,6 +32,11 @@ export const SectorSchema = z.object({
    * refresh; missing on legacy / user sectors.
    */
   lastScreenedAt: z.string().datetime({ offset: true }).optional(),
+  /** Internal userId of the original creator. Owner-only edit gate keys off this. */
+  createdBy: z.string().min(1),
+  /** When true, sector is visible to every user; only the owner may toggle. */
+  published: z.boolean().default(false),
+  publishedAt: z.string().datetime({ offset: true }).optional(),
 });
 export type Sector = z.infer<typeof SectorSchema>;
 
@@ -42,3 +47,9 @@ export const SectorsReplaceBodySchema = z.object({
   sectors: SectorsListSchema,
 });
 export type SectorsReplaceBody = z.infer<typeof SectorsReplaceBodySchema>;
+
+/** POST /api/sectors/:id/publish body. */
+export const SectorPublishBodySchema = z.object({
+  published: z.boolean(),
+});
+export type SectorPublishBody = z.infer<typeof SectorPublishBodySchema>;

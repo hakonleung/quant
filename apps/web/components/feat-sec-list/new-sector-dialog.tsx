@@ -14,6 +14,7 @@ import type { NlScreenResult, ScreenMatchView } from '@quant/shared';
 import { useState } from 'react';
 
 import { makeSectorId } from '../../lib/fp/sector-id.js';
+import { useCurrentUserId } from '../../lib/hooks/use-current-user.js';
 import { useNlScreen } from '../../lib/hooks/use-nl-screen.js';
 import { useSectorsStore, type Sector } from '../../lib/stores/sectors.store.js';
 import { useUiStore } from '../../lib/stores/ui.store.js';
@@ -34,6 +35,7 @@ export function NewSectorDialog({ open, onClose }: Props): React.ReactElement | 
   const screen = useNlScreen();
   const upsert = useSectorsStore((s) => s.upsert);
   const setActiveSector = useUiStore((s) => s.setActiveSector);
+  const currentUserId = useCurrentUserId() ?? '';
 
   if (!open) return null;
 
@@ -74,6 +76,8 @@ export function NewSectorDialog({ open, onClose }: Props): React.ReactElement | 
       meta: 'manual basket',
       chgPct: null,
       codes: [],
+      createdBy: currentUserId,
+      published: false,
     };
     upsert(s);
     setActiveSector(id);
@@ -100,6 +104,8 @@ export function NewSectorDialog({ open, onClose }: Props): React.ReactElement | 
       universePlan: preview.universePlan,
       rank: preview.rank,
       lastScreenedAt: new Date().toISOString(),
+      createdBy: currentUserId,
+      published: false,
     };
     upsert(s);
     setActiveSector(id);

@@ -48,6 +48,7 @@ import {
   analyzeManySentiment,
   analyzeSentiment,
   analyzeTa,
+  analyzeTaMany,
   createLedgerEntry,
   deleteLedgerEntry,
   getCachedLedgerAnalysis,
@@ -61,7 +62,7 @@ import {
   patchLedgerEntry,
   runNlScreen,
 } from '../api/endpoints.js';
-import { fetchSectors, putSectors } from '../api/sectors.js';
+import { fetchSectors, publishSector, putSectors, refreshSector } from '../api/sectors.js';
 import {
   klineToTerm,
   marketSentimentToTerm,
@@ -101,9 +102,11 @@ const REVALIDATE_AFTER: Readonly<Record<string, readonly RevalidateScope[]>> = {
   'analyze.one': ['sentiment'],
   'analyze.many': ['sentiment'],
   'analyze.ta': ['ta'],
+  'analyze.ta.many': ['ta'],
   'sector.upsert': ['sectors'],
   'sector.remove': ['sectors'],
   'sector.refreshDynamic': ['sectors'],
+  'sector.publish': ['sectors'],
   'watch.upsert': ['watch'],
   'watch.remove': ['watch'],
   'ledger.upsert': ['ledger'],
@@ -195,8 +198,16 @@ function buildFetchers(deps: LiveRunnerDeps): Record<string, Fetcher> {
       if (cur === undefined) {
         throw new QuantError('NOT_FOUND', `sector ${idOrName} not found`);
       }
-      if (cur.kind !== 'dynamic' || cur.nl === undefined) {
+      if (cur.kind !== 'dynamic') {
         throw new QuantError('INVALID_ARGUMENT', `sector ${idOrName} is not a dynamic sector`);
+      }
+      // Server-side refresh (re-runs screenPlan, persists for everyone). Falls
+      // back to client-side NL → DSL → PUT if the sector pre-dates screenPlan.
+      if (cur.screenPlan !== undefined) {
+        return refreshSector(cur.id);
+      }
+      if (cur.nl === undefined) {
+        throw new QuantError('INVALID_ARGUMENT', `sector ${idOrName} has no nl/screenPlan`);
       }
       const screen = await runNlScreen(cur.nl);
       const codes = screen.matches.map((m) => m.code);
@@ -208,6 +219,10 @@ function buildFetchers(deps: LiveRunnerDeps): Record<string, Fetcher> {
         throw new QuantError('INTERNAL', 'sector refresh: not in response');
       }
       return ret;
+    },
+
+    'sector.publish': async ({ id, published }: { id: string; published: boolean }) => {
+      return publishSector(id, published);
     },
 
     'analyze.one': async ({ code, force }: { code: string; force?: boolean }) => {
@@ -239,6 +254,20 @@ function buildFetchers(deps: LiveRunnerDeps): Record<string, Fetcher> {
         if (cached !== null) return cached;
       }
       return analyzeTa(code, force === true);
+    },
+
+    'analyze.ta.many': async ({
+      codes,
+      label,
+    }: {
+      codes: readonly string[];
+      label?: string;
+      force?: boolean;
+    }) => {
+      // Per-stock TA fan-out happens server-side; each member call hits
+      // the existing `analyze_ta_one` cache, so a sector with warm
+      // members is fast even on the first call.
+      return analyzeTaMany(codes, label);
     },
 
     'screen.nl': async ({ nl, asof }: { nl: string; asof?: string }) => {

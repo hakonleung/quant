@@ -11,10 +11,12 @@ import {
   LedgerAnalysisSchema,
   LedgerEntrySchema,
   TaAnalysisSchema,
+  TaSectorAnalysisSchema,
   type EnrichedLedgerEntry,
   type LedgerAnalysis,
   type LedgerEntry,
   type TaAnalysis,
+  type TaSectorAnalysis,
 } from '@quant/shared';
 import { z } from 'zod';
 import type { DataActionConfig } from './types.js';
@@ -73,6 +75,11 @@ const sectorSchema = z.object({
   codes: z.array(codeSchema),
   nl: z.string().optional(),
   evidence: z.record(z.string(), z.record(z.string(), z.unknown())).optional(),
+  /** Internal userId of the original creator. */
+  createdBy: z.string().min(1),
+  /** When true, sector is visible to every user; only the owner may toggle. */
+  published: z.boolean().default(false),
+  publishedAt: z.string().optional(),
 });
 export type Sector = z.infer<typeof sectorSchema>;
 
@@ -267,6 +274,18 @@ export const sectorRefreshDynamicAction: DataActionConfig<{ idOrName: string }, 
   invalidates: () => [['sector.list'], ['sector.show']],
 };
 
+export const sectorPublishAction: DataActionConfig<
+  { id: string; published: boolean },
+  Sector
+> = {
+  id: 'sector.publish',
+  kind: 'write',
+  summary: 'Publish or unpublish a sector you own.',
+  args: z.object({ id: z.string().min(1), published: z.boolean() }),
+  result: sectorSchema,
+  invalidates: () => [['sector.list'], ['sector.show']],
+};
+
 export const analyzeOneAction: DataActionConfig<{ code: string; force?: boolean }, Sentiment> = {
   id: 'analyze.one',
   kind: 'paid',
@@ -298,6 +317,23 @@ export const analyzeTaAction: DataActionConfig<{ code: string; force?: boolean }
   result: TaAnalysisSchema,
   cacheKey: (a) => ['analyze.ta', a.code],
   invalidates: (a) => [['analyze.ta', a.code]],
+};
+
+export const analyzeTaManyAction: DataActionConfig<
+  { codes: readonly string[]; label?: string; force?: boolean },
+  TaSectorAnalysis
+> = {
+  id: 'analyze.ta.many',
+  kind: 'paid',
+  summary: 'Sector-level TA fan-out + LLM summary.',
+  args: z.object({
+    codes: codesSchema,
+    label: z.string().min(1).optional(),
+    force: z.boolean().optional(),
+  }),
+  result: TaSectorAnalysisSchema,
+  cacheKey: (a) => ['analyze.ta.many', [...a.codes].sort().join(',')],
+  invalidates: (a) => [['analyze.ta.many', [...a.codes].sort().join(',')]],
 };
 
 export const screenNlAction: DataActionConfig<{ nl: string; asof?: string }, ScreenResult> = {
@@ -414,9 +450,11 @@ export const ALL_ACTIONS = [
   sectorUpsertAction,
   sectorRemoveAction,
   sectorRefreshDynamicAction,
+  sectorPublishAction,
   analyzeOneAction,
   analyzeManyAction,
   analyzeTaAction,
+  analyzeTaManyAction,
   screenNlAction,
   watchListAction,
   watchUpsertAction,

@@ -45,3 +45,48 @@ export const TaAnalysisSchema = z
   })
   .strict();
 export type TaAnalysis = z.infer<typeof TaAnalysisSchema>;
+
+/**
+ * Per-stock TA card embedded inside the sector aggregate. Slim version of
+ * `TaAnalysis` — drops support/resistance level lists and patterns, keeps
+ * the fields needed to render a brief table view + drive the LLM summary.
+ */
+export const TaSectorMemberSchema = z
+  .object({
+    code: z.string().regex(/^\d{6}$/u, 'expected 6-digit code'),
+    name: z.string(),
+    asof: z.string().regex(/^\d{4}-\d{2}-\d{2}$/u, 'expected YYYY-MM-DD'),
+    trend: TaTrendSchema,
+    keyResistance: z.string().nullable(),
+    keySupport: z.string().nullable(),
+    headline: z.string(),
+  })
+  .strict();
+export type TaSectorMember = z.infer<typeof TaSectorMemberSchema>;
+
+/**
+ * Aggregate TA result for a sector. Per-stock cards are produced by Python
+ * fan-out (`analyze_ta_many`), the narrative summary by NestJS LlmService.
+ */
+export const TaSectorAnalysisSchema = z
+  .object({
+    codes: z.array(z.string().regex(/^\d{6}$/u)),
+    /** Distribution of trend directions across members. */
+    trendBreakdown: z
+      .object({
+        up: z.number().int().nonnegative(),
+        down: z.number().int().nonnegative(),
+        sideways: z.number().int().nonnegative(),
+      })
+      .strict(),
+    /** Average confidence over members with `direction === overallDirection`. */
+    overallDirection: z.enum(['up', 'down', 'sideways']),
+    overallConfidence: z.number().min(0).max(1),
+    members: z.array(TaSectorMemberSchema),
+    /** LLM-rendered narrative for the sector as a whole. */
+    summary: z.string(),
+    caveats: z.array(z.string()),
+    cachedAt: z.string().datetime({ offset: true }),
+  })
+  .strict();
+export type TaSectorAnalysis = z.infer<typeof TaSectorAnalysisSchema>;

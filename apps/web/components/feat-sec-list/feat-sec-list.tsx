@@ -4,8 +4,10 @@ import { Flex, Text } from '@chakra-ui/react';
 import { useMemo } from 'react';
 
 import { Feat } from '../../lib/eqty/feat.js';
+import { publishSector } from '../../lib/api/sectors.js';
 import { useBlacklistSet } from '../../lib/hooks/use-blacklist.js';
 import { ConfirmCancelled, useConfirm } from '../../lib/hooks/use-confirm.js';
+import { useCurrentUserId } from '../../lib/hooks/use-current-user.js';
 import { useKlineBulk } from '../../lib/hooks/use-eqty-data.js';
 import { useStockList } from '../../lib/hooks/use-stock-list.js';
 import { useSectorsStore, type Sector } from '../../lib/stores/sectors.store.js';
@@ -42,9 +44,11 @@ interface FeatSecListProps {
 export function FeatSecList({ bare }: FeatSecListProps = {}): React.ReactElement {
   const sectors = useSectorsStore((s) => s.sectors);
   const removeSector = useSectorsStore((s) => s.remove);
+  const upsertSector = useSectorsStore((s) => s.upsert);
   const activeSectorId = useUiStore((s) => s.activeSectorId);
   const setActiveSector = useUiStore((s) => s.setActiveSector);
   const universe = useStockList();
+  const currentUserId = useCurrentUserId();
   const { guard, comp: confirmComp } = useConfirm();
 
   const onDelete = (sector: Sector): void => {
@@ -76,6 +80,39 @@ export function FeatSecList({ bare }: FeatSecListProps = {}): React.ReactElement
       });
   };
 
+  const onTogglePublish = (sector: Sector): void => {
+    const verb = sector.published ? 'unpublish' : 'publish';
+    guard({
+      title: `${verb} sector`,
+      message: (
+        <>
+          <Text fontFamily="mono" fontSize="12px" color="ink2" lineHeight="1.7">
+            {verb}{' '}
+            <Text as="span" color="accent">
+              {sector.name}
+            </Text>
+            ?
+          </Text>
+          <Text fontFamily="mono" fontSize="11px" color="ink3" mt="8px">
+            //{' '}
+            {sector.published
+              ? 'other users will no longer see this sector'
+              : 'other users will be able to see (but not edit) this sector'}
+          </Text>
+        </>
+      ),
+      confirmLabel: verb.toUpperCase(),
+    })
+      .then(async () => {
+        const updated = await publishSector(sector.id, !sector.published);
+        upsertSector(updated);
+      })
+      .catch((e: unknown) => {
+        if (e instanceof ConfirmCancelled) return;
+        throw e;
+      });
+  };
+
   const blacklistSet = useBlacklistSet();
   const allCodes = (universe.data ?? []).map((s) => s.code).filter((c) => !blacklistSet.has(c));
   const allSector: Sector = {
@@ -86,6 +123,8 @@ export function FeatSecList({ bare }: FeatSecListProps = {}): React.ReactElement
     meta: 'every stock',
     chgPct: null,
     codes: allCodes,
+    createdBy: 'system',
+    published: true,
   };
 
   // Bulk last-2-bar fetch — same path as the old vertical SEC.LIST: ask
@@ -114,24 +153,35 @@ export function FeatSecList({ bare }: FeatSecListProps = {}): React.ReactElement
   return (
     <FeatView feat={Feat.Mkt} bare={bare ?? false} contentSized>
       <SectorSwiper height={40}>
-        {orderedSectors.map((s) => (
-          <SectorChip
-            key={s.id}
-            sector={s}
-            selected={activeSectorId === s.id}
-            chgPctByCode={chgPctByCode}
-            onClick={(): void => {
-              setActiveSector(s.id);
-            }}
-            onDelete={
-              s.id === ALL_SECTOR_ID
-                ? undefined
-                : (): void => {
-                    onDelete(s);
-                  }
-            }
-          />
-        ))}
+        {orderedSectors.map((s) => {
+          const isOwner = currentUserId !== null && s.createdBy === currentUserId;
+          const ownerActions = s.id === ALL_SECTOR_ID || !isOwner;
+          return (
+            <SectorChip
+              key={s.id}
+              sector={s}
+              selected={activeSectorId === s.id}
+              chgPctByCode={chgPctByCode}
+              onClick={(): void => {
+                setActiveSector(s.id);
+              }}
+              onDelete={
+                ownerActions
+                  ? undefined
+                  : (): void => {
+                      onDelete(s);
+                    }
+              }
+              onTogglePublish={
+                ownerActions
+                  ? undefined
+                  : (): void => {
+                      onTogglePublish(s);
+                    }
+              }
+            />
+          );
+        })}
       </SectorSwiper>
       {confirmComp}
     </FeatView>
@@ -144,6 +194,7 @@ interface ChipProps {
   readonly chgPctByCode: ReadonlyMap<string, number>;
   readonly onClick: () => void;
   readonly onDelete?: (() => void) | undefined;
+  readonly onTogglePublish?: (() => void) | undefined;
 }
 
 function SectorChip({
@@ -152,6 +203,7 @@ function SectorChip({
   chgPctByCode,
   onClick,
   onDelete,
+  onTogglePublish,
 }: ChipProps): React.ReactElement {
   const isDynamic = sector.kind === 'dynamic';
   const codes = sector.codes;
@@ -208,6 +260,18 @@ function SectorChip({
             [D]
           </Text>
         )}
+        {sector.published === true && (
+          <Text
+            fontFamily="mono"
+            fontSize="8px"
+            fontWeight="700"
+            letterSpacing="0.14em"
+            color="up"
+            aria-label="published sector"
+          >
+            [PUB]
+          </Text>
+        )}
         <Text
           fontFamily="mono"
           fontSize="10px"
@@ -217,6 +281,16 @@ function SectorChip({
         >
           {sector.name}
         </Text>
+        {onTogglePublish !== undefined && (
+          <MonoButton
+            icon="upload"
+            label={`${sector.published ? 'unpublish' : 'publish'} sector ${sector.name}`}
+            onClick={(e: React.MouseEvent<HTMLButtonElement>): void => {
+              e.stopPropagation();
+              onTogglePublish();
+            }}
+          />
+        )}
         {onDelete !== undefined && (
           <MonoButton
             icon="delete"

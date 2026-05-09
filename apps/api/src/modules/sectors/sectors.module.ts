@@ -3,7 +3,13 @@ import { Module } from '@nestjs/common';
 import { FlightClient } from '../../adapters/flight/flight-client.js';
 import { SYSTEM_CLOCK_PROVIDER } from '../../common/clock.js';
 import { SectorInstructionHandler } from './instructions/sector.handler.js';
+import {
+  SectorPublishInstructionHandler,
+  SectorUnpublishInstructionHandler,
+} from './instructions/sector-publish.handler.js';
+import { SectorRefreshInstructionHandler } from './instructions/sector-refresh.handler.js';
 import { SectorsController } from './sectors.controller.js';
+import { SectorsService } from './sectors.service.js';
 import { SECTORS_DATA_DIR, SectorsStore } from './sectors.store.js';
 import { SECTORS_FLIGHT_CLIENT } from './sectors.token.js';
 
@@ -26,8 +32,12 @@ const DEFAULT_FLIGHT_TARGET = '127.0.0.1:8815';
     },
     SYSTEM_CLOCK_PROVIDER,
     SectorsStore,
+    SectorsService,
     SectorInstructionHandler,
+    SectorPublishInstructionHandler,
+    SectorUnpublishInstructionHandler,
+    SectorRefreshInstructionHandler,
   ],
-  exports: [SectorsStore],
+  exports: [SectorsStore, SectorsService],
 })
 export class SectorsModule {}

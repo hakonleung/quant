@@ -22,3 +22,13 @@ export async function refreshSector(id: string): Promise<Sector> {
   );
   return out.sector;
 }
+
+export async function publishSector(id: string, published: boolean): Promise<Sector> {
+  const out = await apiPost(
+    `/api/sectors/${encodeURIComponent(id)}/publish`,
+    { published },
+    (r) => RefreshResponseSchema.parse(r),
+  );
+  return out.sector;
+}
+

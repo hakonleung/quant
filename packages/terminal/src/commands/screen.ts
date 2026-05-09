@@ -1,4 +1,9 @@
-import { screenNlAction, sectorUpsertAction, type Sector } from '../actions/registry.js';
+import {
+  screenNlAction,
+  sectorUpsertAction,
+  userMeAction,
+  type Sector,
+} from '../actions/registry.js';
 import type { CommandSpec } from '../registry.js';
 import { confirmPrompt } from '../widgets/confirm-prompt.js';
 import { selectableList } from '../widgets/selectable-list.js';
@@ -106,19 +111,30 @@ function saveAsSector(
     title: `save dynamic sector from screen (${String(codes.length)} codes)?`,
     onYes: () => {
       const id = `screen-${String(Date.now())}`;
-      const sector: Sector = {
-        id,
-        name: nl.slice(0, 24),
-        kind: 'dynamic',
-        count: codes.length,
-        meta: nl,
-        chgPct: null,
-        codes: [...codes],
-        nl,
-      };
-      void ctx.actions.run(sectorUpsertAction, { sector }, { signal: ctx.signal });
+      void (async (): Promise<void> => {
+        let createdBy = '';
+        try {
+          const me = await ctx.actions.run(userMeAction, {}, { signal: ctx.signal });
+          createdBy = me.data.userId;
+        } catch {
+          /* fallthrough — server will reject if missing */
+        }
+        const sector: Sector = {
+          id,
+          name: nl.slice(0, 24),
+          kind: 'dynamic',
+          count: codes.length,
+          meta: nl,
+          chgPct: null,
+          codes: [...codes],
+          nl,
+          createdBy,
+          published: false,
+        };
+        await ctx.actions.run(sectorUpsertAction, { sector }, { signal: ctx.signal });
+      })();
       return outputResolution(
-        `saved dynamic sector "${sector.name}" (${String(codes.length)} codes)`,
+        `saved dynamic sector "${nl.slice(0, 24)}" (${String(codes.length)} codes)`,
         'ok',
       );
     },

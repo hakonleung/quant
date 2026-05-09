@@ -65,7 +65,10 @@
 | `help`    | `instruction/handlers/help.handler.ts`     | sync      | 列已注册 spec；`/help <id>` 显示详情                                                      |
 | `focus`   | `stock-meta/instructions/focus.handler.ts` | sync      | 校验 6 位 A 股 code 并回 `focus = <code> <name> (<industry>)`                             |
 | `stock`   | `stock-meta/instructions/stock.handler.ts` | sync      | 按 code / 名称 / 拼音搜索（默认 limit=10）                                                |
-| `sector`  | `sectors/instructions/sector.handler.ts`   | sync      | 列用户自定义板块                                                                          |
+| `sector`  | `sectors/instructions/sector.handler.ts`   | sync      | 列对当前用户可见的板块（own + published），输出包含 OWNER 与 [PUB] 标识                    |
+| `sector.publish` | `sectors/instructions/sector-publish.handler.ts` | sync | `/sector.publish <id>` 仅创建者；触发 confirm 后置 `published=true` 让全员可见 |
+| `sector.unpublish` | `sectors/instructions/sector-publish.handler.ts` | sync | `/sector.unpublish <id>` 仅创建者；恢复为私有 |
+| `sector.refresh` | `sectors/instructions/sector-refresh.handler.ts` | sync | `/sector.refresh <id>` 任何用户可触发；动态板块按 `screenPlan` 重跑并落库,所有人共享结果 |
 | `watch`   | `watch/instructions/watch.handler.ts`      | sync      | `watch list`（别名 `watch.list`）—— 列 watch 任务                                         |
 | `ledger`  | `ledger/instructions/ledger.handler.ts`    | sync      | `/ledger sub=summary\|list [limit=N]`：基于 `LedgerService.enriched` 输出汇总或近 N 条    |
 | `analyze` | `ledger/instructions/analyze.handler.ts`   | **async** | `/analyze [fresh=1]` `[$]`：调 `LedgerService.analyze`（LLM in NestJS）；走 `instruction.async` 通道 |

@@ -2,6 +2,9 @@ import { BadRequestException, NotFoundException } from '@nestjs/common';
 import type { TaAnalysis as ViewTaAnalysis } from '@quant/shared';
 
 import type { FlightClient } from '../../../src/adapters/flight/flight-client.js';
+import { FrozenClock } from '../../../src/common/clock.js';
+import type { AuthenticatedUser } from '../../../src/modules/auth/request-with-user.js';
+import type { LlmService } from '../../../src/modules/llm/llm.service.js';
 import { TaController } from '../../../src/modules/ta/ta.controller.js';
 import type { RequestWithTraceId } from '../../../src/common/trace.middleware.js';
 
@@ -32,7 +35,29 @@ function fakeFlight(payload: unknown): {
   return { client, doGet };
 }
 
+function fakeLlm(text = 'sector summary'): LlmService {
+  return {
+    completeJson: jest.fn().mockResolvedValue({
+      text,
+      usage: { input: 1, output: 1, total: 2 },
+      provider: 'mock',
+      model: 'mock-1',
+    }),
+  } as unknown as LlmService;
+}
+
+function makeCtrl(client: FlightClient, llm: LlmService = fakeLlm()): TaController {
+  return new TaController(client, llm, new FrozenClock(new Date('2026-05-06T08:00:00.000Z')));
+}
+
 const traceReq = { traceId: 'trace-test' } as RequestWithTraceId;
+
+const adminUser: AuthenticatedUser = {
+  id: 'admin',
+  displayName: 'Admin',
+  source: 'env',
+  imBootstrap: false,
+};
 
 const PY_PAYLOAD = {
   code: '600519',
@@ -57,7 +82,7 @@ describe('TaController', () => {
   describe('GET /api/ta/analyze_one', () => {
     it('returns the cached payload mapped to the view shape', async () => {
       const { client, doGet } = fakeFlight(PY_PAYLOAD);
-      const ctrl = new TaController(client);
+      const ctrl = makeCtrl(client);
       const result = await ctrl.getOneCached(traceReq, { code: '600519' });
       expect(doGet).toHaveBeenCalledWith(
         'get_cached_ta_one',
@@ -73,7 +98,7 @@ describe('TaController', () => {
 
     it('throws NotFoundException on cache miss (empty table)', async () => {
       const { client } = fakeFlight(null);
-      const ctrl = new TaController(client);
+      const ctrl = makeCtrl(client);
       await expect(ctrl.getOneCached(traceReq, { code: '600519' })).rejects.toThrow(
         NotFoundException,
       );
@@ -83,7 +108,7 @@ describe('TaController', () => {
   describe('POST /api/ta/analyze_one', () => {
     it('forwards bypassCache=true to the Flight call', async () => {
       const { client, doGet } = fakeFlight(PY_PAYLOAD);
-      const ctrl = new TaController(client);
+      const ctrl = makeCtrl(client);
       const result: ViewTaAnalysis = await ctrl.analyzeOne(traceReq, {
         code: '600519',
         bypassCache: true,
@@ -98,10 +123,36 @@ describe('TaController', () => {
 
     it('throws BadRequestException when the flight returns nothing', async () => {
       const { client } = fakeFlight(null);
-      const ctrl = new TaController(client);
+      const ctrl = makeCtrl(client);
       await expect(ctrl.analyzeOne(traceReq, { code: '600519' })).rejects.toThrow(
         BadRequestException,
       );
+    });
+  });
+
+  describe('POST /api/ta/analyze_many', () => {
+    it('aggregates per-stock TA into a sector view + LLM summary', async () => {
+      const { client, doGet } = fakeFlight(PY_PAYLOAD);
+      const llm = fakeLlm('白酒板块上行');
+      const ctrl = makeCtrl(client, llm);
+      const out = await ctrl.analyzeMany(traceReq, adminUser, {
+        codes: ['600519', '000858'],
+        label: '白酒',
+      });
+      // Two per-stock fan-out calls.
+      expect(doGet).toHaveBeenCalledTimes(2);
+      expect(out.codes).toEqual(['600519', '000858']);
+      expect(out.overallDirection).toBe('up');
+      expect(out.summary).toBe('白酒板块上行');
+      expect(out.members.length).toBe(2);
+    });
+
+    it('throws when every member fan-out fails', async () => {
+      const { client } = fakeFlight(null);
+      const ctrl = makeCtrl(client);
+      await expect(
+        ctrl.analyzeMany(traceReq, adminUser, { codes: ['600519'] }),
+      ).rejects.toThrow(BadRequestException);
     });
   });
 });

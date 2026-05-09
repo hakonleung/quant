@@ -19,6 +19,12 @@
     },
     { "name": "NOT_FOUND", "number": 2, "http": 404, "description": "Generic resource-not-found." },
     {
+      "name": "FORBIDDEN",
+      "number": 3,
+      "http": 403,
+      "description": "Caller authenticated but lacks permission for this resource (e.g. non-owner write)."
+    },
+    {
       "name": "STOCK_NOT_FOUND",
       "number": 100,
       "http": 404,

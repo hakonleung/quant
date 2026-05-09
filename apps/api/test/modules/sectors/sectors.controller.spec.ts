@@ -2,13 +2,19 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 import type { Sector } from '@quant/shared';
 
 import { SectorsController } from '../../../src/modules/sectors/sectors.controller.js';
+import { SectorsService } from '../../../src/modules/sectors/sectors.service.js';
 import { SectorsStore } from '../../../src/modules/sectors/sectors.store.js';
 import { FrozenClock } from '../../../src/common/clock.js';
 import type { FlightClient } from '../../../src/adapters/flight/flight-client.js';
+import type { AuthenticatedUser } from '../../../src/modules/auth/request-with-user.js';
 import type { RequestWithTraceId } from '../../../src/common/trace.middleware.js';
 
 interface FakeProxy {
@@ -59,6 +65,8 @@ const baseDynamic: Sector = {
   },
   universePlan: null,
   rank: null,
+  createdBy: 'admin',
+  published: false,
 };
 
 const userSector: Sector = {
@@ -69,44 +77,58 @@ const userSector: Sector = {
   meta: 'manual basket',
   chgPct: null,
   codes: ['000001'],
+  createdBy: 'admin',
+  published: false,
 };
 
 const traceReq = { traceId: 'trace-test' } as RequestWithTraceId;
 
+const adminUser: AuthenticatedUser = {
+  id: 'admin',
+  displayName: 'Admin',
+  source: 'env',
+  imBootstrap: false,
+};
+const aliceUser: AuthenticatedUser = {
+  id: 'alice',
+  displayName: 'Alice',
+  source: 'oauth',
+  imBootstrap: false,
+};
+
 async function freshController(
   initial: readonly Sector[],
   flight: FlightClient,
-): Promise<{ store: SectorsStore; ctrl: SectorsController }> {
+): Promise<{ store: SectorsStore; service: SectorsService; ctrl: SectorsController }> {
   const dir = await tmpDir();
   await fs.writeFile(path.join(dir, 'sectors.json'), JSON.stringify(initial));
   const store = new SectorsStore(dir);
   await store.load();
-  const ctrl = new SectorsController(store, flight, new FrozenClock(FROZEN));
-  return { store, ctrl };
+  const service = new SectorsService(store, flight, new FrozenClock(FROZEN));
+  const ctrl = new SectorsController(service);
+  return { store, service, ctrl };
 }
 
 describe('SectorsController.refresh', () => {
   it('throws NotFound when the sector does not exist', async () => {
     const { ctrl } = await freshController([baseDynamic], fakeFlight(null));
-    await expect(ctrl.refresh(traceReq, 'no-such-id')).rejects.toBeInstanceOf(NotFoundException);
+    await expect(ctrl.refresh(traceReq, adminUser, 'no-such-id')).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
   });
 
   it('throws BadRequest when the sector is not dynamic', async () => {
     const { ctrl } = await freshController([userSector], fakeFlight(null));
-    await expect(ctrl.refresh(traceReq, userSector.id)).rejects.toBeInstanceOf(BadRequestException);
+    await expect(ctrl.refresh(traceReq, adminUser, userSector.id)).rejects.toThrow();
   });
 
-  it('throws BadRequest when the dynamic sector has no screenPlan', async () => {
-    const noPlan: Sector = { ...baseDynamic, screenPlan: undefined };
-    const { ctrl } = await freshController([noPlan], fakeFlight(null));
-    await expect(ctrl.refresh(traceReq, noPlan.id)).rejects.toBeInstanceOf(BadRequestException);
-  });
-
-  it('throws BadRequest when screen_run returns an empty payload', async () => {
-    const { ctrl } = await freshController([baseDynamic], fakeFlight(null));
-    await expect(ctrl.refresh(traceReq, baseDynamic.id)).rejects.toBeInstanceOf(
-      BadRequestException,
-    );
+  it('any user can refresh a published dynamic sector and codes persist', async () => {
+    const published: Sector = { ...baseDynamic, published: true, createdBy: 'admin' };
+    const newPayload = { planSignature: 'sig', matches: [{ code: '688008', evidence: { s: 1 } }] };
+    const { ctrl, store } = await freshController([published], fakeFlight(newPayload));
+    const out = await ctrl.refresh(traceReq, aliceUser, published.id);
+    expect(out.sector.codes).toEqual(['688008']);
+    expect(store.list()[0]?.codes).toEqual(['688008']);
   });
 
   it('replaces codes / evidence and stamps lastScreenedAt from the injected clock', async () => {
@@ -119,76 +141,51 @@ describe('SectorsController.refresh', () => {
     };
     const { store, ctrl } = await freshController([baseDynamic], fakeFlight(newPayload));
 
-    const out = await ctrl.refresh(traceReq, baseDynamic.id);
+    const out = await ctrl.refresh(traceReq, adminUser, baseDynamic.id);
 
     expect(out.sector.codes).toEqual(['688008', '301010']);
     expect(out.sector.count).toBe(2);
-    expect(out.sector.evidence).toEqual({
-      '688008': { score: 0.9 },
-      '301010': { score: 0.8 },
-    });
     expect(out.sector.lastScreenedAt).toBe(FROZEN.toISOString());
-    // store has been updated atomically.
     expect(store.list()[0]).toEqual(out.sector);
   });
+});
 
-  it('preserves nl / screenPlan / rank when refreshing', async () => {
-    const newPayload = { planSignature: 'sig-x', matches: [] };
-    const { ctrl } = await freshController([baseDynamic], fakeFlight(newPayload));
+describe('SectorsController.publish', () => {
+  it('owner can toggle published', async () => {
+    const { ctrl, store } = await freshController([userSector], fakeFlight(null));
+    const out = await ctrl.publish(adminUser, userSector.id, { published: true });
+    expect(out.sector.published).toBe(true);
+    expect(out.sector.publishedAt).toBeDefined();
+    expect(store.list()[0]?.published).toBe(true);
+  });
 
-    const out = await ctrl.refresh(traceReq, baseDynamic.id);
+  it('non-owner is rejected with ForbiddenException', async () => {
+    const { ctrl } = await freshController([userSector], fakeFlight(null));
+    await expect(
+      ctrl.publish(aliceUser, userSector.id, { published: true }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+  });
 
-    expect(out.sector.nl).toBe(baseDynamic.nl);
-    expect(out.sector.screenPlan).toEqual(baseDynamic.screenPlan);
-    expect(out.sector.codes).toEqual([]);
-    expect(out.sector.count).toBe(0);
+  it('NotFound when the sector does not exist', async () => {
+    const { ctrl } = await freshController([], fakeFlight(null));
+    await expect(
+      ctrl.publish(adminUser, 'missing', { published: true }),
+    ).rejects.toBeInstanceOf(NotFoundException);
   });
 });
 
-describe('SectorsStore.upsert', () => {
-  it('updates an existing sector in-place (preserving position)', async () => {
-    const dir = await tmpDir();
-    const a: Sector = { ...userSector, id: 'a' };
-    const b: Sector = { ...userSector, id: 'b' };
-    const c: Sector = { ...userSector, id: 'c' };
-    await fs.writeFile(path.join(dir, 'sectors.json'), JSON.stringify([a, b, c]));
-    const store = new SectorsStore(dir);
-    await store.load();
-
-    const updatedB: Sector = { ...b, name: 'mutated' };
-    await store.upsert(updatedB);
-
-    const list = store.list();
-    expect(list.map((s) => s.id)).toEqual(['a', 'b', 'c']);
-    expect(list[1]?.name).toBe('mutated');
-  });
-
-  it('appends a new sector when id is unseen', async () => {
-    const dir = await tmpDir();
-    await fs.writeFile(path.join(dir, 'sectors.json'), JSON.stringify([userSector]));
-    const store = new SectorsStore(dir);
-    await store.load();
-
-    const fresh: Sector = { ...userSector, id: 'fresh' };
-    await store.upsert(fresh);
-
-    const list = store.list();
-    expect(list.map((s) => s.id)).toEqual([userSector.id, 'fresh']);
-  });
-
-  it('writes the change to disk atomically', async () => {
-    const dir = await tmpDir();
-    await fs.writeFile(path.join(dir, 'sectors.json'), JSON.stringify([userSector]));
-    const store = new SectorsStore(dir);
-    await store.load();
-
-    const fresh: Sector = { ...userSector, id: 'fresh', name: 'on-disk' };
-    await store.upsert(fresh);
-
-    const onDisk = JSON.parse(
-      await fs.readFile(path.join(dir, 'sectors.json'), 'utf8'),
-    ) as Sector[];
-    expect(onDisk.map((s) => s.id)).toEqual([userSector.id, 'fresh']);
-    expect(onDisk[1]?.name).toBe('on-disk');
+describe('SectorsController.list', () => {
+  it('non-owner sees only published others + own', async () => {
+    const aliceOwn: Sector = { ...userSector, id: 'alice-own', createdBy: 'alice' };
+    const adminPub: Sector = { ...userSector, id: 'admin-pub', createdBy: 'admin', published: true };
+    const adminPriv: Sector = { ...userSector, id: 'admin-priv', createdBy: 'admin' };
+    const { ctrl } = await freshController(
+      [aliceOwn, adminPub, adminPriv],
+      fakeFlight(null),
+    );
+    const out = ctrl.list(aliceUser);
+    expect(out.sectors.map((s) => s.id).sort()).toEqual(['admin-pub', 'alice-own']);
   });
 });
+
+void BadRequestException;

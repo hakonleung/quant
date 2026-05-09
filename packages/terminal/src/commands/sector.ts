@@ -1,12 +1,14 @@
 import {
   screenNlAction,
   sectorListAction,
+  sectorPublishAction,
   sectorRefreshDynamicAction,
   sectorRemoveAction,
   sectorShowAction,
   sectorUpsertAction,
   type Sector,
   stockSnapshotsAction,
+  userMeAction,
 } from '../actions/registry.js';
 import { ANSI, paint } from '../render/ansi.js';
 import { renderTable } from '../render/table.js';
@@ -30,8 +32,8 @@ const ALL_ID = 'all';
 
 export const sectorCommand: CommandSpec = {
   name: 'sector',
-  summary: 'Sector management. Subcommands: list, show, add, refresh, rm.',
-  subcommands: ['list', 'show', 'add', 'refresh', 'rm'],
+  summary: 'Sector management. Subcommands: list, show, add, refresh, rm, publish, unpublish.',
+  subcommands: ['list', 'show', 'add', 'refresh', 'rm', 'publish', 'unpublish'],
   async run(argv, ctx) {
     const sub = argv.positional[0];
     if (sub === undefined) return textErr('sector: missing subcommand');
@@ -40,12 +42,26 @@ export const sectorCommand: CommandSpec = {
     if (sub === 'add') return runAdd(ctx);
     if (sub === 'refresh') return runRefresh(argv, ctx);
     if (sub === 'rm') return runRemove(argv, ctx);
+    if (sub === 'publish') return runPublish(argv, ctx, true);
+    if (sub === 'unpublish') return runPublish(argv, ctx, false);
     return textErr(`sector: unknown subcommand ${sub}`);
   },
 };
 
+async function currentUserId(
+  ctx: Parameters<CommandSpec['run']>[1],
+): Promise<string | null> {
+  try {
+    const me = await ctx.actions.run(userMeAction, {}, { signal: ctx.signal });
+    return me.data.userId;
+  } catch {
+    return null;
+  }
+}
+
 async function runList(ctx: Parameters<CommandSpec['run']>[1]) {
   const r = await ctx.actions.run(sectorListAction, {}, { signal: ctx.signal });
+  const me = await currentUserId(ctx);
   const rows = r.data
     .filter((s) => s.id !== ALL_ID)
     .map((s) => ({
@@ -54,6 +70,10 @@ async function runList(ctx: Parameters<CommandSpec['run']>[1]) {
       kind: s.kind,
       count: s.count,
       chgPct: s.chgPct ?? 0,
+      owner: s.createdBy === me ? 'me' : s.createdBy,
+      pub: s.published ? '*' : ' ',
+      isOwner: s.createdBy === me,
+      isPublished: s.published,
     }));
   if (rows.length === 0) {
     return textOk(paint('no sectors yet — try `sector add`', ANSI.gray));
@@ -62,11 +82,13 @@ async function runList(ctx: Parameters<CommandSpec['run']>[1]) {
     title: 'sectors',
     items: rows,
     columns: [
+      { key: 'pub', header: 'PUB', max: 3 },
       { key: 'id', header: 'ID', max: 12 },
       { key: 'name', header: 'NAME', max: 14 },
       { key: 'kind', header: 'KIND', max: 8 },
       { key: 'count', header: 'N', align: 'right' },
       { key: 'chgPct', header: 'CHG%', align: 'right' },
+      { key: 'owner', header: 'OWNER', max: 12 },
     ],
     onCommit: (s) => ({ kind: 'command', line: `sector show ${String(s.id)}` }),
     extraKeys: [
@@ -85,16 +107,44 @@ async function runList(ctx: Parameters<CommandSpec['run']>[1]) {
       },
       {
         key: 'd',
-        hint: { keys: ['d'], label: 'delete', danger: true },
-        resolve: (s) =>
-          widgetResolution(
+        hint: { keys: ['d'], label: 'delete (owner)', danger: true },
+        resolve: (s) => {
+          if (s.isOwner !== true) {
+            return outputResolution(`cannot delete ${String(s.id)}: not owner`, 'err');
+          }
+          return widgetResolution(
             confirmPrompt({
               title: `delete sector ${String(s.name)}?`,
               danger: true,
               onYes: () => ({ kind: 'command', line: `sector rm ${String(s.id)}` }),
               onNo: () => canceledResolution,
             }),
-          ),
+          );
+        },
+      },
+      {
+        key: 'p',
+        hint: { keys: ['p'], label: 'publish/unpublish (owner)', danger: true },
+        resolve: (s) => {
+          if (s.isOwner !== true) {
+            return outputResolution(`cannot publish ${String(s.id)}: not owner`, 'err');
+          }
+          const verb = s.isPublished === true ? 'unpublish' : 'publish';
+          return widgetResolution(
+            confirmPrompt({
+              title: `${verb} sector ${String(s.name)}?`,
+              body: paint(
+                s.isPublished === true
+                  ? 'other users will no longer see this sector'
+                  : 'other users will be able to see (but not edit) this sector',
+                ANSI.gray,
+              ),
+              danger: true,
+              onYes: () => ({ kind: 'command', line: `sector ${verb} ${String(s.id)}` }),
+              onNo: () => canceledResolution,
+            }),
+          );
+        },
       },
     ],
   });
@@ -194,6 +244,35 @@ async function runRefresh(
   return textOk(
     `refreshed sector ${r.data.name}: codes=${String(r.data.count)} chgPct=${String(r.data.chgPct ?? '—')}`,
   );
+}
+
+async function runPublish(
+  argv: { positional: readonly string[] },
+  ctx: Parameters<CommandSpec['run']>[1],
+  publish: boolean,
+) {
+  const idOrName = argv.positional[1];
+  if (idOrName === undefined) {
+    const verb = publish ? 'publish' : 'unpublish';
+    return textErr(`usage: sector ${verb} <id|name>`);
+  }
+  const lower = idOrName.toLowerCase();
+  const list = await ctx.actions.run(sectorListAction, {}, { signal: ctx.signal });
+  const found = list.data.find(
+    (s) => s.id.toLowerCase() === lower || s.name.toLowerCase() === lower,
+  );
+  if (found === undefined) return textErr(`sector ${idOrName} not found`);
+  try {
+    const r = await ctx.actions.run(
+      sectorPublishAction,
+      { id: found.id, published: publish },
+      { signal: ctx.signal },
+    );
+    const verb = publish ? 'published' : 'unpublished';
+    return textOk(`${verb} sector ${r.data.name} (${r.data.id})`);
+  } catch (err) {
+    return textErr(err instanceof Error ? err.message : String(err));
+  }
 }
 
 /* ---------- sector add — guided flow ---------- */
@@ -313,17 +392,21 @@ function addUserConfirm(
   return confirmPrompt({
     title: `save user sector "${name}" (${String(codes.length)} codes)?`,
     onYes: () => {
-      const sector: Sector = {
-        id: name.toLowerCase().replace(/\s+/gu, '-'),
-        name,
-        kind: 'user',
-        count: codes.length,
-        meta: '',
-        chgPct: null,
-        codes: [...codes],
-      };
-      // Fire-and-forget — the engine will surface any thrown error in next tick.
-      void ctx.actions.run(sectorUpsertAction, { sector }, { signal: ctx.signal });
+      void (async (): Promise<void> => {
+        const me = await currentUserId(ctx);
+        const sector: Sector = {
+          id: name.toLowerCase().replace(/\s+/gu, '-'),
+          name,
+          kind: 'user',
+          count: codes.length,
+          meta: '',
+          chgPct: null,
+          codes: [...codes],
+          createdBy: me ?? '',
+          published: false,
+        };
+        await ctx.actions.run(sectorUpsertAction, { sector }, { signal: ctx.signal });
+      })();
       return outputResolution(`saved user sector "${name}" (${String(codes.length)} codes)`, 'ok');
     },
     onNo: () => canceledResolution,
@@ -346,6 +429,7 @@ function addDynamicConfirm(ctx: Parameters<CommandSpec['run']>[1], name: string,
       void (async (): Promise<void> => {
         const r = await ctx.actions.run(screenNlAction, { nl }, { signal: ctx.signal });
         const codes = r.data.matches.map((m) => m.code);
+        const me = await currentUserId(ctx);
         const sector: Sector = {
           id: name.toLowerCase().replace(/\s+/gu, '-'),
           name,
@@ -355,6 +439,8 @@ function addDynamicConfirm(ctx: Parameters<CommandSpec['run']>[1], name: string,
           chgPct: null,
           codes,
           nl,
+          createdBy: me ?? '',
+          published: false,
         };
         await ctx.actions.run(sectorUpsertAction, { sector }, { signal: ctx.signal });
       })();

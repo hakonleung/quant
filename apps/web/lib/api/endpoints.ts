@@ -21,6 +21,7 @@ import {
   StockMetaDtoSchema,
   StockSnapshotDtoSchema,
   TaAnalysisSchema,
+  TaSectorAnalysisSchema,
   type KlineBar,
   type LedgerAnalysis,
   type LedgerEntry,
@@ -37,6 +38,7 @@ import {
   type StockMetaDto,
   type StockSnapshotDto,
   type TaAnalysis,
+  type TaSectorAnalysis,
   type UniversePlanAst,
 } from '@quant/shared';
 import { z } from 'zod';
@@ -199,6 +201,16 @@ export async function analyzeTa(code: string, bypassCache = false): Promise<TaAn
   return apiPost(`/api/ta/analyze_one`, bypassCache ? { code, bypassCache } : { code }, (raw) =>
     TaAnalysisSchema.parse(raw),
   );
+}
+
+/** Sector-level TA fan-out + LLM summary (paid). */
+export async function analyzeTaMany(
+  codes: readonly string[],
+  label?: string,
+): Promise<TaSectorAnalysis> {
+  const body: { codes: string[]; label?: string } = { codes: [...codes] };
+  if (label !== undefined) body.label = label;
+  return apiPost(`/api/ta/analyze_many`, body, (raw) => TaSectorAnalysisSchema.parse(raw));
 }
 
 // ---------- ledger ----------
