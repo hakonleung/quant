@@ -4,25 +4,37 @@
  * delegating handler (toast / banner) consume the same shape.
  */
 
-export type InstructionErrorCode =
-  | 'parse'
-  | 'validation'
-  | 'not-found'
-  | 'forbidden'
-  | 'handler';
+import { z } from 'zod';
 
-export interface InstructionOutput {
-  readonly text: string;
-}
+export const InstructionErrorCodeSchema = z.enum([
+  'parse',
+  'validation',
+  'not-found',
+  'forbidden',
+  'handler',
+]);
+export type InstructionErrorCode = z.infer<typeof InstructionErrorCodeSchema>;
 
-export interface InstructionError {
-  readonly code: InstructionErrorCode;
-  readonly message: string;
-}
+export const InstructionOutputSchema = z
+  .object({
+    text: z.string(),
+  })
+  .strict();
+export type InstructionOutput = z.infer<typeof InstructionOutputSchema>;
 
-export type InstructionResult =
-  | { readonly ok: true; readonly output: InstructionOutput }
-  | { readonly ok: false; readonly error: InstructionError };
+export const InstructionErrorSchema = z
+  .object({
+    code: InstructionErrorCodeSchema,
+    message: z.string(),
+  })
+  .strict();
+export type InstructionError = z.infer<typeof InstructionErrorSchema>;
+
+export const InstructionResultSchema = z.discriminatedUnion('ok', [
+  z.object({ ok: z.literal(true), output: InstructionOutputSchema }).strict(),
+  z.object({ ok: z.literal(false), error: InstructionErrorSchema }).strict(),
+]);
+export type InstructionResult = z.infer<typeof InstructionResultSchema>;
 
 export function okResult(text: string): InstructionResult {
   return { ok: true, output: { text } };

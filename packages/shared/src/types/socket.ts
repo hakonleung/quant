@@ -16,6 +16,7 @@
 
 import { z } from 'zod';
 
+import { InstructionResultSchema } from '../instructions/result.js';
 import { ChannelActivitySchema } from './channel.js';
 import { QueueSnapshotSchema } from './queue-status.js';
 import { WatchTaskSchema } from './watch.js';
@@ -42,6 +43,42 @@ export type QueueSnapshotPayload = z.infer<typeof QueueSnapshotPayloadSchema>;
 export const ChannelActivityPayloadSchema = ChannelActivitySchema;
 export type ChannelActivityPayload = z.infer<typeof ChannelActivityPayloadSchema>;
 
+/** Async instruction job entered the queue (`InstructionAsyncProcessor`). */
+export const InstructionAsyncStartedPayloadSchema = z
+  .object({
+    jobId: z.string().min(1),
+    instructionId: z.string().min(1),
+    userId: z.string().min(1),
+    startedAt: z.string().datetime({ offset: true }),
+  })
+  .strict();
+export type InstructionAsyncStartedPayload = z.infer<typeof InstructionAsyncStartedPayloadSchema>;
+
+/** Optional progress heartbeat from a long-running async instruction. */
+export const InstructionAsyncProgressPayloadSchema = z
+  .object({
+    jobId: z.string().min(1),
+    percent: z.number().min(0).max(100).optional(),
+    message: z.string().max(280).optional(),
+  })
+  .strict();
+export type InstructionAsyncProgressPayload = z.infer<typeof InstructionAsyncProgressPayloadSchema>;
+
+/** Async instruction finished — carries the same `InstructionResult` shape as sync. */
+export const InstructionAsyncCompletedPayloadSchema = z
+  .object({
+    jobId: z.string().min(1),
+    instructionId: z.string().min(1),
+    userId: z.string().min(1),
+    result: InstructionResultSchema,
+    finishedAt: z.string().datetime({ offset: true }),
+    durationMs: z.number().int().nonnegative(),
+  })
+  .strict();
+export type InstructionAsyncCompletedPayload = z.infer<
+  typeof InstructionAsyncCompletedPayloadSchema
+>;
+
 /**
  * Single source of truth for the topic registry. Used by `SocketBus` to
  * validate emits and by `useSocketTopic` to validate inbound frames.
@@ -54,13 +91,14 @@ export const SOCKET_TOPIC_SCHEMAS = {
   'watch.snapshot': WatchSnapshotPayloadSchema,
   'queue.snapshot': QueueSnapshotPayloadSchema,
   'channel.activity': ChannelActivityPayloadSchema,
+  'instruction.async.started': InstructionAsyncStartedPayloadSchema,
+  'instruction.async.progress': InstructionAsyncProgressPayloadSchema,
+  'instruction.async.completed': InstructionAsyncCompletedPayloadSchema,
 } as const satisfies Readonly<Record<string, z.ZodTypeAny>>;
 
 export type SocketTopic = keyof typeof SOCKET_TOPIC_SCHEMAS;
 
-export type SocketTopicPayload<T extends SocketTopic> = z.infer<
-  (typeof SOCKET_TOPIC_SCHEMAS)[T]
->;
+export type SocketTopicPayload<T extends SocketTopic> = z.infer<(typeof SOCKET_TOPIC_SCHEMAS)[T]>;
 
 export function socketTopicSchema<T extends SocketTopic>(
   topic: T,
