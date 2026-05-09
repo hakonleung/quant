@@ -11,6 +11,7 @@ import {
   type Effect,
   type Event,
   type HistoryEntry,
+  type OutputEntry,
   type ReduceResult,
   type TerminalState,
   initialState,
@@ -54,9 +55,88 @@ export function reduce(state: TerminalState, event: Event): ReduceResult {
       // Synchronous engine command — always end on idle, never linger in
       // `running` or `cancelling`.
       return { state: { ...state, phase: 'idle', history: [] }, effects: [] };
+    case 'streamOpen':
+      return handleStreamOpen(state, event.streamId, event.status, event.initialBody);
+    case 'streamChunk':
+      return handleStreamMutate(state, event.streamId, (body) => body + event.delta);
+    case 'streamStepLog':
+      return handleStreamMutate(state, event.streamId, (body) => {
+        const sep = body.length > 0 && !body.endsWith('\n') ? '\n' : '';
+        return body + sep + event.line;
+      });
+    case 'streamClose':
+      return handleStreamClose(state, event.streamId, event.footer, event.status);
     default:
       return { state, effects: [] };
   }
+}
+
+/* ---------- streaming output ---------- */
+
+/**
+ * Append a fresh streaming OutputEntry. `streamId` is treated as the
+ * entry id so subsequent `streamChunk` / `streamStepLog` / `streamClose`
+ * events can find the right row by id.
+ *
+ * If a streaming entry with the same id is already present we no-op
+ * rather than push a duplicate — protects against accidental double-open.
+ */
+function handleStreamOpen(
+  state: TerminalState,
+  streamId: string,
+  status: OutputEntry['status'] | undefined,
+  initialBody: string | undefined,
+): ReduceResult {
+  if (state.history.some((h) => h.kind === 'output' && h.id === streamId)) {
+    return { state, effects: [] };
+  }
+  const entry: OutputEntry = {
+    kind: 'output',
+    id: streamId,
+    body: initialBody ?? '',
+    status: status ?? 'info',
+    streaming: true,
+  };
+  return {
+    state: { ...state, history: [...state.history, entry] },
+    effects: [],
+  };
+}
+
+function handleStreamMutate(
+  state: TerminalState,
+  streamId: string,
+  mutate: (body: string) => string,
+): ReduceResult {
+  const next = state.history.map((h) => {
+    if (h.kind !== 'output' || h.id !== streamId) return h;
+    return { ...h, body: mutate(h.body) };
+  });
+  return { state: { ...state, history: next }, effects: [] };
+}
+
+function handleStreamClose(
+  state: TerminalState,
+  streamId: string,
+  footer: string | undefined,
+  status: OutputEntry['status'] | undefined,
+): ReduceResult {
+  const next = state.history.map((h) => {
+    if (h.kind !== 'output' || h.id !== streamId) return h;
+    const sep = h.body.length > 0 && !h.body.endsWith('\n') ? '\n' : '';
+    const body = footer !== undefined ? h.body + sep + footer : h.body;
+    const updated: OutputEntry = {
+      ...h,
+      body,
+      streaming: false,
+      ...(status !== undefined ? { status } : {}),
+    };
+    return updated;
+  });
+  // Streaming usually runs detached from the prompt's own running phase;
+  // we don't force phase=idle here because the caller's command may have
+  // already ended via a separate `result` event. Reducer stays oblivious.
+  return { state: { ...state, history: next }, effects: [] };
 }
 
 /**

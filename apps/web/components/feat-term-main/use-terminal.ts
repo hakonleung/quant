@@ -125,6 +125,11 @@ export function useTerminal(): TerminalApi {
     [],
   );
 
+  // Forward ref so `buildCtx` can hand `dispatch` into command ctx
+  // without depending on declaration order (the actual `dispatch`
+  // useCallback is defined further down the file).
+  const dispatchRef = useRef<((ev: Event) => void) | null>(null);
+
   const buildCtx = useCallback((): CommandCtx => {
     const ac = new AbortController();
     abortRef.current = ac;
@@ -133,6 +138,12 @@ export function useTerminal(): TerminalApi {
       stockIndex: indexRef.current,
       stores: ctxStores,
       signal: ac.signal,
+      // Streaming commands (e.g. /agent) push streamOpen/Chunk/Close
+      // events here as socket frames arrive; the host pumps them into
+      // the engine via the same `dispatch` the bridge uses for keys.
+      dispatchEvent: (ev: Event): void => {
+        dispatchRef.current?.(ev);
+      },
     };
   }, [ctxStores]);
 
@@ -165,6 +176,9 @@ export function useTerminal(): TerminalApi {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [schedulePaint],
   );
+  // Hook the forward ref `buildCtx` reads from; refreshed every render
+  // so `dispatchEvent` always points at the latest `dispatch`.
+  dispatchRef.current = dispatch;
 
   const applyEffect = useCallback(
     (eff: Effect): void => {

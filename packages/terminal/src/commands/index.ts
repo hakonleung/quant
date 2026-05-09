@@ -4,6 +4,7 @@
  * individual commands and assemble a custom registry.
  */
 
+import { agentCommand } from './agent.js';
 import { analyzeCommand } from './analyze.js';
 import { cacheCommand } from './cache.js';
 import { clearCommand } from './clear.js';
@@ -19,6 +20,7 @@ import { watchCommand } from './watch.js';
 import { createRegistry, type CommandRegistry } from '../registry.js';
 
 export {
+  agentCommand,
   analyzeCommand,
   cacheCommand,
   clearCommand,
@@ -46,6 +48,7 @@ export function createDefaultRegistry(): CommandRegistry {
   r.register(cacheCommand);
   r.register(clearCommand);
   r.register(usrCommand);
+  r.register(agentCommand);
   r.register(helpCommand(r));
   return r;
 }

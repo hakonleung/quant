@@ -24,6 +24,7 @@
 import { z } from 'zod';
 import {
   enrichEntries,
+  InstructionAgentDeltaPayloadSchema,
   QuantError,
   validateLedger,
   WatchTaskSchema,
@@ -31,12 +32,15 @@ import {
 } from '@quant/shared';
 import {
   MockCache,
+  type AgentDeltaFrame,
   type DataActionConfig,
   type DataActionRunner,
   type RevalidateScope,
   type RunOpts,
   type RunOutcome,
 } from '@quant/terminal';
+
+import { sendSocketCommand, subscribeTopic } from '../socket/socket-client.js';
 
 import { apiGet, apiPost } from '../api/client.js';
 import {
@@ -421,4 +425,33 @@ export class LiveActionRunner implements DataActionRunner {
   stats(): { entries: number; hits: number; misses: number } {
     return this.cache.stats();
   }
+
+  // /agent socket bridge — wired to the singleton socket-client. The
+  // optional methods are declared on `DataActionRunner`; mock runners
+  // omit them, so the term command is expected to null-check.
+  invokeBeInstruction = async (
+    id: string,
+    args: Readonly<Record<string, unknown>>,
+  ): Promise<{ readonly jobId: string; readonly text: string; readonly ok: boolean }> => {
+    const ack = await sendSocketCommand({ id, args });
+    const detail = (ack.detail as { text?: unknown } | undefined) ?? undefined;
+    const text = typeof detail?.text === 'string' ? detail.text : '';
+    // Try to extract jobId from the agent handler's "▶ /agent ... jobId=<uuid>" text.
+    const jobIdMatch = /jobId=([0-9a-f-]{36})/u.exec(text);
+    const jobId = jobIdMatch !== null ? (jobIdMatch[1] ?? '') : '';
+    return { jobId, text, ok: ack.ok };
+  };
+
+  subscribeAgentDelta = (
+    jobId: string,
+    onFrame: (frame: AgentDeltaFrame) => void,
+  ): (() => void) => {
+    return subscribeTopic('instruction.agent.delta', (raw: unknown) => {
+      const parsed = InstructionAgentDeltaPayloadSchema.safeParse(raw);
+      if (!parsed.success) return;
+      if (parsed.data.jobId !== jobId) return;
+      // Width the schema to the runner-local frame type.
+      onFrame(parsed.data as unknown as AgentDeltaFrame);
+    });
+  };
 }

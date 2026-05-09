@@ -58,6 +58,15 @@ export interface CommandCtx {
   readonly stockIndex: StockIndex;
   readonly stores: CommandStores;
   readonly signal: AbortSignal;
+  /**
+   * Host-provided handle to dispatch engine events from outside the
+   * normal `run` return value. Used by long-running streaming commands
+   * (`/agent`) that own a socket subscription and need to push
+   * `streamChunk` / `streamStepLog` / `streamClose` events as frames
+   * arrive. Optional because mock runners + unit tests don't have a
+   * dispatch loop.
+   */
+  readonly dispatchEvent?: (event: Event) => void;
 }
 
 /* ---------- command spec ---------- */

@@ -21,6 +21,12 @@ export interface OutputEntry {
   /** ANSI-colored text, `\n`-separated lines. */
   readonly body: string;
   readonly status: 'ok' | 'err' | 'cached' | 'info';
+  /**
+   * Set while the entry is still receiving stream chunks. The bridge
+   * paints a trailing cursor / dot on streaming entries so the user
+   * can tell partial output from completed.
+   */
+  readonly streaming?: boolean;
 }
 
 export interface FrozenInteractiveEntry {
@@ -161,7 +167,27 @@ export type Event =
   /** Drop the last N "interactions" (a prompt + its trailing entries). */
   | { readonly kind: 'clearLast'; readonly count: number }
   /** Wipe all history (engine-level clear). */
-  | { readonly kind: 'clearAll' };
+  | { readonly kind: 'clearAll' }
+  /* -- streaming output (e.g. /agent) -- */
+  /** Open a streaming OutputEntry placeholder. Subsequent streamChunk /
+   * streamStepLog events append to it; streamClose finalises. */
+  | {
+      readonly kind: 'streamOpen';
+      readonly streamId: string;
+      readonly status?: OutputEntry['status'];
+      readonly initialBody?: string;
+    }
+  /** Append delta text to an open stream entry. */
+  | { readonly kind: 'streamChunk'; readonly streamId: string; readonly delta: string }
+  /** Append a single full-line "▶ /focus 600519" marker to an open stream entry. */
+  | { readonly kind: 'streamStepLog'; readonly streamId: string; readonly line: string }
+  /** Close the stream — clears the streaming flag and optionally appends a footer line. */
+  | {
+      readonly kind: 'streamClose';
+      readonly streamId: string;
+      readonly footer?: string;
+      readonly status?: OutputEntry['status'];
+    };
 
 /* ---------- Effects ---------- */
 

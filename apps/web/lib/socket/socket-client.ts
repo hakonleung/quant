@@ -137,3 +137,45 @@ export function subscribeTopic(topic: SocketTopic, handler: TopicHandler): () =>
 export function _getTopicRefCount(topic: SocketTopic): number {
   return refCounts.get(topic) ?? 0;
 }
+
+// ─── command emit ────────────────────────────────────────────────────
+
+interface SocketAck {
+  readonly ok: boolean;
+  readonly error?: string;
+  readonly detail?: unknown;
+}
+
+/**
+ * Fire a `{ id, args }` command at the gateway and wait for the ack.
+ * Returns the ack object (`{ ok, error?, detail? }`) or rejects on
+ * underlying socket transport failures (timeout, disconnect).
+ *
+ * Used by the term `/agent` command to kick off the BE loop —
+ * everywhere else still goes through the BFF HTTP layer.
+ */
+export function sendSocketCommand(
+  command: { readonly id: string; readonly args: Readonly<Record<string, unknown>> },
+  timeoutMs = 30_000,
+): Promise<SocketAck> {
+  const socket = getSocket();
+  return new Promise<SocketAck>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new Error(`socket command timed out after ${String(timeoutMs)}ms`));
+    }, timeoutMs);
+    socket
+      .timeout(timeoutMs)
+      .emit('command', command, (err: unknown, ack: unknown) => {
+        clearTimeout(timer);
+        if (err !== null && err !== undefined) {
+          reject(err instanceof Error ? err : new Error(String(err)));
+          return;
+        }
+        if (ack === null || typeof ack !== 'object') {
+          resolve({ ok: false, error: 'malformed_ack' });
+          return;
+        }
+        resolve(ack as SocketAck);
+      });
+  });
+}
