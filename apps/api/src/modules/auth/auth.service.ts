@@ -6,6 +6,7 @@
  */
 
 import { Inject, Injectable } from '@nestjs/common';
+import type { ChannelId } from '@quant/shared';
 import type { Request } from 'express';
 
 import { AUTH_CONFIG, type AuthConfigShape } from './config/auth.config.js';
@@ -59,6 +60,44 @@ export class AuthService {
       source: 'oauth',
       imBootstrap,
     };
+  }
+
+  /**
+   * Channel-aware IM resolver. The raw `sender` is the prefixed userId
+   * built by the channel adapter (`${channel}:${externalId}`):
+   *   1. if `sender` is in the configured admin allowlist verbatim
+   *      → return the synthetic `admin` user (writes go to `data/users/admin`);
+   *   2. delegates to {@link resolveFromIm} for Feishu (full UserStore
+   *      bootstrap path), stripping the `feishu:` prefix to recover open_id;
+   *   3. falls back to a stable IM-only user (legacy slack behaviour).
+   */
+  async resolveFromImChannel(
+    channel: ChannelId,
+    sender: string,
+    hints: { displayName?: string; tenantKey?: string | null } = {},
+  ): Promise<AuthenticatedUser> {
+    if (this.isImAdmin(sender)) return this.adminUser();
+    if (channel === 'feishu') {
+      const prefix = `${channel}:`;
+      const externalId = sender.startsWith(prefix) ? sender.slice(prefix.length) : sender;
+      const out: FeishuImSender = {
+        openId: externalId,
+        ...(hints.displayName !== undefined ? { displayName: hints.displayName } : {}),
+        ...(hints.tenantKey !== undefined ? { tenantKey: hints.tenantKey } : {}),
+      };
+      return this.resolveFromIm(out);
+    }
+    return {
+      id: sender,
+      displayName: hints.displayName ?? sender,
+      source: 'im',
+      imBootstrap: true,
+    };
+  }
+
+  /** True when the given prefixed IM userId is configured as admin. */
+  isImAdmin(senderId: string): boolean {
+    return this.cfg.adminUserIds.has(senderId);
   }
 
   /**

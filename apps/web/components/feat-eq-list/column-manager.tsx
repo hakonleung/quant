@@ -15,6 +15,8 @@
  */
 
 import { Box, Flex, Text } from '@chakra-ui/react';
+import type { ColumnFilter, ColumnFilterOp } from '@quant/shared';
+import { useState } from 'react';
 
 import {
   COLUMN_CATALOG,
@@ -27,9 +29,38 @@ import { MonoButton } from '../ui/mono-button.js';
 
 const IMMUTABLE: ReadonlySet<ColumnKey> = new Set(['name']);
 
+/**
+ * Numeric (filterable) columns. The CODE column is string-typed and the
+ * snapshot-driven returns/PE columns operate on numeric `sortValue`s, so
+ * the predicate UI is only meaningful for these.
+ */
+const FILTERABLE: ReadonlySet<ColumnKey> = new Set([
+  'price',
+  'chgPct',
+  'turnoverRate',
+  'turnover',
+  'consecUp',
+  'ret5d',
+  'ret10d',
+  'ret20d',
+  'ret90d',
+  'ret250d',
+  'mktCap',
+  'floatMktCap',
+  'peTtm',
+  'peDynamic',
+  'pb',
+  'peg',
+  'grossMargin',
+]);
+
+const OPS: readonly ColumnFilterOp[] = ['>', '>=', '<', '<=', '=', '!='];
+
 export function ColumnManager(): React.ReactElement {
   const persisted = useSettingsStore((s) => s.appliedColumns);
   const setAppliedColumns = useSettingsStore((s) => s.setAppliedColumns);
+  const columnFilters = useSettingsStore((s) => s.columnFilters);
+  const setColumnFilter = useSettingsStore((s) => s.setColumnFilter);
 
   const removable = persisted.filter((k) => !IMMUTABLE.has(k));
   const available: readonly ColumnSpec[] = COLUMN_CATALOG.filter(
@@ -71,8 +102,8 @@ export function ColumnManager(): React.ReactElement {
             return (
               <Flex
                 key={key}
-                align="center"
-                gap="6px"
+                direction="column"
+                gap="4px"
                 px="10px"
                 py="6px"
                 borderBottomWidth="1px"
@@ -81,35 +112,45 @@ export function ColumnManager(): React.ReactElement {
                 fontSize="11px"
                 _hover={{ bg: 'term.bgElev' }}
               >
-                <Text flex="1" color="term.ink" whiteSpace="nowrap">
-                  {spec.label}
-                </Text>
-                <Text color="term.ink3" fontSize="9px" whiteSpace="nowrap">
-                  {spec.group}
-                </Text>
-                <MonoButton
-                  icon="up"
-                  label="move up"
-                  onClick={(): void => {
-                    move(idx, -1);
-                  }}
-                  disabled={idx === 0}
-                />
-                <MonoButton
-                  icon="down"
-                  label="move down"
-                  onClick={(): void => {
-                    move(idx, 1);
-                  }}
-                  disabled={idx === removable.length - 1}
-                />
-                <MonoButton
-                  icon="delete"
-                  label="remove"
-                  onClick={(): void => {
-                    remove(key);
-                  }}
-                />
+                <Flex align="center" gap="6px">
+                  <Text flex="1" color="term.ink" whiteSpace="nowrap">
+                    {spec.label}
+                  </Text>
+                  <Text color="term.ink3" fontSize="9px" whiteSpace="nowrap">
+                    {spec.group}
+                  </Text>
+                  <MonoButton
+                    icon="up"
+                    label="move up"
+                    onClick={(): void => {
+                      move(idx, -1);
+                    }}
+                    disabled={idx === 0}
+                  />
+                  <MonoButton
+                    icon="down"
+                    label="move down"
+                    onClick={(): void => {
+                      move(idx, 1);
+                    }}
+                    disabled={idx === removable.length - 1}
+                  />
+                  <MonoButton
+                    icon="delete"
+                    label="remove"
+                    onClick={(): void => {
+                      remove(key);
+                    }}
+                  />
+                </Flex>
+                {FILTERABLE.has(key) && (
+                  <FilterRow
+                    filter={columnFilters[key] ?? null}
+                    onChange={(next): void => {
+                      setColumnFilter(key, next);
+                    }}
+                  />
+                )}
               </Flex>
             );
           })
@@ -149,6 +190,106 @@ export function ColumnManager(): React.ReactElement {
           ))
         )}
       </PaneSection>
+    </Flex>
+  );
+}
+
+interface FilterRowProps {
+  readonly filter: ColumnFilter | null;
+  readonly onChange: (next: ColumnFilter | null) => void;
+}
+
+const SELECT_STYLE: React.CSSProperties = {
+  fontFamily: 'var(--chakra-fonts-mono, ui-monospace, monospace)',
+  fontSize: '11px',
+  background: 'var(--chakra-colors-term-panel, transparent)',
+  color: 'var(--chakra-colors-term-ink, inherit)',
+  border: '1px solid var(--chakra-colors-term-line, currentColor)',
+  padding: '1px 4px',
+};
+
+const INPUT_STYLE: React.CSSProperties = {
+  ...SELECT_STYLE,
+  flex: 1,
+  minWidth: '60px',
+};
+
+/**
+ * Per-column predicate editor. Edits live in local string state so a
+ * partially-typed value (e.g. `-` mid-typing) doesn't immediately rewrite
+ * the persisted filter as `0` and surprise the row pipeline. We commit
+ * on blur / Enter and accept removal via the trash button.
+ */
+function FilterRow({ filter, onChange }: FilterRowProps): React.ReactElement {
+  const [draft, setDraft] = useState<string>(filter === null ? '' : String(filter.value));
+  const op: ColumnFilterOp = filter?.op ?? '>';
+
+  const commit = (raw: string): void => {
+    const trimmed = raw.trim();
+    if (trimmed === '') {
+      if (filter !== null) onChange(null);
+      return;
+    }
+    const n = Number(trimmed);
+    if (!Number.isFinite(n)) return;
+    if (filter !== null && filter.op === op && filter.value === n) return;
+    onChange({ op, value: n });
+  };
+
+  const onOpChange = (e: React.ChangeEvent<HTMLSelectElement>): void => {
+    const nextOp = e.target.value as ColumnFilterOp;
+    if (filter !== null) {
+      onChange({ op: nextOp, value: filter.value });
+      return;
+    }
+    const trimmed = draft.trim();
+    if (trimmed === '') return;
+    const n = Number(trimmed);
+    if (!Number.isFinite(n)) return;
+    onChange({ op: nextOp, value: n });
+  };
+
+  return (
+    <Flex align="center" gap="6px" pl="2px">
+      <Text color="term.ink3" fontSize="9px" letterSpacing="0.16em" w="38px">
+        FILTER
+      </Text>
+      <select value={op} onChange={onOpChange} style={SELECT_STYLE}>
+        {OPS.map((o) => (
+          <option key={o} value={o}>
+            {o}
+          </option>
+        ))}
+      </select>
+      <input
+        type="text"
+        inputMode="decimal"
+        value={draft}
+        placeholder="∅"
+        onChange={(e: React.ChangeEvent<HTMLInputElement>): void => {
+          setDraft(e.target.value);
+        }}
+        onBlur={(): void => {
+          commit(draft);
+        }}
+        onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>): void => {
+          if (e.key === 'Enter') {
+            commit(draft);
+            (e.target as HTMLInputElement).blur();
+          }
+        }}
+        style={INPUT_STYLE}
+      />
+      {filter !== null && (
+        <MonoButton
+          icon="delete"
+          label="clear filter"
+          onClick={(): void => {
+            setDraft('');
+            onChange(null);
+          }}
+        />
+      )}
     </Flex>
   );
 }

@@ -19,14 +19,32 @@ export interface AuthConfigShape {
   readonly nextauthSecret: string | null;
   readonly dataRoot: string;
   readonly adminUserId: string;
+  /**
+   * IM-derived userIds that should be promoted to the synthetic `admin`
+   * user. Configured via `AUTH_ADMIN_USER_IDS` as a comma-separated list
+   * of full prefixed ids (e.g. `feishu:ou_abc,slack:U_xyz`) — matched
+   * verbatim against the inbound `sender` string built by the channel
+   * adapters (`${channel}:${externalId}`).
+   */
+  readonly adminUserIds: ReadonlySet<string>;
 }
 
 const DEFAULT_DATA_ROOT = '../../data';
 const ADMIN_USER_ID = 'admin';
 
-export function loadAuthConfig(): AuthConfigShape {
-  const mode = parseAuthMode(process.env['AUTH_MODE']);
-  const secretRaw = process.env['NEXTAUTH_SECRET'];
+function parseIdSet(raw: string | undefined): ReadonlySet<string> {
+  if (raw === undefined || raw.length === 0) return new Set<string>();
+  const out = new Set<string>();
+  for (const part of raw.split(',')) {
+    const v = part.trim();
+    if (v.length > 0) out.add(v);
+  }
+  return out;
+}
+
+export function loadAuthConfig(env: NodeJS.ProcessEnv = process.env): AuthConfigShape {
+  const mode = parseAuthMode(env['AUTH_MODE']);
+  const secretRaw = env['NEXTAUTH_SECRET'];
   const secret = secretRaw !== undefined && secretRaw.length > 0 ? secretRaw : null;
   if (mode === 'oauth' && secret === null) {
     throw new Error('AUTH_MODE=oauth requires NEXTAUTH_SECRET');
@@ -34,8 +52,9 @@ export function loadAuthConfig(): AuthConfigShape {
   return {
     mode,
     nextauthSecret: secret,
-    dataRoot: process.env['QUANT_DATA_ROOT'] ?? DEFAULT_DATA_ROOT,
+    dataRoot: env['QUANT_DATA_ROOT'] ?? DEFAULT_DATA_ROOT,
     adminUserId: ADMIN_USER_ID,
+    adminUserIds: parseIdSet(env['AUTH_ADMIN_USER_IDS']),
   };
 }
 

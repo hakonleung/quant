@@ -4,6 +4,12 @@
  * Generates an opaque CSRF `state`, stores it in a short-lived cookie,
  * and redirects the browser to Feishu's authorize URL. The callback
  * route verifies the state on return.
+ *
+ * The redirect URI is built from the **incoming request's origin** rather
+ * than `NEXTAUTH_URL` so the cookie's host scope and the post-OAuth
+ * callback request always live on the same host (the most common cause
+ * of `bad_state` is starting on `localhost` while NEXTAUTH_URL points to
+ * `127.0.0.1` — Feishu redirects to a host the cookie was never set on).
  */
 
 import { randomBytes } from 'node:crypto';
@@ -21,7 +27,8 @@ export async function GET(req: Request): Promise<Response> {
     return NextResponse.redirect(new URL('/', req.url));
   }
   const state = randomBytes(16).toString('hex');
-  const redirectUri = `${cfg.publicBaseUrl}/api/auth/callback/feishu`;
+  const origin = new URL(req.url).origin;
+  const redirectUri = `${origin}/api/auth/callback/feishu`;
   const authorize = buildAuthorizeUrl({
     appId: cfg.feishuAppId,
     redirectUri,
@@ -31,7 +38,10 @@ export async function GET(req: Request): Promise<Response> {
   res.cookies.set(STATE_COOKIE, state, {
     httpOnly: true,
     sameSite: 'lax',
-    secure: cfg.cookieSecure,
+    // Mirror the request's scheme rather than `cfg.cookieSecure` (which
+    // is derived from NEXTAUTH_URL) so a misconfigured NEXTAUTH_URL
+    // can't drop the state cookie on a plain-HTTP loopback dev session.
+    secure: origin.startsWith('https://'),
     path: '/',
     maxAge: 600,
   });

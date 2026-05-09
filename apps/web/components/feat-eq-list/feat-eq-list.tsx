@@ -13,8 +13,8 @@
  * scrollable container.
  */
 
-import { Flex, Text } from '@chakra-ui/react';
-import type { StockMetaDto } from '@quant/shared';
+import { Box, Flex, Text } from '@chakra-ui/react';
+import type { ColumnFilter, StockMetaDto } from '@quant/shared';
 import { useEffect, useMemo, useState } from 'react';
 
 import { Feat } from '../../lib/eqty/feat.js';
@@ -22,6 +22,7 @@ import {
   BUILTIN_KEYS,
   buildRows,
   compareRows,
+  evaluateColumnFilter,
   flattenEvidence,
   type ListRow,
 } from '../../lib/fp/eq-list-fp.js';
@@ -35,21 +36,14 @@ import { FeatView } from '../feat-view/feat-view.js';
 import { ConfirmCancelled, useConfirm } from '../../lib/hooks/use-confirm.js';
 
 import { appliedNeedsSnapshot, buildColumns } from './list-columns.js';
-import {
-  DynamicHeader,
-  EditableTitle,
-  FilterHeader,
-  UserSectorHeader,
-} from './list-headers.js';
+import { DynamicHeader, EditableTitle, FilterHeader, UserSectorHeader } from './list-headers.js';
 import type { ColumnDef, SortState } from './list-types.js';
 import { ScrollGrid } from './scroll-grid.js';
-
 
 // `ListRow`, `BUILTIN_KEYS`, `buildRows`, `flattenEvidence`,
 // `formatRelativeTime`, sort comparators and evidence-cell helpers all
 // live in `lib/fp/eq-list-fp.ts` — pure modules with their own unit
 // tests. This file holds only the React layer (state, hooks, JSX).
-
 
 interface FeatEqListProps {
   /** Hosted inside MKT as the lower body — render content only, no
@@ -131,19 +125,8 @@ export function FeatEqList({ bare }: FeatEqListProps = {}): React.ReactElement {
     return baseRows.filter((r) => r.code.startsWith(q) || r.name.toLowerCase().includes(q));
   }, [baseRows, filter, isDynamic, isUserSector]);
 
-  // Default sort: descending by chgPct so winners surface first.
-  // `null` is reserved for the "use sector-defined order" mode (kept
-  // accessible by clicking the active sort header twice to clear it).
-  const [sort, setSort] = useState<SortState | null>({ key: 'chgPct', dir: 'desc' });
-  const sortedRows: readonly ListRow[] = useMemo(() => {
-    if (sort === null) return filteredRows;
-    const arr = [...filteredRows];
-    arr.sort((a, b) => compareRows(a, b, sort.key));
-    if (sort.dir === 'desc') arr.reverse();
-    return arr;
-  }, [filteredRows, sort]);
-
   const appliedColumns = useSettingsStore((s) => s.appliedColumns);
+  const columnFilters = useSettingsStore((s) => s.columnFilters);
   // For the synthetic "All" sector we send empty codes — the snapshot
   // endpoint expands to the full universe server-side (mirroring
   // kline/bulk). Stuffing ~5500 codes into the query string would
@@ -157,6 +140,43 @@ export function FeatEqList({ bare }: FeatEqListProps = {}): React.ReactElement {
     () => buildColumns(appliedColumns, evidenceKeys, snapshots.byCode),
     [appliedColumns, evidenceKeys, snapshots.byCode],
   );
+
+  // Per-column predicates from the USR column manager — applied after
+  // the search filter and before the sort. We resolve each filter
+  // against the column's `sortValue` extractor so the predicate sees
+  // the same numeric the user sorts by. `null` from the evaluator means
+  // "no opinion" (列值为空跳过) and the row passes that predicate.
+  const filterEntries: readonly { col: ColumnDef; filter: ColumnFilter }[] = useMemo(() => {
+    const out: { col: ColumnDef; filter: ColumnFilter }[] = [];
+    for (const col of columns) {
+      const f = columnFilters[col.key as keyof typeof columnFilters];
+      if (f === undefined) continue;
+      out.push({ col, filter: f });
+    }
+    return out;
+  }, [columns, columnFilters]);
+  const predicateRows: readonly ListRow[] = useMemo(() => {
+    if (filterEntries.length === 0) return filteredRows;
+    return filteredRows.filter((row) => {
+      for (const { col, filter } of filterEntries) {
+        const res = evaluateColumnFilter(col.sortValue(row), filter);
+        if (res === false) return false;
+      }
+      return true;
+    });
+  }, [filteredRows, filterEntries]);
+
+  // Default sort: descending by chgPct so winners surface first.
+  // `null` is reserved for the "use sector-defined order" mode (kept
+  // accessible by clicking the active sort header twice to clear it).
+  const [sort, setSort] = useState<SortState | null>({ key: 'chgPct', dir: 'desc' });
+  const sortedRows: readonly ListRow[] = useMemo(() => {
+    if (sort === null) return predicateRows;
+    const arr = [...predicateRows];
+    arr.sort((a, b) => compareRows(a, b, sort.key));
+    if (sort.dir === 'desc') arr.reverse();
+    return arr;
+  }, [predicateRows, sort]);
 
   // Auto-default focus to the first visible row of the active sector.
   // Fires when (a) nothing is focused yet, or (b) the persisted focus
@@ -244,11 +264,28 @@ export function FeatEqList({ bare }: FeatEqListProps = {}): React.ReactElement {
       status={listTone}
       statusBlink={isLoading || klineBatch.isLoading}
       titleSlot={
-        <EditableTitle
-          value={sector?.name ?? 'list'}
-          editable={sector !== null && !isAll}
-          onSave={onTitleSave}
-        />
+        <Flex align="baseline" gap="8px" minW={0}>
+          <EditableTitle
+            value={sector?.name ?? 'list'}
+            editable={sector !== null && !isAll}
+            onSave={onTitleSave}
+          />
+          {/* Live row count after every filter pass — column predicates
+              from the USR pane shrink this without changing baseRows,
+              so users need a running tally to see the filter biting. */}
+          <Box
+            as="span"
+            fontFamily="mono"
+            fontSize="10px"
+            color="ink3"
+            letterSpacing="0.12em"
+            whiteSpace="nowrap"
+          >
+            {predicateRows.length === baseRows.length
+              ? String(baseRows.length)
+              : `${String(predicateRows.length)}/${String(baseRows.length)}`}
+          </Box>
+        </Flex>
       }
     >
       <Flex direction="column" h="100%" minH={0}>
@@ -257,7 +294,7 @@ export function FeatEqList({ bare }: FeatEqListProps = {}): React.ReactElement {
             filter={filter}
             setFilter={setFilter}
             total={baseRows.length}
-            hits={filteredRows.length}
+            hits={predicateRows.length}
           />
         )}
         {isUserSector && sector !== null && (
@@ -299,5 +336,3 @@ function useUiHydrated(): boolean {
   }, [hydrated]);
   return hydrated;
 }
-
-

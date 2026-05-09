@@ -62,7 +62,7 @@ async function tmpRoot(): Promise<string> {
 }
 
 function cfg(dataRoot: string): AuthConfigShape {
-  return { mode: 'disabled', nextauthSecret: null, dataRoot, adminUserId: 'admin' };
+  return { mode: 'disabled', nextauthSecret: null, dataRoot, adminUserId: 'admin', adminUserIds: new Set<string>() };
 }
 
 async function setup(seed: readonly LedgerEntry[] = []): Promise<{
@@ -97,9 +97,9 @@ describe('LedgerService.create', () => {
     const { store, cache } = await setup();
     const { flight } = fakeFlight([]);
     const svc = new LedgerService(store, cache, flight, new FrozenClock(FROZEN));
-    await expect(
-      svc.create(USER, { date: '2026-05-01', pnlAmount: '5' }),
-    ).rejects.toMatchObject({ code: 'LEDGER_FIRST_NEEDS_CLOSING_POSITION' });
+    await expect(svc.create(USER, { date: '2026-05-01', pnlAmount: '5' })).rejects.toMatchObject({
+      code: 'LEDGER_FIRST_NEEDS_CLOSING_POSITION',
+    });
   });
 
   it('accepts a non-anchor entry without closingPosition once an anchor exists', async () => {

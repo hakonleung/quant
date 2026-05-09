@@ -2,10 +2,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import type { SpotQuote, StockBasic, WatchTask, WatchMarket } from '@quant/shared';
-import type {
-  ChannelOutboundRequest,
-  ChannelOutboundResponse,
-} from '@quant/shared';
+import type { ChannelOutboundRequest, ChannelOutboundResponse } from '@quant/shared';
 
 import type { AuthConfigShape } from '../../../src/modules/auth/config/auth.config.js';
 import type { ChannelService } from '../../../src/modules/channel/channel.service.js';
@@ -74,7 +71,7 @@ async function tmpRoot(): Promise<string> {
 }
 
 function cfg(dataRoot: string): AuthConfigShape {
-  return { mode: 'disabled', nextauthSecret: null, dataRoot, adminUserId: 'admin' };
+  return { mode: 'disabled', nextauthSecret: null, dataRoot, adminUserId: 'admin', adminUserIds: new Set<string>() };
 }
 
 function quote(overrides: Partial<SpotQuote> = {}): SpotQuote {
@@ -249,9 +246,7 @@ describe('WatchScheduler.tick', () => {
   it('trend baseline (window in seconds) only fires once a sample is old enough', async () => {
     const { store, users } = await buildEnv(
       task({
-        conditions: [
-          { kind: 'pct', baseline: 'trend', op: 'gte', thresholdPct: '5', window: 30 },
-        ],
+        conditions: [{ kind: 'pct', baseline: 'trend', op: 'gte', thresholdPct: '5', window: 30 }],
       }),
     );
     const port = new FakeQuotePort();

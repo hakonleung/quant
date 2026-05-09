@@ -12,7 +12,7 @@ async function tmpRoot(): Promise<string> {
 }
 
 function cfg(dataRoot: string): AuthConfigShape {
-  return { mode: 'disabled', nextauthSecret: null, dataRoot, adminUserId: 'admin' };
+  return { mode: 'disabled', nextauthSecret: null, dataRoot, adminUserId: 'admin', adminUserIds: new Set<string>() };
 }
 
 const USER = 'admin';

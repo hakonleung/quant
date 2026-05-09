@@ -35,11 +35,32 @@ export type SlackTarget = z.infer<typeof SlackTargetSchema>;
 export const DragDirectionSchema = z.enum(['natural', 'inverted']);
 export type DragDirection = z.infer<typeof DragDirectionSchema>;
 
+/**
+ * Per-column numeric filter applied to the EQ.LIST sector view. Rows whose
+ * column value fails the predicate are dropped; rows whose value is null /
+ * undefined / non-numeric are skipped (treated as "no opinion") so partial
+ * data sources don't silently empty the table.
+ */
+export const ColumnFilterOpSchema = z.enum(['>', '>=', '<', '<=', '=', '!=']);
+export type ColumnFilterOp = z.infer<typeof ColumnFilterOpSchema>;
+
+export const ColumnFilterSchema = z.object({
+  op: ColumnFilterOpSchema,
+  value: z.number().finite(),
+});
+export type ColumnFilter = z.infer<typeof ColumnFilterSchema>;
+
 export const SysCfgSchema = z.object({
   theme: ThemeModeSchema,
   slackTargets: z.array(SlackTargetSchema),
   appliedColumns: z.array(z.string()),
   dragDirection: DragDirectionSchema.default('inverted'),
+  /**
+   * Map of column-key → numeric filter. Keys are opaque strings (the
+   * frontend's `ColumnKey`); validating the literal union here would
+   * couple Sys.Cfg to the column catalog, which is owned by the web app.
+   */
+  columnFilters: z.record(z.string(), ColumnFilterSchema).default({}),
 });
 export type SysCfg = z.infer<typeof SysCfgSchema>;
 
@@ -48,4 +69,5 @@ export const DEFAULT_SYS_CFG: SysCfg = {
   slackTargets: [],
   appliedColumns: [],
   dragDirection: 'inverted',
+  columnFilters: {},
 };

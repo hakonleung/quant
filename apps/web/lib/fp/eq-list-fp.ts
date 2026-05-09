@@ -9,9 +9,37 @@
  * parameter so the caller injects the clock at the boundary.
  */
 
-import type { KlineBar, StockMetaDto } from '@quant/shared';
+import type { ColumnFilter, ColumnFilterOp, KlineBar, StockMetaDto } from '@quant/shared';
 
 import { deriveStats, type StockStats } from './stock-stats.js';
+
+/**
+ * Apply a numeric predicate to a candidate value. Non-numeric (`null`,
+ * `undefined`, strings) yields `null` — the caller is expected to treat
+ * "no opinion" rows as passing rather than dropping them silently. This
+ * matches the user-facing rule "对于某个列筛选条件，列值为空跳过".
+ */
+export function evaluateColumnFilter(value: unknown, filter: ColumnFilter): boolean | null {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return null;
+  return compareWithOp(value, filter.op, filter.value);
+}
+
+function compareWithOp(lhs: number, op: ColumnFilterOp, rhs: number): boolean {
+  switch (op) {
+    case '>':
+      return lhs > rhs;
+    case '>=':
+      return lhs >= rhs;
+    case '<':
+      return lhs < rhs;
+    case '<=':
+      return lhs <= rhs;
+    case '=':
+      return lhs === rhs;
+    case '!=':
+      return lhs !== rhs;
+  }
+}
 
 export interface ListRow extends StockStats, Record<string, unknown> {
   readonly code: string;

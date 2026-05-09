@@ -8,7 +8,7 @@
  * imBootstrap state lifts.
  */
 
-import { NextResponse } from 'next/server.js';
+import { NextRequest, NextResponse } from 'next/server.js';
 
 import { getAuthConfig } from '../../../../../lib/auth/config.js';
 import { exchangeCodeForProfile } from '../../../../../lib/auth/feishu-provider.js';
@@ -16,7 +16,7 @@ import { mintSession, SESSION_COOKIE_MAX_AGE_SEC } from '../../../../../lib/auth
 
 const STATE_COOKIE = 'next-auth.feishu-state';
 
-export async function GET(req: Request): Promise<Response> {
+export async function GET(req: NextRequest): Promise<Response> {
   const cfg = getAuthConfig();
   if (cfg.mode === 'disabled') {
     return NextResponse.redirect(new URL('/', req.url));
@@ -27,13 +27,17 @@ export async function GET(req: Request): Promise<Response> {
   if (code === null || state === null) {
     return NextResponse.redirect(new URL('/login?error=missing_code', req.url));
   }
-  const stateCookie = req.headers
-    .get('cookie')
-    ?.split(';')
-    .map((p) => p.trim())
-    .find((p) => p.startsWith(`${STATE_COOKIE}=`))
-    ?.split('=')[1];
+  // NextRequest decodes the cookie correctly even when the value contains
+  // `=`/`;`, and won't be tripped up by adjacent cookies whose names share
+  // the `next-auth.` prefix. Manual cookie-header parsing was the source
+  // of intermittent `bad_state` redirects.
+  const stateCookie = req.cookies.get(STATE_COOKIE)?.value;
+  if (stateCookie === undefined || stateCookie.length === 0) {
+    console.warn('feishu_callback_state_cookie_missing host=%s', url.host);
+    return NextResponse.redirect(new URL('/login?error=bad_state', req.url));
+  }
   if (stateCookie !== state) {
+    console.warn('feishu_callback_state_mismatch');
     return NextResponse.redirect(new URL('/login?error=bad_state', req.url));
   }
 

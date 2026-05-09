@@ -34,10 +34,10 @@ const oauthUser: AuthenticatedUser = {
   imBootstrap: false,
 };
 
-function buildGuard(input: {
-  cfg: AuthConfigShape;
-  resolved: AuthenticatedUser | null;
-}): { guard: AuthGuard; calls: Array<Partial<Request>> } {
+function buildGuard(input: { cfg: AuthConfigShape; resolved: AuthenticatedUser | null }): {
+  guard: AuthGuard;
+  calls: Array<Partial<Request>>;
+} {
   const calls: Array<Partial<Request>> = [];
   const auth = {
     resolveFromHttp: (req: Request) => {
@@ -56,6 +56,7 @@ describe('AuthGuard', () => {
       nextauthSecret: null,
       dataRoot: '/tmp',
       adminUserId: 'admin',
+      adminUserIds: new Set<string>(),
     };
     const { guard } = buildGuard({ cfg, resolved: adminUser });
     const req: Partial<Request> = { path: '/api/anything' };
@@ -69,6 +70,7 @@ describe('AuthGuard', () => {
       nextauthSecret: 'shh',
       dataRoot: '/tmp',
       adminUserId: 'admin',
+      adminUserIds: new Set<string>(),
     };
     const { guard } = buildGuard({ cfg, resolved: oauthUser });
     const req: Partial<Request> = {
@@ -85,6 +87,7 @@ describe('AuthGuard', () => {
       nextauthSecret: 'shh',
       dataRoot: '/tmp',
       adminUserId: 'admin',
+      adminUserIds: new Set<string>(),
     };
     const { guard } = buildGuard({ cfg, resolved: null });
     const req: Partial<Request> = { path: '/api/ledger' };

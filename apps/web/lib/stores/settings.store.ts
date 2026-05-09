@@ -11,7 +11,13 @@
 
 'use client';
 
-import type { DragDirection, SlackTarget, SysCfg, ThemeMode } from '@quant/shared';
+import type {
+  ColumnFilter,
+  DragDirection,
+  SlackTarget,
+  SysCfg,
+  ThemeMode,
+} from '@quant/shared';
 import { useEffect, useRef } from 'react';
 import { create } from 'zustand';
 
@@ -31,11 +37,18 @@ interface SettingsState {
   readonly slackTargets: readonly SlackTarget[];
   /** E-1 list applied columns, in render order. */
   readonly appliedColumns: readonly ColumnKey[];
+  /**
+   * Per-column numeric filter (e.g. `> 5`). Only columns present here
+   * participate in EQ.LIST row filtering. Rows whose column value is
+   * null / undefined are skipped (no opinion).
+   */
+  readonly columnFilters: Readonly<Partial<Record<ColumnKey, ColumnFilter>>>;
   readonly dragDirection: DragDirection;
   setTheme(theme: ThemeMode): void;
   addSlackTarget(target: SlackTarget): void;
   removeSlackTarget(channel: string): void;
   setAppliedColumns(keys: readonly ColumnKey[]): void;
+  setColumnFilter(key: ColumnKey, filter: ColumnFilter | null): void;
   setDragDirection(direction: DragDirection): void;
 }
 
@@ -43,6 +56,7 @@ export const useSettingsStore = create<SettingsState>()((set) => ({
   theme: 'light',
   slackTargets: [],
   appliedColumns: DEFAULT_APPLIED_COLUMNS,
+  columnFilters: {},
   dragDirection: 'inverted',
   setTheme: (theme) => {
     set({ theme });
@@ -70,17 +84,42 @@ export const useSettingsStore = create<SettingsState>()((set) => ({
         cleaned.push(k);
       }
     }
-    set({ appliedColumns: cleaned });
+    set((state) => {
+      // Drop filters for columns no longer applied (they'd be invisible
+      // and confusing — re-adding the column shouldn't silently inherit
+      // a stale predicate).
+      const keep: Partial<Record<ColumnKey, ColumnFilter>> = {};
+      const appliedSet = new Set<ColumnKey>(cleaned);
+      for (const [k, v] of Object.entries(state.columnFilters)) {
+        if (v === undefined) continue;
+        const ck = k as ColumnKey;
+        if (appliedSet.has(ck)) keep[ck] = v;
+      }
+      return { appliedColumns: cleaned, columnFilters: keep };
+    });
+  },
+  setColumnFilter: (key, filter) => {
+    set((state) => {
+      const next: Partial<Record<ColumnKey, ColumnFilter>> = { ...state.columnFilters };
+      if (filter === null) delete next[key];
+      else next[key] = filter;
+      return { columnFilters: next };
+    });
   },
 }));
 
 function snapshotCfg(): SysCfg {
   const s = useSettingsStore.getState();
+  const filters: Record<string, ColumnFilter> = {};
+  for (const [k, v] of Object.entries(s.columnFilters)) {
+    if (v !== undefined) filters[k] = v;
+  }
   return {
     theme: s.theme,
     slackTargets: [...s.slackTargets],
     appliedColumns: [...s.appliedColumns],
     dragDirection: s.dragDirection,
+    columnFilters: filters,
   };
 }
 
@@ -94,11 +133,21 @@ function applyCfg(cfg: SysCfg): void {
       filtered.push(k);
     }
   }
+  const appliedFinal = filtered.length === 0 ? DEFAULT_APPLIED_COLUMNS : filtered;
+  const appliedSet = new Set<ColumnKey>(appliedFinal);
+  const filters: Partial<Record<ColumnKey, ColumnFilter>> = {};
+  for (const [k, v] of Object.entries(cfg.columnFilters)) {
+    if (v === undefined) continue;
+    if (!isColumnKey(k)) continue;
+    if (!appliedSet.has(k)) continue;
+    filters[k] = v;
+  }
   useSettingsStore.setState({
     theme: cfg.theme,
     slackTargets: cfg.slackTargets,
-    appliedColumns: filtered.length === 0 ? DEFAULT_APPLIED_COLUMNS : filtered,
+    appliedColumns: appliedFinal,
     dragDirection: cfg.dragDirection,
+    columnFilters: filters,
   });
 }
 
