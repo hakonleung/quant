@@ -15,5 +15,6 @@ export * from './blacklist.js';
 export * from './ta.js';
 export * from './ledger.js';
 export * from './channel.js';
+export * from './llm.js';
 // `socket.ts` re-exports schemas from channel/queue/watch — must come last.
 export * from './socket.js';

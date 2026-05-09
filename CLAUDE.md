@@ -118,6 +118,7 @@
 - 等级语义：`DEBUG` 开发期细节 / `INFO` 业务里程碑 / `WARN` 可恢复 / `ERROR` 业务失败 / `FATAL/CRITICAL` 进程级故障。
 - **结构化字段优先**（Python：`logger.info("trade_filled", extra={...})`；TS：`logger.info({ symbol, qty }, "trade_filled")`），不要拼字符串。
 - 跨进程调用必须带 `trace_id`，由入口生成、向下游透传。
+- **LLM 调用日志强制结构化**：每次 NestJS `LlmService` 调用必须输出 `provider`、`model`、`scope`（agent/screen/analyze/...）、`usage`（input/output/total tokens）、`durationMs`、`traceId`、`userId` 字段。失败路径同样记录（usage 字段允许缺失）。配套写入 `UserLlmLedgerStore` 由 recorder 完成，不要在调用点手写双份。
 
 ### 1.5 注释
 
@@ -139,8 +140,8 @@
 ```
 
 - **Next.js**：UI、用户交互、SSR 渲染、SSE/WS 接收长任务进度。**不直接调外部数据源/LLM**。
-- **NestJS**：HTTP API 网关、参数校验、任务编排（短任务）、缓存读取、调度 Python 服务。**所有重计算/LLM 调用下沉到 Python**；v1 不做鉴权（监听 127.0.0.1）。
-- **Python service**：行情/新闻拉取与缓存写入、筛选/形态/舆情计算、LangGraph 工作流。
+- **NestJS**：HTTP API 网关、参数校验、任务编排（短任务）、缓存读取、调度 Python 服务、**外部 LLM 客户端**（OpenAI 兼容协议；DeepSeek / Moonshot / Qwen / Doubao / OpenAI）。LLM provider 注册表与 token ledger 持久化都在 NestJS 侧；上层 service 通过 `LlmService` 统一调用。v1 不做鉴权（监听 127.0.0.1）。
+- **Python service**：行情/新闻拉取与缓存写入、筛选/形态/舆情计算、LangGraph 工作流。**Python 不再持有外部 LLM 客户端**；如未来 LangGraph 节点需要 LLM 推理，反向 RPC 调 NestJS `LlmService`。
 
 ### 2.2 仓库结构（monorepo, pnpm workspaces + uv）
 
@@ -157,7 +158,7 @@ services/
     quant_compute/              # 计算密集模块（screening / pattern / sentiment）
     quant_io/                   # 数据源 adapters
     quant_cache/                # 缓存 adapters
-    quant_workflow/             # LangGraph 编排
+    quant_workflow/             # LangGraph 编排（v2，反向 RPC 调 NestJS LlmService 取 LLM 推理）
     quant_rpc/                  # Arrow Flight server
 proto/                          # Arrow schema (.fbs) + RPC 契约（共享）
 docs/                           # 工程文档

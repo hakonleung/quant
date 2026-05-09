@@ -8,6 +8,7 @@ import { InstructionModule } from './modules/instruction/instruction.module.js';
 import { SocketInstructionAdapter } from './modules/instruction/socket-instruction.adapter.js';
 import { KlineModule } from './modules/kline/kline.module.js';
 import { LedgerModule } from './modules/ledger/ledger.module.js';
+import { LlmModule } from './modules/llm/llm.module.js';
 import { OrchestrationModule } from './modules/orchestration/orchestration.module.js';
 import { PatternModule } from './modules/pattern/pattern.module.js';
 import { ScreenModule } from './modules/screen/screen.module.js';
@@ -24,6 +25,10 @@ import { WatchModule } from './modules/watch/watch.module.js';
     // AuthModule is global; must come first so the legacy → users/admin
     // boot-time migration runs before any per-user store loads.
     AuthModule,
+    // LlmModule is @Global — every feature that calls an LLM imports
+    // LlmService transparently. Place near the top so feature modules
+    // resolved later don't race with provider construction.
+    LlmModule,
     // Channel must come before InstructionModule so the channel.send
     // handler can inject ChannelService at registration time.
     ChannelModule,
