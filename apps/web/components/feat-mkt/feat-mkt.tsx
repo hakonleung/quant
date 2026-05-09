@@ -14,6 +14,7 @@
  */
 
 import { Flex } from '@chakra-ui/react';
+import { useIsFetching } from '@tanstack/react-query';
 import { useState } from 'react';
 
 import { Feat } from '../../lib/eqty/feat.js';
@@ -33,14 +34,22 @@ export function FeatMkt(): React.ReactElement {
   // result, no extra request).
   const stocks = useStockList();
   const blacklist = useBlacklistQuery();
-  const tone =
-    stocks.error !== null ? 'red' : stocks.isLoading || blacklist.isLoading ? 'amber' : 'green';
+  // Surface in-flight kline / snapshot batches owned by the embedded
+  // FeatEqList — without this the MKT header flips back to green the
+  // moment sectors finish loading, even though the row data is still
+  // streaming in. `useIsFetching` returns the count of matching queries
+  // currently fetching, so any non-zero value keeps us on amber.
+  const eqtyFetching =
+    useIsFetching({ queryKey: ['kline.bulk'] }) +
+    useIsFetching({ queryKey: ['stock.snapshots'] });
+  const isLoading = stocks.isLoading || blacklist.isLoading || eqtyFetching > 0;
+  const tone = stocks.error !== null ? 'red' : isLoading ? 'amber' : 'green';
   const [dialogOpen, setDialogOpen] = useState(false);
   return (
     <FeatView
       feat={Feat.Mkt}
       status={tone}
-      statusBlink={stocks.isLoading}
+      statusBlink={isLoading}
       right={
         <MonoButton
           icon="add"

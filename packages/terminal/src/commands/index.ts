@@ -14,6 +14,7 @@ import { sectorCommand } from './sector.js';
 import { stockCommand } from './stock.js';
 import { screenCommand } from './screen.js';
 import { updateCommand } from './update.js';
+import { usrCommand } from './usr.js';
 import { watchCommand } from './watch.js';
 import { createRegistry, type CommandRegistry } from '../registry.js';
 
@@ -28,6 +29,7 @@ export {
   stockCommand,
   screenCommand,
   updateCommand,
+  usrCommand,
   watchCommand,
 };
 
@@ -43,6 +45,7 @@ export function createDefaultRegistry(): CommandRegistry {
   r.register(updateCommand);
   r.register(cacheCommand);
   r.register(clearCommand);
+  r.register(usrCommand);
   r.register(helpCommand(r));
   return r;
 }

@@ -26,6 +26,12 @@ export interface InstructionCtx {
   readonly userId: string;
   /** True when the user has only ever been seen via IM, never Web OAuth. */
   readonly imBootstrap?: boolean;
+  /**
+   * Pre-mapping userId, set only when the caller's natural id was promoted
+   * onto the synthetic admin user via `AUTH_ADMIN_USER_IDS`. Surfaced by
+   * the `/usr` instruction so admins can see what their real id is.
+   */
+  readonly originalUserId?: string;
 }
 
 export interface InstructionHandler<TArgs> {

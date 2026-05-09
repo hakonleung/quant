@@ -325,6 +325,35 @@ function buildFetchers(deps: LiveRunnerDeps): Record<string, Fetcher> {
       }
       return analyzeLedger(force === true);
     },
+
+    'user.me': async (_a, signal: AbortSignal) => {
+      // The BFF's /api/auth/me returns the resolved AuthenticatedUser
+      // verbatim; we project it into the action's UserMe shape (admin
+      // role inferred from id === 'admin' so the terminal doesn't have
+      // to know the configured admin id).
+      const me = await apiGet(
+        '/api/auth/me',
+        (raw) =>
+          z
+            .object({
+              id: z.string().min(1),
+              displayName: z.string(),
+              source: z.enum(['oauth', 'env', 'im']),
+              imBootstrap: z.boolean(),
+              originalUserId: z.string().optional(),
+            })
+            .parse(raw),
+        { signal },
+      );
+      return {
+        userId: me.id,
+        displayName: me.displayName,
+        role: me.id === 'admin' ? ('admin' as const) : ('user' as const),
+        source: me.source,
+        imBootstrap: me.imBootstrap,
+        ...(me.originalUserId !== undefined ? { originalUserId: me.originalUserId } : {}),
+      };
+    },
   };
 }
 

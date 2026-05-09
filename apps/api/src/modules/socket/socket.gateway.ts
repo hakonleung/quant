@@ -43,12 +43,23 @@ import { SocketBus, type SocketSink } from './socket-bus.service.js';
 
 interface SocketData {
   userId: string;
+  /** Pre-mapping userId, set only when AUTH_ADMIN_USER_IDS promoted us. */
+  originalUserId?: string;
 }
 
 export const SOCKET_COMMAND_HANDLER = Symbol('SOCKET_COMMAND_HANDLER');
 
+export interface SocketCommandPrincipal {
+  readonly userId: string;
+  readonly originalUserId?: string;
+}
+
 export interface SocketCommandHandler {
-  handle(command: SocketCommand, traceId: string, userId: string): Promise<SocketCommandAck>;
+  handle(
+    command: SocketCommand,
+    traceId: string,
+    principal: SocketCommandPrincipal,
+  ): Promise<SocketCommandAck>;
 }
 
 @WebSocketGateway({
@@ -81,26 +92,39 @@ export class SocketGateway
   }
 
   async handleConnection(client: Socket): Promise<void> {
-    const userId = await this.resolveUserId(client);
-    if (userId === null) {
+    const resolved = await this.resolvePrincipal(client);
+    if (resolved === null) {
       this.logger.warn(`socket_reject_unauthenticated id=${client.id}`);
       client.disconnect(true);
       return;
     }
-    (client.data as SocketData).userId = userId;
-    await client.join(`user:${userId}`);
-    this.logger.log(`socket_open id=${client.id} user=${userId}`);
+    const data = client.data as SocketData;
+    data.userId = resolved.userId;
+    if (resolved.originalUserId !== undefined) data.originalUserId = resolved.originalUserId;
+    await client.join(`user:${resolved.userId}`);
+    this.logger.log(
+      `socket_open id=${client.id} user=${resolved.userId}${
+        resolved.originalUserId !== undefined ? ` mapped_from=${resolved.originalUserId}` : ''
+      }`,
+    );
   }
 
-  private async resolveUserId(client: Socket): Promise<string | null> {
-    if (this.authCfg.mode === 'disabled') return this.authCfg.adminUserId;
+  private async resolvePrincipal(client: Socket): Promise<SocketCommandPrincipal | null> {
+    if (this.authCfg.mode === 'disabled') return { userId: this.authCfg.adminUserId };
     const cookieHeader = client.handshake.headers['cookie'];
     const auth = client.handshake.auth as { token?: unknown } | undefined;
     const tokenFromAuth = typeof auth?.token === 'string' ? auth.token : null;
     const token = tokenFromAuth ?? readCookieToken(cookieHeader);
     if (token === null) return null;
     const claims = await this.verifier.verify(token);
-    return claims === null ? null : claims.userId;
+    if (claims === null) return null;
+    // Symmetric admin promotion at the socket boundary too — keeps the
+    // /usr instruction's "mapped_from" line coherent regardless of whether
+    // the caller hit us via REST or the realtime channel.
+    if (this.authCfg.adminUserIds.has(claims.userId)) {
+      return { userId: this.authCfg.adminUserId, originalUserId: claims.userId };
+    }
+    return { userId: claims.userId };
   }
 
   handleDisconnect(client: Socket): void {
@@ -167,12 +191,16 @@ export class SocketGateway
       return { ok: false, error: 'invalid_command_payload' };
     }
     const traceId = `sock-${client.id}-${String(Date.now())}`;
-    const userId = (client.data as SocketData).userId;
-    if (userId === undefined) {
+    const data = client.data as SocketData;
+    if (data.userId === undefined) {
       return { ok: false, error: 'unauthenticated' };
     }
+    const principal: SocketCommandPrincipal = {
+      userId: data.userId,
+      ...(data.originalUserId !== undefined ? { originalUserId: data.originalUserId } : {}),
+    };
     try {
-      return await this.commandHandler.handle(parsed.data, traceId, userId);
+      return await this.commandHandler.handle(parsed.data, traceId, principal);
     } catch (err) {
       this.logger.warn(`socket_command_failed err=${String(err)}`);
       return { ok: false, error: String(err) };

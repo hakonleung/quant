@@ -381,6 +381,29 @@ export const analyzeLedgerAction: DataActionConfig<{ force?: boolean }, LedgerAn
   invalidates: () => [['analyze.ledger']],
 };
 
+/* ---------- user / auth ---------- */
+
+const userMeSchema = z.object({
+  userId: z.string().min(1),
+  displayName: z.string(),
+  role: z.enum(['admin', 'user']),
+  source: z.enum(['oauth', 'env', 'im']),
+  imBootstrap: z.boolean(),
+  originalUserId: z.string().optional(),
+});
+export type UserMe = z.infer<typeof userMeSchema>;
+
+export const userMeAction: DataActionConfig<Record<string, never>, UserMe> = {
+  id: 'user.me',
+  kind: 'read',
+  summary: 'Resolved user identity, role, and admin mapping (if any).',
+  args: z.object({}).strict(),
+  result: userMeSchema,
+  // Per-process cache: auth state rarely changes mid-session, and a
+  // login/logout invalidates the entire terminal anyway.
+  cacheKey: () => ['user.me'],
+};
+
 export const ALL_ACTIONS = [
   stockListAction,
   stockInfoAction,
@@ -402,6 +425,7 @@ export const ALL_ACTIONS = [
   ledgerUpsertAction,
   ledgerRemoveAction,
   analyzeLedgerAction,
+  userMeAction,
 ] as const;
 
 const byId = new Map<string, DataActionConfig<unknown, unknown>>();

@@ -51,6 +51,11 @@ export class AuthService {
     if (token === null) return null;
     const claims = await this.verifier.verify(token);
     if (claims === null) return null;
+    // Symmetric admin promotion: a Web OAuth user whose canonical id is
+    // listed in `AUTH_ADMIN_USER_IDS` lands on the synthetic admin user
+    // too, so the env knob is the single source of truth regardless of
+    // entry surface (IM vs Web).
+    if (this.isImAdmin(claims.userId)) return this.adminUser(claims.userId);
     const record = this.users.get(claims.userId);
     const displayName = record?.displayName ?? claims.displayName;
     const imBootstrap = record !== null && record.lastLoginAt === null;
@@ -76,7 +81,7 @@ export class AuthService {
     sender: string,
     hints: { displayName?: string; tenantKey?: string | null } = {},
   ): Promise<AuthenticatedUser> {
-    if (this.isImAdmin(sender)) return this.adminUser();
+    if (this.isImAdmin(sender)) return this.adminUser(sender);
     if (channel === 'feishu') {
       const prefix = `${channel}:`;
       const externalId = sender.startsWith(prefix) ? sender.slice(prefix.length) : sender;
@@ -146,7 +151,7 @@ export class AuthService {
     return merged;
   }
 
-  private async adminUser(): Promise<AuthenticatedUser> {
+  private async adminUser(originalUserId?: string): Promise<AuthenticatedUser> {
     if (!this.adminSeeded) {
       await this.users.ensureAdminSeed();
       this.adminSeeded = true;
@@ -156,6 +161,7 @@ export class AuthService {
       displayName: 'admin',
       source: 'env',
       imBootstrap: false,
+      ...(originalUserId !== undefined ? { originalUserId } : {}),
     };
   }
 }

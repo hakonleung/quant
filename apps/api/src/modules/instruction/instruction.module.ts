@@ -19,6 +19,7 @@ import { InstructionAsyncProcessor } from './async/instruction-async.processor.j
 import { ChannelEchoHandler } from './handlers/channel-echo.handler.js';
 import { HelpHandler } from './handlers/help.handler.js';
 import { PingHandler } from './handlers/ping.handler.js';
+import { UsrHandler } from './handlers/usr.handler.js';
 import { INSTRUCTION_CONFIG, loadInstructionConfig } from './instruction.config.js';
 import { InstructionExecutor } from './instruction.executor.js';
 import { InstructionImListener } from './instruction.im.listener.js';
@@ -46,6 +47,7 @@ import { SocketInstructionAdapter } from './socket-instruction.adapter.js';
     HelpHandler,
     PingHandler,
     ChannelEchoHandler,
+    UsrHandler,
   ],
   exports: [
     INSTRUCTION_CONFIG,

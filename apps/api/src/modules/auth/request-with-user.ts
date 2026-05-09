@@ -14,6 +14,13 @@ export interface AuthenticatedUser {
   readonly source: AuthSource;
   /** True when the user has only ever been seen via IM, never via Web OAuth. */
   readonly imBootstrap: boolean;
+  /**
+   * Pre-mapping userId, set only when the caller's natural id was promoted
+   * onto the synthetic admin user via `AUTH_ADMIN_USER_IDS`. Lets the
+   * `/usr` instruction tell the user "you're admin, but your real id is X"
+   * without leaking implementation details to non-admin paths.
+   */
+  readonly originalUserId?: string;
 }
 
 export interface RequestWithUser extends Request {

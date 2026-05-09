@@ -199,6 +199,9 @@ export class InstructionImListener implements OnModuleInit {
       ...(msg.target !== undefined && msg.target.length > 0 ? { target: msg.target } : {}),
       userId: resolved.userId,
       imBootstrap: resolved.imBootstrap,
+      ...(resolved.originalUserId !== undefined
+        ? { originalUserId: resolved.originalUserId }
+        : {}),
     };
     const imHints: InstructionImHints | undefined = isAsync
       ? { channel: msg.channel, target: replyTarget }
@@ -261,8 +264,12 @@ export class InstructionImListener implements OnModuleInit {
    */
   private async resolveImUser(
     msg: InboundMessage,
-  ): Promise<{ userId: string; imBootstrap: boolean }> {
+  ): Promise<{ userId: string; imBootstrap: boolean; originalUserId?: string }> {
     const user = await this.auth.resolveFromImChannel(msg.channel, msg.sender);
-    return { userId: user.id, imBootstrap: user.imBootstrap };
+    return {
+      userId: user.id,
+      imBootstrap: user.imBootstrap,
+      ...(user.originalUserId !== undefined ? { originalUserId: user.originalUserId } : {}),
+    };
   }
 }

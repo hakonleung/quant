@@ -83,4 +83,8 @@ export class AuthConfig {
   get nextauthSecret(): string | null {
     return this.cfg.nextauthSecret;
   }
+
+  get adminUserIds(): ReadonlySet<string> {
+    return this.cfg.adminUserIds;
+  }
 }

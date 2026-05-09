@@ -20,6 +20,7 @@ import {
   stockKlineAction,
   stockListAction,
   stockSnapshotsAction,
+  userMeAction,
   watchListAction,
   watchRemoveAction,
   watchUpsertAction,
@@ -95,6 +96,13 @@ const fetchers: Record<string, Fetcher> = {
     }
     return { market, code };
   },
+  [userMeAction.id]: () => ({
+    userId: 'admin',
+    displayName: 'admin',
+    role: 'admin' as const,
+    source: 'env' as const,
+    imBootstrap: false,
+  }),
 };
 
 export interface MockRunnerOptions {
