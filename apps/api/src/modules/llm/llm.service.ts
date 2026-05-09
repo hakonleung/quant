@@ -152,12 +152,17 @@ export class LlmService {
     }
   }
 
-  /** JSON-mode single-shot. Returns the raw text + token usage. */
+  /** JSON-mode single-shot. Returns raw text, token usage, and resolved provider identity. */
   async completeJson(
     args: { readonly system: string; readonly user: string },
     ctx: LlmCallContext,
     opts: ResolveOptions = { scope: ctx.scope },
-  ): Promise<{ readonly text: string; readonly usage: ChatTokenUsage }> {
+  ): Promise<{
+    readonly text: string;
+    readonly usage: ChatTokenUsage;
+    readonly provider: string;
+    readonly model: string;
+  }> {
     const resolved = this.resolve(opts);
     const client = this.getClient(resolved);
     const startedAt = Date.now();
@@ -169,7 +174,12 @@ export class LlmService {
         traceId: ctx.traceId,
       });
       usage = out.usage;
-      return out;
+      return {
+        text: out.text,
+        usage: out.usage,
+        provider: resolved.row.provider,
+        model: resolved.model,
+      };
     } catch (err) {
       this.recordFailure(resolved, ctx, startedAt, err);
       throw err;

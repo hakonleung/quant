@@ -13,7 +13,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 import {
   EnrichedLedgerEntrySchema,
-  LedgerAnalysisSchema,
   QuantError,
   enrichEntries,
   mergeEntries,
@@ -23,23 +22,26 @@ import {
   type LedgerEntry,
   type LedgerSnapshot,
 } from '@quant/shared';
-import { Table } from 'apache-arrow';
 
-import { FlightClient } from '../../adapters/flight/flight-client.js';
 import { CLOCK, type Clock } from '../../common/clock.js';
+import { LlmService } from '../llm/llm.service.js';
 import type { LedgerPatchBody } from './dto/ledger.dto.js';
 import { LedgerCacheStore } from './ledger-cache.store.js';
 import { LedgerStore } from './ledger.store.js';
-import { LEDGER_FLIGHT_CLIENT } from './ledger.token.js';
+import {
+  buildLedgerSystemPrompt,
+  buildLedgerUserPrompt,
+} from './prompts/analyze.prompt.js';
 
 const MAX_AI_WINDOW = 30;
+const MAX_RECOMMENDATIONS = 5;
 
 @Injectable()
 export class LedgerService {
   constructor(
     @Inject(LedgerStore) private readonly store: LedgerStore,
     @Inject(LedgerCacheStore) private readonly cache: LedgerCacheStore,
-    @Inject(LEDGER_FLIGHT_CLIENT) private readonly flight: FlightClient,
+    @Inject(LlmService) private readonly llm: LlmService,
     @Inject(CLOCK) private readonly clock: Clock,
   ) {}
 
@@ -131,40 +133,96 @@ export class LedgerService {
       if (hit !== null) return hit;
     }
 
-    const args: Record<string, unknown> = {
-      entries: window.map((e) => ({
-        date: e.date,
-        pnl_amount: e.pnlAmount,
-        closing_position: e.derivedClosingPosition,
-        closing_provided: e.closingProvided,
-        cash_flow: e.cashFlow,
-        derived_daily_pct: e.derivedDailyPct,
-      })),
-      asof: this.clock.now().toISOString().slice(0, 10),
-    };
-    const result = await this.flight.doGet('analyze_ledger', args, { traceId });
-    const payload = extractFirstPayload(result.value);
-    if (payload === null) {
-      throw new QuantError('LLM_FAILED', 'analyze_ledger returned no payload', {});
-    }
-    const analysis = LedgerAnalysisSchema.parse(payload);
+    const system = buildLedgerSystemPrompt();
+    const user = buildLedgerUserPrompt(window);
+    const out = await this.llm.completeJson(
+      { system, user },
+      { userId, traceId, scope: 'analyze' },
+    );
+    const analysis = parseLedgerAnalysis(out.text, window, out.provider, this.clock.now());
     await this.cache.put(userId, key, analysis);
     return analysis;
   }
 }
 
-function extractFirstPayload(table: Table): unknown {
-  if (table.numRows === 0) return null;
-  const proxy = table.get(0);
-  if (proxy === null) return null;
-  const row: Readonly<Record<string, unknown>> = proxy.toJSON();
-  const json = row['payload_json'];
-  if (typeof json !== 'string' || json.length === 0) return null;
+// ---------------------------------------------------------------------------
+// pure JSON → LedgerAnalysis decoder (replaces the Python ledger_service)
+// ---------------------------------------------------------------------------
+
+function parseLedgerAnalysis(
+  raw: string,
+  window: readonly EnrichedLedgerEntry[],
+  provider: string,
+  generatedAt: Date,
+): LedgerAnalysis {
+  const text = stripFence(raw);
+  let payload: unknown;
   try {
-    return JSON.parse(json);
-  } catch {
-    return null;
+    payload = JSON.parse(text);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new QuantError('LLM_FAILED', `ledger output is not valid JSON: ${msg}`, {
+      snippet: raw.slice(0, 200),
+    });
   }
+  if (typeof payload !== 'object' || payload === null || Array.isArray(payload)) {
+    throw new QuantError('LLM_FAILED', 'ledger output is not a JSON object', {});
+  }
+  const obj = payload as Readonly<Record<string, unknown>>;
+  const summary = decodeNonEmptyString(obj['summary'], 'summary');
+  const operationStyle = decodeNonEmptyString(obj['operation_style'], 'operation_style');
+  const marketView = decodeNonEmptyString(obj['market_view'], 'market_view');
+  const recommendations = decodeStringList(obj['recommendations']);
+  const first = window[0];
+  const last = window[window.length - 1];
+  if (first === undefined || last === undefined) {
+    throw new QuantError('LLM_FAILED', 'ledger window is empty', {});
+  }
+  return {
+    summary,
+    operationStyle,
+    marketView,
+    recommendations: [...recommendations],
+    generatedAt: generatedAt.toISOString(),
+    windowStart: first.date,
+    windowEnd: last.date,
+    entryCount: window.length,
+    provider,
+  };
+}
+
+function decodeNonEmptyString(raw: unknown, key: string): string {
+  if (typeof raw !== 'string') {
+    throw new QuantError('LLM_FAILED', `ledger output '${key}' must be a string`, {
+      got: typeof raw,
+    });
+  }
+  const stripped = raw.trim();
+  if (stripped.length === 0) {
+    throw new QuantError('LLM_FAILED', `ledger output '${key}' is empty`, {});
+  }
+  return stripped;
+}
+
+function decodeStringList(raw: unknown): readonly string[] {
+  if (!Array.isArray(raw)) return [];
+  const out: string[] = [];
+  for (const entry of raw) {
+    if (typeof entry !== 'string') continue;
+    const trimmed = entry.trim();
+    if (trimmed.length === 0) continue;
+    out.push(trimmed);
+    if (out.length >= MAX_RECOMMENDATIONS) break;
+  }
+  return out;
+}
+
+const FENCE_RE = /^```(?:json)?\s*([\s\S]+?)```$/u;
+
+function stripFence(raw: string): string {
+  const text = raw.trim();
+  const fenced = FENCE_RE.exec(text);
+  return fenced !== null ? fenced[1]?.trim() ?? text : text;
 }
 
 export { EnrichedLedgerEntrySchema };
