@@ -300,6 +300,15 @@ apps/web/lib/
 - **IM 命令入口不走 `AuthGuard`**：`AuthService.resolveFromIm` 直接产出 `AuthenticatedUser`，dispatcher 调 service 时第一参数即为 `userId`。详见 `docs/integrations/auth.md`。
 - **Python 服务用户无关**：`services/py/quant_rpc/*` 永远不应出现 `userId` 字段。所有用户分区在 NestJS 帧内完成。
 
+### 2.10 配置项 / env（强制）
+
+- **凡新增任何运行时读取的 env 变量（NestJS / Next.js / Python 任一进程）必须同步加进仓库根的 `.env.example`**——这是 onboarding 唯一可信来源。漏写视为本提交未完成。
+- 模板条目结构：① 上方一行注释指明用途 + 关联文档（`see docs/...`），② 默认值 / 是否必填，③ 可选枚举或取值范围。**不要**把真实 key / token 写进示例。
+- 同主题的变量分组放在同一个 `# ---- <module> ---- ` 区段下，保持表头一致；新区段紧贴最相关的老区段后。
+- 删除 / 改名一个 env 变量时一并更新 `.env.example` 与所有引用它的文档（`docs/architecture.md` / `docs/integrations/*` / `README.md`）。CI 不会自动 catch 漏改。
+- 共享给前端的变量必须以 `NEXT_PUBLIC_` 开头并双写 NestJS + Next.js（参考 `AUTH_MODE` / `NEXT_PUBLIC_AUTH_MODE` 模式）。
+- 仅供生成密钥 / 长 token 的项写明生成方式（如 `openssl rand -hex 32`）；不要让用户去搜命令。
+
 ---
 
 ## 3. 测试（硬性）
