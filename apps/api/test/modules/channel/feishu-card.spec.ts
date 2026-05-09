@@ -120,3 +120,45 @@ describe('stripSlackMrkdwn (regression)', () => {
     expect(stripSlackMrkdwn('*hello* :white_square: _world_')).toBe('hello ⬜ world');
   });
 });
+
+describe('pickCard — agent kinds', () => {
+  it('renders the paid-confirm card with the original q in the body', () => {
+    const card = pickCard({
+      kind: 'agent.paid_confirm',
+      text: '',
+      meta: { agentQ: '看茅台估值', instructionId: 'agent' },
+    });
+    expect(card).not.toBeNull();
+    expect(card?.header.template).toBe('purple');
+    expect(card?.header.title.content).toContain('agent');
+    const body = JSON.stringify(card?.elements);
+    expect(body).toContain('看茅台估值');
+    expect(body).toContain('/agent confirm=1');
+  });
+
+  it('renders the tool-proposal card with both approve + cancel commands', () => {
+    const card = pickCard({
+      kind: 'agent.tool_proposal',
+      text: '  1. /screen "近5日银行" — NL 选股',
+      meta: { correlationId: 'abc-123' },
+    });
+    expect(card).not.toBeNull();
+    expect(card?.header.template).toBe('purple');
+    const body = JSON.stringify(card?.elements);
+    expect(body).toContain('/agent.confirm correlationId=abc-123 approve=1');
+    expect(body).toContain('/agent.confirm correlationId=abc-123 approve=0');
+  });
+
+  it('escapes embedded double-quotes in the original q so re-paste survives', () => {
+    const card = pickCard({
+      kind: 'agent.paid_confirm',
+      text: '',
+      meta: { agentQ: 'find "high vol" stocks', instructionId: 'agent' },
+    });
+    // Pull the rendered text directly out of the elements tree rather
+    // than chasing nested JSON.stringify escape levels.
+    const elements = card?.elements as readonly { text?: { content?: string } }[];
+    const content = elements[0]?.text?.content ?? '';
+    expect(content).toContain('q="find \\"high vol\\" stocks"');
+  });
+});

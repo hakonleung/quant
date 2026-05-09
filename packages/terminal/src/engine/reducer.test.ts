@@ -245,3 +245,100 @@ describe('reducer — interactive widget', () => {
     expect(s.buffer).toBe('');
   });
 });
+
+/* ── streaming events (used by /agent) ──────────────────────────────── */
+
+describe('reducer — streaming output (golden)', () => {
+  const STREAM = 's-1';
+
+  it('streamOpen appends an OutputEntry with streaming=true', () => {
+    const s = reduce(initialState, {
+      kind: 'streamOpen',
+      streamId: STREAM,
+      status: 'info',
+      initialBody: '▶ /agent…',
+    }).state;
+    expect(s.history.length).toBe(1);
+    const last = s.history.at(-1);
+    expect(last?.kind).toBe('output');
+    if (last?.kind === 'output') {
+      expect(last.id).toBe(STREAM);
+      expect(last.streaming).toBe(true);
+      expect(last.status).toBe('info');
+      expect(last.body).toBe('▶ /agent…');
+    }
+  });
+
+  it('streamChunk appends delta to the matching entry', () => {
+    let s = reduce(initialState, {
+      kind: 'streamOpen',
+      streamId: STREAM,
+      initialBody: '',
+    }).state;
+    s = reduce(s, { kind: 'streamChunk', streamId: STREAM, delta: 'hello' }).state;
+    s = reduce(s, { kind: 'streamChunk', streamId: STREAM, delta: ' world' }).state;
+    const last = s.history.at(-1);
+    if (last?.kind === 'output') expect(last.body).toBe('hello world');
+    else throw new Error('expected output entry');
+  });
+
+  it('streamStepLog appends a newline-separated line', () => {
+    let s = reduce(initialState, { kind: 'streamOpen', streamId: STREAM }).state;
+    s = reduce(s, { kind: 'streamChunk', streamId: STREAM, delta: 'intro' }).state;
+    s = reduce(s, {
+      kind: 'streamStepLog',
+      streamId: STREAM,
+      line: '▶ /focus 600519',
+    }).state;
+    const last = s.history.at(-1);
+    if (last?.kind === 'output')
+      expect(last.body).toBe('intro\n▶ /focus 600519');
+    else throw new Error('expected output entry');
+  });
+
+  it('streamClose flips streaming=false and appends optional footer', () => {
+    let s = reduce(initialState, { kind: 'streamOpen', streamId: STREAM }).state;
+    s = reduce(s, { kind: 'streamChunk', streamId: STREAM, delta: 'final answer' }).state;
+    s = reduce(s, {
+      kind: 'streamClose',
+      streamId: STREAM,
+      status: 'ok',
+      footer: '—— ¥0.0010',
+    }).state;
+    const last = s.history.at(-1);
+    if (last?.kind === 'output') {
+      expect(last.streaming).toBe(false);
+      expect(last.status).toBe('ok');
+      expect(last.body).toBe('final answer\n—— ¥0.0010');
+    } else throw new Error('expected output entry');
+  });
+
+  it('streamOpen on an already-open stream is a no-op (idempotent)', () => {
+    const s1 = reduce(initialState, { kind: 'streamOpen', streamId: STREAM }).state;
+    const s2 = reduce(s1, { kind: 'streamOpen', streamId: STREAM, initialBody: 'x' }).state;
+    expect(s2.history.length).toBe(1);
+    if (s2.history[0]?.kind === 'output') {
+      // initialBody is ignored on the second open.
+      expect(s2.history[0].body).toBe('');
+    }
+  });
+
+  it('streamChunk with unknown streamId is a silent no-op', () => {
+    const s = reduce(initialState, {
+      kind: 'streamChunk',
+      streamId: 'never-opened',
+      delta: 'lost',
+    }).state;
+    expect(s.history.length).toBe(0);
+  });
+
+  it('streamClose without footer just toggles the flag', () => {
+    let s = reduce(initialState, { kind: 'streamOpen', streamId: STREAM, initialBody: 'a' }).state;
+    s = reduce(s, { kind: 'streamClose', streamId: STREAM }).state;
+    const last = s.history.at(-1);
+    if (last?.kind === 'output') {
+      expect(last.body).toBe('a');
+      expect(last.streaming).toBe(false);
+    }
+  });
+});

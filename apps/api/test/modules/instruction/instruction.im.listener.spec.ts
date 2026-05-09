@@ -233,3 +233,85 @@ describe('InstructionImListener.onInbound — async path', () => {
     expect(sends).toHaveLength(0);
   });
 });
+
+/**
+ * Spec for the /agent fallback: bare messages from allowlisted senders
+ * route to /agent (which then short-circuits with confirm-required when
+ * not yet confirmed). Non-allowlisted senders stay silent regardless.
+ */
+const agentSpec: InstructionSpec<{ q: string; confirm?: boolean }> = {
+  id: instructionId('agent'),
+  summary: 'agent',
+  summaryCn: 'agent',
+  group: 'system',
+  argsSchema: z
+    .object({
+      q: z.string(),
+      confirm: z.union([z.string(), z.boolean()]).optional(),
+    })
+    .strict(),
+  positional: ['q'],
+  imAliases: ['助手'],
+  costsCredits: true,
+};
+
+function buildWithAgent(cfg?: Partial<InstructionConfig>): Harness {
+  const h = build(cfg);
+  h.reg.register(agentSpec, {
+    execute: (args): Promise<InstructionResult> => {
+      const isConfirmed =
+        args.confirm === true || (typeof args.confirm === 'string' && args.confirm.length > 0);
+      if (!isConfirmed) {
+        return Promise.resolve({
+          ok: false,
+          error: {
+            code: 'confirm-required',
+            message: JSON.stringify({ q: args.q, kind: 'agent.paid' }),
+          },
+        });
+      }
+      return Promise.resolve({ ok: true, output: { text: '▶ /agent jobId=fake-job' } });
+    },
+  });
+  return h;
+}
+
+describe('InstructionImListener.onInbound — /agent fallback', () => {
+  it('routes bare allowlisted messages to /agent and returns the paid-confirm card', async () => {
+    const allowlist = new Set<string>(['slack:U_GOOD']);
+    const { listener, sends } = buildWithAgent({ imAllowlist: allowlist });
+    await listener.onInbound(inbound('看看茅台估值', 'slack:U_GOOD'));
+    expect(sends).toHaveLength(1);
+    expect(sends[0]?.kind).toBe('agent.paid_confirm');
+    expect(sends[0]?.meta?.['agentQ']).toBe('看看茅台估值');
+    expect(sends[0]?.meta?.['code']).toBe('confirm-required');
+  });
+
+  it('keeps non-allowlisted casual chat silent even with /agent registered', async () => {
+    const allowlist = new Set<string>(['slack:U_GOOD']);
+    const { listener, sends } = buildWithAgent({ imAllowlist: allowlist });
+    await listener.onInbound(inbound('hi everyone', 'slack:U_BAD'));
+    expect(sends).toHaveLength(0);
+  });
+
+  it('with empty allowlist (open mode) still routes bare messages through', async () => {
+    const { listener, sends } = buildWithAgent();
+    await listener.onInbound(inbound('看看茅台'));
+    expect(sends).toHaveLength(1);
+    expect(sends[0]?.kind).toBe('agent.paid_confirm');
+  });
+
+  it('explicit /agent confirm=1 q=... runs through normally as instruction.reply', async () => {
+    const { listener, sends } = buildWithAgent();
+    await listener.onInbound(inbound('/agent confirm=1 q="hello"'));
+    expect(sends).toHaveLength(1);
+    expect(sends[0]?.kind).toBe('instruction.reply');
+    expect(sends[0]?.text).toContain('▶ /agent jobId=fake-job');
+  });
+
+  it('does not fall back when /agent is not registered (legacy silent path)', async () => {
+    const { listener, sends } = build();
+    await listener.onInbound(inbound('看看茅台'));
+    expect(sends).toHaveLength(0);
+  });
+});
