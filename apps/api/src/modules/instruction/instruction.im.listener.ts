@@ -56,12 +56,17 @@ interface PendingAsync {
   readonly instructionId: string;
 }
 
-type ReplyKind = 'instruction.reply' | 'instruction.async.started';
+type ReplyKind =
+  | 'instruction.reply'
+  | 'instruction.async.started'
+  | 'agent.paid_confirm';
 
 interface ReplyEnvelope {
   readonly result: InstructionResult;
   readonly kind: ReplyKind;
   readonly instructionId: string | null;
+  /** Extra meta fields the card builder reads. */
+  readonly meta?: Readonly<Record<string, unknown>>;
 }
 
 function reply(result: InstructionResult, instructionId: string | null): ReplyEnvelope {
@@ -137,7 +142,12 @@ export class InstructionImListener implements OnModuleInit {
 
   private async dispatch(msg: InboundMessage, traceId: string): Promise<ReplyEnvelope | null> {
     const parsed = this.parseLine(msg.text);
-    if (parsed.kind === 'silent') return null;
+    if (parsed.kind === 'silent') {
+      // No instruction matched — fall back to the natural-language /agent
+      // entry point, but keep ACL gating: only allowlisted senders get
+      // routed; everyone else still stays silent.
+      return this.fallbackToAgent(msg, traceId);
+    }
     if (parsed.kind === 'parse-error') {
       return reply(errResult('parse', parsed.reason), null);
     }
@@ -155,6 +165,35 @@ export class InstructionImListener implements OnModuleInit {
       return reply(errResult('parse', detail), parsed.id);
     }
     return this.runEntry(msg, traceId, parsed.id, entry.spec.mode === 'async', rawArgs);
+  }
+
+  /**
+   * Casual-chat fallback: route the bare message to `/agent q="<text>"`.
+   * Skipped for empty / whitespace bodies and gated on the same allowlist
+   * as explicit commands, so non-allowlisted senders stay silent.
+   *
+   * The first /agent call always returns the "needs confirmation" reply
+   * because `/agent` is `costsCredits`; the user must accept via the
+   * Feishu button card before any LLM call fires.
+   */
+  private async fallbackToAgent(
+    msg: InboundMessage,
+    traceId: string,
+  ): Promise<ReplyEnvelope | null> {
+    const text = msg.text.trim();
+    if (text.length === 0) return null;
+    const guard = this.applyAcl(msg, 'agent');
+    if (guard !== null) {
+      // Don't surface "forbidden" for casual chat — keep IM polite.
+      return null;
+    }
+    const entry = this.registry.get('agent');
+    if (entry === undefined) {
+      // /agent is registered as part of AgentModule; if it isn't there,
+      // fallback should be inert rather than chatty.
+      return null;
+    }
+    return this.runEntry(msg, traceId, 'agent', entry.spec.mode === 'async', { q: text });
   }
 
   private parseLine(
@@ -225,6 +264,22 @@ export class InstructionImListener implements OnModuleInit {
         instructionId: dispatched.instructionId,
       };
     }
+    // Detect the `confirm-required` soft-failure emitted by costsCredits
+    // instructions (currently only `/agent`) so the IM reply path can
+    // render a paid-confirm card instead of a red error.
+    if (
+      !dispatched.result.ok &&
+      dispatched.result.error.code === 'confirm-required' &&
+      instructionId === 'agent'
+    ) {
+      const envelope = decodeAgentPaidConfirm(dispatched.result.error.message);
+      return {
+        result: dispatched.result,
+        kind: 'agent.paid_confirm',
+        instructionId,
+        meta: { agentQ: envelope.q ?? '' },
+      };
+    }
     return {
       result: dispatched.result,
       kind: 'instruction.reply',
@@ -249,6 +304,7 @@ export class InstructionImListener implements OnModuleInit {
             ok: envelope.result.ok,
             instructionId: envelope.instructionId,
             ...(envelope.result.ok ? {} : { code: envelope.result.error.code }),
+            ...(envelope.meta ?? {}),
           },
         },
         { traceId, source: 'system' },
@@ -277,4 +333,24 @@ export class InstructionImListener implements OnModuleInit {
       ...(user.originalUserId !== undefined ? { originalUserId: user.originalUserId } : {}),
     };
   }
+}
+
+/**
+ * The /agent handler hands its `confirm-required` payload back as a
+ * JSON-encoded `error.message` so the IM card builder can pull the
+ * original `q` out without round-tripping a parallel meta channel.
+ * Tolerates non-JSON / missing fields by yielding empty strings; the
+ * card just renders "" placeholders rather than crashing.
+ */
+function decodeAgentPaidConfirm(message: string): { readonly q: string | null } {
+  try {
+    const parsed: unknown = JSON.parse(message);
+    if (typeof parsed === 'object' && parsed !== null) {
+      const q = (parsed as { q?: unknown }).q;
+      return { q: typeof q === 'string' ? q : null };
+    }
+  } catch {
+    // fallthrough
+  }
+  return { q: null };
 }

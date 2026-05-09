@@ -12,6 +12,14 @@ export const InstructionErrorCodeSchema = z.enum([
   'not-found',
   'forbidden',
   'handler',
+  /**
+   * Soft-failure: the instruction needs the user's interactive
+   * approval before it will run. The IM listener / FE term render this
+   * as a button card / confirm widget rather than a red error. The
+   * `error.message` field carries a JSON envelope with the data the
+   * UI needs to mount the confirm surface (e.g. the original `q`).
+   */
+  'confirm-required',
 ]);
 export type InstructionErrorCode = z.infer<typeof InstructionErrorCodeSchema>;
 

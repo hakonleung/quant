@@ -61,10 +61,10 @@ export class AgentInstructionHandler extends InstructionRegistrarBase<AgentArgs>
 
   async execute(args: AgentArgs, ctx: InstructionCtx): Promise<InstructionResult> {
     if (args.confirm !== true) {
-      return errResult(
-        'forbidden',
-        '/agent 是付费指令，需要先确认。请通过终端 widget 或飞书按钮确认后再触发。',
-      );
+      // Hand the IM / term layer enough context to render a confirm card
+      // and re-dispatch /agent with confirm=1 on approval. The literal
+      // text of error.message is JSON so the renderer can decode it.
+      return errResult('confirm-required', JSON.stringify({ q: args.q, kind: 'agent.paid' }));
     }
     const delivery = pickDelivery(ctx);
     if (delivery === null) {

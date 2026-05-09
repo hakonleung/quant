@@ -99,6 +99,8 @@ export class HelpHandler extends InstructionRegistrarBase<Args> {
       lines.push(`中文别名: ${spec.imAliases.join('、')}`);
     }
     if (spec.mode === 'async') lines.push('执行方式: 异步（收到开始通知后等待完成回调）');
+    if (spec.costsCredits === true) lines.push('标签: [$] 调用会触发外部付费 LLM');
+    if (spec.destructive === true) lines.push('标签: [!] 写操作 / 不可逆');
     return lines.join('\n');
   }
 }
@@ -112,7 +114,14 @@ function buildAliasLine(spec: InstructionSpec<unknown>): string {
   return `${String(spec.id)}${cn}`;
 }
 
+function formatTags(spec: InstructionSpec<unknown>): string {
+  const tags: string[] = [];
+  if (spec.costsCredits === true) tags.push('[$]');
+  if (spec.destructive === true) tags.push('[!]');
+  return tags.length > 0 ? ` ${tags.join('')}` : '';
+}
+
 function formatListRow(spec: InstructionSpec<unknown>): string {
-  const label = buildAliasLine(spec).padEnd(22);
+  const label = (buildAliasLine(spec) + formatTags(spec)).padEnd(26);
   return `  ${label}  ${spec.summaryCn}  ·  ${spec.summary}`;
 }

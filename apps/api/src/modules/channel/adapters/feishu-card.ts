@@ -14,7 +14,7 @@
 interface FeishuCard {
   readonly config: { readonly wide_screen_mode: boolean };
   readonly header: {
-    readonly template: 'red' | 'green' | 'grey' | 'blue' | 'orange';
+    readonly template: 'red' | 'green' | 'grey' | 'blue' | 'orange' | 'purple';
     readonly title: { readonly tag: 'plain_text'; readonly content: string };
   };
   readonly elements: readonly unknown[];
@@ -234,6 +234,83 @@ export function buildInstructionAsyncCompletedCard(
 }
 
 /**
+ * `/agent` paid-call confirm card. Rendered when `costsCredits=true`
+ * instructions return `confirm-required` from the executor; the user
+ * must reply with the displayed confirm command before the LLM is
+ * actually invoked. Buttons are deferred to v1.5; v1 ships the safer
+ * "type the command back" pattern so the feature works without a
+ * Feishu app callback URL configured.
+ */
+export function buildAgentPaidConfirmCard(
+  text: string,
+  meta: Readonly<Record<string, unknown>>,
+): FeishuCard {
+  const q = metaString(meta, 'agentQ') ?? '';
+  const idLabel = metaString(meta, 'instructionId') ?? 'agent';
+  const escaped = q.replace(/"/g, '\\"');
+  const confirmCmd = `/agent confirm=1 q="${escaped}"`;
+  const body = [
+    `**确认调用 \`/${idLabel}\` ?**`,
+    '该指令会触发外部付费 LLM 调用 + 多步指令。',
+    '',
+    `原始问题：\`${truncateForCard(stripSlackMrkdwn(q))}\``,
+    '',
+    `回复以下命令以继续：`,
+    '```',
+    confirmCmd,
+    '```',
+    '回复任意其它内容会被识别为新的需求。',
+  ].join('\n');
+  // Surface the underlying text for old clients / fallback path; ignored
+  // on the lark side because the card is `interactive`.
+  void text;
+  return {
+    config: { wide_screen_mode: true },
+    header: {
+      template: 'purple',
+      title: { tag: 'plain_text', content: `❓ /${idLabel} 需要确认` },
+    },
+    elements: [{ tag: 'div', text: { tag: 'lark_md', content: body } }],
+  };
+}
+
+/**
+ * `/agent` tool-proposal confirm card. Emitted mid-loop when one or more
+ * proposed tool calls are `costsCredits` / `destructive`. Same v1
+ * pattern: paste-back text confirm rather than buttons.
+ */
+export function buildAgentToolProposalCard(
+  text: string,
+  meta: Readonly<Record<string, unknown>>,
+): FeishuCard {
+  const correlationId = metaString(meta, 'correlationId') ?? '';
+  const approveCmd = `/agent.confirm correlationId=${correlationId} approve=1`;
+  const cancelCmd = `/agent.confirm correlationId=${correlationId} approve=0`;
+  const body = [
+    `**Agent 申请执行以下工具调用：**`,
+    truncateForCard(stripSlackMrkdwn(text)),
+    '',
+    '回复以批准：',
+    '```',
+    approveCmd,
+    '```',
+    '或取消：',
+    '```',
+    cancelCmd,
+    '```',
+    `（5 分钟后自动失效）`,
+  ].join('\n');
+  return {
+    config: { wide_screen_mode: true },
+    header: {
+      template: 'purple',
+      title: { tag: 'plain_text', content: '❓ Agent 工具调用确认' },
+    },
+    elements: [{ tag: 'div', text: { tag: 'lark_md', content: body } }],
+  };
+}
+
+/**
  * Choose a card for the message kind, or return null to fall back to
  * the stripped-mrkdwn plain-text path.
  */
@@ -253,6 +330,10 @@ export function pickCard(message: {
       return buildInstructionAsyncStartedCard(message.text, meta);
     case 'instruction.async.completed':
       return buildInstructionAsyncCompletedCard(message.text, meta);
+    case 'agent.paid_confirm':
+      return buildAgentPaidConfirmCard(message.text, meta);
+    case 'agent.tool_proposal':
+      return buildAgentToolProposalCard(message.text, meta);
     default:
       return null;
   }

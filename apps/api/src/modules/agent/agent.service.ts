@@ -379,6 +379,32 @@ export class AgentService {
     delivery: { readonly channel: ChannelId; readonly target: string; readonly userId: string },
     payload: InstructionAgentDeltaPayload,
   ): Promise<void> {
+    // The mid-loop tool-proposal confirm gets a dedicated card kind so
+    // the Feishu adapter renders an interactive card with the
+    // copy-paste /agent.confirm command.
+    if (payload.kind === 'confirm') {
+      const text = payload.toolCalls
+        .map((p, i) => `  ${String(i + 1)}. /${p.id} ${formatArgs(p.args)} — ${p.summary}`)
+        .join('\n');
+      try {
+        await this.channels.send(
+          delivery.channel,
+          {
+            text,
+            kind: 'agent.tool_proposal',
+            target: delivery.target,
+            meta: { correlationId: payload.correlationId, jobId: payload.jobId },
+          },
+          { traceId: 'agent', source: 'system' },
+        );
+      } catch (err) {
+        this.logger.warn(
+          `agent_im_confirm_failed channel=${delivery.channel} err=${String(err)}`,
+        );
+      }
+      return;
+    }
+
     const text = renderFrameForIm(payload);
     if (text === null) return;
     try {
