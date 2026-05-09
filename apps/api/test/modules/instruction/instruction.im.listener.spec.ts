@@ -22,6 +22,8 @@ import type { AuthService } from '../../../src/modules/auth/auth.service.js';
 const focusSpec: InstructionSpec<{ code: string }> = {
   id: instructionId('focus'),
   summary: 'focus',
+  summaryCn: '查询个股',
+  group: 'market',
   argsSchema: z.object({ code: z.string().regex(/^\d{6}$/u) }).strict(),
   positional: ['code'],
 };
@@ -29,6 +31,8 @@ const focusSpec: InstructionSpec<{ code: string }> = {
 const analyzeSpec: InstructionSpec<{ fresh: boolean }> = {
   id: instructionId('analyze'),
   summary: 'analyze',
+  summaryCn: '账本分析',
+  group: 'portfolio',
   argsSchema: z.object({ fresh: z.boolean().default(false) }).strict(),
   mode: 'async',
 };

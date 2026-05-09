@@ -22,8 +22,11 @@ export class StockInstructionHandler extends InstructionRegistrarBase<Args> {
   readonly spec: InstructionSpec<Args> = {
     id: instructionId('stock'),
     summary: 'Search A-share metadata by code, name, or pinyin fragment.',
+    summaryCn: '按代码、名称或拼音搜索股票',
+    group: 'market',
     argsSchema,
     positional: ['q'],
+    imAliases: ['股票'],
   };
 
   constructor(

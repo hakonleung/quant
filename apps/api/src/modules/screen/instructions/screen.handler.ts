@@ -51,8 +51,11 @@ export class ScreenInstructionHandler extends InstructionRegistrarBase<Args> {
     id: instructionId('screen'),
     summary:
       'Run a natural-language screen via the LLM. `q="..."` (positional), `asof=YYYY-MM-DD`.',
+    summaryCn: '自然语言选股，q="..." 描述筛选条件',
+    group: 'market',
     argsSchema,
     positional: ['q'],
+    imAliases: ['筛选', '选股'],
     mode: 'async',
   };
 

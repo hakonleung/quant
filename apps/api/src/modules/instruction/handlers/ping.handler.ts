@@ -16,6 +16,8 @@ export class PingHandler extends InstructionRegistrarBase<Args> {
   readonly spec: InstructionSpec<Args> = {
     id: instructionId('ping'),
     summary: 'Round-trip latency probe; echoes args + traceId. (debug)',
+    summaryCn: '延迟探测，回显参数和 traceId（调试）',
+    group: 'system',
     argsSchema,
   };
 

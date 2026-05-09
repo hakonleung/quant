@@ -16,6 +16,8 @@ export class ChannelEchoHandler extends InstructionRegistrarBase<Args> {
   readonly spec: InstructionSpec<Args> = {
     id: instructionId('channel.echo'),
     summary: 'Echo args back through the same IM channel. (debug)',
+    summaryCn: '回显消息至当前频道（调试）',
+    group: 'system',
     argsSchema,
   };
 

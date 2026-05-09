@@ -28,9 +28,12 @@ export class WatchInstructionHandler extends InstructionRegistrarBase<Args> {
   readonly spec: InstructionSpec<Args> = {
     id: instructionId('watch'),
     summary: 'Inspect watch tasks. v1 only supports `watch list`.',
+    summaryCn: '预警任务列表',
+    group: 'watch',
     argsSchema,
     positional: ['sub'],
     aliases: [instructionId('watch.list')],
+    imAliases: ['自选'],
   };
 
   constructor(

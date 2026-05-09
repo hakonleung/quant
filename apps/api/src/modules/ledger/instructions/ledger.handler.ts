@@ -40,8 +40,11 @@ export class LedgerInstructionHandler extends InstructionRegistrarBase<Args> {
   readonly spec: InstructionSpec<Args> = {
     id: instructionId('ledger'),
     summary: 'Inspect the per-user ledger. `sub=list|summary`, `limit` (list only).',
+    summaryCn: '查看交易账本，sub=list|summary',
+    group: 'portfolio',
     argsSchema,
     positional: ['sub'],
+    imAliases: ['账本', '账单'],
   };
 
   constructor(

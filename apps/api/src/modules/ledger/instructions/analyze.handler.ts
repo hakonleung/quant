@@ -54,7 +54,10 @@ export class AnalyzeInstructionHandler extends InstructionRegistrarBase<Args> {
   readonly spec: InstructionSpec<Args> = {
     id: instructionId('analyze'),
     summary: 'Run the LLM ledger review. `fresh=1` bypasses the cache.',
+    summaryCn: '账本 AI 分析，fresh=1 强制刷新',
+    group: 'portfolio',
     argsSchema,
+    imAliases: ['分析'],
     mode: 'async',
   };
 

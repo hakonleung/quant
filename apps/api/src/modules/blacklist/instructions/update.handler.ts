@@ -37,8 +37,11 @@ export class UpdateInstructionHandler extends InstructionRegistrarBase<Args> {
   readonly spec: InstructionSpec<Args> = {
     id: instructionId('update'),
     summary: 'Refresh a cached dataset. v1 only supports `target=blacklist`.',
+    summaryCn: '手动刷新缓存数据集',
+    group: 'system',
     argsSchema,
     positional: ['target'],
+    imAliases: ['更新'],
   };
 
   constructor(

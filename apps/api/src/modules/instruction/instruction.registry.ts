@@ -24,7 +24,10 @@ export interface InstructionEntry {
 export class InstructionRegistry {
   private readonly logger = new Logger(InstructionRegistry.name);
   private readonly byId = new Map<string, InstructionEntry>();
+  /** ASCII aliases (InstructionId-validated), e.g. `watch.list → watch`. */
   private readonly aliasOf = new Map<string, string>();
+  /** Free-form IM aliases (Chinese, etc.) → canonical id. */
+  private readonly imAliasOf = new Map<string, string>();
 
   register<TArgs>(spec: InstructionSpec<TArgs>, handler: InstructionHandler<TArgs>): void {
     const id = spec.id;
@@ -42,13 +45,19 @@ export class InstructionRegistry {
       }
       this.aliasOf.set(alias, id);
     }
+    for (const alias of spec.imAliases ?? []) {
+      if (this.imAliasOf.has(alias) || this.aliasOf.has(alias) || this.byId.has(alias)) {
+        throw new Error(`duplicate instruction im-alias: ${alias}`);
+      }
+      this.imAliasOf.set(alias, id);
+    }
     this.logger.log(
-      `instruction_registered id=${String(id)} aliases=${(spec.aliases ?? []).join(',')}`,
+      `instruction_registered id=${String(id)} aliases=${(spec.aliases ?? []).join(',')} imAliases=${(spec.imAliases ?? []).join(',')}`,
     );
   }
 
   get(id: string): InstructionEntry | undefined {
-    const real = this.aliasOf.get(id) ?? id;
+    const real = this.imAliasOf.get(id) ?? this.aliasOf.get(id) ?? id;
     return this.byId.get(real);
   }
 
@@ -56,12 +65,20 @@ export class InstructionRegistry {
     return [...this.byId.values()];
   }
 
-  knownIds(): ReadonlySet<string> {
-    return new Set<string>([...this.byId.keys(), ...this.aliasOf.keys()]);
+  /**
+   * Returns a map from every accepted token (canonical id, ASCII alias,
+   * or IM human alias) to its canonical id. Used by `parseInstructionLine`.
+   */
+  knownIds(): ReadonlyMap<string, string> {
+    const out = new Map<string, string>();
+    for (const id of this.byId.keys()) out.set(id, id);
+    for (const [alias, canon] of this.aliasOf) out.set(alias, canon);
+    for (const [alias, canon] of this.imAliasOf) out.set(alias, canon);
+    return out;
   }
 
   resolveId(id: string): InstructionId | undefined {
-    const real = this.aliasOf.get(id) ?? id;
+    const real = this.imAliasOf.get(id) ?? this.aliasOf.get(id) ?? id;
     if (!this.byId.has(real)) return undefined;
     // `instructionId(...)` re-validates the string via the shared regex
     // before re-branding; cheaper than tracking branded keys end-to-end.

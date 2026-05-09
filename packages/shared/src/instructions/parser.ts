@@ -5,12 +5,16 @@
  * need zod coercion and FE handlers need the terminal's `parseArgv`
  * tied to xterm-style flags.
  *
- * `requirePrefix: true` (IM mode) demands a leading `/` so casual
- * Slack/Feishu chat doesn't trigger any handler. Term mode passes
- * `false` because it already lives behind a prompt.
+ * `knownIds` maps every accepted token (canonical id, ASCII alias, or
+ * IM-only human alias such as Chinese) to its canonical InstructionId.
+ * The lookup is a single Map.get so non-ASCII aliases work without
+ * touching the id regex.
+ *
+ * `requirePrefix: true` (legacy / explicit IM mode) demands a leading
+ * `/`. Term mode passes `false` because it already lives behind a prompt.
  */
 
-import { instructionId, isInstructionId, type InstructionId } from './id.js';
+import { instructionId, type InstructionId } from './id.js';
 
 export type ParseFailure = 'no-prefix' | 'not-found' | 'empty';
 
@@ -24,7 +28,7 @@ export interface ParseOptions {
 
 export function parseInstructionLine(
   text: string,
-  knownIds: ReadonlySet<string>,
+  knownIds: ReadonlyMap<string, string>,
   options: ParseOptions = {},
 ): ParseOutcome {
   let body = text.trim();
@@ -32,6 +36,10 @@ export function parseInstructionLine(
 
   if (options.requirePrefix === true) {
     if (!body.startsWith('/')) return { ok: false, reason: 'no-prefix' };
+    body = body.slice(1).trimStart();
+    if (body.length === 0) return { ok: false, reason: 'empty' };
+  } else if (body.startsWith('/')) {
+    // Strip optional leading `/` for backward compatibility; bare tokens also accepted.
     body = body.slice(1).trimStart();
     if (body.length === 0) return { ok: false, reason: 'empty' };
   }
@@ -42,8 +50,8 @@ export function parseInstructionLine(
   const head = match[1] ?? '';
   const rest = (match[2] ?? '').trim();
 
-  if (!isInstructionId(head)) return { ok: false, reason: 'not-found' };
-  if (!knownIds.has(head)) return { ok: false, reason: 'not-found' };
+  const canonical = knownIds.get(head);
+  if (canonical === undefined) return { ok: false, reason: 'not-found' };
 
-  return { ok: true, id: instructionId(head), rest };
+  return { ok: true, id: instructionId(canonical), rest };
 }

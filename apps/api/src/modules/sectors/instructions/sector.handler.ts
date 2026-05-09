@@ -16,7 +16,10 @@ export class SectorInstructionHandler extends InstructionRegistrarBase<Args> {
   readonly spec: InstructionSpec<Args> = {
     id: instructionId('sector'),
     summary: 'List user-defined sectors with their member counts.',
+    summaryCn: '查看自定义板块及成分数',
+    group: 'market',
     argsSchema,
+    imAliases: ['板块'],
   };
 
   constructor(

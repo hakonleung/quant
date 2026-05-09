@@ -3,7 +3,14 @@ import { describe, expect, it } from 'vitest';
 import { parseInstructionLine } from './parser.js';
 import { errResult, formatResult, okResult } from './result.js';
 
-const KNOWN = new Set(['focus', 'watch', 'channel.echo', 'screen']);
+const KNOWN = new Map<string, string>([
+  ['focus', 'focus'],
+  ['watch', 'watch'],
+  ['watch.list', 'watch'],
+  ['channel.echo', 'channel.echo'],
+  ['screen', 'screen'],
+  ['筛选', 'screen'],
+]);
 
 describe('parseInstructionLine', () => {
   it('parses bare line with rest', () => {
@@ -47,8 +54,36 @@ describe('parseInstructionLine', () => {
     }
   });
 
-  it('rejects malformed id (uppercase)', () => {
+  it('rejects unknown token (uppercase)', () => {
     expect(parseInstructionLine('FOCUS', KNOWN)).toEqual({ ok: false, reason: 'not-found' });
+  });
+
+  it('resolves Chinese alias to canonical id', () => {
+    const r = parseInstructionLine('筛选 q="涨停"', KNOWN);
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.id).toBe('screen');
+      expect(r.rest).toBe('q="涨停"');
+    }
+  });
+
+  it('resolves dotted alias to canonical id', () => {
+    const r = parseInstructionLine('watch.list', KNOWN);
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.id).toBe('watch');
+  });
+
+  it('strips optional slash when requirePrefix is false', () => {
+    const r = parseInstructionLine('/focus 600519', KNOWN);
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.id).toBe('focus');
+      expect(r.rest).toBe('600519');
+    }
+  });
+
+  it('returns empty for bare slash without requirePrefix', () => {
+    expect(parseInstructionLine('/', KNOWN)).toEqual({ ok: false, reason: 'empty' });
   });
 
   it('preserves multi-token rest verbatim', () => {

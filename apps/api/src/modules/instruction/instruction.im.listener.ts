@@ -1,9 +1,9 @@
 /**
  * Subscribes to `channel.inbound` events emitted by `ChannelBus`. Each
- * inbound IM message is routed through the executor; if it matches a
- * registered instruction the result is posted back to the same channel
- * via `ChannelService.send`. Casual chat (no leading `/`) is silently
- * ignored — the parser returns `no-prefix` and the listener bails out.
+ * inbound IM message is matched against registered instructions by the
+ * first token (no leading `/` required); unrecognised messages are
+ * silently ignored. Chinese aliases (e.g. `分析`, `筛选`) and ASCII
+ * aliases resolve to their canonical id via the registry's knownIds map.
  *
  * Three reply paths:
  *   - **sync** instruction: handler runs inline; listener posts a single
@@ -14,8 +14,8 @@
  *     up `instruction.async.completed` message when the worker finishes.
  *   - **forbidden** sender (ACL): `errResult('forbidden', ...)` posted back
  *     so the user sees they were rejected. The check runs only after the
- *     parser confirms a `/`-prefixed instruction; casual chat from
- *     non-allowlisted senders stays silent.
+ *     parser confirms a known instruction; casual chat from non-allowlisted
+ *     senders stays silent.
  *
  * Trace id is generated per inbound and threaded into the executor ctx,
  * the outbound send, and (for async) the job payload so the full
@@ -164,10 +164,15 @@ export class InstructionImListener implements OnModuleInit {
     | { readonly kind: 'parse-error'; readonly reason: string }
     | { readonly kind: 'ok'; readonly id: string; readonly rest: string } {
     const known = this.registry.knownIds();
-    const parsed = parseInstructionLine(text, known, { requirePrefix: true });
+    const parsed = parseInstructionLine(text, known, { requirePrefix: false });
     if (!parsed.ok) {
-      if (parsed.reason === 'no-prefix') return { kind: 'silent' };
-      return { kind: 'parse-error', reason: parsed.reason };
+      // A `/`-prefixed unknown token signals explicit command intent — reply
+      // with an error so the user knows the command doesn't exist.
+      // A bare unrecognised token is casual chat — stay silent.
+      if (parsed.reason === 'not-found' && text.trimStart().startsWith('/')) {
+        return { kind: 'parse-error', reason: parsed.reason };
+      }
+      return { kind: 'silent' };
     }
     return { kind: 'ok', id: String(parsed.id), rest: parsed.rest };
   }

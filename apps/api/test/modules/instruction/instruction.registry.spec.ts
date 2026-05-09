@@ -18,6 +18,8 @@ function spec(id: string, aliases: readonly string[] = []): InstructionSpec<Args
   return {
     id: instructionId(id),
     summary: 's',
+    summaryCn: 'stub',
+    group: 'system',
     argsSchema,
     aliases: aliases.map((a) => instructionId(a)),
   };

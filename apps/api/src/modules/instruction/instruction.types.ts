@@ -37,13 +37,34 @@ import type { z } from 'zod';
  */
 export type InstructionMode = 'sync' | 'async';
 
+/**
+ * Category used by `help` to group instructions.
+ *   - `market`:    行情 — stock lookup, screening, sectors
+ *   - `portfolio`: 持仓 — ledger, analysis
+ *   - `watch`:     预警 — watch tasks
+ *   - `system`:    系统 — meta, debug, infra
+ */
+export type InstructionGroup = 'market' | 'portfolio' | 'watch' | 'system';
+
 export interface InstructionSpec<TArgs> {
   readonly id: InstructionId;
+  /** English one-liner shown in the help list and detail view. */
   readonly summary: string;
+  /** Chinese one-liner shown alongside `summary` in bilingual help output. */
+  readonly summaryCn: string;
   readonly help?: string;
+  /** Category for grouping in `help` output. */
+  readonly group: InstructionGroup;
   readonly argsSchema: z.ZodType<TArgs, z.ZodTypeDef, unknown>;
   readonly positional?: readonly string[];
+  /** ASCII aliases validated against InstructionId regex (e.g. dotted forms). */
   readonly aliases?: readonly InstructionId[];
+  /**
+   * Free-form IM aliases that bypass the InstructionId regex — intended for
+   * human-language tokens such as Chinese characters (e.g. `['分析', '选股']`).
+   * These only work in IM and terminal contexts; they are not valid InstructionIds.
+   */
+  readonly imAliases?: readonly string[];
   readonly mode?: InstructionMode;
 }
 

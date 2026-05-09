@@ -25,7 +25,9 @@ type Args = z.infer<typeof argsSchema>;
 export class UsrHandler extends InstructionRegistrarBase<Args> {
   readonly spec: InstructionSpec<Args> = {
     id: instructionId('usr'),
-    summary: 'Show the caller’s resolved userId, source, and admin status.',
+    summary: "Show the caller's resolved userId, source, and admin status.",
+    summaryCn: '显示当前用户 ID 与权限',
+    group: 'system',
     argsSchema,
   };
 

@@ -27,6 +27,8 @@ export class FocusInstructionHandler extends InstructionRegistrarBase<Args> {
   readonly spec: InstructionSpec<Args> = {
     id: instructionId('focus'),
     summary: 'Validate an A-share code and report its name + industry.',
+    summaryCn: '查询个股名称与所属行业',
+    group: 'market',
     argsSchema,
     positional: ['code'],
   };

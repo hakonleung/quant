@@ -40,6 +40,8 @@ export class ChannelSendHandler extends InstructionRegistrarBase<Args> {
   readonly spec: InstructionSpec<Args> = {
     id: instructionId('channel.send'),
     summary: 'Send a manual outbound message to slack/feishu. (debug)',
+    summaryCn: '手动发送 IM 消息（调试）',
+    group: 'system',
     argsSchema,
     positional: ['channel', 'text'],
   };
