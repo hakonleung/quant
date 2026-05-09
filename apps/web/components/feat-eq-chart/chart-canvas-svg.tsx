@@ -22,12 +22,7 @@ import type { CandleGeometry } from '../../lib/fp/chart-render-helpers.js';
 import type { ChartViewport } from '../../lib/fp/chart-view.js';
 
 import { MA_COLORS, VOL_GAP } from './chart-canvas-constants.js';
-import {
-  CandleGroup,
-  DateTicks,
-  FocusDateMarker,
-  HoverCrosshair,
-} from './chart-svg-pieces.js';
+import { CandleGroup, DateTicks, FocusDateMarker, HoverCrosshair } from './chart-svg-pieces.js';
 import { AXIS_TEXT_STYLE } from './chart-svg-style.js';
 
 interface ChartSvgProps {

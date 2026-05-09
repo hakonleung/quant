@@ -101,10 +101,9 @@ export class FeishuChannelAdapter implements ChannelAdapter {
     }
     const card = pickCard(message);
     if (this.dryRun) {
-      const preview = card !== null ? `card<${message.kind ?? 'unknown'}>` : message.text.slice(0, 80);
-      this.logger.log(
-        `feishu_send_dryrun trace_id=${traceId} target=${target} preview=${preview}`,
-      );
+      const preview =
+        card !== null ? `card<${message.kind ?? 'unknown'}>` : message.text.slice(0, 80);
+      this.logger.log(`feishu_send_dryrun trace_id=${traceId} target=${target} preview=${preview}`);
       return { status: 'dryrun', target };
     }
     const data =
@@ -119,9 +118,7 @@ export class FeishuChannelAdapter implements ChannelAdapter {
             msg_type: 'text',
             content: JSON.stringify({
               text: stripSlackMrkdwn(
-                message.title !== undefined
-                  ? `${message.title}\n${message.text}`
-                  : message.text,
+                message.title !== undefined ? `${message.title}\n${message.text}` : message.text,
               ),
             }),
           };
@@ -129,8 +126,7 @@ export class FeishuChannelAdapter implements ChannelAdapter {
       params: { receive_id_type: 'chat_id' },
       data,
     });
-    const messageId =
-      typeof res.data?.message_id === 'string' ? res.data.message_id : null;
+    const messageId = typeof res.data?.message_id === 'string' ? res.data.message_id : null;
     return {
       status: 'sent',
       target,

@@ -39,11 +39,7 @@ export class SocketBus {
     this.sink.publish(topic, envelope);
   }
 
-  emitTo<T extends SocketTopic>(
-    userId: string,
-    topic: T,
-    payload: SocketTopicPayload<T>,
-  ): void {
+  emitTo<T extends SocketTopic>(userId: string, topic: T, payload: SocketTopicPayload<T>): void {
     const envelope = this.buildEnvelope(topic, payload);
     if (envelope === null || this.sink === null) return;
     this.sink.publishTo(userId, topic, envelope);

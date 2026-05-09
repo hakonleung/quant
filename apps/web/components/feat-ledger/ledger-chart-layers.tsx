@@ -49,13 +49,7 @@ export function YAxisLayer({
         const y = yFor(v);
         return (
           <g key={`yt-${String(i)}`}>
-            <line
-              x1={PRICE_AXIS_W - 3}
-              x2={width}
-              y1={y}
-              y2={y}
-              stroke={palette.term.line}
-            />
+            <line x1={PRICE_AXIS_W - 3} x2={width} y1={y} y2={y} stroke={palette.term.line} />
             <text
               x={PRICE_AXIS_W - 6}
               y={y + 3}
@@ -69,13 +63,7 @@ export function YAxisLayer({
         );
       })}
       {showZero && yMin < 0 && yMax > 0 && (
-        <line
-          x1={PRICE_AXIS_W}
-          x2={width}
-          y1={yFor(0)}
-          y2={yFor(0)}
-          stroke={palette.term.line}
-        />
+        <line x1={PRICE_AXIS_W} x2={width} y1={yFor(0)} y2={yFor(0)} stroke={palette.term.line} />
       )}
     </g>
   );
@@ -108,11 +96,7 @@ export function XAxisLayer({
         if (hoverCx !== null && Math.abs(cx - hoverCx) < 24) return null;
         const isFirst = ti === 0;
         const isLast = ti === tickKs.length - 1;
-        const anchor: 'start' | 'middle' | 'end' = isFirst
-          ? 'start'
-          : isLast
-            ? 'end'
-            : 'middle';
+        const anchor: 'start' | 'middle' | 'end' = isFirst ? 'start' : isLast ? 'end' : 'middle';
         return (
           <text
             key={`dt-${String(i)}`}

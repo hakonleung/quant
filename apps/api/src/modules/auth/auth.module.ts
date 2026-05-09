@@ -31,7 +31,8 @@ const FEISHU_APP_SECRET_ENV = 'CHANNEL_FEISHU_APP_SECRET';
     {
       provide: SESSION_VERIFIER,
       inject: [AUTH_CONFIG],
-      useFactory: (cfg: AuthConfigShape): SessionVerifier => new NextauthJwtVerifier(cfg.nextauthSecret),
+      useFactory: (cfg: AuthConfigShape): SessionVerifier =>
+        new NextauthJwtVerifier(cfg.nextauthSecret),
     },
     {
       provide: OAUTH_PROVIDERS,

@@ -20,8 +20,7 @@ import { ALL_SECTOR_ID } from '../stores/ui.store.js';
 export type RandomSuffix = () => string;
 
 /** Default suffix source — `Math.random` boxed for deterministic injection. */
-export const defaultRandomSuffix: RandomSuffix = () =>
-  Math.random().toString(36).slice(2, 8);
+export const defaultRandomSuffix: RandomSuffix = () => Math.random().toString(36).slice(2, 8);
 
 export function makeSectorId(name: string, rng: RandomSuffix = defaultRandomSuffix): string {
   const slug = name

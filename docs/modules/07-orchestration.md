@@ -9,7 +9,7 @@
 ## 实现
 
 | 组件        | 位置                                                           | 说明                                                                                |
-| ----------- | -------------------------------------------------------------- | ----------------------------------------------------------------------------------- | ----- | ---- |
+| ----------- | -------------------------------------------------------------- | ----------------------------------------------------------------------------------- | ----- | --------- | ---- |
 | Cron        | `apps/api/src/modules/orchestration/cron.orchestrator.ts`      | 自实现 setTimeout 调度（无 `@nestjs/schedule`）；BJT 15:15 触发，冷启动不自动扫描   |
 | Queues      | `apps/api/src/modules/orchestration/domain/in-memory-queue.ts` | 进程内 FIFO + 并发上限 + 失败退避；MetaQueue / KlineQueue 各一条独立队列            |
 | Workers     | `kline-worker.ts`、`meta-worker.ts`                            | 出队 → Arrow Flight 调 Python ops                                                   |

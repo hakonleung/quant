@@ -11,7 +11,12 @@
  */
 
 import { Controller, Get, HttpCode, HttpStatus, Inject, Post, Query } from '@nestjs/common';
-import { ScanKindSchema, type QueueSnapshot, type ScanAccepted, type ScanKind } from '@quant/shared';
+import {
+  ScanKindSchema,
+  type QueueSnapshot,
+  type ScanAccepted,
+  type ScanKind,
+} from '@quant/shared';
 
 import { ZodValidationPipe } from '../../common/zod-pipe.js';
 

@@ -19,10 +19,7 @@ import { Box, Flex } from '@chakra-ui/react';
 import type { QueueSnapshotEntry } from '@quant/shared';
 
 import { Feat } from '../../lib/eqty/feat.js';
-import {
-  findQueue,
-  isScanCovering,
-} from '../../lib/fp/sys-stat-fmt.js';
+import { findQueue, isScanCovering } from '../../lib/fp/sys-stat-fmt.js';
 import { useQueueStream } from '../../lib/hooks/use-queue-stream.js';
 import { useWebVitals } from '../../lib/hooks/use-web-vitals.js';
 import { ChannelLiveBody } from '../feat-channel/feat-channel-body.js';

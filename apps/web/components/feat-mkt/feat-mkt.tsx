@@ -34,11 +34,7 @@ export function FeatMkt(): React.ReactElement {
   const stocks = useStockList();
   const blacklist = useBlacklistQuery();
   const tone =
-    stocks.error !== null
-      ? 'red'
-      : stocks.isLoading || blacklist.isLoading
-        ? 'amber'
-        : 'green';
+    stocks.error !== null ? 'red' : stocks.isLoading || blacklist.isLoading ? 'amber' : 'green';
   const [dialogOpen, setDialogOpen] = useState(false);
   return (
     <FeatView

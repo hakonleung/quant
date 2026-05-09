@@ -50,13 +50,7 @@ export function CandleGroup({
         <line x1={c.wickX} x2={c.wickX} y1={c.highY} y2={c.top} stroke={stroke} />
       )}
       {c.lowY > c.top + c.bodyH && (
-        <line
-          x1={c.wickX}
-          x2={c.wickX}
-          y1={c.top + c.bodyH}
-          y2={c.lowY}
-          stroke={stroke}
-        />
+        <line x1={c.wickX} x2={c.wickX} y1={c.top + c.bodyH} y2={c.lowY} stroke={stroke} />
       )}
       {c.isUp ? (
         <rect
@@ -92,12 +86,7 @@ interface TickPlacement {
   readonly span: { readonly left: number; readonly right: number };
 }
 
-function placeDateTick(
-  ti: number,
-  total: number,
-  rawX: number,
-  innerW: number,
-): TickPlacement {
+function placeDateTick(ti: number, total: number, rawX: number, innerW: number): TickPlacement {
   const isFirst = ti === 0;
   const isLast = ti === total - 1;
   const anchor: 'start' | 'middle' | 'end' = isFirst ? 'start' : isLast ? 'end' : 'middle';
@@ -183,11 +172,7 @@ interface FocusDateMarkerProps {
   readonly totalH: number;
 }
 
-export function FocusDateMarker({
-  date,
-  cx,
-  totalH,
-}: FocusDateMarkerProps): React.ReactElement {
+export function FocusDateMarker({ date, cx, totalH }: FocusDateMarkerProps): React.ReactElement {
   const markerW = 36;
   return (
     <g>

@@ -140,9 +140,7 @@ describe('buildInitialState', () => {
   it('mirrors picked stocks, conditions, and intervals from the override', () => {
     const initial: WatchAddInitial = {
       picked: [STOCK],
-      conditions: [
-        { kind: 'pct', baseline: 'prev_close', op: 'gte', thresholdPct: '3' },
-      ],
+      conditions: [{ kind: 'pct', baseline: 'prev_close', op: 'gte', thresholdPct: '3' }],
       intervalSec: 120,
       pushIntervalSec: 600,
     };
@@ -176,18 +174,18 @@ describe('buildDraft', () => {
 
 describe('describeCondition', () => {
   it('formats pct trend with the window seconds', () => {
-    expect(
-      describeCondition({ ...INITIAL_CONDITION, baseline: 'trend', windowSec: '90' }),
-    ).toBe('pct trend(90s) ≥ 5%');
+    expect(describeCondition({ ...INITIAL_CONDITION, baseline: 'trend', windowSec: '90' })).toBe(
+      'pct trend(90s) ≥ 5%',
+    );
   });
   it('formats pct non-trend without window', () => {
-    expect(
-      describeCondition({ ...INITIAL_CONDITION, baseline: 'prev_close', op: 'lte' }),
-    ).toBe('pct prev_close ≤ 5%');
+    expect(describeCondition({ ...INITIAL_CONDITION, baseline: 'prev_close', op: 'lte' })).toBe(
+      'pct prev_close ≤ 5%',
+    );
   });
   it('formats abs as price-only', () => {
-    expect(
-      describeCondition({ ...INITIAL_CONDITION, kind: 'abs', thresholdPrice: '99.9' }),
-    ).toBe('abs ≥ 99.9');
+    expect(describeCondition({ ...INITIAL_CONDITION, kind: 'abs', thresholdPrice: '99.9' })).toBe(
+      'abs ≥ 99.9',
+    );
   });
 });

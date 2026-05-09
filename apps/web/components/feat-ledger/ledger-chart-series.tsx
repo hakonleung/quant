@@ -42,15 +42,10 @@ export function buildLedgerSeries(
   enriched: readonly EnrichedLedgerEntry[],
   today: string,
 ): ChartSeries {
-  return mode === 'daily'
-    ? buildDailySeries(enriched, today)
-    : buildKlineSeries(enriched, today);
+  return mode === 'daily' ? buildDailySeries(enriched, today) : buildKlineSeries(enriched, today);
 }
 
-function buildDailySeries(
-  enriched: readonly EnrichedLedgerEntry[],
-  today: string,
-): ChartSeries {
+function buildDailySeries(enriched: readonly EnrichedLedgerEntry[], today: string): ChartSeries {
   const points = seriesDailyPnlNoAnchor(enriched);
   // The non-anchor slice drops `enriched[0]`; entry at point i lives
   // at `enriched[i + 1]` so we can reach back for pct.
@@ -95,10 +90,7 @@ function buildDailySeries(
   };
 }
 
-function buildKlineSeries(
-  enriched: readonly EnrichedLedgerEntry[],
-  today: string,
-): ChartSeries {
+function buildKlineSeries(enriched: readonly EnrichedLedgerEntry[], today: string): ChartSeries {
   const candles = seriesKline(enriched);
   // `seriesKline` skips the anchor (i=0), so candle at index i pairs
   // with `enriched[i + 1]` for pnl / pct lookup.

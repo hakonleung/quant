@@ -52,9 +52,7 @@ export function renderCondition(c: WatchCondition): string {
   if (c.kind === 'pct') {
     const v = new Decimal(c.thresholdPct);
     const baselineLabel =
-      c.baseline === 'trend' && c.window !== undefined
-        ? `trend(${String(c.window)}s)`
-        : c.baseline;
+      c.baseline === 'trend' && c.window !== undefined ? `trend(${String(c.window)}s)` : c.baseline;
     return `pct($, ${baselineLabel}) ${renderOp(c.op)} ${v.toString()}%`;
   }
   const price = new Decimal(c.thresholdPrice);

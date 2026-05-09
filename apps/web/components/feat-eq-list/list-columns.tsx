@@ -177,14 +177,7 @@ function makeAppliedColumn(
     case 'peTtm':
       return derivedColumn('peTtm', 'PE-TTM', 90, snapshotByCode, (d) => d.pe_ttm, 'ratio');
     case 'peDynamic':
-      return derivedColumn(
-        'peDynamic',
-        'PE动态',
-        90,
-        snapshotByCode,
-        (d) => d.pe_dynamic,
-        'ratio',
-      );
+      return derivedColumn('peDynamic', 'PE动态', 90, snapshotByCode, (d) => d.pe_dynamic, 'ratio');
     case 'pb':
       return derivedColumn('pb', 'PB', 70, snapshotByCode, (d) => d.pb, 'ratio');
     case 'peg':

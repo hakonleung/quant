@@ -79,10 +79,7 @@ export class LedgerController {
   }
 
   @Get('export')
-  async exportEntries(
-    @CurrentUser() user: AuthenticatedUser,
-    @Res() res: Response,
-  ): Promise<void> {
+  async exportEntries(@CurrentUser() user: AuthenticatedUser, @Res() res: Response): Promise<void> {
     const entries = await this.service.list(user.id);
     const snap: LedgerSnapshot = { entries: entries as LedgerEntry[] };
     const today = new Date();

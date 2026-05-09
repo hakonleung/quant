@@ -1,9 +1,9 @@
-import type {
-  ChannelActivity,
-  ChannelId,
-} from '@quant/shared';
+import type { ChannelActivity, ChannelId } from '@quant/shared';
 
-import { ChannelBus, type OutboundJob } from '../../../src/modules/channel/bus/channel-bus.service.js';
+import {
+  ChannelBus,
+  type OutboundJob,
+} from '../../../src/modules/channel/bus/channel-bus.service.js';
 import { ChannelRegistry } from '../../../src/modules/channel/channel.registry.js';
 import { ChannelService } from '../../../src/modules/channel/channel.service.js';
 
@@ -28,10 +28,7 @@ class FakeBus {
 function makeService(): { svc: ChannelService; reg: FakeRegistry; bus: FakeBus } {
   const reg = new FakeRegistry();
   const bus = new FakeBus();
-  const svc = new ChannelService(
-    reg as unknown as ChannelRegistry,
-    bus as unknown as ChannelBus,
-  );
+  const svc = new ChannelService(reg as unknown as ChannelRegistry, bus as unknown as ChannelBus);
   return { svc, reg, bus };
 }
 

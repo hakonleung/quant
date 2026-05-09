@@ -26,10 +26,7 @@ export function ChannelLiveBody(): React.ReactElement {
   });
 
   const filtered = useMemo(
-    () =>
-      rows.filter(
-        (row) => filter.sources.has(row.source) && filter.channels.has(row.channel),
-      ),
+    () => rows.filter((row) => filter.sources.has(row.source) && filter.channels.has(row.channel)),
     [rows, filter],
   );
 

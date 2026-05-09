@@ -25,15 +25,10 @@ export async function POST(request: Request): Promise<Response> {
   try {
     const raw: unknown = await request.json();
     const body = WatchGroupCreateSchema.parse(raw);
-    const created = await nestJson(
-      request,
-      '/api/watch/groups',
-      (r) => WatchGroupSchema.parse(r),
-      {
-        method: 'POST',
-        body,
-      },
-    );
+    const created = await nestJson(request, '/api/watch/groups', (r) => WatchGroupSchema.parse(r), {
+      method: 'POST',
+      body,
+    });
     return Response.json(created, {
       status: 201,
       headers: { [TRACE_HEADER]: traceId },

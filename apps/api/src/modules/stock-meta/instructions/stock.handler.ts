@@ -36,16 +36,17 @@ export class StockInstructionHandler extends InstructionRegistrarBase<Args> {
   async execute(args: Args, ctx: InstructionCtx): Promise<InstructionResult> {
     const all = await this.stockMeta.listAll(ctx.traceId);
     const q = (args.q ?? '').toLowerCase();
-    const matches = q.length === 0
-      ? all.slice(0, args.limit)
-      : all
-          .filter(
-            (m) =>
-              m.code.includes(q) ||
-              m.name.toLowerCase().includes(q) ||
-              m.name_pinyin.toLowerCase().includes(q),
-          )
-          .slice(0, args.limit);
+    const matches =
+      q.length === 0
+        ? all.slice(0, args.limit)
+        : all
+            .filter(
+              (m) =>
+                m.code.includes(q) ||
+                m.name.toLowerCase().includes(q) ||
+                m.name_pinyin.toLowerCase().includes(q),
+            )
+            .slice(0, args.limit);
     if (matches.length === 0) return okResult(`no match for "${args.q ?? ''}"`);
     const lines = matches.map((m) => `  ${m.code}  ${m.name.padEnd(8)}  ${m.industries}`);
     return okResult(`stock matches (${String(matches.length)}):\n${lines.join('\n')}`);

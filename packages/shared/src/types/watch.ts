@@ -135,13 +135,9 @@ const isoDateTime = z.string().datetime({ offset: true });
  * (the `DELETE /watch/groups/:name` route) without escaping.
  */
 export const WATCH_GROUP_NAME_PATTERN = /^[A-Za-z0-9_-][A-Za-z0-9 _-]{0,31}$/;
-export const WatchGroupNameSchema = z
-  .string()
-  .min(1)
-  .max(32)
-  .regex(WATCH_GROUP_NAME_PATTERN, {
-    message: 'group name must be 1–32 chars; letters/digits/space/_/-, no leading space',
-  });
+export const WatchGroupNameSchema = z.string().min(1).max(32).regex(WATCH_GROUP_NAME_PATTERN, {
+  message: 'group name must be 1–32 chars; letters/digits/space/_/-, no leading space',
+});
 
 export const WatchGroupSchema = z
   .object({

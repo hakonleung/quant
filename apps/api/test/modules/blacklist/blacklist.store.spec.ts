@@ -65,7 +65,9 @@ describe('BlacklistStore', () => {
     expect(out).toEqual(fixture);
     expect(store.snapshot()).toEqual(fixture);
     expect(store.has('000001')).toBe(true);
-    const onDisk = JSON.parse(await fs.readFile(path.join(dir, 'blacklist.json'), 'utf8')) as unknown;
+    const onDisk = JSON.parse(
+      await fs.readFile(path.join(dir, 'blacklist.json'), 'utf8'),
+    ) as unknown;
     expect(onDisk).toEqual(fixture);
   });
 

@@ -2,7 +2,10 @@ import { describe, expect, it } from 'vitest';
 
 import { makeSectorId } from './sector-id.js';
 
-const fixedRng = (suffix: string): (() => string) => () => suffix;
+const fixedRng =
+  (suffix: string): (() => string) =>
+  () =>
+    suffix;
 
 describe('makeSectorId', () => {
   it('slugs ASCII titles to lowercase + dash and appends a 6-char suffix', () => {

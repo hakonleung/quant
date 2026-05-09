@@ -124,7 +124,7 @@ docs/              工程文档
 | `docs/modules/08-frontend.md`         | 前端 Feat 框架 + Feat 列表                |
 | `docs/modules/09-notifications.md`    | 通知（Slack 纯文本 mrkdwn）               |
 | `docs/modules/10-terminal.md`         | `@quant/terminal` + `TERM.MAIN`           |
-| `docs/modules/12-blacklist.md`        | A 股噪音黑名单（cron + sector-all 过滤）   |
+| `docs/modules/12-blacklist.md`        | A 股噪音黑名单（cron + sector-all 过滤）  |
 | `docs/integrations/data-sources.md`   | akshare 适配                              |
 | `docs/integrations/llm-providers.md`  | LLM provider 抽象                         |
 | `docs/integrations/ipc-py-ts.md`      | Arrow Flight 通信 + op 清单               |

@@ -99,10 +99,7 @@ export class LedgerService {
     await this.store.replace(userId, next);
   }
 
-  async importEntries(
-    userId: string,
-    entries: readonly LedgerEntry[],
-  ): Promise<LedgerSnapshot> {
+  async importEntries(userId: string, entries: readonly LedgerEntry[]): Promise<LedgerSnapshot> {
     const next = mergeEntries(await this.store.list(userId), entries);
     return this.store.replace(userId, next);
   }

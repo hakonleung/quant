@@ -328,7 +328,6 @@ function buildFetchers(deps: LiveRunnerDeps): Record<string, Fetcher> {
   };
 }
 
-
 export class LiveActionRunner implements DataActionRunner {
   readonly id = 'live' as const;
   private readonly cache: MockCache;

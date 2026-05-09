@@ -1,4 +1,8 @@
-import { ArgvParseError, parseArgvToObject, tokenize } from '../../../src/modules/instruction/parse-argv.js';
+import {
+  ArgvParseError,
+  parseArgvToObject,
+  tokenize,
+} from '../../../src/modules/instruction/parse-argv.js';
 
 describe('tokenize', () => {
   it('splits on whitespace', () => {

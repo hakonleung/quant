@@ -37,10 +37,7 @@ import {
 import type { Server, Socket } from 'socket.io';
 
 import { AuthConfig } from '../auth/config/auth.config.js';
-import {
-  SESSION_VERIFIER,
-  type SessionVerifier,
-} from '../auth/ports/session-verifier.port.js';
+import { SESSION_VERIFIER, type SessionVerifier } from '../auth/ports/session-verifier.port.js';
 import { corsOriginCallback } from './cors-origin.js';
 import { SocketBus, type SocketSink } from './socket-bus.service.js';
 

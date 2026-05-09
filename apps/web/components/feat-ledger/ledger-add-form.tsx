@@ -58,8 +58,7 @@ function validateEntry(
     ...(closingTrim === '' ? {} : { closingPosition: closingTrim }),
   };
   const parsed = LedgerEntrySchema.safeParse(candidate);
-  if (!parsed.success)
-    return { error: parsed.error.issues[0]?.message ?? '校验失败' };
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? '校验失败' };
   return { entry: parsed.data };
 }
 
@@ -70,8 +69,7 @@ function validateShape(state: FormState, ctx: ValidationCtx): string | null {
   if (!DATE_RE.test(date)) return '日期需要 YYYY-MM-DD 格式';
   if (!NUM_RE.test(pnlAmount.trim())) return '盈亏金额需要是数字（可为负）';
   const closingTrim = closingPosition.trim();
-  if (ctx.closingRequired && closingTrim === '')
-    return '当前条目是首条，必须填写当日收盘仓位';
+  if (ctx.closingRequired && closingTrim === '') return '当前条目是首条，必须填写当日收盘仓位';
   if (closingTrim !== '' && !NUM_RE.test(closingTrim)) return '收盘仓位需要是数字';
   if (ctx.mode === 'add' && ctx.existingDates.includes(date))
     return `日期 ${date} 已存在，请编辑现有条目或换一天`;
@@ -160,12 +158,7 @@ export function LedgerAddForm({
       ariaLabel={mode === 'add' ? '新增账本条目' : '编辑账本条目'}
       onOutsideClose={isMobile ? null : onCancel}
     >
-      <FormFields
-        state={state}
-        onChange={setState}
-        mode={mode}
-        closingRequired={closingRequired}
-      />
+      <FormFields state={state} onChange={setState} mode={mode} closingRequired={closingRequired} />
       {error !== null && (
         <Text fontSize="11px" color="fall" fontFamily="mono" role="alert">
           {error}

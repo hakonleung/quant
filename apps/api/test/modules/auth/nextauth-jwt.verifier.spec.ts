@@ -19,10 +19,7 @@ describe('NextauthJwtVerifier', () => {
   it('decodes a valid HS256 token and surfaces claims', async () => {
     const v = new NextauthJwtVerifier(SECRET);
     const exp = Math.floor(Date.now() / 1000) + 3600;
-    const token = sign(
-      { userId: 'feishu:ou_alice', displayName: 'Alice', iat: 0, exp },
-      SECRET,
-    );
+    const token = sign({ userId: 'feishu:ou_alice', displayName: 'Alice', iat: 0, exp }, SECRET);
     const claims = await v.verify(token);
     expect(claims).toEqual({
       userId: 'feishu:ou_alice',

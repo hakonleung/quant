@@ -206,8 +206,7 @@ export function ChartCanvas({
   // to refit on width changes alone preserves any user-initiated
   // zoom. The series identity uses first/last dates so reordering
   // within the same range doesn't refit.
-  const seriesKey =
-    bars.length === 0 ? '' : `${bars[0]!.date}-${bars[bars.length - 1]!.date}`;
+  const seriesKey = bars.length === 0 ? '' : `${bars[0]!.date}-${bars[bars.length - 1]!.date}`;
   const lastFitRef = useRef<{ key: string; widthKnown: boolean }>({
     key: '',
     widthKnown: false,
@@ -259,10 +258,46 @@ export function ChartCanvas({
   );
   const maPaths: Record<MaKey, string> = useMemo(
     () => ({
-      ma5: buildMaPath(bars, slice.startIdx, slice.count, slice.stride, slice.firstX, vp.candleW, scaleY, 'ma5'),
-      ma10: buildMaPath(bars, slice.startIdx, slice.count, slice.stride, slice.firstX, vp.candleW, scaleY, 'ma10'),
-      ma20: buildMaPath(bars, slice.startIdx, slice.count, slice.stride, slice.firstX, vp.candleW, scaleY, 'ma20'),
-      ma60: buildMaPath(bars, slice.startIdx, slice.count, slice.stride, slice.firstX, vp.candleW, scaleY, 'ma60'),
+      ma5: buildMaPath(
+        bars,
+        slice.startIdx,
+        slice.count,
+        slice.stride,
+        slice.firstX,
+        vp.candleW,
+        scaleY,
+        'ma5',
+      ),
+      ma10: buildMaPath(
+        bars,
+        slice.startIdx,
+        slice.count,
+        slice.stride,
+        slice.firstX,
+        vp.candleW,
+        scaleY,
+        'ma10',
+      ),
+      ma20: buildMaPath(
+        bars,
+        slice.startIdx,
+        slice.count,
+        slice.stride,
+        slice.firstX,
+        vp.candleW,
+        scaleY,
+        'ma20',
+      ),
+      ma60: buildMaPath(
+        bars,
+        slice.startIdx,
+        slice.count,
+        slice.stride,
+        slice.firstX,
+        vp.candleW,
+        scaleY,
+        'ma60',
+      ),
     }),
     [bars, slice, vp.candleW, scaleY],
   );

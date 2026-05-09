@@ -12,10 +12,7 @@
  */
 
 import { Box, Flex, Input, Text } from '@chakra-ui/react';
-import {
-  WATCH_GROUP_NAME_PATTERN,
-  type WatchGroup,
-} from '@quant/shared';
+import { WATCH_GROUP_NAME_PATTERN, type WatchGroup } from '@quant/shared';
 import { useEffect, useMemo, type Dispatch, type SetStateAction } from 'react';
 
 import {
@@ -121,9 +118,7 @@ interface SectorImportRowProps {
   readonly onBatchPick: (stocks: readonly UniverseStock[]) => void;
 }
 
-export function SectorImportRow({
-  onBatchPick,
-}: SectorImportRowProps): React.ReactElement | null {
+export function SectorImportRow({ onBatchPick }: SectorImportRowProps): React.ReactElement | null {
   const sectors = useSectorsStore((s) => s.sectors);
   const { data: universe } = useStockUniverse('a');
   const codeToStock = useMemo(() => {

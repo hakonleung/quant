@@ -152,11 +152,7 @@ export function FeatLedger({ bare }: FeatLedgerProps = {}): React.ReactElement {
   };
 
   return (
-    <FeatView
-      feat={Feat.Ledger}
-      bare={bare ?? false}
-      {...(status !== undefined ? { status } : {})}
-    >
+    <FeatView feat={Feat.Ledger} bare={bare ?? false} {...(status !== undefined ? { status } : {})}>
       <Flex
         px="10px"
         py="4px"

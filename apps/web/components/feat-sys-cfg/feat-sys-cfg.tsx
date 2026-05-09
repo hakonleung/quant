@@ -277,8 +277,8 @@ function PresetsSection(): React.ReactElement {
         );
       })}
       <Text fontSize="10px" color="term.ink3" mt="4px" lineHeight="1.5">
-        // 提示：拖动列宽或最小化任意面板会清掉 ACTIVE 标记 —
-        // 预设只是一次性的状态注入，之后是用户自由布局。
+        // 提示：拖动列宽或最小化任意面板会清掉 ACTIVE 标记 — //
+        预设只是一次性的状态注入，之后是用户自由布局。
       </Text>
     </Flex>
   );

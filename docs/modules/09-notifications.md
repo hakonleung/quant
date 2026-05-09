@@ -11,14 +11,14 @@
 
 ## 旧 → 新映射
 
-| 旧                                                                | 新                                                |
-| ----------------------------------------------------------------- | ------------------------------------------------- |
-| `apps/api/src/modules/push/`                                      | *（删除）*                                        |
-| `apps/api/src/modules/watch/watch-notifier.ts`                    | *（删除）*                                        |
-| `WatchNotifier` 接口                                              | `ChannelAdapter`（多 IM）                         |
-| `SlackWebhookWatchNotifier`                                       | `apps/api/src/modules/channel/adapters/slack.adapter.ts`（Web API + Socket Mode） |
-| `POST /api/push/test`                                             | `POST /api/channel/send`                          |
-| `QUANT_WATCH_SLACK_WEBHOOK` / `SLACK_WEBHOOK_URL`                 | `CHANNEL_SLACK_BOT_TOKEN` 等（见 11-channel.md）  |
+| 旧                                                | 新                                                                                |
+| ------------------------------------------------- | --------------------------------------------------------------------------------- |
+| `apps/api/src/modules/push/`                      | _（删除）_                                                                        |
+| `apps/api/src/modules/watch/watch-notifier.ts`    | _（删除）_                                                                        |
+| `WatchNotifier` 接口                              | `ChannelAdapter`（多 IM）                                                         |
+| `SlackWebhookWatchNotifier`                       | `apps/api/src/modules/channel/adapters/slack.adapter.ts`（Web API + Socket Mode） |
+| `POST /api/push/test`                             | `POST /api/channel/send`                                                          |
+| `QUANT_WATCH_SLACK_WEBHOOK` / `SLACK_WEBHOOK_URL` | `CHANNEL_SLACK_BOT_TOKEN` 等（见 11-channel.md）                                  |
 
 ## 消息格式
 

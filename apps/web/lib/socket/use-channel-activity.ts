@@ -47,7 +47,10 @@ export function useChannelActivity(maxRows: number = DEFAULT_MAX_ROWS): ChannelA
       setError(null);
       setRows((prev) => {
         const idx = prev.findIndex((r) => baseId(r.id) === baseId(incoming.id));
-        const next = idx >= 0 ? [...prev.slice(0, idx), incoming, ...prev.slice(idx + 1)] : [incoming, ...prev];
+        const next =
+          idx >= 0
+            ? [...prev.slice(0, idx), incoming, ...prev.slice(idx + 1)]
+            : [incoming, ...prev];
         return next.length > maxRows ? next.slice(0, maxRows) : next;
       });
     };

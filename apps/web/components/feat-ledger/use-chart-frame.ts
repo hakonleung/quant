@@ -229,12 +229,7 @@ export interface HoverApi {
   readonly onMouseUp: (e: React.MouseEvent<SVGSVGElement>) => void;
 }
 
-export function useChartHover({
-  slice,
-  seriesCount,
-  innerW,
-  isDragging,
-}: HoverArgs): HoverApi {
+export function useChartHover({ slice, seriesCount, innerW, isDragging }: HoverArgs): HoverApi {
   const [state, setState] = useState<HoverState | null>(null);
 
   const pickIdx = useCallback(

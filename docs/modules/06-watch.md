@@ -15,15 +15,15 @@
 
 ## 实现
 
-| 层      | 位置                                                                                          | 说明                                                                                  |
-| ------- | --------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
-| Types   | `quant_core/domain/types/watch.py`                                                            | `SpotQuote`（含 `amount` / `volume`）、`StockBasic`                                   |
-| Source  | `quant_io/sources/akshare_watch.py`                                                           | A: `stock_bid_ask_em`；HK/US: `stock_{hk,us}_hist_min_em`（BJT 墙钟窗口）             |
-| Service | `quant_core/services/watch_quote_service.py`                                                  | 拉行情 + 评估 hit                                                                     |
-| RPC     | `quant_rpc/ops/watch.py`                                                                      | ops `watch.quote_one` / `watch.universe_refresh`（schema 含 amount/volume）           |
-| API     | `apps/api/src/modules/watch/`                                                                 | `GET /api/watch`、`POST /api/watch`、`GET/POST /api/watch/groups`、`DELETE /api/watch/groups/:name`；实时流通过 Socket.IO `watch.snapshot` topic（[12-socket.md](./12-socket.md)） |
-| Notify  | `apps/api/src/modules/watch/domain/{evaluate,format}.ts` + `ChannelService.broadcast`         | 条件求值 + 文本渲染 + 多 IM 投递（[11-channel.md](./11-channel.md)）                  |
-| Web     | `feat-watch-live`、`feat-watch-live/watch-add-form`                                           | 实时表格 + 多选 + 状态徽标；trend baseline 含 window 字段                             |
+| 层      | 位置                                                                                  | 说明                                                                                                                                                                               |
+| ------- | ------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Types   | `quant_core/domain/types/watch.py`                                                    | `SpotQuote`（含 `amount` / `volume`）、`StockBasic`                                                                                                                                |
+| Source  | `quant_io/sources/akshare_watch.py`                                                   | A: `stock_bid_ask_em`；HK/US: `stock_{hk,us}_hist_min_em`（BJT 墙钟窗口）                                                                                                          |
+| Service | `quant_core/services/watch_quote_service.py`                                          | 拉行情 + 评估 hit                                                                                                                                                                  |
+| RPC     | `quant_rpc/ops/watch.py`                                                              | ops `watch.quote_one` / `watch.universe_refresh`（schema 含 amount/volume）                                                                                                        |
+| API     | `apps/api/src/modules/watch/`                                                         | `GET /api/watch`、`POST /api/watch`、`GET/POST /api/watch/groups`、`DELETE /api/watch/groups/:name`；实时流通过 Socket.IO `watch.snapshot` topic（[12-socket.md](./12-socket.md)） |
+| Notify  | `apps/api/src/modules/watch/domain/{evaluate,format}.ts` + `ChannelService.broadcast` | 条件求值 + 文本渲染 + 多 IM 投递（[11-channel.md](./11-channel.md)）                                                                                                               |
+| Web     | `feat-watch-live`、`feat-watch-live/watch-add-form`                                   | 实时表格 + 多选 + 状态徽标；trend baseline 含 window 字段                                                                                                                          |
 
 ## 条件语义（`WatchCondition`）
 
@@ -31,23 +31,25 @@
 type WatchBaseline = 'prev_close' | 'day_high' | 'day_low' | 'vwap' | 'trend';
 
 type WatchCondition =
-  | { kind: 'pct'; op: 'gte' | 'lte';
+  | {
+      kind: 'pct';
+      op: 'gte' | 'lte';
       baseline: WatchBaseline;
-      thresholdPct: string;        // 带符号 Decimal-as-string
-      window?: number;             // 仅 baseline === 'trend' 必填，单位**秒**，1..14400 (4h)
+      thresholdPct: string; // 带符号 Decimal-as-string
+      window?: number; // 仅 baseline === 'trend' 必填，单位**秒**，1..14400 (4h)
     }
   | { kind: 'abs'; op: 'gte' | 'lte'; thresholdPrice: string };
 ```
 
 求值用 `Decimal`，禁用 `number`（`apps/api/.../evaluate.ts`）。基线含义：
 
-| baseline    | 取值                                                                       | 备注 |
-| ----------- | -------------------------------------------------------------------------- | ---- |
-| `prev_close` | 上一交易日收盘                                                           | 来自报价 |
-| `day_high`  | 当日最高                                                                   | 来自报价 |
-| `day_low`   | 当日最低                                                                   | 来自报价 |
-| `vwap`      | `amount / volume`（累计成交额 / 成交量）                                   | `volume <= 0` 时不触发 |
-| `trend`     | 当日已缓存样本中，时间戳 ≤ `latestTs - window 秒` 的最新一条               | `window` 单位为**秒**；调度器维护 `{ts, price}` 内存样本，按 `latestTs - maxWindow` 滚动裁剪；跨日重置；找不到符合 cutoff 的样本时不触发 |
+| baseline     | 取值                                                         | 备注                                                                                                                                     |
+| ------------ | ------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `prev_close` | 上一交易日收盘                                               | 来自报价                                                                                                                                 |
+| `day_high`   | 当日最高                                                     | 来自报价                                                                                                                                 |
+| `day_low`    | 当日最低                                                     | 来自报价                                                                                                                                 |
+| `vwap`       | `amount / volume`（累计成交额 / 成交量）                     | `volume <= 0` 时不触发                                                                                                                   |
+| `trend`      | 当日已缓存样本中，时间戳 ≤ `latestTs - window 秒` 的最新一条 | `window` 单位为**秒**；调度器维护 `{ts, price}` 内存样本，按 `latestTs - maxWindow` 滚动裁剪；跨日重置；找不到符合 cutoff 的样本时不触发 |
 
 > 历史 `prev`（上一次盘中采样）基线已在 2026-05 移除；旧任务由 `migrateLegacyTasks` 自动改写为 `prev_close`。
 

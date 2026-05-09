@@ -43,10 +43,7 @@ function readActiveElement(): HTMLElement | null {
   return el instanceof HTMLElement ? el : null;
 }
 
-export function useFocusTrap(
-  containerRef: RefObject<HTMLElement | null>,
-  active: boolean,
-): void {
+export function useFocusTrap(containerRef: RefObject<HTMLElement | null>, active: boolean): void {
   useEffect(() => {
     if (!active) return;
     const container = containerRef.current;

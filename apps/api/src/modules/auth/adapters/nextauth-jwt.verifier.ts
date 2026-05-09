@@ -65,10 +65,7 @@ export class NextauthJwtVerifier implements SessionVerifier {
 
     let payload: Record<string, unknown>;
     try {
-      payload = JSON.parse(decodeBase64Url(payloadB64).toString('utf8')) as Record<
-        string,
-        unknown
-      >;
+      payload = JSON.parse(decodeBase64Url(payloadB64).toString('utf8')) as Record<string, unknown>;
     } catch {
       return null;
     }
@@ -77,8 +74,7 @@ export class NextauthJwtVerifier implements SessionVerifier {
     const displayName = pickString(payload, ['displayName', 'name']) ?? userId;
     const issuedAt =
       typeof payload['iat'] === 'number' ? payload['iat'] : Math.floor(Date.now() / 1000);
-    const expiresAt =
-      typeof payload['exp'] === 'number' ? payload['exp'] : issuedAt + 60 * 60 * 24;
+    const expiresAt = typeof payload['exp'] === 'number' ? payload['exp'] : issuedAt + 60 * 60 * 24;
     const nowSec = Math.floor(Date.now() / 1000);
     if (expiresAt < nowSec) {
       this.logger.warn('session_verify_expired');

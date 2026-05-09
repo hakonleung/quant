@@ -68,8 +68,8 @@ export function TopBar({ session }: TopBarProps = {}): React.ReactElement {
         </Box>
       )}
       {/* SYS + USR move to bottom-tab nav on mobile — the topbar
-        * collapses to just the brand mark (filling the row) and the
-        * user chip lives inside USR's tall header on desktop. */}
+       * collapses to just the brand mark (filling the row) and the
+       * user chip lives inside USR's tall header on desktop. */}
       {!isMobile && (
         <Box w={sideSlot} flex="0 0 auto" display="flex" alignItems="stretch">
           <FeatUsrMain session={session} />

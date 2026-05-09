@@ -54,18 +54,18 @@ NestJS API process
 
 ## 配置（`apps/api/.env`）
 
-| 名称                            | 必需           | 默认                       | 说明                                |
-| ------------------------------- | -------------- | -------------------------- | ----------------------------------- |
-| `CHANNEL_ENABLED`               | 否             | 空（不启用任何 IM）        | 逗号分隔，如 `slack,feishu`。       |
-| `CHANNEL_DRY_RUN`               | 否             | `false`                    | 强制 dry-run（仅日志，不发请求）。  |
-| `CHANNEL_REDIS_URL`             | 启用任一通道时 | `redis://127.0.0.1:6379`   | BullMQ 连接。                       |
-| `CHANNEL_BULL_PREFIX`           | 否             | `quant:channel`            | 队列前缀，多环境隔离用。            |
-| `CHANNEL_SLACK_BOT_TOKEN`       | 启用 slack 时  | —                          | `xoxb-...`，Web API。               |
-| `CHANNEL_SLACK_APP_TOKEN`       | 否             | —                          | `xapp-...`，启用入站时必须。        |
-| `CHANNEL_SLACK_DEFAULT_CHANNEL` | 否             | `#quant-signals`           | 不指定 target 时的默认频道。        |
-| `CHANNEL_FEISHU_APP_ID`         | 启用 feishu 时 | —                          | `cli_...`。                         |
-| `CHANNEL_FEISHU_APP_SECRET`     | 启用 feishu 时 | —                          | 配合 app id 拿 tenant token。       |
-| `CHANNEL_FEISHU_DEFAULT_CHAT_ID`| 否             | 空（不指定 target 即报错） | 默认推送的 chat_id（`oc_...`）。    |
+| 名称                             | 必需           | 默认                       | 说明                               |
+| -------------------------------- | -------------- | -------------------------- | ---------------------------------- |
+| `CHANNEL_ENABLED`                | 否             | 空（不启用任何 IM）        | 逗号分隔，如 `slack,feishu`。      |
+| `CHANNEL_DRY_RUN`                | 否             | `false`                    | 强制 dry-run（仅日志，不发请求）。 |
+| `CHANNEL_REDIS_URL`              | 启用任一通道时 | `redis://127.0.0.1:6379`   | BullMQ 连接。                      |
+| `CHANNEL_BULL_PREFIX`            | 否             | `quant:channel`            | 队列前缀，多环境隔离用。           |
+| `CHANNEL_SLACK_BOT_TOKEN`        | 启用 slack 时  | —                          | `xoxb-...`，Web API。              |
+| `CHANNEL_SLACK_APP_TOKEN`        | 否             | —                          | `xapp-...`，启用入站时必须。       |
+| `CHANNEL_SLACK_DEFAULT_CHANNEL`  | 否             | `#quant-signals`           | 不指定 target 时的默认频道。       |
+| `CHANNEL_FEISHU_APP_ID`          | 启用 feishu 时 | —                          | `cli_...`。                        |
+| `CHANNEL_FEISHU_APP_SECRET`      | 启用 feishu 时 | —                          | 配合 app id 拿 tenant token。      |
+| `CHANNEL_FEISHU_DEFAULT_CHAT_ID` | 否             | 空（不指定 target 即报错） | 默认推送的 chat*id（`oc*...`）。   |
 
 ## HTTP 路由
 

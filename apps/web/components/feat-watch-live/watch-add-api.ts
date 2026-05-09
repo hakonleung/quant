@@ -7,11 +7,7 @@
  * (CLAUDE.md §1.3 — system boundary code lives in adapters).
  */
 
-import {
-  WatchGroupCreateSchema,
-  WatchGroupSchema,
-  type WatchGroup,
-} from '@quant/shared';
+import { WatchGroupCreateSchema, WatchGroupSchema, type WatchGroup } from '@quant/shared';
 import { z } from 'zod';
 
 import {

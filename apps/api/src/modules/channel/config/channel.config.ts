@@ -94,9 +94,7 @@ export function loadChannelConfig(env: NodeJS.ProcessEnv = process.env): Channel
   let feishu: FeishuConfig | null = null;
   if (enabled.has('feishu')) {
     if (raw.CHANNEL_FEISHU_APP_ID === undefined || raw.CHANNEL_FEISHU_APP_SECRET === undefined) {
-      throw new Error(
-        'channel:feishu enabled but CHANNEL_FEISHU_APP_ID/SECRET is missing',
-      );
+      throw new Error('channel:feishu enabled but CHANNEL_FEISHU_APP_ID/SECRET is missing');
     }
     feishu = {
       appId: raw.CHANNEL_FEISHU_APP_ID,

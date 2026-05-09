@@ -30,11 +30,7 @@ interface EditableTitleProps {
   readonly onSave: (next: string) => void;
 }
 
-export function EditableTitle({
-  value,
-  editable,
-  onSave,
-}: EditableTitleProps): React.ReactElement {
+export function EditableTitle({ value, editable, onSave }: EditableTitleProps): React.ReactElement {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value);
   useEffect(() => {
@@ -154,10 +150,7 @@ interface UserSectorHeaderProps {
   readonly onBatchAdd: (codes: readonly string[]) => void;
 }
 
-export function UserSectorHeader({
-  onAdd,
-  onBatchAdd,
-}: UserSectorHeaderProps): React.ReactElement {
+export function UserSectorHeader({ onAdd, onBatchAdd }: UserSectorHeaderProps): React.ReactElement {
   return (
     <Box flexShrink={0}>
       <FeatScrNl

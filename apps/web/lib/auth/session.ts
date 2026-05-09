@@ -34,7 +34,11 @@ export async function getSession(): Promise<Session | null> {
   const payload = verifySession(raw, cfg.nextauthSecret);
   if (payload === null) return null;
   return {
-    user: { id: payload.userId, name: payload.displayName, imBootstrap: payload.imBootstrap === true },
+    user: {
+      id: payload.userId,
+      name: payload.displayName,
+      imBootstrap: payload.imBootstrap === true,
+    },
     token: raw,
   };
 }

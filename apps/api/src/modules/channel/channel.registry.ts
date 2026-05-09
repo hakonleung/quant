@@ -17,11 +17,7 @@ import {
   type OnModuleDestroy,
   type OnModuleInit,
 } from '@nestjs/common';
-import {
-  type ChannelActivity,
-  type ChannelId,
-  type ChannelStatus,
-} from '@quant/shared';
+import { type ChannelActivity, type ChannelId, type ChannelStatus } from '@quant/shared';
 import { randomUUID } from 'node:crypto';
 
 import { CHANNEL_CONFIG, type ChannelConfig } from './config/channel.config.js';

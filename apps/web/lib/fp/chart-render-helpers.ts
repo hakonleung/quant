@@ -35,10 +35,7 @@ export function priceAxisTicks(min: number, max: number, count: number): readonl
  * roughly one tick per ~12 visible bars (clamped to [2, 8]) and uses
  * `sparseIndices` to spread them evenly through the slice.
  */
-export function dateAxisTickIndices(
-  sliceStartIdx: number,
-  sliceCount: number,
-): readonly number[] {
+export function dateAxisTickIndices(sliceStartIdx: number, sliceCount: number): readonly number[] {
   const target = Math.max(2, Math.min(8, Math.round(sliceCount / 12)));
   return sparseIndices(sliceCount, target).map((k) => sliceStartIdx + k);
 }
@@ -81,9 +78,7 @@ export interface CandleGeometryInput {
   readonly volMax: number;
 }
 
-export function computeCandleGeometry(
-  input: CandleGeometryInput,
-): readonly CandleGeometry[] {
+export function computeCandleGeometry(input: CandleGeometryInput): readonly CandleGeometry[] {
   const out: CandleGeometry[] = [];
   for (let i = input.sliceStartIdx; i < input.sliceStartIdx + input.sliceCount; i += 1) {
     const b = input.bars[i];

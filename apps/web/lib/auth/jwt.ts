@@ -70,9 +70,6 @@ function base64UrlEncode(buf: Buffer): string {
 
 function decodeBase64Url(s: string): Buffer {
   const normalised = s.replace(/-/gu, '+').replace(/_/gu, '/');
-  const padded = normalised.padEnd(
-    normalised.length + ((4 - (normalised.length % 4)) % 4),
-    '=',
-  );
+  const padded = normalised.padEnd(normalised.length + ((4 - (normalised.length % 4)) % 4), '=');
   return Buffer.from(padded, 'base64');
 }

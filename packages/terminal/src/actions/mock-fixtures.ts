@@ -176,7 +176,8 @@ export function fixtureMarketSentiment(codes: readonly string[]): MarketSentimen
     score: round(avg),
     themes: ['行业景气复苏', '资金流入'],
     cachedAt: new Date().toISOString(),
-    marketTrendSummary: '板块呈温和复苏态势，主线题材集中在景气改善 + 资金面共振；短期关注波动率回归。',
+    marketTrendSummary:
+      '板块呈温和复苏态势，主线题材集中在景气改善 + 资金面共振；短期关注波动率回归。',
     themeClusters: [
       {
         label: '行业景气复苏',

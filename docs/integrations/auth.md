@@ -8,10 +8,10 @@
 `AUTH_MODE` is a single env var consumed by both the API (`apps/api`) and
 the web (`apps/web`). The two ends MUST agree:
 
-| Mode       | Behaviour                                                                                          |
-| ---------- | -------------------------------------------------------------------------------------------------- |
-| `disabled` | Every request inherits a synthetic `admin` user. Per-user dir at `data/users/admin/`. Default.     |
-| `oauth`    | Web requires Feishu OAuth login. Per-user dir at `data/users/${userId}/` for `feishu:${open_id}`.  |
+| Mode       | Behaviour                                                                                         |
+| ---------- | ------------------------------------------------------------------------------------------------- |
+| `disabled` | Every request inherits a synthetic `admin` user. Per-user dir at `data/users/admin/`. Default.    |
+| `oauth`    | Web requires Feishu OAuth login. Per-user dir at `data/users/${userId}/` for `feishu:${open_id}`. |
 
 The web side reads `NEXT_PUBLIC_AUTH_MODE` (Next.js can't see private env
 vars in the browser bundle) — keep both vars in sync.
@@ -88,14 +88,14 @@ commands.
 `apps/api/src/common/user-scoped-store.ts` is the single helper backing
 all five user-scoped stores:
 
-| Store             | File                                         |
-| ----------------- | -------------------------------------------- |
-| Ledger entries    | `data/users/{uid}/_ledger/entries.json`      |
-| Ledger AI cache   | `data/users/{uid}/_ledger/ai-cache.json`     |
-| Watch tasks       | `data/users/{uid}/watch/tasks.json`          |
-| Watch groups      | `data/users/{uid}/watch/groups.json`         |
-| Sys-Cfg           | `data/users/{uid}/sys-cfg/sys-cfg.json`      |
-| User registry     | `data/users/_meta/users.json`                |
+| Store           | File                                     |
+| --------------- | ---------------------------------------- |
+| Ledger entries  | `data/users/{uid}/_ledger/entries.json`  |
+| Ledger AI cache | `data/users/{uid}/_ledger/ai-cache.json` |
+| Watch tasks     | `data/users/{uid}/watch/tasks.json`      |
+| Watch groups    | `data/users/{uid}/watch/groups.json`     |
+| Sys-Cfg         | `data/users/{uid}/sys-cfg/sys-cfg.json`  |
+| User registry   | `data/users/_meta/users.json`            |
 
 Shared (NOT user-scoped): `data/kline/`, `data/sectors/`, `data/blacklist.json`,
 `data/sentiment/`, `data/ta/`, `data/meta/`, `data/watch/universe_*.json`.

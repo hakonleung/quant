@@ -21,11 +21,7 @@
 import { InjectQueue } from '@nestjs/bullmq';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import {
-  type ChannelActivity,
-  type ChannelId,
-  type ChannelMessageSource,
-} from '@quant/shared';
+import { type ChannelActivity, type ChannelId, type ChannelMessageSource } from '@quant/shared';
 import { Queue } from 'bullmq';
 
 import { SocketBus } from '../../socket/socket-bus.service.js';

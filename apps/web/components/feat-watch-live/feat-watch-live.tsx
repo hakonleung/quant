@@ -692,9 +692,7 @@ function formatCondition(c: WatchCondition): string {
   const op = c.op === 'gte' ? '≥' : '≤';
   if (c.kind === 'pct') {
     const base =
-      c.baseline === 'trend' && c.window !== undefined
-        ? `trend(${String(c.window)}s)`
-        : c.baseline;
+      c.baseline === 'trend' && c.window !== undefined ? `trend(${String(c.window)}s)` : c.baseline;
     return `pct($, ${base}) ${op} ${c.thresholdPct}%`;
   }
   return `abs($) ${op} ${c.thresholdPrice}`;

@@ -13,8 +13,7 @@ const TRANSITION_MS = 280;
 
 /** Returns true when the user has asked for reduced motion. SSR-safe. */
 const prefersReducedMotion = (): boolean =>
-  typeof window !== 'undefined' &&
-  window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 /** Inline styles applied to the pane when it switches to fullscreen.
  *  Lifted to module scope so the pane chrome stays under the per-

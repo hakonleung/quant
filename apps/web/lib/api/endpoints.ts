@@ -224,10 +224,8 @@ export async function patchLedgerEntry(
   if (Object.prototype.hasOwnProperty.call(body, 'closingPosition')) {
     payload['closingPosition'] = body.closingPosition ?? null;
   }
-  return apiPatch(
-    `/api/ledger/${encodeURIComponent(date)}`,
-    payload,
-    (raw) => LedgerEntrySchema.parse(raw),
+  return apiPatch(`/api/ledger/${encodeURIComponent(date)}`, payload, (raw) =>
+    LedgerEntrySchema.parse(raw),
   );
 }
 
@@ -236,10 +234,8 @@ export async function deleteLedgerEntry(date: string): Promise<void> {
 }
 
 export async function importLedger(entries: readonly LedgerEntry[]): Promise<LedgerSnapshot> {
-  return apiPost(
-    `/api/ledger/import`,
-    { entries: [...entries] },
-    (raw) => LedgerSnapshotSchema.parse(raw),
+  return apiPost(`/api/ledger/import`, { entries: [...entries] }, (raw) =>
+    LedgerSnapshotSchema.parse(raw),
   );
 }
 
@@ -251,10 +247,8 @@ export async function getCachedLedgerAnalysis(): Promise<LedgerAnalysis | null> 
 }
 
 export async function analyzeLedger(bypassCache = false): Promise<LedgerAnalysis> {
-  return apiPost(
-    `/api/ledger/analyze`,
-    bypassCache ? { bypassCache } : {},
-    (raw) => LedgerAnalysisSchema.parse(raw),
+  return apiPost(`/api/ledger/analyze`, bypassCache ? { bypassCache } : {}, (raw) =>
+    LedgerAnalysisSchema.parse(raw),
   );
 }
 

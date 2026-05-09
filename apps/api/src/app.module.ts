@@ -31,7 +31,10 @@ import { WatchModule } from './modules/watch/watch.module.js';
     // Instruction must come before SocketModule.forRoot so the
     // SocketInstructionAdapter provider exists when the socket module
     // resolves SOCKET_COMMAND_HANDLER via `useExisting`.
-    SocketModule.forRoot({ imports: [InstructionModule], commandHandler: SocketInstructionAdapter }),
+    SocketModule.forRoot({
+      imports: [InstructionModule],
+      commandHandler: SocketInstructionAdapter,
+    }),
     BlacklistModule,
     StockMetaModule,
     OrchestrationModule,

@@ -35,13 +35,14 @@ describe('loadChannelConfig', () => {
   });
 
   it('rejects feishu=enabled without app id/secret', () => {
-    expect(() => loadChannelConfig({ CHANNEL_ENABLED: 'feishu' })).toThrow(
-      /CHANNEL_FEISHU_APP_ID/,
-    );
+    expect(() => loadChannelConfig({ CHANNEL_ENABLED: 'feishu' })).toThrow(/CHANNEL_FEISHU_APP_ID/);
   });
 
   it('ignores unknown channel ids in CHANNEL_ENABLED', () => {
-    const cfg = loadChannelConfig({ CHANNEL_ENABLED: 'imaginary,slack', CHANNEL_SLACK_BOT_TOKEN: 'xoxb' });
+    const cfg = loadChannelConfig({
+      CHANNEL_ENABLED: 'imaginary,slack',
+      CHANNEL_SLACK_BOT_TOKEN: 'xoxb',
+    });
     expect(cfg.enabled.has('slack')).toBe(true);
     expect(cfg.enabled.size).toBe(1);
   });

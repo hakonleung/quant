@@ -186,15 +186,7 @@ interface RowProps {
   readonly busy: boolean;
 }
 
-function Row({
-  entry,
-  top,
-  height,
-  tier,
-  onEdit,
-  onDelete,
-  busy,
-}: RowProps): React.ReactElement {
+function Row({ entry, top, height, tier, onEdit, onDelete, busy }: RowProps): React.ReactElement {
   const pnlD = new Decimal(entry.pnlAmount);
   // 涨红跌绿: positive PnL → up (red), negative → down (green).
   // LDG renders inside the cyber USR pane — neutral PnL must use
