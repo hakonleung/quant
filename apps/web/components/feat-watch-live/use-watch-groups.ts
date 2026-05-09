@@ -1,18 +1,19 @@
 'use client';
 
 /**
- * `useGroups` hook — owned by the WATCH add-form. Lives in its own
- * file so the form component stays under the 400-line ceiling. The
- * hook re-fetches when `refresh()` is called, which the form invokes
- * after a successful new-group creation so the dropdown reflects the
- * new entry without a page reload.
+ * `useWatchGroups` — react-query hook backing the WATCH add-form
+ * dropdown and the live-pane group config. Sharing the same query key
+ * lets the form's `refresh` invalidate the cache for both callers in
+ * one shot, and tab-flips inside USR re-use the cached groups list.
  */
 
-import { useCallback, useEffect, useState } from 'react';
-
 import type { WatchGroup } from '@quant/shared';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useCallback } from 'react';
 
 import { fetchGroups } from './watch-add-api.js';
+
+export const WATCH_GROUPS_KEY = ['watch', 'groups'] as const;
 
 export interface UseWatchGroupsResult {
   readonly groups: readonly WatchGroup[];
@@ -20,23 +21,17 @@ export interface UseWatchGroupsResult {
 }
 
 export function useWatchGroups(): UseWatchGroupsResult {
-  const [groups, setGroups] = useState<readonly WatchGroup[]>([]);
-  const [tick, setTick] = useState(0);
-  useEffect(() => {
-    let cancelled = false;
-    void fetchGroups()
-      .then((g) => {
-        if (!cancelled) setGroups(g);
-      })
-      .catch(() => {
-        if (!cancelled) setGroups([]);
-      });
-    return (): void => {
-      cancelled = true;
-    };
-  }, [tick]);
+  const qc = useQueryClient();
+  const q = useQuery<readonly WatchGroup[]>({
+    queryKey: WATCH_GROUPS_KEY,
+    queryFn: fetchGroups,
+    staleTime: 60_000,
+    placeholderData: EMPTY_GROUPS,
+  });
   const refresh = useCallback((): void => {
-    setTick((t) => t + 1);
-  }, []);
-  return { groups, refresh };
+    void qc.invalidateQueries({ queryKey: WATCH_GROUPS_KEY });
+  }, [qc]);
+  return { groups: q.data ?? EMPTY_GROUPS, refresh };
 }
+
+const EMPTY_GROUPS: readonly WatchGroup[] = Object.freeze([]);

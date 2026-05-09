@@ -19,7 +19,10 @@ import {
 } from '../../lib/fp/watch-add-fp.js';
 
 export async function fetchGroups(): Promise<readonly WatchGroup[]> {
-  const res = await fetch('/api/watch/groups', { cache: 'no-store' });
+  // No `cache: 'no-store'` — react-query owns staleness; bypassing the
+  // HTTP cache here just slowed every USR-pane mount with a needless
+  // round-trip.
+  const res = await fetch('/api/watch/groups');
   if (!res.ok) throw new Error(`groups list failed: ${String(res.status)}`);
   const raw: unknown = await res.json();
   return z.array(WatchGroupSchema).parse(raw);

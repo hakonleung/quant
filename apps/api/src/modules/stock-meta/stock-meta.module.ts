@@ -12,6 +12,7 @@
  */
 
 import { Module } from '@nestjs/common';
+import { SYSTEM_CLOCK_PROVIDER } from '../../common/clock.js';
 import { FlightClient } from '../../adapters/flight/flight-client.js';
 import { OrchestrationModule } from '../orchestration/orchestration.module.js';
 import { STOCK_META_PORT } from './domain/stock-meta-port.js';
@@ -35,6 +36,7 @@ const DEFAULT_FLIGHT_TARGET = '127.0.0.1:8815';
       },
     },
     { provide: STOCK_META_PORT, useClass: FlightStockMetaAdapter },
+    SYSTEM_CLOCK_PROVIDER,
     StockMetaService,
     FocusInstructionHandler,
     StockInstructionHandler,

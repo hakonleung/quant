@@ -18,14 +18,12 @@
 
 import { Box, Checkbox, Flex, Text } from '@chakra-ui/react';
 import {
-  WatchGroupSchema,
   WatchSnapshotPayloadSchema,
   type WatchCondition,
   type WatchGroup,
   type WatchTask,
 } from '@quant/shared';
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { z } from 'zod';
+import { useEffect, useMemo, useState } from 'react';
 
 import { Feat } from '../../lib/eqty/feat.js';
 import { ConfirmCancelled, useConfirm } from '../../lib/hooks/use-confirm.js';
@@ -33,6 +31,7 @@ import { useViewport } from '../../lib/hooks/use-viewport.js';
 import { useSocketTopic } from '../../lib/socket/use-socket-topic.js';
 import { FeatView } from '../feat-view/feat-view.js';
 import { MonoButton } from '../ui/mono-button.js';
+import { useWatchGroups } from './use-watch-groups.js';
 import { WatchAddForm, type PickedStock, type WatchAddInitial } from './watch-add-form.js';
 
 type StreamState =
@@ -101,34 +100,6 @@ function groupTasks(
   return out;
 }
 
-async function fetchGroups(): Promise<readonly WatchGroup[]> {
-  const res = await fetch('/api/watch/groups', { cache: 'no-store' });
-  if (!res.ok) return [];
-  const raw: unknown = await res.json();
-  return z.array(WatchGroupSchema).parse(raw);
-}
-
-function useGroupConfigs(): {
-  readonly groups: readonly WatchGroup[];
-  readonly refresh: () => void;
-} {
-  const [groups, setGroups] = useState<readonly WatchGroup[]>([]);
-  const [tick, setTick] = useState(0);
-  useEffect(() => {
-    let cancelled = false;
-    void fetchGroups().then((g) => {
-      if (!cancelled) setGroups(g);
-    });
-    return (): void => {
-      cancelled = true;
-    };
-  }, [tick]);
-  const refresh = useCallback((): void => {
-    setTick((t) => t + 1);
-  }, []);
-  return { groups, refresh };
-}
-
 interface FeatWatchLiveProps {
   /** Hosted inside USR.MAIN as a tab — drop the FeatView chrome. */
   readonly bare?: boolean;
@@ -154,7 +125,7 @@ export function FeatWatchLive({ bare }: FeatWatchLiveProps = {}): React.ReactEle
     if (formInitial !== undefined) setFormOpen(true);
   }, [formInitial]);
   const tasks = state.kind === 'open' ? state.tasks : [];
-  const { groups: groupConfigs, refresh: refreshGroupConfigs } = useGroupConfigs();
+  const { groups: groupConfigs, refresh: refreshGroupConfigs } = useWatchGroups();
   const groups = useMemo(() => groupTasks(tasks, groupConfigs), [tasks, groupConfigs]);
   const { guard, comp: confirmComp } = useConfirm();
 

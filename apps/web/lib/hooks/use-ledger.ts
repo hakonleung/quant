@@ -43,7 +43,10 @@ export function useLedgerEntries(): UseQueryResult<readonly LedgerEntry[]> {
   return useQuery({
     queryKey: ENTRIES_KEY,
     queryFn: () => listLedgerEntries(),
-    staleTime: 30_000,
+    // 5 min: every mutation (create/patch/remove/import) calls
+    // `invalidate()` so the staleTime can't mask user-driven writes.
+    // Tab-flips (USR LDG ↔ WATCH ↔ CFG) within 5 min reuse the cache.
+    staleTime: 5 * 60_000,
   });
 }
 
