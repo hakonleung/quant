@@ -82,7 +82,7 @@ export class HelpHandler extends InstructionRegistrarBase<Args> {
         title: GROUP_LABEL[group],
         columns: [
           { name: 'id', displayName: 'id', horizontalAlign: 'left', width: '160px' },
-          { name: 'tags', displayName: 'tag', horizontalAlign: 'left', width: '70px' },
+          { name: 'tags', displayName: 'tag', horizontalAlign: 'left', width: '80px' },
           { name: 'cn', displayName: '中文', horizontalAlign: 'left' },
           { name: 'example', displayName: '示例', horizontalAlign: 'left', width: '220px' },
         ],

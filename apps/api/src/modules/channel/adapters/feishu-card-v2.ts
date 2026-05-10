@@ -54,6 +54,53 @@ function isScalar(v: unknown): v is string | number {
   return typeof v === 'string' || typeof v === 'number';
 }
 
+const PX_MIN = 80;
+const PX_MAX = 600;
+const PCT_MIN = 1;
+const PCT_MAX = 100;
+
+/**
+ * Coerce a handler-supplied column width into one Feishu's v2 table
+ * accepts. The cardkit-v2 spec only allows three forms:
+ *
+ *   - `'auto'` — passed through verbatim
+ *   - `'<n>px'` — integer in `[80, 600]`
+ *   - `'<n>%'` — integer in `[1, 100]`
+ *
+ * Anything else (negative numbers, non-integer pixel/percent values,
+ * a bare number, garbled units, etc.) gets dropped — the column then
+ * falls back to Feishu's default width instead of 400ing the entire
+ * card. Out-of-range integers are clamped to the nearest legal bound
+ * so handlers don't have to know the magic numbers.
+ *
+ * Returns `null` to signal "omit the property" so the caller can fall
+ * back to the spread-based optional include pattern.
+ */
+function sanitizeColumnWidth(raw: string | undefined): string | null {
+  if (raw === undefined) return null;
+  const trimmed = raw.trim();
+  if (trimmed === '') return null;
+  if (trimmed === 'auto') return 'auto';
+  const pxMatch = /^(\d+)px$/u.exec(trimmed);
+  if (pxMatch !== null) {
+    const n = clampInt(Number(pxMatch[1]), PX_MIN, PX_MAX);
+    return n === null ? null : `${String(n)}px`;
+  }
+  const pctMatch = /^(\d+)%$/u.exec(trimmed);
+  if (pctMatch !== null) {
+    const n = clampInt(Number(pctMatch[1]), PCT_MIN, PCT_MAX);
+    return n === null ? null : `${String(n)}%`;
+  }
+  return null;
+}
+
+function clampInt(n: number, lo: number, hi: number): number | null {
+  if (!Number.isFinite(n) || !Number.isInteger(n)) return null;
+  if (n < lo) return lo;
+  if (n > hi) return hi;
+  return n;
+}
+
 function metaRows(meta: Readonly<Record<string, unknown>>): readonly StockTableMetaRow[] | null {
   const raw = meta['stockTableRows'];
   if (!Array.isArray(raw) || raw.length === 0) return null;
@@ -285,12 +332,13 @@ function buildTableComponent(args: {
     header_style: { background_style: 'grey', bold: true, text_align: 'left' },
     columns: args.columns.map((c) => {
       const dn = c.displayName !== undefined && c.displayName.length > 0 ? c.displayName : c.name;
+      const sanitized = sanitizeColumnWidth(c.width);
       return {
         name: c.name,
         display_name: dn,
         data_type: c.dataType ?? 'text',
         ...(c.horizontalAlign !== undefined ? { horizontal_align: c.horizontalAlign } : {}),
-        ...(c.width !== undefined ? { width: c.width } : {}),
+        ...(sanitized !== null ? { width: sanitized } : {}),
       };
     }),
     rows: args.rows.map((r) => {

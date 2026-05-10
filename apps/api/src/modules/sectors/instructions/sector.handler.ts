@@ -56,10 +56,12 @@ export class SectorInstructionHandler extends InstructionRegistrarBase<Args> {
         tableSections: [
           {
             columns: [
-              { name: 'pub', displayName: 'pub', horizontalAlign: 'center', width: '50px' },
+              // Feishu v2 table only accepts widths in [80px, 600px] — narrower
+              // labels still take the 80px floor.
+              { name: 'pub', displayName: 'pub', horizontalAlign: 'center', width: '80px' },
               { name: 'id', displayName: 'id', horizontalAlign: 'left', width: '90px' },
               { name: 'name', displayName: 'name', horizontalAlign: 'left', width: '160px' },
-              { name: 'count', displayName: 'n', horizontalAlign: 'right', width: '60px' },
+              { name: 'count', displayName: 'n', horizontalAlign: 'right', width: '80px' },
               { name: 'by', displayName: 'by', horizontalAlign: 'left', width: '120px' },
             ],
             rows,
