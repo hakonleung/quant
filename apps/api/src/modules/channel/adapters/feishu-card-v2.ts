@@ -283,9 +283,10 @@ function buildTableComponent(args: {
     name: args.name,
     page_size: 10,
     row_height: 'low',
-    // `freeze_first_column` is NOT a valid v2-table field — keeping it
-    // is one of the reasons Feishu was 400ing every table card. Drop it.
-    header_style: { background_style: 'grey', bold_font: true, text_align: 'left' },
+    // `freeze_first_column` is NOT a valid v2-table field; keeping it
+    // out. `bold` is the spec field name for header weight (not
+    // `bold_font` — that mistake was the cause of an earlier 400).
+    header_style: { background_style: 'grey', bold: true, text_align: 'left' },
     columns: args.columns.map((c) => {
       const dn = c.displayName !== undefined && c.displayName.length > 0 ? c.displayName : c.name;
       return {
