@@ -8,10 +8,15 @@
  *   - per-codes-hash: `${dataRoot}/sentiment/market/{hash}.json` —
  *     slim `MarketSentiment` view; hash = sha256(canonicalised codes).
  *
- * Cache key includes `windowDays` + `asof` (resolved to today's UTC
- * date when the request didn't pin one). 2-trading-day TTL is
- * implemented as "asof must match" — once the backing data ages out,
- * the next request gets a miss and re-runs the LLM.
+ * Cache key is `(code | codeHash, windowDays)`. **TTL is 30 calendar
+ * days from the original analysis timestamp** — `Sentiment.cachedAt`
+ * for stock entries, `MarketSentiment.fetchedAt` for market entries.
+ * News and search results age slowly enough that 30 days is a
+ * reasonable upper bound; users that want fresher numbers pass
+ * `fresh=1` to bypass.
+ *
+ * Different `windowDays` is a separate cache entry — `analyze 600519
+ * windowDays=7` and the default 30-day query don't collide.
  */
 
 import { Inject, Injectable, Logger } from '@nestjs/common';
@@ -23,17 +28,19 @@ import {
 } from '@quant/shared';
 import path from 'node:path';
 
+import { CLOCK, type Clock } from '../../common/clock.js';
 import { atomicWriteJson, readJsonOr } from '../watch/domain/atomic-json.js';
 import { SENTIMENT_DATA_DIR } from './sentiment.token.js';
 
+/** 30 calendar days. */
+const TTL_MS = 30 * 24 * 60 * 60 * 1000;
+
 interface StockEntry {
-  readonly asof: string;
   readonly windowDays: number;
   readonly value: Sentiment;
 }
 
 interface MarketEntry {
-  readonly asof: string;
   readonly windowDays: number;
   readonly value: MarketSentiment;
 }
@@ -43,54 +50,62 @@ export class SentimentCacheStore {
   private readonly logger = new Logger(SentimentCacheStore.name);
   private readonly mutex = new Map<string, Promise<unknown>>();
 
-  constructor(@Inject(SENTIMENT_DATA_DIR) private readonly dataRoot: string) {}
+  constructor(
+    @Inject(SENTIMENT_DATA_DIR) private readonly dataRoot: string,
+    @Inject(CLOCK) private readonly clock: Clock,
+  ) {}
 
-  async getStock(code: string, asof: string, windowDays: number): Promise<Sentiment | null> {
+  async getStock(code: string, windowDays: number): Promise<Sentiment | null> {
     const file = this.stockFile(code);
     const raw = await readJsonOr<unknown>(file, null);
     if (raw === null) return null;
     if (typeof raw !== 'object' || raw === null) return null;
     const entry = raw as Partial<StockEntry>;
-    if (entry.asof !== asof || entry.windowDays !== windowDays) return null;
+    if (entry.windowDays !== windowDays) return null;
     const parsed = SentimentSchema.safeParse(entry.value);
     if (!parsed.success) {
       this.logger.warn(`sentiment_stock_cache_invalid file=${file}`);
       return null;
     }
+    if (this.isStale(parsed.data.cachedAt)) return null;
     return parsed.data;
   }
 
-  async putStock(value: Sentiment, asof: string, windowDays: number): Promise<void> {
-    const entry: StockEntry = { asof, windowDays, value };
+  async putStock(value: Sentiment, windowDays: number): Promise<void> {
+    const entry: StockEntry = { windowDays, value };
     await this.runLocked(`stock:${value.code}`, () =>
       atomicWriteJson(this.stockFile(value.code), entry),
     );
   }
 
-  async getMarket(
-    codeHash: string,
-    asof: string,
-    windowDays: number,
-  ): Promise<MarketSentiment | null> {
+  async getMarket(codeHash: string, windowDays: number): Promise<MarketSentiment | null> {
     const file = this.marketFile(codeHash);
     const raw = await readJsonOr<unknown>(file, null);
     if (raw === null) return null;
     if (typeof raw !== 'object' || raw === null) return null;
     const entry = raw as Partial<MarketEntry>;
-    if (entry.asof !== asof || entry.windowDays !== windowDays) return null;
+    if (entry.windowDays !== windowDays) return null;
     const parsed = MarketSentimentSchema.safeParse(entry.value);
     if (!parsed.success) {
       this.logger.warn(`sentiment_market_cache_invalid file=${file}`);
       return null;
     }
+    if (this.isStale(parsed.data.fetchedAt)) return null;
     return parsed.data;
   }
 
-  async putMarket(value: MarketSentiment, asof: string, windowDays: number): Promise<void> {
-    const entry: MarketEntry = { asof, windowDays, value };
+  async putMarket(value: MarketSentiment, windowDays: number): Promise<void> {
+    const entry: MarketEntry = { windowDays, value };
     await this.runLocked(`market:${value.codeHash}`, () =>
       atomicWriteJson(this.marketFile(value.codeHash), entry),
     );
+  }
+
+  /** True when the on-disk timestamp is older than {@link TTL_MS}. */
+  private isStale(timestampIso: string): boolean {
+    const t = Date.parse(timestampIso);
+    if (!Number.isFinite(t)) return true;
+    return this.clock.now().getTime() - t > TTL_MS;
   }
 
   private stockFile(code: string): string {

@@ -83,33 +83,34 @@ export class NewsSentimentService {
   ) {}
 
   async getCachedStock(code: string, windowDays: number): Promise<Sentiment | null> {
-    const asof = this.todayAsof();
-    return this.cache.getStock(code, asof, windowDays);
+    return this.cache.getStock(code, windowDays);
   }
 
   async getCachedMarket(
     codes: readonly string[],
     windowDays: number,
   ): Promise<MarketSentiment | null> {
-    const asof = this.todayAsof();
     const canon = canonicaliseCodes(codes);
     const codeHash = sha256(canon.join(','));
-    return this.cache.getMarket(codeHash, asof, windowDays);
+    return this.cache.getMarket(codeHash, windowDays);
   }
 
   async analyzeOne(args: AnalyzeOneArgs, ctx: SentimentCallContext): Promise<Sentiment> {
     const code = args.code;
     const windowDays = args.windowDays ?? DEFAULT_WINDOW_DAYS;
-    const asof = this.todayAsof();
 
     if (args.bypassCache !== true) {
-      const cached = await this.cache.getStock(code, asof, windowDays);
+      const cached = await this.cache.getStock(code, windowDays);
       if (cached !== null) return cached;
     }
 
+    // `asof` is still today's UTC date — it goes into the LLM prompt as
+    // "截止日期" so the analyst pass anchors on a stable timestamp. It's
+    // no longer used as a cache key (TTL is now timestamp-driven).
+    const asof = this.todayAsof();
     const meta = await this.meta.get(code, ctx.traceId);
     const result = await this.runPerStock({ meta, asof, windowDays, ctx });
-    await this.cache.putStock(result, asof, windowDays);
+    await this.cache.putStock(result, windowDays);
     return result;
   }
 
@@ -118,14 +119,14 @@ export class NewsSentimentService {
       throw new QuantError('INVALID_ARGUMENT', 'codes must be non-empty', {});
     }
     const windowDays = args.windowDays ?? DEFAULT_WINDOW_DAYS;
-    const asof = this.todayAsof();
     const canon = canonicaliseCodes(args.codes);
     const codeHash = sha256(canon.join(','));
 
     if (args.bypassCache !== true) {
-      const cached = await this.cache.getMarket(codeHash, asof, windowDays);
+      const cached = await this.cache.getMarket(codeHash, windowDays);
       if (cached !== null) return cached;
     }
+    const asof = this.todayAsof();
 
     const settled = await Promise.allSettled(
       canon.map((code) =>
@@ -173,7 +174,7 @@ export class NewsSentimentService {
       marketTrendSummary,
       caveats,
     });
-    await this.cache.putMarket(result, asof, windowDays);
+    await this.cache.putMarket(result, windowDays);
     return result;
   }
 
