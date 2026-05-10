@@ -152,6 +152,9 @@ async function buildEnv(seed: WatchTask): Promise<{
 }
 
 describe('WatchScheduler.tick', () => {
+  beforeEach(() => jest.useFakeTimers());
+  afterEach(() => jest.useRealTimers());
+
   it('fetches quote and pushes when condition hits (no prior hit)', async () => {
     const { store, groups, users } = await buildEnv(task());
     const port = new FakeQuotePort();
@@ -160,6 +163,7 @@ describe('WatchScheduler.tick', () => {
     const sched = newScheduler(store, groups, port, notifier, users);
 
     await sched.tick(TICK_TIME);
+    await jest.runAllTimersAsync();
 
     expect(port.calls).toHaveLength(1);
     expect(notifier.sent).toHaveLength(1);
@@ -222,6 +226,7 @@ describe('WatchScheduler.tick', () => {
     const sched = newScheduler(store, groups, port, notifier, users);
 
     await sched.tick(TICK_TIME);
+    await jest.runAllTimersAsync();
 
     expect(notifier.sent).toHaveLength(1);
     const after = await store.get(USER, 'a', '600000');
@@ -271,6 +276,7 @@ describe('WatchScheduler.tick', () => {
     await sched.tick(TICK_TIME);
     await sched.tick(new Date(TICK_TIME.getTime() + 30_000));
     await sched.tick(new Date(TICK_TIME.getTime() + 60_000));
+    await jest.runAllTimersAsync();
 
     expect(notifier.sent).toHaveLength(1);
     expect((await store.get(USER, 'a', '600000'))?.hitCount).toBe(1);
@@ -315,5 +321,47 @@ describe('WatchScheduler.tick', () => {
     await sched.tick(new Date('2026-05-09T01:30:00Z'));
 
     expect(port.calls).toHaveLength(0);
+  });
+
+  it('batches two hits from same tick into one broadcast', async () => {
+    const root = await tmpRoot();
+    const store = new WatchTaskStore(cfg(root));
+    const groups = new WatchGroupStore(cfg(root));
+    await store.upsert(USER, task({ code: '600000', name: '浦发银行', idx: 1 }));
+    await store.upsert(USER, task({ code: '600519', name: '贵州茅台', idx: 2 }));
+    const users = new FakeUserStore([USER]);
+    const port = new FakeQuotePort();
+    port.responses.push(quote({ code: '600000' }));
+    port.responses.push(quote({ code: '600519', last: '1850.00', prevClose: '1750.00' }));
+    const notifier = new FakeNotifier();
+    const sched = newScheduler(store, groups, port, notifier, users);
+
+    await sched.tick(TICK_TIME);
+    // hits are queued but not yet sent
+    expect(notifier.sent).toHaveLength(0);
+    await jest.runAllTimersAsync();
+    // both hits flushed as one message
+    expect(notifier.sent).toHaveLength(1);
+    expect(notifier.sent[0]?.text).toContain('600000');
+    expect(notifier.sent[0]?.text).toContain('600519');
+  });
+
+  it('throttle: second tick within window does not reset timer', async () => {
+    const { store, groups, users } = await buildEnv(task());
+    const port = new FakeQuotePort();
+    port.responses.push(quote());
+    port.responses.push(quote({ last: '10.80' }));
+    const notifier = new FakeNotifier();
+    const sched = newScheduler(store, groups, port, notifier, users);
+
+    await sched.tick(TICK_TIME);
+    // advance 1s (still inside the 3s window)
+    jest.advanceTimersByTime(1_000);
+    await sched.tick(new Date(TICK_TIME.getTime() + 5_000));
+    // flush at 3s from first hit, not reset by second
+    await jest.runAllTimersAsync();
+
+    expect(notifier.sent).toHaveLength(1);
+    expect(notifier.sent[0]?.text).toContain('600000');
   });
 });

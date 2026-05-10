@@ -35,13 +35,14 @@ import { ChannelService } from '../channel/channel.service.js';
 import { UserStore } from '../auth/user.store.js';
 import { decimalQuoteFromDto } from './domain/decimal-mapper.js';
 import { evaluate, type IntradaySample } from './domain/evaluate.js';
-import { buildPayload } from './domain/format.js';
+import { buildBatchPayload, type HitArgs } from './domain/format.js';
 import { isMarketOpen, marketTradingDayKey } from './domain/market-hours.js';
 import { WATCH_QUOTE_PORT, type WatchQuotePort } from './domain/watch-port.js';
 import { WatchGroupStore } from './watch-group.store.js';
 import { WatchTaskStore } from './watch-task.store.js';
 
 const MASTER_TICK_MS = 5_000;
+const HIT_BATCH_WINDOW_MS = 3_000;
 
 /** Stale quote — bump cadence without evaluating, do not pollute samples. */
 const STALE_QUOTE_MAX_MS = 30 * 60 * 1000;
@@ -72,6 +73,11 @@ export class WatchScheduler implements OnModuleInit, OnModuleDestroy {
    */
   private readonly samples = new Map<string, IntradayBuffer>();
 
+  /** Pending hits waiting to be batched, keyed by userId. */
+  private readonly hitBuffer = new Map<string, HitArgs[]>();
+  /** Debounce timers for flushing each user's hit buffer. */
+  private readonly flushTimers = new Map<string, NodeJS.Timeout>();
+
   constructor(
     @Inject(WatchTaskStore) private readonly store: WatchTaskStore,
     @Inject(WatchGroupStore) private readonly groups: WatchGroupStore,
@@ -91,9 +97,12 @@ export class WatchScheduler implements OnModuleInit, OnModuleDestroy {
     this.destroyed = true;
     if (this.timer !== null) clearInterval(this.timer);
     this.timer = null;
+    for (const t of this.flushTimers.values()) clearTimeout(t);
+    this.flushTimers.clear();
     if (this.tickInFlight !== null) {
       await this.tickInFlight.catch(() => undefined);
     }
+    await Promise.allSettled([...this.hitBuffer.keys()].map((u) => this.flushHits(u)));
     await this.store.flushAll();
   }
 
@@ -259,27 +268,47 @@ export class WatchScheduler implements OnModuleInit, OnModuleDestroy {
     });
 
     if (isHit && task.notifySlack) {
-      const payload = buildPayload({
+      this.enqueueHit(userId, {
         code: task.code,
         name: task.name,
         market: task.market,
         quote: decimalQuote,
         matched,
       });
+    }
+  }
+
+  private enqueueHit(userId: string, hit: HitArgs): void {
+    const buf = this.hitBuffer.get(userId) ?? [];
+    buf.push(hit);
+    this.hitBuffer.set(userId, buf);
+
+    if (!this.flushTimers.has(userId)) {
+      const timer = setTimeout(() => {
+        void this.flushHits(userId);
+      }, HIT_BATCH_WINDOW_MS);
+      this.flushTimers.set(userId, timer);
+    }
+  }
+
+  private async flushHits(userId: string): Promise<void> {
+    const hits = this.hitBuffer.get(userId);
+    this.hitBuffer.delete(userId);
+    this.flushTimers.delete(userId);
+    if (hits === undefined || hits.length === 0) return;
+    const traceId = newTraceId();
+    const payload = buildBatchPayload(hits);
+    try {
       await this.channels.broadcast(
         {
           text: payload.text,
           kind: 'watch.hit',
-          meta: {
-            market: task.market,
-            code: task.code,
-            name: task.name,
-            last: decimalQuote.last.toString(),
-            userId,
-          },
+          meta: { userId, count: hits.length },
         },
         { traceId, source: 'system' },
       );
+    } catch (err) {
+      this.logger.warn(`watch_hit_flush_failed user=${userId} count=${String(hits.length)} err=${String(err)}`);
     }
   }
 

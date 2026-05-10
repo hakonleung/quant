@@ -59,13 +59,21 @@ export function renderCondition(c: WatchCondition): string {
   return `abs($) ${renderOp(c.op)} ${price.toFixed(2)}`;
 }
 
-export function buildPayload(args: {
-  code: string;
-  name: string;
-  market: WatchMarket;
-  quote: SpotQuoteDecimal;
-  matched: ReadonlyArray<WatchCondition>;
-}): SlackPayload {
+export type HitArgs = {
+  readonly code: string;
+  readonly name: string;
+  readonly market: WatchMarket;
+  readonly quote: SpotQuoteDecimal;
+  readonly matched: ReadonlyArray<WatchCondition>;
+};
+
+export function buildBatchPayload(hits: ReadonlyArray<HitArgs>): SlackPayload {
+  if (hits.length === 1) return buildPayload(hits[0]!);
+  const sections = hits.map((h) => buildPayload(h).text);
+  return { text: sections.join('\n\n---\n\n') };
+}
+
+export function buildPayload(args: HitArgs): SlackPayload {
   const { code, name, market, quote, matched } = args;
   const changePct = quote.prevClose.gt(0)
     ? quote.last.div(quote.prevClose).minus(1).mul(100)
