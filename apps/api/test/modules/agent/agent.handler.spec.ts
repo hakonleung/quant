@@ -1,8 +1,6 @@
 import { instructionId } from '@quant/shared';
 
-import {
-  AgentHistoryStore,
-} from '../../../src/modules/agent/agent-history.store.js';
+import { AgentHistoryStore } from '../../../src/modules/agent/agent-history.store.js';
 import { AgentInstructionHandler } from '../../../src/modules/agent/instructions/agent.handler.js';
 import type { AgentService } from '../../../src/modules/agent/agent.service.js';
 import { InstructionRegistry } from '../../../src/modules/instruction/instruction.registry.js';
@@ -31,7 +29,11 @@ function fakeAuth(): AuthService {
 describe('AgentInstructionHandler', () => {
   it('returns confirm-required when confirm flag is missing', async () => {
     const { svc } = fakeAgent();
-    const h = new AgentInstructionHandler(new InstructionRegistry(), svc, new AgentHistoryStore(fakeAuth()));
+    const h = new AgentInstructionHandler(
+      new InstructionRegistry(),
+      svc,
+      new AgentHistoryStore(fakeAuth()),
+    );
     const r = await h.execute({ q: 'hello' }, sockCtx);
     expect(r.ok).toBe(false);
     if (!r.ok) {
@@ -44,7 +46,11 @@ describe('AgentInstructionHandler', () => {
 
   it('with confirm=true kicks off the loop and returns "▶ /agent jobId=…"', async () => {
     const { svc, calls } = fakeAgent();
-    const h = new AgentInstructionHandler(new InstructionRegistry(), svc, new AgentHistoryStore(fakeAuth()));
+    const h = new AgentInstructionHandler(
+      new InstructionRegistry(),
+      svc,
+      new AgentHistoryStore(fakeAuth()),
+    );
     const r = await h.execute({ q: 'fundamentals', confirm: true }, sockCtx);
     expect(r.ok).toBe(true);
     if (r.ok) {
@@ -61,7 +67,11 @@ describe('AgentInstructionHandler', () => {
 
   it('rejects when source is unsupported (no delivery target)', async () => {
     const { svc } = fakeAgent();
-    const h = new AgentInstructionHandler(new InstructionRegistry(), svc, new AgentHistoryStore(fakeAuth()));
+    const h = new AgentInstructionHandler(
+      new InstructionRegistry(),
+      svc,
+      new AgentHistoryStore(fakeAuth()),
+    );
     const ctx: InstructionCtx = {
       traceId: 't1',
       source: 'im',
@@ -75,7 +85,11 @@ describe('AgentInstructionHandler', () => {
 
   it('threads explicit context through to the loop', async () => {
     const { svc, calls } = fakeAgent();
-    const h = new AgentInstructionHandler(new InstructionRegistry(), svc, new AgentHistoryStore(fakeAuth()));
+    const h = new AgentInstructionHandler(
+      new InstructionRegistry(),
+      svc,
+      new AgentHistoryStore(fakeAuth()),
+    );
     await h.execute(
       {
         q: 'follow-up',
@@ -91,7 +105,11 @@ describe('AgentInstructionHandler', () => {
 
   it('declares costsCredits=true and id="agent"', () => {
     const { svc } = fakeAgent();
-    const h = new AgentInstructionHandler(new InstructionRegistry(), svc, new AgentHistoryStore(fakeAuth()));
+    const h = new AgentInstructionHandler(
+      new InstructionRegistry(),
+      svc,
+      new AgentHistoryStore(fakeAuth()),
+    );
     expect(h.spec.id).toBe(instructionId('agent'));
     expect(h.spec.costsCredits).toBe(true);
     expect(h.spec.imAliases).toContain('助手');

@@ -163,19 +163,17 @@ export function sendSocketCommand(
     const timer = setTimeout(() => {
       reject(new Error(`socket command timed out after ${String(timeoutMs)}ms`));
     }, timeoutMs);
-    socket
-      .timeout(timeoutMs)
-      .emit('command', command, (err: unknown, ack: unknown) => {
-        clearTimeout(timer);
-        if (err !== null && err !== undefined) {
-          reject(err instanceof Error ? err : new Error(String(err)));
-          return;
-        }
-        if (ack === null || typeof ack !== 'object') {
-          resolve({ ok: false, error: 'malformed_ack' });
-          return;
-        }
-        resolve(ack as SocketAck);
-      });
+    socket.timeout(timeoutMs).emit('command', command, (err: unknown, ack: unknown) => {
+      clearTimeout(timer);
+      if (err !== null && err !== undefined) {
+        reject(err instanceof Error ? err : new Error(String(err)));
+        return;
+      }
+      if (ack === null || typeof ack !== 'object') {
+        resolve({ ok: false, error: 'malformed_ack' });
+        return;
+      }
+      resolve(ack as SocketAck);
+    });
   });
 }

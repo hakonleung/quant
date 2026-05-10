@@ -65,6 +65,7 @@ class FakePort implements StockMetaPort {
       gross_margin_ttm: null,
     };
     const baseReturns = {
+      ret_1d: null,
       ret_5d: null,
       ret_10d: null,
       ret_20d: null,

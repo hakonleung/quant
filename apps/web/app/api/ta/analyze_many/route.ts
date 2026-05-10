@@ -12,7 +12,10 @@ import { bffErrorResponse, nestJson, readTrace } from '../../_lib/proxy.js';
 
 const BodySchema = z
   .object({
-    codes: z.array(z.string().regex(/^\d{6}$/u)).min(1).max(50),
+    codes: z
+      .array(z.string().regex(/^\d{6}$/u))
+      .min(1)
+      .max(50),
     label: z.string().min(1).optional(),
     bypassCache: z.boolean().optional(),
   })

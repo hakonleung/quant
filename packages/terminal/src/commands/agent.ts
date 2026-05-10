@@ -21,7 +21,13 @@
 
 import type { AgentDeltaFrame } from '../actions/types.js';
 import { confirmPrompt } from '../widgets/confirm-prompt.js';
-import { commandResolution, interactive, noopResolution, textErr, textOk } from '../widgets/helpers.js';
+import {
+  commandResolution,
+  interactive,
+  noopResolution,
+  textErr,
+  textOk,
+} from '../widgets/helpers.js';
 import type { CommandCtx, CommandSpec } from '../registry.js';
 import type { Event } from '../engine/state.js';
 
@@ -52,9 +58,7 @@ function buildPaidConfirm(prompt: string): ReturnType<typeof confirmPrompt> {
   return confirmPrompt({
     title: '确认调用 /agent ?',
     body:
-      '将触发外部付费 LLM + 多步指令调用。' +
-      `\n\n问题：${truncated}` +
-      '\n\nY 继续 / N 取消。',
+      '将触发外部付费 LLM + 多步指令调用。' + `\n\n问题：${truncated}` + '\n\nY 继续 / N 取消。',
     onYes: () => commandResolution(`agent confirm=1 q=${quote(prompt)}`),
     onNo: () => noopResolution,
   });
@@ -109,16 +113,20 @@ async function launch(
   });
   // Tear down on user cancel signal too — the host's AbortController
   // fires when the user hits Ctrl+C.
-  ctx.signal.addEventListener('abort', () => {
-    unsubscribe?.();
-    unsubscribe = null;
-    dispatch({
-      kind: 'streamClose',
-      streamId,
-      status: 'info',
-      footer: '\n（已取消订阅，BE loop 仍在后台运行）',
-    });
-  }, { once: true });
+  ctx.signal.addEventListener(
+    'abort',
+    () => {
+      unsubscribe?.();
+      unsubscribe = null;
+      dispatch({
+        kind: 'streamClose',
+        streamId,
+        status: 'info',
+        footer: '\n（已取消订阅，BE loop 仍在后台运行）',
+      });
+    },
+    { once: true },
+  );
 
   return textOk(`▶ /agent loop started — jobId=${jobId}`);
 }
@@ -135,7 +143,10 @@ function handleFrame(
       return;
     case 'tool_result': {
       const head = frame.ok ? '✓' : '✗';
-      const lines = frame.summary.split('\n').map((l) => `   ${l}`).join('\n');
+      const lines = frame.summary
+        .split('\n')
+        .map((l) => `   ${l}`)
+        .join('\n');
       dispatch({
         kind: 'streamStepLog',
         streamId,

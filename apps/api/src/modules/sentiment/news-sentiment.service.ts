@@ -154,11 +154,10 @@ export class NewsSentimentService {
       perStock.push(r.value);
     }
     if (perStock.length === 0) {
-      throw new QuantError(
-        'LLM_FAILED',
-        'every per-stock analysis failed in analyzeMany',
-        { codes: canon, caveats },
-      );
+      throw new QuantError('LLM_FAILED', 'every per-stock analysis failed in analyzeMany', {
+        codes: canon,
+        caveats,
+      });
     }
 
     const themeClusters = await this.runClusterStep(perStock, ctx);
@@ -356,7 +355,7 @@ function projectStockSentiment(args: {
   const research = readArray(payload['research_targets']);
   const targetUpside =
     research.length > 0 && isObj(research[0])
-      ? readNumber((research[0] as RawObj)['target_upside_pct']) ?? 0
+      ? (readNumber((research[0] as RawObj)['target_upside_pct']) ?? 0)
       : 0;
 
   const rumor = pickFirstRumor([[...drivers], [...readArray(payload['m_and_a'])]]);
@@ -420,9 +419,7 @@ function synthesiseRawLog(
   raw: RawObj,
 ): readonly string[] {
   const lines: string[] = [];
-  lines.push(
-    `▎ source  llm.web_search · ${String(readArray(raw['core_drivers']).length)} drivers`,
-  );
+  lines.push(`▎ source  llm.web_search · ${String(readArray(raw['core_drivers']).length)} drivers`);
   if (view.topTheme.length > 0) lines.push(`▎ theme   ${view.topTheme}`);
   if (view.topDriver.length > 0) lines.push(`▎ driver  ${view.topDriver}`);
   if (view.targetUpside !== 0) lines.push(`▎ target  ${view.targetUpside.toFixed(2)}%`);
@@ -446,7 +443,7 @@ function pickFirstRumor(buckets: readonly (readonly unknown[])[]): string {
 function parseJsonObject(raw: string): RawObj {
   const trimmed = raw.trim();
   const fenced = FENCE_RE.exec(trimmed);
-  const stripped = fenced !== null ? fenced[1]?.trim() ?? trimmed : trimmed;
+  const stripped = fenced !== null ? (fenced[1]?.trim() ?? trimmed) : trimmed;
   let payload: unknown;
   try {
     payload = JSON.parse(stripped);

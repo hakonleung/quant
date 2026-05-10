@@ -99,11 +99,25 @@ export class AgentInstructionHandler extends InstructionRegistrarBase<AgentArgs>
     };
     if (args.context !== undefined && args.context.length > 0) {
       for (const entry of args.context) push(entry.role, entry.content);
-      return messages;
+      return this.dropTrailingDuplicate(messages, args.q);
     }
     if (ctx.source === 'im' && ctx.channelId !== undefined) {
       const recent = this.history.recent(ctx.userId, ctx.channelId, 10);
       for (const entry of recent) push(entry.role, entry.content);
+    }
+    // The IM channel listener captures every inbound message into
+    // AgentHistoryStore via @OnEvent before this handler runs. So the
+    // tail of `recent` already contains the same `q` we're about to
+    // append in agent.service.runFresh — drop it here to avoid the LLM
+    // seeing two identical user turns back-to-back (manifests as the
+    // model echoing the question instead of acting on it).
+    return this.dropTrailingDuplicate(messages, args.q);
+  }
+
+  private dropTrailingDuplicate(messages: ChatMessage[], q: string): ChatMessage[] {
+    const last = messages.at(-1);
+    if (last !== undefined && last.role === 'user' && last.content === q) {
+      messages.pop();
     }
     return messages;
   }

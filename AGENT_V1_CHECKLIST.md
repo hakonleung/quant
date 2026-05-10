@@ -22,11 +22,11 @@ f4d8f01  feat(ledger): migrate /analyze LLM call from Python to NestJS
 - [x] `pnpm -r typecheck` — every workspace clean
 - [x] `pnpm --filter @quant/api test` — 307 / 44 passing
 - [x] `pnpm --filter @quant/terminal test` — 219 / 20 passing
-- [ ] `pnpm --filter @quant/shared test` — 4 *pre-existing* failures
-  in `eqty.test.ts` / `stock-meta.test.ts`. They fail on `main` before
-  this work too — confirmed by stashing all my changes and re-running.
-  Not introduced by v1 and not blocking; please cross-check on a clean
-  branch.
+- [ ] `pnpm --filter @quant/shared test` — 4 _pre-existing_ failures
+      in `eqty.test.ts` / `stock-meta.test.ts`. They fail on `main` before
+      this work too — confirmed by stashing all my changes and re-running.
+      Not introduced by v1 and not blocking; please cross-check on a clean
+      branch.
 
 ## Configuration you must set before testing
 
@@ -61,7 +61,7 @@ Without this, every IM sender can trigger the `/agent` paid path.
 - §2.1: external LLM clients now live in NestJS; Python keeps pure
   compute + IO.
 - §1.4: structured `provider / model / scope / usage / durationMs /
-  traceId / userId` fields on every LLM call log line.
+traceId / userId` fields on every LLM call log line.
 - §2.2: `services/py/quant_workflow/` LangGraph package re-framed as
   v2 (reverse-RPC into NestJS).
 
@@ -70,106 +70,106 @@ Without this, every IM sender can trigger the `/agent` paid path.
 ### LLM substrate (commit `7dee644`)
 
 - [ ] `apps/api/src/modules/llm/llm.config.ts` — env loader merging
-  `LLM_*` defaults with `AGENT_LLM_*` per-scope override.
+      `LLM_*` defaults with `AGENT_LLM_*` per-scope override.
 - [ ] `apps/api/src/modules/llm/providers.ts` — Qwen/DeepSeek/Moonshot
-  catalog with CNY pricing; `priceCallCny()`.
+      catalog with CNY pricing; `priceCallCny()`.
 - [ ] `apps/api/src/modules/llm/adapters/openai-compatible.client.ts`
-  — `chatWithTools`, `chatStreamFinalize`, `completeJson`.
+      — `chatWithTools`, `chatStreamFinalize`, `completeJson`.
 - [ ] `apps/api/src/modules/llm/web-search/moonshot-tool-loop.ts` —
-  `$web_search` builtin_function tool loop, hard-cap at 4 searches.
+      `$web_search` builtin_function tool loop, hard-cap at 4 searches.
 - [ ] `apps/api/src/modules/llm/web-search/qwen-extra-body.ts` —
-  single-shot `enable_search` streaming.
+      single-shot `enable_search` streaming.
 - [ ] `apps/api/src/modules/llm/ledger/user-llm-ledger.store.ts` —
-  append-only `data/users/{userId}/llm-ledger.json` with per-scope
-  aggregation.
+      append-only `data/users/{userId}/llm-ledger.json` with per-scope
+      aggregation.
 - [ ] `apps/api/src/modules/llm/ledger/llm-ledger.recorder.ts` —
-  fire-and-forget recorder; failed LLM calls also recorded.
+      fire-and-forget recorder; failed LLM calls also recorded.
 - [ ] `apps/api/src/modules/llm/llm.service.ts` — provider resolution
-  + structured logging + ledger hookup.
+  - structured logging + ledger hookup.
 
 ### Migrated callers (commits `685cfb2`, `f4d8f01`)
 
 - [ ] `apps/api/src/modules/screen/nl-to-dsl.service.ts` — verbatim
-  port of the Python prompt + 1-retry loop.
+      port of the Python prompt + 1-retry loop.
 - [ ] `apps/api/src/modules/screen/op-to-kind.ts` — op-tagged →
-  kind-tagged AST converter (mirror of Python `screen_parse` +
-  `universe_parse`).
+      kind-tagged AST converter (mirror of Python `screen_parse` +
+      `universe_parse`).
 - [ ] `apps/api/src/modules/screen/screen.service.ts` — `runNl` does
-  NL→DSL in NestJS, then dispatches `screen_run` Flight op.
+      NL→DSL in NestJS, then dispatches `screen_run` Flight op.
 - [ ] `apps/api/src/modules/screen/screen.controller.ts` — `userId`
-  threaded through via `@CurrentUser()`.
+      threaded through via `@CurrentUser()`.
 - [ ] `apps/api/src/modules/ledger/ledger.service.ts` — `analyze()`
-  calls `LlmService.completeJson(scope='analyze')` directly; Flight
-  client + `ledger.token.ts` deleted.
+      calls `LlmService.completeJson(scope='analyze')` directly; Flight
+      client + `ledger.token.ts` deleted.
 - [ ] `apps/api/src/modules/ledger/prompts/analyze.prompt.ts` —
-  verbatim port of `ledger_prompts.py`.
+      verbatim port of `ledger_prompts.py`.
 
 ### Agent module (commits `0a85cf0`, `2c298ca`, `edf78f0`)
 
 - [ ] `packages/shared/src/instructions/agent-history.ts` — role +
-  content + ts envelope.
+      content + ts envelope.
 - [ ] `packages/shared/src/instructions/agent-tool-call.ts` —
-  proposal envelope used in confirm cards.
+      proposal envelope used in confirm cards.
 - [ ] `packages/shared/src/types/socket.ts` —
-  `instruction.agent.delta` topic with 5-kind discriminated union
-  (`step / tool_result / confirm / text / done`).
+      `instruction.agent.delta` topic with 5-kind discriminated union
+      (`step / tool_result / confirm / text / done`).
 - [ ] `packages/shared/src/instructions/result.ts` —
-  `confirm-required` error code added.
+      `confirm-required` error code added.
 - [ ] `apps/api/src/modules/instruction/instruction.types.ts` — new
-  `costsCredits` + `destructive` spec flags. `/screen` `/analyze`
-  carry `costsCredits=true`; `/blacklist update` `destructive=true`.
+      `costsCredits` + `destructive` spec flags. `/screen` `/analyze`
+      carry `costsCredits=true`; `/blacklist update` `destructive=true`.
 - [ ] `apps/api/src/modules/agent/agent.service.ts` — the loop.
 - [ ] `apps/api/src/modules/agent/agent-tool-bridge.ts` — registry →
-  ChatTool + ChatToolCall → `InstructionExecutor.execute`. Includes
-  the narrow `zodToJsonSchema` helper so we don't pull a 30 KB dep.
+      ChatTool + ChatToolCall → `InstructionExecutor.execute`. Includes
+      the narrow `zodToJsonSchema` helper so we don't pull a 30 KB dep.
 - [ ] `apps/api/src/modules/agent/agent-history.store.ts` —
-  per-(userId,channel) ring buffer + `CHANNEL_INBOUND_EVENT` capture.
+      per-(userId,channel) ring buffer + `CHANNEL_INBOUND_EVENT` capture.
 - [ ] `apps/api/src/modules/agent/agent-pending.store.ts` —
-  correlationId-keyed snapshot store with 5-min TTL sweep.
+      correlationId-keyed snapshot store with 5-min TTL sweep.
 - [ ] `apps/api/src/modules/agent/instructions/agent.handler.ts` —
-  paid-confirm intercept + detached loop launch.
+      paid-confirm intercept + detached loop launch.
 - [ ] `apps/api/src/modules/agent/instructions/agent-confirm.handler.ts`
-  — correlationId continuation; rejects cross-user resume.
+      — correlationId continuation; rejects cross-user resume.
 - [ ] `apps/api/src/modules/agent/prompts/system-prompt.ts` — Chinese
-  A 股 helper persona with live tool catalog injection.
+      A 股 helper persona with live tool catalog injection.
 - [ ] `apps/api/src/modules/agent/agent.module.ts` registered in
-  `app.module.ts` (ordered after `TaModule`).
+      `app.module.ts` (ordered after `TaModule`).
 - [ ] `apps/api/src/modules/instruction/instruction.im.listener.ts` —
-  `parseLine` silent fallback to `/agent`; `confirm-required` →
-  `agent.paid_confirm` card kind.
+      `parseLine` silent fallback to `/agent`; `confirm-required` →
+      `agent.paid_confirm` card kind.
 - [ ] `apps/api/src/modules/channel/adapters/feishu-card.ts` —
-  `buildAgentPaidConfirmCard`, `buildAgentToolProposalCard`, purple
-  template, paste-back command bodies.
+      `buildAgentPaidConfirmCard`, `buildAgentToolProposalCard`, purple
+      template, paste-back command bodies.
 - [ ] `apps/api/src/modules/instruction/handlers/usr.handler.ts` —
-  injects `UserLlmLedgerStore`; renders today / month / total
-  + per-scope CNY breakdown.
+      injects `UserLlmLedgerStore`; renders today / month / total
+  - per-scope CNY breakdown.
 - [ ] `apps/api/src/modules/instruction/handlers/help.handler.ts` —
-  `[$]` / `[!]` tags in the list + detail views.
+      `[$]` / `[!]` tags in the list + detail views.
 
 ### Terminal + Web (commit `6c34497`)
 
 - [ ] `packages/terminal/src/engine/state.ts` — `OutputEntry.streaming`
-  + 4 stream events.
+  - 4 stream events.
 - [ ] `packages/terminal/src/engine/reducer.ts` — pure handlers for
-  the 4 events; idempotent open, no-op on unknown id, footer + status
-  on close.
+      the 4 events; idempotent open, no-op on unknown id, footer + status
+      on close.
 - [ ] `packages/terminal/src/registry.ts` — `CommandCtx.dispatchEvent`.
 - [ ] `packages/terminal/src/actions/types.ts` —
-  `DataActionRunner.invokeBeInstruction` + `subscribeAgentDelta` +
-  `AgentDeltaFrame` mirror.
+      `DataActionRunner.invokeBeInstruction` + `subscribeAgentDelta` +
+      `AgentDeltaFrame` mirror.
 - [ ] `packages/terminal/src/commands/agent.ts` — confirm widget +
-  socket call + frame → engine event mapping + Ctrl+C unsubscribe.
+      socket call + frame → engine event mapping + Ctrl+C unsubscribe.
 - [ ] `apps/web/lib/socket/socket-client.ts` — `sendSocketCommand`.
 - [ ] `apps/web/lib/term/live-runner.ts` — wires
-  `invokeBeInstruction` + `subscribeAgentDelta` against the socket
-  singleton.
+      `invokeBeInstruction` + `subscribeAgentDelta` against the socket
+      singleton.
 - [ ] `apps/web/components/feat-term-main/use-terminal.ts` — passes
-  `dispatchEvent` into `CommandCtx` via a forward ref.
+      `dispatchEvent` into `CommandCtx` via a forward ref.
 
 ## Manual test plan
 
 > Boot order: `pnpm dev:api`, `pnpm dev:web`, `uv run python -m
-> quant_rpc.main`. Confirm at least one `*_API_KEY` is set.
+quant_rpc.main`. Confirm at least one `*_API_KEY` is set.
 
 ### Term
 

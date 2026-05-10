@@ -63,12 +63,17 @@ export class AgentToolBridge {
   }
 
   /**
-   * Execute one tool call from the LLM. Routed through the instruction
-   * executor so zod validation, async dispatch, and ACL all stay in
-   * one place.
+   * Execute one tool call from the LLM **synchronously**. We deliberately
+   * use `executeHandler` rather than `execute`: when the agent calls an
+   * `mode:'async'` instruction (`/ta`, `/screen`, `/analyze`), routing
+   * through `execute()` would enqueue a BullMQ job and return a "queued"
+   * ack — which the LLM then treats as the tool result and the loop stalls
+   * with "I've started the analysis" but no actual data. `executeHandler`
+   * runs the handler inline so the agent gets the real result back as a
+   * `role:'tool'` message and can continue reasoning.
    */
   async executeToolCall(call: ChatToolCall, ctx: InstructionCtx): Promise<InstructionResult> {
-    return this.executor.execute(call.toolId, call.args, ctx);
+    return this.executor.executeHandler(call.toolId, call.args, ctx);
   }
 
   /** Render a tool result as the `role:'tool'` message body. */
@@ -146,36 +151,54 @@ function unwrap(schema: z.ZodTypeAny): z.ZodTypeAny {
   return schema;
 }
 
-function simpleSchema(schema: z.ZodTypeAny): Record<string, unknown> {
-  const def = schema._def as { typeName?: string; values?: readonly string[] };
-  switch (def.typeName) {
-    case 'ZodString':
-      return { type: 'string' };
-    case 'ZodNumber':
-      return { type: 'number' };
-    case 'ZodBoolean':
-      return { type: 'boolean' };
-    case 'ZodEnum':
-      return { type: 'string', enum: def.values ?? [] };
-    case 'ZodLiteral': {
-      const litDef = def as unknown as { value: unknown };
-      const v = litDef.value;
-      const t = typeof v;
-      if (t === 'string' || t === 'number' || t === 'boolean') {
-        return { type: t, const: v };
-      }
-      return { type: 'string', const: String(v) };
-    }
-    case 'ZodArray': {
-      const arrDef = def as unknown as { type: z.ZodTypeAny };
-      return { type: 'array', items: simpleSchema(arrDef.type) };
-    }
-    case 'ZodUnion': {
-      // Coerce unions to a free string — simpler for the model than
-      // anyOf in v1, and our union args are usually `string | boolean`.
-      return { type: 'string' };
-    }
-    default:
-      return { type: 'string' };
+/**
+ * JSON-Schema fragment per Zod-typeName. Keeps the dispatch table flat —
+ * `simpleSchema` then composes the result with `description`. Cases that
+ * need the full def (literal value, array inner type) are extracted into
+ * named helpers so the dispatch stays under the cyclomatic-complexity
+ * cap (CLAUDE.md §1.2).
+ */
+const SIMPLE_SCHEMA_BUILDERS: Readonly<
+  Record<string, (def: ZodAnyDef) => Record<string, unknown>>
+> = {
+  ZodString: () => ({ type: 'string' }),
+  ZodNumber: () => ({ type: 'number' }),
+  ZodBoolean: () => ({ type: 'boolean' }),
+  ZodEnum: (def) => ({ type: 'string', enum: def.values ?? [] }),
+  ZodLiteral: literalSchema,
+  ZodArray: arraySchema,
+  // Coerce unions to a free string — simpler for the model than anyOf in
+  // v1, and our union args are usually `string | boolean`.
+  ZodUnion: () => ({ type: 'string' }),
+};
+
+interface ZodAnyDef {
+  readonly typeName?: string;
+  readonly values?: readonly string[];
+  readonly description?: string;
+}
+
+function literalSchema(def: ZodAnyDef): Record<string, unknown> {
+  const v = (def as { value?: unknown }).value;
+  const t = typeof v;
+  if (t === 'string' || t === 'number' || t === 'boolean') {
+    return { type: t, const: v };
   }
+  return { type: 'string', const: String(v) };
+}
+
+function arraySchema(def: ZodAnyDef): Record<string, unknown> {
+  const inner = (def as { type?: z.ZodTypeAny }).type;
+  if (inner === undefined) return { type: 'array' };
+  return { type: 'array', items: simpleSchema(inner) };
+}
+
+function simpleSchema(schema: z.ZodTypeAny): Record<string, unknown> {
+  const def = schema._def as ZodAnyDef;
+  const description = def.description;
+  const builder =
+    def.typeName !== undefined ? SIMPLE_SCHEMA_BUILDERS[def.typeName] : undefined;
+  const base: Record<string, unknown> = builder !== undefined ? builder(def) : { type: 'string' };
+  if (description !== undefined) base['description'] = description;
+  return base;
 }

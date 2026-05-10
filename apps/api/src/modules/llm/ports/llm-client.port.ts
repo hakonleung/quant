@@ -20,12 +20,7 @@
  * just pass `webSearch: true`.
  */
 
-import type {
-  ChatMessage,
-  ChatStepResult,
-  ChatStreamChunk,
-  ChatTool,
-} from '@quant/shared';
+import type { ChatMessage, ChatStepResult, ChatStreamChunk, ChatTool } from '@quant/shared';
 
 import type { LlmProviderRow } from '../providers.js';
 
@@ -58,5 +53,7 @@ export interface LlmClient {
 
   chatWithTools(args: ChatWithToolsArgs): Promise<ChatStepResult>;
   chatStreamFinalize(args: ChatStreamFinalizeArgs): AsyncIterable<ChatStreamChunk>;
-  completeJson(args: CompleteJsonArgs): Promise<{ readonly text: string; readonly usage: ChatStepResult['usage'] }>;
+  completeJson(
+    args: CompleteJsonArgs,
+  ): Promise<{ readonly text: string; readonly usage: ChatStepResult['usage'] }>;
 }

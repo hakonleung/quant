@@ -27,14 +27,14 @@ NestJS API (:3001)
 
 唯一来源：`packages/shared/src/types/socket.ts` 的 `SOCKET_TOPIC_SCHEMAS`。
 
-| Topic                         | Payload                            | 来源                                         |
-| ----------------------------- | ---------------------------------- | -------------------------------------------- |
-| `watch.snapshot`              | `WatchTask[]` (1Hz)                | `WatchBroadcaster`                           |
-| `queue.snapshot`              | `QueueSnapshot` (1Hz)              | `QueueBroadcaster`                           |
-| `channel.activity`            | `ChannelActivity`（事件即推）      | `ChannelBus.publishActivity/Inbound`         |
-| `instruction.async.started`   | `InstructionAsyncStartedPayload`   | `InstructionAsyncProcessor`（emitTo userId） |
-| `instruction.async.progress`  | `InstructionAsyncProgressPayload`  | handler 主动 emit（v1.5 暂未使用）           |
-| `instruction.async.completed` | `InstructionAsyncCompletedPayload` | `InstructionAsyncProcessor`（emitTo userId） |
+| Topic                         | Payload                                                                                              | 来源                                                            |
+| ----------------------------- | ---------------------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
+| `watch.snapshot`              | `WatchTask[]` (1Hz)                                                                                  | `WatchBroadcaster`                                              |
+| `queue.snapshot`              | `QueueSnapshot` (1Hz)                                                                                | `QueueBroadcaster`                                              |
+| `channel.activity`            | `ChannelActivity`（事件即推）                                                                        | `ChannelBus.publishActivity/Inbound`                            |
+| `instruction.async.started`   | `InstructionAsyncStartedPayload`                                                                     | `InstructionAsyncProcessor`（emitTo userId）                    |
+| `instruction.async.progress`  | `InstructionAsyncProgressPayload`                                                                    | handler 主动 emit（v1.5 暂未使用）                              |
+| `instruction.async.completed` | `InstructionAsyncCompletedPayload`                                                                   | `InstructionAsyncProcessor`（emitTo userId）                    |
 | `instruction.agent.delta`     | `InstructionAgentDeltaPayload`（5-kind union：`step` / `tool_result` / `confirm` / `text` / `done`） | `AgentService` 循环中 emitTo userId — 终端用来流式渲染 `/agent` |
 
 新增 topic = 在 `SOCKET_TOPIC_SCHEMAS` 加一行，前端 `useSocketTopic('<topic>', schema)` 即可消费。

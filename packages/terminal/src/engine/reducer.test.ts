@@ -291,8 +291,7 @@ describe('reducer — streaming output (golden)', () => {
       line: '▶ /focus 600519',
     }).state;
     const last = s.history.at(-1);
-    if (last?.kind === 'output')
-      expect(last.body).toBe('intro\n▶ /focus 600519');
+    if (last?.kind === 'output') expect(last.body).toBe('intro\n▶ /focus 600519');
     else throw new Error('expected output entry');
   });
 

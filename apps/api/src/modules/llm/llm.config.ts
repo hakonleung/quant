@@ -78,7 +78,11 @@ export function loadLlmConfig(env: NodeJS.ProcessEnv = process.env): LlmConfig {
     requestTimeoutMs:
       env['LLM_REQUEST_TIMEOUT_MS'] === undefined
         ? undefined
-        : numberFromEnv(env['LLM_REQUEST_TIMEOUT_MS'], DEFAULT_TIMEOUT_MS, 'LLM_REQUEST_TIMEOUT_MS'),
+        : numberFromEnv(
+            env['LLM_REQUEST_TIMEOUT_MS'],
+            DEFAULT_TIMEOUT_MS,
+            'LLM_REQUEST_TIMEOUT_MS',
+          ),
     agentProvider: env['AGENT_LLM_PROVIDER'],
     agentModel: env['AGENT_LLM_MODEL'],
   });

@@ -316,4 +316,3 @@ describe('LedgerService.analyze', () => {
     expect(result.summary).toBe('过去三日整体小幅盈利');
   });
 });
-

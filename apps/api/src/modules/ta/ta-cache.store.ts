@@ -36,9 +36,7 @@ export class TaCacheStore {
     if (raw === null) return null;
     const parsed = TaAnalysisSchema.safeParse(raw);
     if (!parsed.success) {
-      this.logger.warn(
-        `ta_cache_invalid file=${file} err=${parsed.error.message.slice(0, 200)}`,
-      );
+      this.logger.warn(`ta_cache_invalid file=${file} err=${parsed.error.message.slice(0, 200)}`);
       return null;
     }
     if (parsed.data.asof !== asof) return null;

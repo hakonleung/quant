@@ -1,6 +1,6 @@
 import { instructionId, QuantError, type LedgerAnalysis } from '@quant/shared';
 
-import { AnalyzeInstructionHandler } from '../../../src/modules/ledger/instructions/analyze.handler.js';
+import { LedgerAnalyzeInstructionHandler } from '../../../src/modules/ledger/instructions/ledger-analyze.handler.js';
 import type { LedgerService } from '../../../src/modules/ledger/ledger.service.js';
 import { InstructionRegistry } from '../../../src/modules/instruction/instruction.registry.js';
 import type { InstructionCtx } from '../../../src/modules/instruction/instruction.port.js';
@@ -24,7 +24,7 @@ interface Calls {
 }
 
 function build(opts: { resolve?: LedgerAnalysis; reject?: Error }): {
-  handler: AnalyzeInstructionHandler;
+  handler: LedgerAnalyzeInstructionHandler;
   calls: Calls;
 } {
   const reg = new InstructionRegistry();
@@ -38,16 +38,17 @@ function build(opts: { resolve?: LedgerAnalysis; reject?: Error }): {
     },
   };
   return {
-    handler: new AnalyzeInstructionHandler(reg, ledger as unknown as LedgerService),
+    handler: new LedgerAnalyzeInstructionHandler(reg, ledger as unknown as LedgerService),
     calls,
   };
 }
 
-describe('AnalyzeInstructionHandler', () => {
-  it('declares spec id `analyze` with mode=async', () => {
+describe('LedgerAnalyzeInstructionHandler', () => {
+  it('declares spec id `ledger.analyze` with mode=async (term-aligned id)', () => {
     const { handler } = build({ resolve: baseAnalysis });
-    expect(handler.spec.id).toBe(instructionId('analyze'));
+    expect(handler.spec.id).toBe(instructionId('ledger.analyze'));
     expect(handler.spec.mode).toBe('async');
+    expect(handler.spec.costsCredits).toBe(true);
   });
 
   it('returns a condensed text view on success', async () => {
@@ -55,9 +56,9 @@ describe('AnalyzeInstructionHandler', () => {
     const r = await handler.execute({ fresh: false }, ctx);
     expect(r.ok).toBe(true);
     if (r.ok) {
-      expect(r.output.text).toContain('analyze 2026-04-09 → 2026-05-09');
+      expect(r.output.text).toContain('ledger analyze  2026-04-09 → 2026-05-09');
       expect(r.output.text).toContain('via=moonshot');
-      expect(r.output.text).toContain('summary: all good');
+      expect(r.output.text).toContain('summary : all good');
       expect(r.output.text).toContain('1. hold core');
     }
   });

@@ -65,12 +65,12 @@ export async function* runMoonshotWebSearchStream(
     }
     let response: ChatCompletion;
     try {
-      response = await client.chat.completions.create(
+      response = (await client.chat.completions.create(
         // The OpenAI TS types don't model `extra_body` / `builtin_function`
         // tools — Moonshot accepts both. Cast through unknown to bypass.
         body as unknown as Parameters<typeof client.chat.completions.create>[0],
         { timeout: TURN_TIMEOUT_MS },
-      ) as unknown as ChatCompletion;
+      )) as unknown as ChatCompletion;
     } catch (err) {
       throw wrapProviderError(err, provider);
     }
@@ -122,11 +122,10 @@ export async function* runMoonshotWebSearchStream(
       allowTools = false;
     }
   }
-  throw new QuantError(
-    'LLM_FAILED',
-    `${provider}: web_search loop exceeded ${MAX_TURNS} turns`,
-    { source: provider, max_turns: MAX_TURNS },
-  );
+  throw new QuantError('LLM_FAILED', `${provider}: web_search loop exceeded ${MAX_TURNS} turns`, {
+    source: provider,
+    max_turns: MAX_TURNS,
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -171,18 +170,21 @@ function rejectUnknownTools(
 ): void {
   const unknown = toolCalls.map((tc) => nameOf(tc)).filter((n) => n !== '$web_search' && n !== '');
   if (unknown.length > 0) {
-    throw new QuantError(
-      'LLM_FAILED',
-      `${provider}: model invoked unsupported tool`,
-      { source: provider, tools: unknown },
-    );
+    throw new QuantError('LLM_FAILED', `${provider}: model invoked unsupported tool`, {
+      source: provider,
+      tools: unknown,
+    });
   }
 }
 
 function accumulateUsage(
   acc: { input: number; output: number; total: number },
   raw:
-    | { prompt_tokens?: number | null; completion_tokens?: number | null; total_tokens?: number | null }
+    | {
+        prompt_tokens?: number | null;
+        completion_tokens?: number | null;
+        total_tokens?: number | null;
+      }
     | null
     | undefined,
 ): void {

@@ -23,9 +23,15 @@ import { STOCK_META_PORT, type StockMetaPort } from './domain/stock-meta-port.js
  * upstream change cadence.
  */
 const LIST_ALL_TTL_MS = 60_000;
+const SNAPSHOT_ALL_TTL_MS = 60_000;
 
 interface ListAllCacheEntry {
   readonly value: readonly StockMetaDto[];
+  readonly fetchedAt: number;
+}
+
+interface SnapshotAllCacheEntry {
+  readonly value: readonly StockSnapshotDto[];
   readonly fetchedAt: number;
 }
 
@@ -34,6 +40,8 @@ export class StockMetaService {
   private readonly logger = new Logger(StockMetaService.name);
   private listAllCache: ListAllCacheEntry | null = null;
   private listAllRevalidating: Promise<readonly StockMetaDto[]> | null = null;
+  private snapshotAllCache: SnapshotAllCacheEntry | null = null;
+  private snapshotAllRevalidating: Promise<readonly StockSnapshotDto[]> | null = null;
 
   constructor(
     @Inject(STOCK_META_PORT) private readonly port: StockMetaPort,
@@ -85,7 +93,7 @@ export class StockMetaService {
     return this.listAllRevalidating;
   }
 
-  /** Test/lifecycle helper — drops the cached snapshot. */
+  /** Test/lifecycle helper — drops the cached snapshots. */
   clearListAllCache(): void {
     this.listAllCache = null;
     this.listAllRevalidating = null;
@@ -107,5 +115,38 @@ export class StockMetaService {
     // avoid a 30 KB query string. Adapter / Python side enforces the
     // server-side cap.
     return this.port.listSnapshots(codes, traceId);
+  }
+
+  /**
+   * Full-universe snapshot with SWR caching (60 s TTL). Used by IM
+   * handlers that render stock tables — they filter the cached result
+   * locally rather than issuing per-code Flight calls.
+   */
+  async snapshotAll(traceId: string): Promise<readonly StockSnapshotDto[]> {
+    const now = this.clock.now().getTime();
+    const cached = this.snapshotAllCache;
+    if (cached !== null) {
+      const age = now - cached.fetchedAt;
+      if (age < SNAPSHOT_ALL_TTL_MS) return cached.value;
+      if (this.snapshotAllRevalidating === null) {
+        this.snapshotAllRevalidating = this.refreshSnapshotAll(traceId).finally(() => {
+          this.snapshotAllRevalidating = null;
+        });
+        this.snapshotAllRevalidating.catch((err: unknown) => {
+          this.logger.warn(`stock-meta snapshotAll background refresh failed: ${String(err)}`);
+        });
+      }
+      return cached.value;
+    }
+    this.snapshotAllRevalidating ??= this.refreshSnapshotAll(traceId).finally(() => {
+      this.snapshotAllRevalidating = null;
+    });
+    return this.snapshotAllRevalidating;
+  }
+
+  private async refreshSnapshotAll(traceId: string): Promise<readonly StockSnapshotDto[]> {
+    const value = await this.port.listSnapshots([], traceId);
+    this.snapshotAllCache = { value, fetchedAt: this.clock.now().getTime() };
+    return value;
   }
 }

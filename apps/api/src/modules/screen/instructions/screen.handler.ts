@@ -18,10 +18,11 @@ import {
   errResult,
   instructionId,
   okResult,
+  okResultWithMeta,
   QuantError,
   type InstructionResult,
   type NlScreenResult,
-  type ScreenMatchView,
+  type StockSnapshotDto,
 } from '@quant/shared';
 import { z } from 'zod';
 
@@ -29,11 +30,21 @@ import type { InstructionCtx } from '../../instruction/instruction.port.js';
 import { InstructionRegistrarBase } from '../../instruction/instruction.provider.js';
 import { InstructionRegistry } from '../../instruction/instruction.registry.js';
 import type { InstructionSpec } from '../../instruction/instruction.types.js';
+import {
+  formatStockTable,
+  stockTableMetaRows,
+  type StockTableRow,
+} from '../../stock-meta/domain/format-stock-table.js';
+import { StockMetaService } from '../../stock-meta/stock-meta.service.js';
 import { ScreenService } from '../screen.service.js';
 
 const argsSchema = z
   .object({
-    q: z.string().min(1).max(500),
+    q: z
+      .string()
+      .min(1)
+      .max(500)
+      .describe('Natural-language screening query in Chinese, e.g. "找昨日涨停今天回踩ma5"'),
     asof: z
       .string()
       .regex(/^\d{4}-\d{2}-\d{2}$/u, 'asof must be YYYY-MM-DD')
@@ -43,7 +54,7 @@ const argsSchema = z
 
 type Args = z.infer<typeof argsSchema>;
 
-const MAX_MATCHES_DISPLAY = 10;
+const MAX_MATCHES_DISPLAY = 30;
 
 @Injectable()
 export class ScreenInstructionHandler extends InstructionRegistrarBase<Args> {
@@ -63,43 +74,62 @@ export class ScreenInstructionHandler extends InstructionRegistrarBase<Args> {
   constructor(
     @Inject(InstructionRegistry) registry: InstructionRegistry,
     @Inject(ScreenService) private readonly screen: ScreenService,
+    @Inject(StockMetaService) private readonly stockMeta: StockMetaService,
   ) {
     super(registry);
   }
 
   async execute(args: Args, ctx: InstructionCtx): Promise<InstructionResult> {
+    let result: NlScreenResult;
     try {
-      const result = await this.screen.runNl(args.q, args.asof, {
+      result = await this.screen.runNl(args.q, args.asof, {
         userId: ctx.userId,
         traceId: ctx.traceId,
       });
-      return okResult(formatResult(result));
     } catch (err) {
       if (err instanceof QuantError) return errResult('handler', err.message);
       throw err;
     }
-  }
-}
-
-function formatResult(r: NlScreenResult): string {
-  const head = `screen "${r.nl}" asof=${r.asof}  matches=${String(r.matches.length)}`;
-  if (r.matches.length === 0) return `${head}\n  (no matches)`;
-  const top = r.matches.slice(0, MAX_MATCHES_DISPLAY).map((m, i) => formatMatch(m, i + 1));
-  const tail =
-    r.matches.length > MAX_MATCHES_DISPLAY
-      ? `\n  …(+${String(r.matches.length - MAX_MATCHES_DISPLAY)} more)`
-      : '';
-  return `${head}\n${top.join('\n')}${tail}`;
-}
-
-function formatMatch(m: ScreenMatchView, ordinal: number): string {
-  const evidenceParts: string[] = [];
-  for (const [key, value] of Object.entries(m.evidence)) {
-    if (typeof value === 'number' || typeof value === 'string') {
-      evidenceParts.push(`${key}=${String(value)}`);
+    const head = `screen "${result.nl}" asof=${result.asof}  matches=${String(result.matches.length)}`;
+    if (result.matches.length === 0) {
+      return okResult(`${head}\n  (no matches)`);
     }
-    if (evidenceParts.length >= 3) break;
+    const codes = result.matches.slice(0, MAX_MATCHES_DISPLAY).map((m) => m.code);
+    const tail =
+      result.matches.length > MAX_MATCHES_DISPLAY
+        ? `\n(+${String(result.matches.length - MAX_MATCHES_DISPLAY)} more)`
+        : '';
+    let rows: StockTableRow[] | null = null;
+    let table: string;
+    try {
+      const allSnapshots = await this.stockMeta.snapshotAll(ctx.traceId);
+      const byCode = new Map<string, StockSnapshotDto>(allSnapshots.map((s) => [s.meta.code, s]));
+      rows = codes.map((code) => {
+        const snap = byCode.get(code);
+        return {
+          code,
+          name: snap?.meta.name ?? code,
+          price: snap?.price ?? null,
+          ret_1d: snap?.returns.ret_1d ?? null,
+          ret_20d: snap?.returns.ret_20d ?? null,
+          ret_90d: snap?.returns.ret_90d ?? null,
+          ret_250d: snap?.returns.ret_250d ?? null,
+        };
+      });
+      table = formatStockTable(rows);
+    } catch {
+      // Snapshot fetch failed — fall back to a bare code list so the user
+      // still sees the matches; no structured rows in this branch.
+      table = codes.join(', ');
+    }
+    const text = `${head}\n\n${table}${tail}`;
+    if (rows === null) return okResult(text);
+    // Surface the rows on `output.meta` so the Feishu adapter renders the
+    // schema-2.0 native `table` element instead of falling back to
+    // ASCII-padded markdown (which Feishu can't align).
+    return okResultWithMeta(text, {
+      stockTableRows: stockTableMetaRows(rows),
+      stockTableSubheader: `${head}${tail.length > 0 ? `  ·  ${tail.trim()}` : ''}`,
+    });
   }
-  const evidence = evidenceParts.length > 0 ? `  ${evidenceParts.join(' ')}` : '';
-  return `  ${String(ordinal).padStart(2)}. ${m.code}${evidence}`;
 }

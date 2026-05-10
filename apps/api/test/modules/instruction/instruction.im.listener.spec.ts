@@ -193,12 +193,12 @@ describe('InstructionImListener.onInbound — ACL', () => {
 });
 
 describe('InstructionImListener.onInbound — async path', () => {
-  it('posts a started reply and bridges completion back to the IM thread', async () => {
+  it('enqueues but sends no started card, then bridges completion back to the IM thread', async () => {
     const { listener, sends, enqueued } = build();
     await listener.onInbound(inbound('/analyze'));
     expect(enqueued).toHaveLength(1);
-    expect(sends).toHaveLength(1);
-    expect(sends[0]?.kind).toBe('instruction.async.started');
+    // No "queued" card is sent — async flow is silent until done.
+    expect(sends).toHaveLength(0);
 
     const job = enqueued[0];
     expect(job).toBeDefined();
@@ -213,11 +213,11 @@ describe('InstructionImListener.onInbound — async path', () => {
     };
     await listener.onAsyncCompleted(completion);
 
-    expect(sends).toHaveLength(2);
-    expect(sends[1]?.kind).toBe('instruction.async.completed');
-    expect(sends[1]?.text).toBe('final analysis');
-    expect(sends[1]?.meta?.['jobId']).toBe(job.jobId);
-    expect(sends[1]?.meta?.['durationMs']).toBe(5000);
+    expect(sends).toHaveLength(1);
+    expect(sends[0]?.kind).toBe('instruction.async.completed');
+    expect(sends[0]?.text).toBe('final analysis');
+    expect(sends[0]?.meta?.['jobId']).toBe(job.jobId);
+    expect(sends[0]?.meta?.['durationMs']).toBe(5000);
   });
 
   it('ignores completion events for jobs that did not originate from IM', async () => {

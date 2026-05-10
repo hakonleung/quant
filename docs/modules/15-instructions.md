@@ -60,23 +60,29 @@
 
 ### v1 已注册指令
 
-| Spec id   | 来源                                       | 模式      | 摘要                                                                                      |
-| --------- | ------------------------------------------ | --------- | ----------------------------------------------------------------------------------------- |
-| `help`    | `instruction/handlers/help.handler.ts`     | sync      | 列已注册 spec；`/help <id>` 显示详情                                                      |
-| `focus`   | `stock-meta/instructions/focus.handler.ts` | sync      | 校验 6 位 A 股 code 并回 `focus = <code> <name> (<industry>)`                             |
-| `stock`   | `stock-meta/instructions/stock.handler.ts` | sync      | 按 code / 名称 / 拼音搜索（默认 limit=10）                                                |
-| `sector`  | `sectors/instructions/sector.handler.ts`   | sync      | 列对当前用户可见的板块（own + published），输出包含 OWNER 与 [PUB] 标识                    |
-| `sector.publish` | `sectors/instructions/sector-publish.handler.ts` | sync | `/sector.publish <id>` 仅创建者；触发 confirm 后置 `published=true` 让全员可见 |
-| `sector.unpublish` | `sectors/instructions/sector-publish.handler.ts` | sync | `/sector.unpublish <id>` 仅创建者；恢复为私有 |
-| `sector.refresh` | `sectors/instructions/sector-refresh.handler.ts` | sync | `/sector.refresh <id>` 任何用户可触发；动态板块按 `screenPlan` 重跑并落库,所有人共享结果 |
-| `watch`   | `watch/instructions/watch.handler.ts`      | sync      | `watch list`（别名 `watch.list`）—— 列 watch 任务                                         |
-| `ledger`  | `ledger/instructions/ledger.handler.ts`    | sync      | `/ledger sub=summary\|list [limit=N]`：基于 `LedgerService.enriched` 输出汇总或近 N 条    |
-| `analyze` | `ledger/instructions/analyze.handler.ts`   | **async** | `/analyze [fresh=1]` `[$]`：调 `LedgerService.analyze`（LLM in NestJS）；走 `instruction.async` 通道 |
-| `update`  | `blacklist/instructions/update.handler.ts` | sync      | `/update target=blacklist` `[!]`：调 `BlacklistService.refresh`，回 size/asof/universe   |
-| `screen`  | `screen/instructions/screen.handler.ts`    | **async** | `/screen "<NL>" [asof=YYYY-MM-DD]` `[$]`：NestJS 端 NL→DSL + Flight `screen_run`；走 async 通道 |
-| `agent`   | `agent/instructions/agent.handler.ts`      | sync      | `/agent <prompt>` `[$]`：自然语言总入口，多步 tool-use 循环 + 流式收尾；首次返回 `confirm-required` 让 IM 出付费卡，term 出 confirmPrompt |
-| `agent.confirm` | `agent/instructions/agent-confirm.handler.ts` | sync | `/agent.confirm correlationId=… approve=1\|0`：续派被付费/破坏性工具暂停的循环；只接 `correlationId` 所属的同一 userId |
-| `usr`     | `instruction/handlers/usr.handler.ts`      | sync      | 显示用户身份 + LLM ledger 累计（今日 / 本月 / 总计 + per-scope CNY） |
+| Spec id            | 来源                                             | 模式      | 摘要                                                                                                                                      |
+| ------------------ | ------------------------------------------------ | --------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `help`             | `instruction/handlers/help.handler.ts`           | sync      | 列已注册 spec；`/help <id>` 显示详情                                                                                                      |
+| `focus`            | `stock-meta/instructions/focus.handler.ts`       | sync      | 校验 6 位 A 股 code 并回 `focus = <code> <name> (<industry>)`                                                                             |
+| `stock`            | `stock-meta/instructions/stock.handler.ts`       | sync      | 按 code / 名称 / 拼音搜索（默认 limit=10）                                                                                                |
+| `sector`           | `sectors/instructions/sector.handler.ts`         | sync      | 列对当前用户可见的板块（own + published），输出包含 OWNER 与 [PUB] 标识                                                                   |
+| `sector.publish`   | `sectors/instructions/sector-publish.handler.ts` | sync      | `/sector.publish <id>` 仅创建者；触发 confirm 后置 `published=true` 让全员可见                                                            |
+| `sector.unpublish` | `sectors/instructions/sector-publish.handler.ts` | sync      | `/sector.unpublish <id>` 仅创建者；恢复为私有                                                                                             |
+| `sector.refresh`   | `sectors/instructions/sector-refresh.handler.ts` | sync      | `/sector.refresh <id>` 任何用户可触发；动态板块按 `screenPlan` 重跑并落库,所有人共享结果                                                  |
+| `watch`            | `watch/instructions/watch.handler.ts`            | sync      | `watch list`（别名 `watch.list`）—— 列 watch 任务                                                                                         |
+| `ledger`           | `ledger/instructions/ledger.handler.ts`          | sync      | `/ledger [sub=list] [limit=N]`：基于 `LedgerService.enriched` 输出近 N 条（`sub=summary` 已下线，复盘走 `/ledger.analyze`）                |
+| `ledger.analyze`   | `ledger/instructions/ledger-analyze.handler.ts`  | **async** | `/ledger analyze [fresh=1]` `[$]`：调 `LedgerService.analyze`（LLM in NestJS），与 term 的 `analyze.ledger` 按钮等价；走 `instruction.async` 通道 |
+| `analyze`          | `sentiment/instructions/analyze.handler.ts`      | **async** | `/analyze <code> [fresh=1] [windowDays=N]` `[$]`：单只新闻舆情，对齐 term `analyze.one`；async 通道                                       |
+| `analyze.sector`   | `sentiment/instructions/analyze-sector.handler.ts` | **async** | `/analyze.sector <id> [fresh=1] [windowDays=N]` `[$]`：板块成员舆情扇出 + LLM 主题聚类，对齐 term `analyze.many`                          |
+| `ta`               | `ta/instructions/ta.handler.ts`                  | **async** | `/ta <code> [fresh=1]` `[$]`：单只技术分析，对齐 term `analyze.ta`                                                                        |
+| `ta.show`          | `ta/instructions/ta-show.handler.ts`             | sync      | `/ta.show <code>` `[$]`：从缓存读已生成的 TA 分析（无 LLM 调用，仍走 confirm 流以与 `/ta` 一致）                                          |
+| `ta.sector`        | `ta/instructions/ta-sector.handler.ts`           | **async** | `/ta.sector <id> [fresh=1]` `[$]`：板块成员 TA 扇出 + LLM 综述，对齐 term `analyze.ta.many`                                               |
+| `web.search`       | `agent/instructions/web-search.handler.ts`       | sync      | `/web.search q="..." [n=5]`：仅给 `/agent` 工具集使用；锁定 Qwen 提供方做付费网搜，输出中文摘要                                           |
+| `update`           | `blacklist/instructions/update.handler.ts`       | sync      | `/update target=blacklist` `[!]`：调 `BlacklistService.refresh`，回 size/asof/universe                                                    |
+| `screen`           | `screen/instructions/screen.handler.ts`          | **async** | `/screen "<NL>" [asof=YYYY-MM-DD]` `[$]`：NestJS 端 NL→DSL + Flight `screen_run`；走 async 通道                                           |
+| `agent`            | `agent/instructions/agent.handler.ts`            | sync      | `/agent <prompt>` `[$]`：自然语言总入口，多步 tool-use 循环 + 流式收尾；首次返回 `confirm-required` 让 IM 出付费卡，term 出 confirmPrompt |
+| `agent.confirm`    | `agent/instructions/agent-confirm.handler.ts`    | sync      | `/agent.confirm correlationId=… approve=1\|0`：续派被付费/破坏性工具暂停的循环；只接 `correlationId` 所属的同一 userId                    |
+| `usr`              | `instruction/handlers/usr.handler.ts`            | sync      | 显示用户身份 + LLM ledger 累计（今日 / 本月 / 总计 + per-scope CNY）                                                                      |
 
 #### 调试 / 内部指令（`INSTRUCTION_DEBUG_ENABLED=1` 才注册）
 
@@ -130,14 +136,14 @@
 
 ## 卡片回复
 
-| kind                          | 飞书卡片 builder                     | Slack blocks builder                   |
-| ----------------------------- | ------------------------------------ | -------------------------------------- |
-| `instruction.reply`           | `buildInstructionReplyCard`          | `buildInstructionReplyBlocks`          |
-| `instruction.async.started`   | `buildInstructionAsyncStartedCard`   | `buildInstructionAsyncStartedBlocks`   |
-| `instruction.async.completed` | `buildInstructionAsyncCompletedCard` | `buildInstructionAsyncCompletedBlocks` |
-| `watch.hit`                   | `buildWatchHitCard`                  | `buildWatchHitBlocks`                  |
-| `agent.paid_confirm`          | `buildAgentPaidConfirmCard`（紫色 header；含 `/agent confirm=1 q="…"` 复制粘贴提示） | — Slack 走纯文本兜底 |
-| `agent.tool_proposal`         | `buildAgentToolProposalCard`（紫色 header；含 `agent.confirm correlationId=… approve=1\|0`） | — Slack 走纯文本兜底 |
+| kind                          | 飞书卡片 builder                                                                             | Slack blocks builder                   |
+| ----------------------------- | -------------------------------------------------------------------------------------------- | -------------------------------------- |
+| `instruction.reply`           | `buildInstructionReplyCard`                                                                  | `buildInstructionReplyBlocks`          |
+| `instruction.async.started`   | `buildInstructionAsyncStartedCard`                                                           | `buildInstructionAsyncStartedBlocks`   |
+| `instruction.async.completed` | `buildInstructionAsyncCompletedCard`                                                         | `buildInstructionAsyncCompletedBlocks` |
+| `watch.hit`                   | `buildWatchHitCard`                                                                          | `buildWatchHitBlocks`                  |
+| `agent.paid_confirm`          | `buildAgentPaidConfirmCard`（紫色 header；含 `/agent confirm=1 q="…"` 复制粘贴提示）         | — Slack 走纯文本兜底                   |
+| `agent.tool_proposal`         | `buildAgentToolProposalCard`（紫色 header；含 `agent.confirm correlationId=… approve=1\|0`） | — Slack 走纯文本兜底                   |
 
 - IM listener 在每条 `channels.send` 上挂 `meta = { ok, instructionId, code?, jobId?, durationMs? }`，由 adapter 端的 `pickCard` / `pickBlocks` 路由到对应 builder。
 - 飞书 header 模板：sync 成功 `green`、失败 `red`；async started `orange`；async completed 与 sync 同色。
@@ -147,8 +153,9 @@
 ## 异步长任务通道
 
 ```
-IM /analyze ──► InstructionExecutor.dispatch
-                     │ (mode === 'async')
+IM /analyze | /analyze.sector | /ta | /ta.sector | /ledger.analyze | /screen
+                     │ ──► InstructionExecutor.dispatch
+                     │     (mode === 'async')
                      ▼
                InstructionAsyncBus.enqueue ──► BullMQ "instruction.async"
                                                        │
@@ -157,7 +164,9 @@ IM /analyze ──► InstructionExecutor.dispatch
                                               │   ├── SocketBus.emitTo(userId, 'instruction.async.started', …)
                                               │   └── EventEmitter2 'instruction.async.started'
                                               ▼
-                                       executor.execute (handler runs)
+                                  executor.executeHandler (handler runs inline,
+                                       bypassing async re-routing — see
+                                       InstructionExecutor.executeHandler doc)
                                               │   ├── SocketBus.emitTo(userId, 'instruction.async.completed', …)
                                               │   └── EventEmitter2 'instruction.async.completed'
                                               ▼
@@ -184,7 +193,7 @@ IM /analyze ──► InstructionExecutor.dispatch
 - `apps/api/test/modules/instruction/instruction.executor.spec.ts` —— execute / executeLine / dispatch / mode='async' 入队 / zod 早失败 / 入队异常。
 - `apps/api/test/modules/instruction/instruction.im.listener.spec.ts` —— `/` 前缀 / sync 回复 + meta / ACL forbidden / async started + 续推 completed。
 - `apps/api/test/modules/instruction/instruction-async.processor.spec.ts` —— started/completed 事件链 / executor 抛错被包装成 completed 错误。
-- `apps/api/test/modules/ledger/{ledger,analyze}.handler.spec.ts`、
+- `apps/api/test/modules/ledger/{ledger,ledger-analyze}.handler.spec.ts`、
   `apps/api/test/modules/blacklist/update.handler.spec.ts`、
   `apps/api/test/modules/screen/screen.handler.spec.ts` —— 业务 handler golden + 异常路径。
 - `apps/api/test/modules/channel/{feishu-card,slack-card}.spec.ts` —— pickCard / pickBlocks 四类 kind + 截断 + 未知 kind fallback。

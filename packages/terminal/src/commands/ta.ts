@@ -116,11 +116,7 @@ async function taManyConfirm(
     });
     return interactive(widget);
   }
-  const r = await ctx.actions.run(
-    analyzeTaManyAction,
-    { codes, label },
-    { signal: ctx.signal },
-  );
+  const r = await ctx.actions.run(analyzeTaManyAction, { codes, label }, { signal: ctx.signal });
   return interactive(
     selectReadingMode({
       title: `ta sector ${label} — pick reading mode`,

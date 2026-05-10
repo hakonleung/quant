@@ -66,9 +66,13 @@ describe('buildInstructionReplyCard', () => {
   it('truncates body text past the card limit', () => {
     const long = 'x'.repeat(5000);
     const card = buildInstructionReplyCard(long, { ok: true, instructionId: 'focus' });
-    const elem = card.elements[0] as { text: { content: string } };
-    expect(elem.text.content.endsWith('…(truncated)')).toBe(true);
-    expect(elem.text.content.length).toBeLessThanOrEqual(3000);
+    // Body is rendered via the cardkit-v2 `markdown` element (no `text`
+    // wrapper) so triple-backtick fences render as real monospace blocks
+    // — see the `bodyMarkdownElement` comment in feishu-card.ts.
+    const elem = card.elements[0] as { tag: 'markdown'; content: string };
+    expect(elem.tag).toBe('markdown');
+    expect(elem.content.endsWith('…(truncated)')).toBe(true);
+    expect(elem.content.length).toBeLessThanOrEqual(3000);
   });
 });
 
@@ -122,7 +126,7 @@ describe('stripSlackMrkdwn (regression)', () => {
 });
 
 describe('pickCard — agent kinds', () => {
-  it('renders the paid-confirm card with the original q in the body', () => {
+  it('renders the paid-confirm card with the original q in the body and confirm button', () => {
     const card = pickCard({
       kind: 'agent.paid_confirm',
       text: '',
@@ -131,12 +135,22 @@ describe('pickCard — agent kinds', () => {
     expect(card).not.toBeNull();
     expect(card?.header.template).toBe('purple');
     expect(card?.header.title.content).toContain('agent');
-    const body = JSON.stringify(card?.elements);
-    expect(body).toContain('看茅台估值');
-    expect(body).toContain('/agent confirm=1');
+    // q appears in the div body text
+    const divElem = (card as unknown as { elements: unknown[] })?.elements[0] as { tag: string; text: { content: string } };
+    expect(divElem.text.content).toContain('看茅台估值');
+    // confirm button value carries action=confirm + agentQ as a plain object
+    // (Feishu spec requires Object — strings are not reliably round-tripped).
+    const actionElem = (card as unknown as { elements: unknown[] })?.elements[1] as {
+      tag: string;
+      actions: { tag: string; type: string; value: Record<string, unknown> }[];
+    };
+    expect(actionElem.tag).toBe('action');
+    const confirmBtn = actionElem.actions[0];
+    expect(confirmBtn?.value['action']).toBe('confirm');
+    expect(confirmBtn?.value['agentQ']).toBe('看茅台估值');
   });
 
-  it('renders the tool-proposal card with both approve + cancel commands', () => {
+  it('renders the tool-proposal card with approve + cancel buttons carrying correlationId', () => {
     const card = pickCard({
       kind: 'agent.tool_proposal',
       text: '  1. /screen "近5日银行" — NL 选股',
@@ -144,21 +158,29 @@ describe('pickCard — agent kinds', () => {
     });
     expect(card).not.toBeNull();
     expect(card?.header.template).toBe('purple');
-    const body = JSON.stringify(card?.elements);
-    expect(body).toContain('/agent.confirm correlationId=abc-123 approve=1');
-    expect(body).toContain('/agent.confirm correlationId=abc-123 approve=0');
+    const actionElem = (card as unknown as { elements: unknown[] })?.elements[1] as {
+      tag: string;
+      actions: { tag: string; type: string; value: Record<string, unknown> }[];
+    };
+    expect(actionElem.tag).toBe('action');
+    expect(actionElem.actions[0]?.value['action']).toBe('confirm');
+    expect(actionElem.actions[0]?.value['correlationId']).toBe('abc-123');
+    expect(actionElem.actions[1]?.value['action']).toBe('cancel');
+    expect(actionElem.actions[1]?.value['correlationId']).toBe('abc-123');
   });
 
-  it('escapes embedded double-quotes in the original q so re-paste survives', () => {
+  it('preserves embedded double-quotes in agentQ via the object button value', () => {
     const card = pickCard({
       kind: 'agent.paid_confirm',
       text: '',
       meta: { agentQ: 'find "high vol" stocks', instructionId: 'agent' },
     });
-    // Pull the rendered text directly out of the elements tree rather
-    // than chasing nested JSON.stringify escape levels.
-    const elements = card?.elements as readonly { text?: { content?: string } }[];
-    const content = elements[0]?.text?.content ?? '';
-    expect(content).toContain('q="find \\"high vol\\" stocks"');
+    const actionElem = (card as unknown as { elements: unknown[] })?.elements[1] as {
+      tag: string;
+      actions: { value: Record<string, unknown> }[];
+    };
+    // Object payload preserves the original string intact — Feishu serializes
+    // it on the wire and our adapter parses it back to the same shape.
+    expect(actionElem.actions[0]?.value['agentQ']).toBe('find "high vol" stocks');
   });
 });

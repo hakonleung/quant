@@ -74,6 +74,11 @@ export class ChannelRegistry implements OnModuleInit, OnModuleDestroy {
     return this.adapters.get(id) ?? null;
   }
 
+  getFeishu(): FeishuChannelAdapter | null {
+    const adapter = this.adapters.get('feishu');
+    return adapter instanceof FeishuChannelAdapter ? adapter : null;
+  }
+
   ids(): readonly ChannelId[] {
     return [...this.adapters.keys()];
   }

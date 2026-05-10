@@ -93,11 +93,20 @@ export type AgentDeltaFrame =
         readonly summary: string;
       }[];
     }
-  | { readonly kind: 'text'; readonly jobId: string; readonly chunk: string; readonly done: boolean }
+  | {
+      readonly kind: 'text';
+      readonly jobId: string;
+      readonly chunk: string;
+      readonly done: boolean;
+    }
   | {
       readonly kind: 'done';
       readonly jobId: string;
-      readonly tokenUsage: { readonly input: number; readonly output: number; readonly total: number };
+      readonly tokenUsage: {
+        readonly input: number;
+        readonly output: number;
+        readonly total: number;
+      };
       readonly cnyCost: number;
       readonly toolCallCount: number;
     };

@@ -1,14 +1,18 @@
 /**
  * `/ledger` — inspect the per-user trading journal from IM.
  *
- *   /ledger                  → summary (default)
- *   /ledger sub=list         → recent N entries (default limit=5)
- *   /ledger sub=list limit=10
- *   /ledger sub=summary
+ *   /ledger                  → recent N entries (default sub=list)
+ *   /ledger list limit=10    → recent N entries
+ *   /ledger analyze          → routed by the subcommand parser to
+ *                              `ledger.analyze` (LLM review, paid).
+ *                              Aligns with the term widget's
+ *                              `analyze.ledger` action.
  *
- * Reads via `LedgerService.enriched(userId)` so derived columns
- * (closingPosition, dailyPct, cashFlow) are already filled in. No
- * service-side changes required.
+ * The previous `sub=summary` path computed a free local aggregate
+ * (entries / total pnl / wins+losses). It was renamed to `analyze`
+ * and now delegates to the LLM-driven `LedgerService.analyze` so the
+ * IM and term surfaces produce the same payload — a "summary" without
+ * the LLM was a different feature with the same name.
  */
 
 import { Inject, Injectable } from '@nestjs/common';
@@ -28,7 +32,7 @@ import { LedgerService } from '../ledger.service.js';
 
 const argsSchema = z
   .object({
-    sub: z.enum(['list', 'summary']).default('summary'),
+    sub: z.literal('list').default('list'),
     limit: z.coerce.number().int().min(1).max(50).default(5),
   })
   .strict();
@@ -39,11 +43,12 @@ type Args = z.infer<typeof argsSchema>;
 export class LedgerInstructionHandler extends InstructionRegistrarBase<Args> {
   readonly spec: InstructionSpec<Args> = {
     id: instructionId('ledger'),
-    summary: 'Inspect the per-user ledger. `sub=list|summary`, `limit` (list only).',
-    summaryCn: '查看交易账本，sub=list|summary',
+    summary: 'List the recent N ledger entries. `limit` defaults to 5.',
+    summaryCn: '查看交易账本（最近 N 条）；analyze 子命令请用 /ledger analyze',
     group: 'portfolio',
     argsSchema,
     positional: ['sub'],
+    aliases: [instructionId('ledger.list')],
     imAliases: ['账本', '账单'],
   };
 
@@ -57,8 +62,7 @@ export class LedgerInstructionHandler extends InstructionRegistrarBase<Args> {
   async execute(args: Args, ctx: InstructionCtx): Promise<InstructionResult> {
     const enriched = await this.ledger.enriched(ctx.userId);
     if (enriched.length === 0) return okResult('ledger is empty');
-    if (args.sub === 'list') return okResult(formatList(enriched, args.limit));
-    return okResult(formatSummary(enriched));
+    return okResult(formatList(enriched, args.limit));
   }
 }
 
@@ -69,20 +73,4 @@ function formatList(entries: readonly EnrichedLedgerEntry[], limit: number): str
     return `  ${e.date}  pnl=${e.pnlAmount.padStart(10)}  pos=${e.derivedClosingPosition.padStart(12)}  pct=${pct}%`;
   });
   return `ledger (last ${String(tail.length)} of ${String(entries.length)}):\n${lines.join('\n')}`;
-}
-
-function formatSummary(entries: readonly EnrichedLedgerEntry[]): string {
-  const first = entries[0];
-  const last = entries[entries.length - 1];
-  if (first === undefined || last === undefined) return 'ledger is empty';
-  const totalPnl = entries.reduce((sum, e) => sum + Number(e.pnlAmount), 0);
-  const wins = entries.filter((e) => Number(e.pnlAmount) > 0).length;
-  const losses = entries.filter((e) => Number(e.pnlAmount) < 0).length;
-  return [
-    `ledger summary (${first.date} → ${last.date})`,
-    `  entries: ${String(entries.length)}`,
-    `  total pnl: ${totalPnl.toFixed(2)}`,
-    `  wins: ${String(wins)}  losses: ${String(losses)}`,
-    `  closing position: ${last.derivedClosingPosition}`,
-  ].join('\n');
 }

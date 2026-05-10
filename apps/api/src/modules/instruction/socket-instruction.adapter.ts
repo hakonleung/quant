@@ -7,10 +7,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { formatResult, type SocketCommand, type SocketCommandAck } from '@quant/shared';
 
-import type {
-  SocketCommandHandler,
-  SocketCommandPrincipal,
-} from '../socket/socket.gateway.js';
+import type { SocketCommandHandler, SocketCommandPrincipal } from '../socket/socket.gateway.js';
 
 import { InstructionExecutor } from './instruction.executor.js';
 

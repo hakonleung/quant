@@ -18,7 +18,12 @@
 
 import { Inject, Injectable, Logger } from '@nestjs/common';
 
-import { QuantError, type RankSpecView, type ScreenPlanAst, type UniversePlanAst } from '@quant/shared';
+import {
+  QuantError,
+  type RankSpecView,
+  type ScreenPlanAst,
+  type UniversePlanAst,
+} from '@quant/shared';
 
 import { LlmService } from '../llm/llm.service.js';
 import {
@@ -122,7 +127,7 @@ const FENCE_RE = /^```(?:json)?\s*([\s\S]+?)```$/u;
 function extractJsonObject(raw: string): unknown {
   const text = raw.trim();
   const fenced = FENCE_RE.exec(text);
-  const stripped = fenced !== null ? fenced[1]?.trim() ?? '' : text;
+  const stripped = fenced !== null ? (fenced[1]?.trim() ?? '') : text;
   try {
     return JSON.parse(stripped) as unknown;
   } catch (err) {

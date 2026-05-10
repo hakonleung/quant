@@ -12,7 +12,13 @@
  * fresh LLM output goes through this decoder instead.
  */
 
-import { QuantError, TaAnalysisSchema, type TaAnalysis, type TaLevel, type TaTrend } from '@quant/shared';
+import {
+  QuantError,
+  TaAnalysisSchema,
+  type TaAnalysis,
+  type TaLevel,
+  type TaTrend,
+} from '@quant/shared';
 
 const LEVEL_STRENGTHS = new Set<string>(['weak', 'medium', 'strong']);
 const TREND_DIRECTIONS = new Set<string>(['up', 'down', 'sideways']);
@@ -54,7 +60,7 @@ export function decodeTaAnalysis(args: DecodeTaArgs): TaAnalysis {
 function parseJsonObject(raw: string): Readonly<Record<string, unknown>> {
   const trimmed = raw.trim();
   const fenced = FENCE_RE.exec(trimmed);
-  const stripped = fenced !== null ? fenced[1]?.trim() ?? trimmed : trimmed;
+  const stripped = fenced !== null ? (fenced[1]?.trim() ?? trimmed) : trimmed;
   let payload: unknown;
   try {
     payload = JSON.parse(stripped);
@@ -95,27 +101,21 @@ function decodeTrend(raw: unknown): TaTrend {
   const t = raw as Readonly<Record<string, unknown>>;
   const directionRaw = t['direction'];
   if (typeof directionRaw !== 'string' || !TREND_DIRECTIONS.has(directionRaw)) {
-    throw new QuantError(
-      'LLM_FAILED',
-      'ta trend.direction must be up/down/sideways',
-      { got: String(directionRaw) },
-    );
+    throw new QuantError('LLM_FAILED', 'ta trend.direction must be up/down/sideways', {
+      got: String(directionRaw),
+    });
   }
   const horizon = coerceInt(t['horizon_days']);
   if (horizon === null || horizon <= 0) {
-    throw new QuantError(
-      'LLM_FAILED',
-      'ta trend.horizon_days must be a positive integer',
-      { got: String(t['horizon_days']) },
-    );
+    throw new QuantError('LLM_FAILED', 'ta trend.horizon_days must be a positive integer', {
+      got: String(t['horizon_days']),
+    });
   }
   const confidence = coerceUnitFloat(t['confidence']);
   if (confidence === null) {
-    throw new QuantError(
-      'LLM_FAILED',
-      'ta trend.confidence must be a number in [0,1]',
-      { got: String(t['confidence']) },
-    );
+    throw new QuantError('LLM_FAILED', 'ta trend.confidence must be a number in [0,1]', {
+      got: String(t['confidence']),
+    });
   }
   const rationaleRaw = t['rationale'];
   const rationale = typeof rationaleRaw === 'string' ? rationaleRaw.trim() : '';

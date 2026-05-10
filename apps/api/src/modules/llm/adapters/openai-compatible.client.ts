@@ -19,7 +19,10 @@
  */
 
 import OpenAI from 'openai';
-import type { ChatCompletionChunk, ChatCompletionMessageParam } from 'openai/resources/chat/completions';
+import type {
+  ChatCompletionChunk,
+  ChatCompletionMessageParam,
+} from 'openai/resources/chat/completions';
 
 import {
   type ChatMessage,
@@ -163,11 +166,9 @@ export class OpenAiCompatibleLlmClient implements LlmClient {
     }
     const choice = response.choices[0];
     if (choice === undefined) {
-      throw new QuantError(
-        'LLM_FAILED',
-        `${this.providerRow.provider}: response has no choices`,
-        { source: this.providerRow.provider },
-      );
+      throw new QuantError('LLM_FAILED', `${this.providerRow.provider}: response has no choices`, {
+        source: this.providerRow.provider,
+      });
     }
     const text = choice.message.content;
     if (typeof text !== 'string') {
@@ -213,7 +214,11 @@ function toOpenAiMessage(msg: ChatMessage): ChatCompletionMessageParam {
 
 function toOpenAiTool(tool: ChatTool): {
   readonly type: 'function';
-  readonly function: { readonly name: string; readonly description: string; readonly parameters: Record<string, unknown> };
+  readonly function: {
+    readonly name: string;
+    readonly description: string;
+    readonly parameters: Record<string, unknown>;
+  };
 } {
   return {
     type: 'function',

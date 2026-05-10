@@ -58,6 +58,13 @@ export interface ResolveOptions {
   readonly scope: LlmScope;
   /** When true, prefer a provider with `webSearchKind`. */
   readonly needWebSearch?: boolean;
+  /**
+   * Per-call provider override. Bypasses both the agent-scope override
+   * and the default heuristic — e.g. the `web.search` instruction pins
+   * itself to `'qwen'` because Qwen DashScope is the only provider with
+   * production-grade native web search in our catalog.
+   */
+  readonly provider?: string;
 }
 
 export interface LlmCallContext {
@@ -229,8 +236,17 @@ export class LlmService {
   // -------------------------------------------------------------------------
 
   private resolve(opts: ResolveOptions): ResolvedProvider {
-    const override =
-      opts.scope === 'agent' && hasOverride(this.cfg.agent) ? this.cfg.agent : this.cfg.default;
+    // Per-call provider pin (e.g. `web.search` → 'qwen') wins over both
+    // the AGENT_LLM_* override and the catalog scan — without it, a box
+    // configured with both QWEN_API_KEY and MOONSHOT_API_KEY would
+    // silently route web search through whichever happens to be first
+    // in the catalog scan.
+    const override: LlmProviderOverride =
+      opts.provider !== undefined && opts.provider.length > 0
+        ? { provider: opts.provider }
+        : opts.scope === 'agent' && hasOverride(this.cfg.agent)
+          ? this.cfg.agent
+          : this.cfg.default;
     const row = pickRow(override, opts);
     const apiKey = process.env[row.apiKeyEnv];
     if (apiKey === undefined || apiKey === '') {

@@ -21,7 +21,11 @@ const SYSTEM = `你是A股技术面分析师。基于一组成分股的技术分
 interface PromptInput {
   readonly sectorLabel: string;
   readonly members: readonly TaSectorMember[];
-  readonly trendBreakdown: { readonly up: number; readonly down: number; readonly sideways: number };
+  readonly trendBreakdown: {
+    readonly up: number;
+    readonly down: number;
+    readonly sideways: number;
+  };
   readonly overallDirection: 'up' | 'down' | 'sideways';
   readonly overallConfidence: number;
 }

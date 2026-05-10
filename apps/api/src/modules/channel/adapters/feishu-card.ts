@@ -11,13 +11,43 @@
  * `<font color='red'>...</font>`, and emoji shortcodes natively.
  */
 
-interface FeishuCard {
+import { maybeStockTableCard } from './feishu-card-v2.js';
+
+/**
+ * Two card envelopes ride on the same outbound channel:
+ *
+ *   - {@link FeishuV1Card}: legacy `{ config, header, elements }` shape.
+ *     Used by every text / button / lark_md card we still hand-build.
+ *   - {@link FeishuV2Card}: schema 2.0 `{ schema:"2.0", header, body }`
+ *     shape. The only envelope that accepts the new card-kit content
+ *     components — most importantly the native `table` element which
+ *     we use for stock-list rendering (alignment is impossible inside
+ *     `lark_md`; see `bodyMarkdownElement` for the prior workaround).
+ *
+ * The Feishu adapter's `send()` does `JSON.stringify(card)` either way,
+ * so the union is fine on the wire — Feishu detects the format by the
+ * presence of the `schema` field.
+ */
+export type FeishuCard = FeishuV1Card | FeishuV2Card;
+
+export interface FeishuV1Card {
   readonly config: { readonly wide_screen_mode: boolean };
   readonly header: {
     readonly template: 'red' | 'green' | 'grey' | 'blue' | 'orange' | 'purple';
     readonly title: { readonly tag: 'plain_text'; readonly content: string };
   };
   readonly elements: readonly unknown[];
+}
+
+export interface FeishuV2Card {
+  readonly schema: '2.0';
+  readonly header: {
+    readonly template: 'red' | 'green' | 'grey' | 'blue' | 'orange' | 'purple';
+    readonly title: { readonly tag: 'plain_text'; readonly content: string };
+  };
+  readonly body: {
+    readonly elements: readonly unknown[];
+  };
 }
 
 const PRICE_PREFIX: Readonly<Record<string, string>> = { a: '¥', hk: 'HK$', us: '$' };
@@ -29,12 +59,12 @@ const NEG_LEAD_RE = /^-\d/u;
 const MAX_BODY_CHARS = 3000;
 const TRUNCATE_SUFFIX = '\n…(truncated)';
 
-function truncateForCard(text: string): string {
+export function truncateForCard(text: string): string {
   if (text.length <= MAX_BODY_CHARS) return text;
   return text.slice(0, MAX_BODY_CHARS - TRUNCATE_SUFFIX.length) + TRUNCATE_SUFFIX;
 }
 
-function metaString(meta: Readonly<Record<string, unknown>>, key: string): string | null {
+export function metaString(meta: Readonly<Record<string, unknown>>, key: string): string | null {
   const v = meta[key];
   return typeof v === 'string' && v.length > 0 ? v : null;
 }
@@ -104,7 +134,7 @@ function watchHitElements(summaryMd: string, condsLine: string): unknown[] {
 export function buildWatchHitCard(
   text: string,
   meta: Readonly<Record<string, unknown>>,
-): FeishuCard {
+): FeishuV1Card {
   const market = metaString(meta, 'market') ?? 'a';
   const code = metaString(meta, 'code') ?? '';
   const name = metaString(meta, 'name') ?? code;
@@ -139,7 +169,7 @@ export function buildFeishuCard(message: {
   readonly title?: string;
   readonly text: string;
   readonly kind?: string;
-}): FeishuCard {
+}): FeishuV1Card {
   return {
     config: { wide_screen_mode: true },
     header: {
@@ -157,7 +187,7 @@ export function buildFeishuCard(message: {
 export function buildInstructionReplyCard(
   text: string,
   meta: Readonly<Record<string, unknown>>,
-): FeishuCard {
+): FeishuV1Card {
   const ok = meta['ok'] === true;
   const idLabel = metaString(meta, 'instructionId') ?? 'instruction';
   const code = metaString(meta, 'code');
@@ -172,9 +202,7 @@ export function buildInstructionReplyCard(
       template: ok ? 'green' : 'red',
       title: { tag: 'plain_text', content: headerTitle },
     },
-    elements: [
-      { tag: 'div', text: { tag: 'lark_md', content: truncateForCard(stripSlackMrkdwn(text)) } },
-    ],
+    elements: [bodyMarkdownElement(text)],
   };
 }
 
@@ -182,7 +210,7 @@ export function buildInstructionReplyCard(
 export function buildInstructionAsyncStartedCard(
   text: string,
   meta: Readonly<Record<string, unknown>>,
-): FeishuCard {
+): FeishuV1Card {
   const idLabel = metaString(meta, 'instructionId') ?? 'instruction';
   return {
     config: { wide_screen_mode: true },
@@ -190,9 +218,7 @@ export function buildInstructionAsyncStartedCard(
       template: 'orange',
       title: { tag: 'plain_text', content: `▶ /${idLabel} queued` },
     },
-    elements: [
-      { tag: 'div', text: { tag: 'lark_md', content: truncateForCard(stripSlackMrkdwn(text)) } },
-    ],
+    elements: [bodyMarkdownElement(text)],
   };
 }
 
@@ -204,7 +230,7 @@ export function buildInstructionAsyncStartedCard(
 export function buildInstructionAsyncCompletedCard(
   text: string,
   meta: Readonly<Record<string, unknown>>,
-): FeishuCard {
+): FeishuV1Card {
   const ok = meta['ok'] === true;
   const idLabel = metaString(meta, 'instructionId') ?? 'instruction';
   const code = metaString(meta, 'code');
@@ -214,9 +240,7 @@ export function buildInstructionAsyncCompletedCard(
     : code !== null
       ? `✗ /${idLabel} (${code})`
       : `✗ /${idLabel} failed`;
-  const elements: unknown[] = [
-    { tag: 'div', text: { tag: 'lark_md', content: truncateForCard(stripSlackMrkdwn(text)) } },
-  ];
+  const elements: unknown[] = [bodyMarkdownElement(text)];
   if (durationMs !== null) {
     elements.push({
       tag: 'note',
@@ -234,81 +258,46 @@ export function buildInstructionAsyncCompletedCard(
 }
 
 /**
- * `/agent` paid-call confirm card. Rendered when `costsCredits=true`
- * instructions return `confirm-required` from the executor; the user
- * must reply with the displayed confirm command before the LLM is
- * actually invoked. Buttons are deferred to v1.5; v1 ships the safer
- * "type the command back" pattern so the feature works without a
- * Feishu app callback URL configured.
+ * Render a handler's text body as Feishu's cardkit-v2 `markdown` element
+ * (top-level `{ tag: 'markdown', content }`, NOT a `div` + `lark_md`).
+ *
+ * This is the only Feishu card text variant that:
+ *   - preserves whitespace inside triple-backtick code fences (renders
+ *     them as actual monospace preformatted blocks),
+ *   - supports markdown tables, headings, blockquotes,
+ *   - doesn't collapse runs of spaces in regular paragraphs.
+ *
+ * The legacy `lark_md` element renders code fences as **literal** `` ``` ``
+ * characters and uses a proportional font, so any ASCII column-padding we
+ * emit (stock tables, /usr spend table, /help) ends up jumbled — exactly
+ * the `飞书渲染的 table 布局全是乱的` bug the screenshot showed.
+ *
+ * Watch.hit and the agent confirm cards stay on `lark_md` because they
+ * use `<font color>` tags + emoji shortcodes that `markdown` doesn't
+ * support.
  */
-export function buildAgentPaidConfirmCard(
-  text: string,
-  meta: Readonly<Record<string, unknown>>,
-): FeishuCard {
-  const q = metaString(meta, 'agentQ') ?? '';
-  const idLabel = metaString(meta, 'instructionId') ?? 'agent';
-  const escaped = q.replace(/"/g, '\\"');
-  const confirmCmd = `/agent confirm=1 q="${escaped}"`;
-  const body = [
-    `**确认调用 \`/${idLabel}\` ?**`,
-    '该指令会触发外部付费 LLM 调用 + 多步指令。',
-    '',
-    `原始问题：\`${truncateForCard(stripSlackMrkdwn(q))}\``,
-    '',
-    `回复以下命令以继续：`,
-    '```',
-    confirmCmd,
-    '```',
-    '回复任意其它内容会被识别为新的需求。',
-  ].join('\n');
-  // Surface the underlying text for old clients / fallback path; ignored
-  // on the lark side because the card is `interactive`.
-  void text;
-  return {
-    config: { wide_screen_mode: true },
-    header: {
-      template: 'purple',
-      title: { tag: 'plain_text', content: `❓ /${idLabel} 需要确认` },
-    },
-    elements: [{ tag: 'div', text: { tag: 'lark_md', content: body } }],
-  };
+function bodyMarkdownElement(text: string): { tag: 'markdown'; content: string } {
+  return { tag: 'markdown', content: truncateForCard(stripSlackMrkdwn(text)) };
 }
 
-/**
- * `/agent` tool-proposal confirm card. Emitted mid-loop when one or more
- * proposed tool calls are `costsCredits` / `destructive`. Same v1
- * pattern: paste-back text confirm rather than buttons.
- */
-export function buildAgentToolProposalCard(
-  text: string,
-  meta: Readonly<Record<string, unknown>>,
-): FeishuCard {
-  const correlationId = metaString(meta, 'correlationId') ?? '';
-  const approveCmd = `/agent.confirm correlationId=${correlationId} approve=1`;
-  const cancelCmd = `/agent.confirm correlationId=${correlationId} approve=0`;
-  const body = [
-    `**Agent 申请执行以下工具调用：**`,
-    truncateForCard(stripSlackMrkdwn(text)),
-    '',
-    '回复以批准：',
-    '```',
-    approveCmd,
-    '```',
-    '或取消：',
-    '```',
-    cancelCmd,
-    '```',
-    `（5 分钟后自动失效）`,
-  ].join('\n');
-  return {
-    config: { wide_screen_mode: true },
-    header: {
-      template: 'purple',
-      title: { tag: 'plain_text', content: '❓ Agent 工具调用确认' },
-    },
-    elements: [{ tag: 'div', text: { tag: 'lark_md', content: body } }],
-  };
-}
+// Agent confirm / decided cards live in `feishu-card-agent.ts` (kept
+// out of this file to stay under the 400-LoC cap). Re-exported here so
+// the Feishu adapter (and `pickCard` below) keeps importing from the
+// same module surface.
+export {
+  buildAgentPaidConfirmCard,
+  buildAgentToolProposalCard,
+  buildDecidedConfirmCard,
+} from './feishu-card-agent.js';
+import {
+  buildAgentPaidConfirmCard,
+  buildAgentToolProposalCard,
+} from './feishu-card-agent.js';
+
+// Schema-2.0 native-table renderer lives in `feishu-card-v2.ts` (kept
+// out of this file to stay under the 400-LoC cap and keep v1 / v2 card
+// envelopes in separate modules). Imported below for `pickCard` to
+// route stock-table outbounds through the native `table` widget.
 
 /**
  * Choose a card for the message kind, or return null to fall back to
@@ -324,12 +313,38 @@ export function pickCard(message: {
   switch (message.kind) {
     case 'watch.hit':
       return buildWatchHitCard(message.text, meta);
-    case 'instruction.reply':
-      return buildInstructionReplyCard(message.text, meta);
+    case 'instruction.reply': {
+      const ok = meta['ok'] === true;
+      const idLabel = metaString(meta, 'instructionId') ?? 'instruction';
+      const code = metaString(meta, 'code');
+      const title = ok
+        ? `✓ /${idLabel}`
+        : code !== null
+          ? `✗ /${idLabel} (${code})`
+          : `✗ /${idLabel}`;
+      const tableCard = maybeStockTableCard(message.text, meta, {
+        headerTitle: title,
+        headerTemplate: ok ? 'green' : 'red',
+      });
+      return tableCard ?? buildInstructionReplyCard(message.text, meta);
+    }
     case 'instruction.async.started':
       return buildInstructionAsyncStartedCard(message.text, meta);
-    case 'instruction.async.completed':
-      return buildInstructionAsyncCompletedCard(message.text, meta);
+    case 'instruction.async.completed': {
+      const ok = meta['ok'] === true;
+      const idLabel = metaString(meta, 'instructionId') ?? 'instruction';
+      const code = metaString(meta, 'code');
+      const title = ok
+        ? `✓ /${idLabel} done`
+        : code !== null
+          ? `✗ /${idLabel} (${code})`
+          : `✗ /${idLabel} failed`;
+      const tableCard = maybeStockTableCard(message.text, meta, {
+        headerTitle: title,
+        headerTemplate: ok ? 'green' : 'red',
+      });
+      return tableCard ?? buildInstructionAsyncCompletedCard(message.text, meta);
+    }
     case 'agent.paid_confirm':
       return buildAgentPaidConfirmCard(message.text, meta);
     case 'agent.tool_proposal':

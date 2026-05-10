@@ -15,6 +15,13 @@ const SAMPLE = {
   list_date: '2001-08-27',
   float_pct: '1',
   updated_at: '2026-05-01T00:00:00+00:00',
+  // M3 enrichment fields (nullable)
+  total_share: null,
+  float_share: null,
+  net_assets: null,
+  net_assets_period: null,
+  quarterlies: [],
+  financials_updated_at: null,
 };
 
 function jsonResponse(body: unknown, init: { status?: number } = {}): Response {

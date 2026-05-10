@@ -13,12 +13,7 @@
  */
 
 import { Inject, Injectable } from '@nestjs/common';
-import {
-  errResult,
-  instructionId,
-  okResult,
-  type InstructionResult,
-} from '@quant/shared';
+import { errResult, instructionId, okResult, type InstructionResult } from '@quant/shared';
 
 import type { InstructionCtx } from '../../instruction/instruction.port.js';
 import { InstructionRegistrarBase } from '../../instruction/instruction.provider.js';
@@ -50,10 +45,7 @@ export class AgentConfirmInstructionHandler extends InstructionRegistrarBase<Age
   async execute(args: AgentConfirmArgs, ctx: InstructionCtx): Promise<InstructionResult> {
     const snapshot = this.pending.take(args.correlationId);
     if (snapshot === null) {
-      return errResult(
-        'not-found',
-        `agent confirmation expired or unknown: ${args.correlationId}`,
-      );
+      return errResult('not-found', `agent confirmation expired or unknown: ${args.correlationId}`);
     }
     if (snapshot.userId !== ctx.userId) {
       // Should not happen with proper auth, but defend in depth.

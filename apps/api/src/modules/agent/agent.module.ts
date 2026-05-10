@@ -16,11 +16,15 @@ import { ChannelModule } from '../channel/channel.module.js';
 import { InstructionModule } from '../instruction/instruction.module.js';
 import { SocketModule } from '../socket/socket.module.js';
 import { AgentHistoryStore } from './agent-history.store.js';
+import { AgentImDelivery } from './agent-im-delivery.js';
 import { AgentPendingStore } from './agent-pending.store.js';
 import { AgentService } from './agent.service.js';
+import { AGENT_CONFIG, loadAgentConfig } from './agent.config.js';
+import { AgentStreamFinalizer } from './agent-stream-finalizer.js';
 import { AgentToolBridge } from './agent-tool-bridge.js';
 import { AgentConfirmInstructionHandler } from './instructions/agent-confirm.handler.js';
 import { AgentInstructionHandler } from './instructions/agent.handler.js';
+import { WebSearchInstructionHandler } from './instructions/web-search.handler.js';
 
 @Module({
   imports: [
@@ -30,13 +34,20 @@ import { AgentInstructionHandler } from './instructions/agent.handler.js';
     SocketModule.forRoot({ imports: [InstructionModule] }),
   ],
   providers: [
+    {
+      provide: AGENT_CONFIG,
+      useFactory: () => loadAgentConfig(),
+    },
     SYSTEM_CLOCK_PROVIDER,
     AgentToolBridge,
     AgentHistoryStore,
+    AgentImDelivery,
     AgentPendingStore,
+    AgentStreamFinalizer,
     AgentService,
     AgentInstructionHandler,
     AgentConfirmInstructionHandler,
+    WebSearchInstructionHandler,
   ],
   exports: [AgentService, AgentHistoryStore],
 })

@@ -8,11 +8,17 @@
  * including 404 / future static pages) no longer pays the boot cost.
  */
 
+import { useEffect } from 'react';
+
+import { startChannelActivitySubscription } from './socket/channel-activity-subscriber.js';
 import { useSectorsRemoteSync } from './stores/sectors.store.js';
 import { useSysCfgRemoteSync } from './stores/settings.store.js';
 
 export function RemoteSyncBoot(): null {
   useSectorsRemoteSync();
   useSysCfgRemoteSync();
+  useEffect(() => {
+    startChannelActivitySubscription();
+  }, []);
   return null;
 }

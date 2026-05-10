@@ -134,7 +134,8 @@ export class WatchService implements OnModuleInit {
       );
     }
     const now = new Date().toISOString();
-    const task: WatchTask = {
+    // idx is auto-assigned by the store; build without it
+    const taskData = {
       market: payload.market,
       code: payload.code,
       name: payload.name,
@@ -151,9 +152,8 @@ export class WatchService implements OnModuleInit {
       lastSampleAt: null,
       hitCount: 0,
       lastHitPrice: null,
-    };
-    await this.tasks.upsert(userId, task, false);
-    return task;
+    } satisfies Omit<WatchTask, 'idx'>;
+    return this.tasks.upsert(userId, taskData, false);
   }
 
   async patch(

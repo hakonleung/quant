@@ -86,9 +86,7 @@ export function buildTaUserPrompt(args: {
   readonly bars: readonly KlineBar[];
 }): string {
   const body =
-    args.bars.length === 0
-      ? '(no bars available)'
-      : [HEADER, ...args.bars.map(fmtBar)].join('\n');
+    args.bars.length === 0 ? '(no bars available)' : [HEADER, ...args.bars.map(fmtBar)].join('\n');
   return [
     `股票: ${args.code} ${args.name}`,
     `所属行业: ${args.industries}`,

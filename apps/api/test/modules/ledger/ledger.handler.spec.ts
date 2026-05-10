@@ -28,9 +28,9 @@ function build(entries: readonly EnrichedLedgerEntry[]): LedgerInstructionHandle
 
 async function run(
   h: LedgerInstructionHandler,
-  args: { sub?: 'list' | 'summary'; limit?: number } = {},
+  args: { limit?: number } = {},
 ): Promise<InstructionResult> {
-  return h.execute({ sub: args.sub ?? 'summary', limit: args.limit ?? 5 }, ctx);
+  return h.execute({ sub: 'list', limit: args.limit ?? 5 }, ctx);
 }
 
 describe('LedgerInstructionHandler', () => {
@@ -45,30 +45,13 @@ describe('LedgerInstructionHandler', () => {
     if (r.ok) expect(r.output.text).toBe('ledger is empty');
   });
 
-  it('renders a summary by default', async () => {
-    const data = [
-      entry('2026-05-01', '100', '10100', '1.0'),
-      entry('2026-05-02', '-50', '10050', '-0.49'),
-      entry('2026-05-03', '20', '10070', '0.20'),
-    ];
-    const r = await run(build(data));
-    expect(r.ok).toBe(true);
-    if (r.ok) {
-      expect(r.output.text).toContain('ledger summary (2026-05-01 → 2026-05-03)');
-      expect(r.output.text).toContain('entries: 3');
-      expect(r.output.text).toContain('total pnl: 70.00');
-      expect(r.output.text).toContain('wins: 2');
-      expect(r.output.text).toContain('losses: 1');
-    }
-  });
-
   it('lists the most recent N entries newest-first', async () => {
     const data = [
       entry('2026-05-01', '1', '10001', '0.01'),
       entry('2026-05-02', '2', '10003', '0.02'),
       entry('2026-05-03', '3', '10006', '0.03'),
     ];
-    const r = await run(build(data), { sub: 'list', limit: 2 });
+    const r = await run(build(data), { limit: 2 });
     expect(r.ok).toBe(true);
     if (r.ok) {
       const lines = r.output.text.split('\n');
@@ -76,5 +59,12 @@ describe('LedgerInstructionHandler', () => {
       expect(lines[1]).toContain('2026-05-03');
       expect(lines[2]).toContain('2026-05-02');
     }
+  });
+
+  it('drops the legacy `summary` subcommand — analyze is the new term-aligned path', () => {
+    const h = build([]);
+    // Schema only accepts `sub: "list"` now; `summary` should be a parse error.
+    const result = h.spec.argsSchema.safeParse({ sub: 'summary' });
+    expect(result.success).toBe(false);
   });
 });

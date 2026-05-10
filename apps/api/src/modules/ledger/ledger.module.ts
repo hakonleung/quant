@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 
 import { SYSTEM_CLOCK_PROVIDER } from '../../common/clock.js';
-import { AnalyzeInstructionHandler } from './instructions/analyze.handler.js';
+import { LedgerAnalyzeInstructionHandler } from './instructions/ledger-analyze.handler.js';
 import { LedgerInstructionHandler } from './instructions/ledger.handler.js';
 import { LedgerCacheStore } from './ledger-cache.store.js';
 import { LedgerController } from './ledger.controller.js';
@@ -16,7 +16,7 @@ import { LedgerStore } from './ledger.store.js';
     LedgerCacheStore,
     LedgerService,
     LedgerInstructionHandler,
-    AnalyzeInstructionHandler,
+    LedgerAnalyzeInstructionHandler,
   ],
   exports: [LedgerStore, LedgerService],
 })

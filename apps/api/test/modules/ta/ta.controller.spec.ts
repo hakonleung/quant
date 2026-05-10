@@ -1,9 +1,7 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
-import type { TaAnalysis as ViewTaAnalysis } from '@quant/shared';
+import type { TaAnalysis as ViewTaAnalysis, TaSectorAnalysis } from '@quant/shared';
 
-import { FrozenClock } from '../../../src/common/clock.js';
 import type { AuthenticatedUser } from '../../../src/modules/auth/request-with-user.js';
-import type { LlmService } from '../../../src/modules/llm/llm.service.js';
 import { TaController } from '../../../src/modules/ta/ta.controller.js';
 import type { TaService } from '../../../src/modules/ta/ta.service.js';
 import type { RequestWithTraceId } from '../../../src/common/trace.middleware.js';
@@ -21,32 +19,59 @@ const SAMPLE: ViewTaAnalysis = {
   cachedAt: '2026-05-06T08:00:00.000+00:00',
 };
 
+const SAMPLE_SECTOR: TaSectorAnalysis = {
+  codes: ['600519', '000858'],
+  trendBreakdown: { up: 2, down: 0, sideways: 0 },
+  overallDirection: 'up',
+  overallConfidence: 0.7,
+  members: [
+    {
+      code: '600519',
+      name: '',
+      asof: '2026-05-06',
+      trend: SAMPLE.trend,
+      keyResistance: '1800.00',
+      keySupport: '1500.00',
+      headline: 'MA 多头排列',
+    },
+    {
+      code: '000858',
+      name: '',
+      asof: '2026-05-06',
+      trend: SAMPLE.trend,
+      keyResistance: null,
+      keySupport: null,
+      headline: 'MA 多头排列',
+    },
+  ],
+  summary: '白酒板块上行',
+  caveats: [],
+  cachedAt: '2026-05-06T08:00:00.000+00:00',
+};
+
 interface FakeTa {
   readonly ta: TaService;
   readonly analyzeOne: jest.Mock;
   readonly getCached: jest.Mock;
+  readonly analyzeSector: jest.Mock;
 }
 
-function fakeTa(overrides: { analyzeOne?: jest.Mock; getCached?: jest.Mock } = {}): FakeTa {
+function fakeTa(
+  overrides: {
+    analyzeOne?: jest.Mock;
+    getCached?: jest.Mock;
+    analyzeSector?: jest.Mock;
+  } = {},
+): FakeTa {
   const analyzeOne = overrides.analyzeOne ?? jest.fn().mockResolvedValue(SAMPLE);
   const getCached = overrides.getCached ?? jest.fn().mockResolvedValue(SAMPLE);
-  const ta = { analyzeOne, getCached } as unknown as TaService;
-  return { ta, analyzeOne, getCached };
+  const analyzeSector = overrides.analyzeSector ?? jest.fn().mockResolvedValue(SAMPLE_SECTOR);
+  const ta = { analyzeOne, getCached, analyzeSector } as unknown as TaService;
+  return { ta, analyzeOne, getCached, analyzeSector };
 }
 
-function fakeLlm(text = 'sector summary'): LlmService {
-  return {
-    completeJson: jest.fn().mockResolvedValue({
-      text,
-      usage: { input: 1, output: 1, total: 2 },
-      provider: 'mock',
-      model: 'mock-1',
-    }),
-  } as unknown as LlmService;
-}
-
-function makeCtrl(ta: TaService, llm: LlmService = fakeLlm()): TaController {
-  return new TaController(ta, llm, new FrozenClock(new Date('2026-05-06T08:00:00.000Z')));
+function makeCtrl(ta: TaService): TaController {
+  return new TaController(ta);
 }
 
 const traceReq = { traceId: 'trace-test' } as RequestWithTraceId;
@@ -106,28 +131,34 @@ describe('TaController', () => {
   });
 
   describe('POST /api/ta/analyze_many', () => {
-    it('aggregates per-stock TA into a sector view + LLM summary', async () => {
-      const { ta, analyzeOne } = fakeTa();
-      const llm = fakeLlm('白酒板块上行');
-      const ctrl = makeCtrl(ta, llm);
+    it('delegates the full sector aggregation to TaService.analyzeSector', async () => {
+      const { ta, analyzeSector } = fakeTa();
+      const ctrl = makeCtrl(ta);
       const out = await ctrl.analyzeMany(traceReq, adminUser, {
         codes: ['600519', '000858'],
         label: '白酒',
       });
-      expect(analyzeOne).toHaveBeenCalledTimes(2);
+      expect(analyzeSector).toHaveBeenCalledTimes(1);
+      expect(analyzeSector.mock.calls[0]?.[0]).toEqual({
+        codes: ['600519', '000858'],
+        label: '白酒',
+        ctx: { userId: 'admin', traceId: 'trace-test' },
+      });
       expect(out.codes).toEqual(['600519', '000858']);
       expect(out.overallDirection).toBe('up');
       expect(out.summary).toBe('白酒板块上行');
       expect(out.members.length).toBe(2);
     });
 
-    it('throws when every member fan-out fails', async () => {
-      const analyzeOne = jest.fn().mockRejectedValue(new Error('boom'));
-      const { ta } = fakeTa({ analyzeOne });
+    it('rewraps "no member TA could be produced" into BadRequestException', async () => {
+      const analyzeSector = jest
+        .fn()
+        .mockRejectedValue(new Error('no member TA could be produced'));
+      const { ta } = fakeTa({ analyzeSector });
       const ctrl = makeCtrl(ta);
-      await expect(
-        ctrl.analyzeMany(traceReq, adminUser, { codes: ['600519'] }),
-      ).rejects.toThrow(BadRequestException);
+      await expect(ctrl.analyzeMany(traceReq, adminUser, { codes: ['600519'] })).rejects.toThrow(
+        BadRequestException,
+      );
     });
   });
 });

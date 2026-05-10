@@ -27,19 +27,12 @@ import {
   Query,
   Req,
 } from '@nestjs/common';
-import {
-  TaSectorAnalysisSchema,
-  type TaAnalysis,
-  type TaSectorAnalysis,
-  type TaSectorMember,
-} from '@quant/shared';
+import { type TaAnalysis, type TaSectorAnalysis } from '@quant/shared';
 import { z } from 'zod';
 import type { Request } from 'express';
 
-import { CLOCK, type Clock } from '../../common/clock.js';
 import { CurrentUser } from '../auth/current-user.decorator.js';
 import type { AuthenticatedUser } from '../auth/request-with-user.js';
-import { LlmService } from '../llm/llm.service.js';
 import { ZodValidationPipe } from '../../common/zod-pipe.js';
 import {
   AnalyzeTaOneBodySchema,
@@ -47,7 +40,6 @@ import {
   type AnalyzeTaOneBody,
   type AnalyzeTaOneQuery,
 } from './dto/ta.dto.js';
-import { buildSectorSummaryPrompt } from './prompts/sector-summary.prompt.js';
 import { TaService } from './ta.service.js';
 
 const queryPipe = new ZodValidationPipe(AnalyzeTaOneQuerySchema);
@@ -66,11 +58,7 @@ const manyBodyPipe = new ZodValidationPipe(AnalyzeTaManyBodySchema);
 
 @Controller('ta')
 export class TaController {
-  constructor(
-    @Inject(TaService) private readonly ta: TaService,
-    @Inject(LlmService) private readonly llm: LlmService,
-    @Inject(CLOCK) private readonly clock: Clock,
-  ) {}
+  constructor(@Inject(TaService) private readonly ta: TaService) {}
 
   @Get('analyze_one')
   async getOneCached(
@@ -109,105 +97,22 @@ export class TaController {
     @Body(manyBodyPipe) body: AnalyzeTaManyBody,
   ): Promise<TaSectorAnalysis> {
     const traceId = traceOf(req);
-    const codes = [...body.codes];
-    const ctx = { userId: user.id, traceId } as const;
-
-    // Per-stock fan-out — each call hits the local cache first, so a
-    // re-run of a sector that's seen recent activity is mostly cache
-    // reads. Concurrency is bounded by `Promise.all` over N items
-    // (caller cap = 50 in the body schema).
-    const settled = await Promise.allSettled(
-      codes.map((code) => this.ta.analyzeOne(code, body.bypassCache === true, ctx)),
-    );
-
-    const members: TaSectorMember[] = [];
-    const caveats: string[] = [];
-    let up = 0;
-    let down = 0;
-    let sideways = 0;
-    for (let i = 0; i < settled.length; i += 1) {
-      const code = codes[i] ?? '';
-      const r = settled[i];
-      if (r === undefined) continue;
-      if (r.status === 'rejected') {
-        caveats.push(`${code}: ${describeError(r.reason)}`);
-        continue;
-      }
-      const ta = r.value;
-      if (ta.trend.direction === 'up') up += 1;
-      else if (ta.trend.direction === 'down') down += 1;
-      else sideways += 1;
-      const member: TaSectorMember = {
-        code: ta.code,
-        name: '',
-        asof: ta.asof,
-        trend: ta.trend,
-        keyResistance: ta.resistanceLevels[0]?.price ?? null,
-        keySupport: ta.supportLevels[0]?.price ?? null,
-        headline: ta.trend.rationale,
-      };
-      members.push(member);
-    }
-
-    if (members.length === 0) {
-      throw new BadRequestException({
-        code: 'EVALUATION_FAILED',
-        message: 'no member TA could be produced',
-        details: { codes, caveats },
-      });
-    }
-
-    const overallDirection = pickOverallDirection({ up, down, sideways });
-    const overallConfidence = avgConfidence(members, overallDirection);
-
-    const label = body.label ?? `${String(members.length)} codes`;
-    const summary = await this.summarise({
-      label,
-      members,
-      trendBreakdown: { up, down, sideways },
-      overallDirection,
-      overallConfidence,
-      ctx: { userId: user.id, traceId, scope: 'ta' },
-    });
-
-    const out: TaSectorAnalysis = {
-      codes,
-      trendBreakdown: { up, down, sideways },
-      overallDirection,
-      overallConfidence,
-      members,
-      summary,
-      caveats,
-      cachedAt: this.clock.now().toISOString(),
-    };
-    return TaSectorAnalysisSchema.parse(out);
-  }
-
-  private async summarise(input: {
-    readonly label: string;
-    readonly members: readonly TaSectorMember[];
-    readonly trendBreakdown: { readonly up: number; readonly down: number; readonly sideways: number };
-    readonly overallDirection: 'up' | 'down' | 'sideways';
-    readonly overallConfidence: number;
-    readonly ctx: { readonly userId: string; readonly traceId: string; readonly scope: 'ta' };
-  }): Promise<string> {
-    const prompt = buildSectorSummaryPrompt({
-      sectorLabel: input.label,
-      members: input.members,
-      trendBreakdown: input.trendBreakdown,
-      overallDirection: input.overallDirection,
-      overallConfidence: input.overallConfidence,
-    });
     try {
-      const out = await this.llm.completeJson(
-        { system: prompt.system, user: prompt.user },
-        input.ctx,
-      );
-      return out.text.trim();
-    } catch {
-      // Sector view degrades gracefully — caller still gets the
-      // numerical aggregate; we just surface a non-blocking caveat.
-      return '';
+      return await this.ta.analyzeSector({
+        codes: body.codes,
+        label: body.label ?? `${String(body.codes.length)} codes`,
+        ...(body.bypassCache === true ? { bypassCache: true } : {}),
+        ctx: { userId: user.id, traceId },
+      });
+    } catch (err) {
+      if (err instanceof Error && err.message === 'no member TA could be produced') {
+        throw new BadRequestException({
+          code: 'EVALUATION_FAILED',
+          message: err.message,
+          details: { codes: [...body.codes] },
+        });
+      }
+      throw err;
     }
   }
 }
@@ -215,33 +120,4 @@ export class TaController {
 function traceOf(req: Request): string {
   const r = req as Request & { traceId?: string };
   return r.traceId ?? '';
-}
-
-function describeError(err: unknown): string {
-  if (err instanceof Error) return err.message;
-  return String(err);
-}
-
-function pickOverallDirection(b: {
-  readonly up: number;
-  readonly down: number;
-  readonly sideways: number;
-}): 'up' | 'down' | 'sideways' {
-  if (b.up >= b.down && b.up >= b.sideways) return 'up';
-  if (b.down >= b.up && b.down >= b.sideways) return 'down';
-  return 'sideways';
-}
-
-function avgConfidence(
-  members: readonly TaSectorMember[],
-  direction: 'up' | 'down' | 'sideways',
-): number {
-  let sum = 0;
-  let count = 0;
-  for (const m of members) {
-    if (m.trend.direction !== direction) continue;
-    sum += m.trend.confidence;
-    count += 1;
-  }
-  return count === 0 ? 0 : sum / count;
 }

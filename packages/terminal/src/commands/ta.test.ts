@@ -75,7 +75,12 @@ describe('ta <code>', () => {
   it('dispatches analyzeTaAction and returns the reading-mode selector', async () => {
     const run = vi.fn().mockResolvedValue({ data: fakeTa, cached: false });
     const ctx = makeCtx({
-      actions: { id: 'mock' as const, run, invalidate: vi.fn(), stats: () => ({ entries: 0, hits: 0, misses: 0 }) },
+      actions: {
+        id: 'mock' as const,
+        run,
+        invalidate: vi.fn(),
+        stats: () => ({ entries: 0, hits: 0, misses: 0 }),
+      },
     });
     const out = await taCommand.run(argv(['600519']), ctx);
     expect(run).toHaveBeenCalledTimes(1);
@@ -87,7 +92,12 @@ describe('ta <code>', () => {
   it('--force opens a confirm widget without dispatching the runner', async () => {
     const run = vi.fn();
     const ctx = makeCtx({
-      actions: { id: 'mock' as const, run, invalidate: vi.fn(), stats: () => ({ entries: 0, hits: 0, misses: 0 }) },
+      actions: {
+        id: 'mock' as const,
+        run,
+        invalidate: vi.fn(),
+        stats: () => ({ entries: 0, hits: 0, misses: 0 }),
+      },
     });
     const out = await taCommand.run(argv(['600519'], { force: true }), ctx);
     expect(run).not.toHaveBeenCalled();
@@ -127,15 +137,18 @@ describe('ta sector <id|name>', () => {
       createdBy: 'admin',
       published: false,
     };
-    const run = vi
-      .fn()
-      .mockImplementation(async (action: unknown) => {
-        if (action === sectorShowAction) return { data: sector, cached: false };
-        if (action === analyzeTaManyAction) return { data: fakeSector, cached: false };
-        throw new Error('unexpected action');
-      });
+    const run = vi.fn().mockImplementation(async (action: unknown) => {
+      if (action === sectorShowAction) return { data: sector, cached: false };
+      if (action === analyzeTaManyAction) return { data: fakeSector, cached: false };
+      throw new Error('unexpected action');
+    });
     const ctx = makeCtx({
-      actions: { id: 'mock' as const, run, invalidate: vi.fn(), stats: () => ({ entries: 0, hits: 0, misses: 0 }) },
+      actions: {
+        id: 'mock' as const,
+        run,
+        invalidate: vi.fn(),
+        stats: () => ({ entries: 0, hits: 0, misses: 0 }),
+      },
     });
     const out = await taCommand.run(argv(['sector', 'tech']), ctx);
     expect(run.mock.calls[0]?.[0]).toBe(sectorShowAction);

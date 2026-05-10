@@ -99,6 +99,7 @@ export type StockDerivedMetrics = z.infer<typeof StockDerivedMetricsSchema>;
  */
 export const StockReturnsSchema = z
   .object({
+    ret_1d: decimalStringOrNull,
     ret_5d: decimalStringOrNull,
     ret_10d: decimalStringOrNull,
     ret_20d: decimalStringOrNull,

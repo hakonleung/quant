@@ -22,7 +22,8 @@ export interface SentimentMeta {
   readonly industries: string;
 }
 
-const STOCK_SEARCH_SYSTEM = '你是资深股票分析师，擅长从产业趋势/消息面/预期差等方面分析股票的上涨动因。';
+const STOCK_SEARCH_SYSTEM =
+  '你是资深股票分析师，擅长从产业趋势/消息面/预期差等方面分析股票的上涨动因。';
 
 export function buildSentimentSearchSystem(): string {
   return STOCK_SEARCH_SYSTEM;

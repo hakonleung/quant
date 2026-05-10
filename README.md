@@ -35,15 +35,15 @@ cp .env.example .env
 
 主要 env 变量：
 
-| 变量                                                     | 说明                                                                                              |
-| -------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
-| `QWEN_API_KEY` / `DEEPSEEK_API_KEY` / `MOONSHOT_API_KEY` | provider key；catalog 顺序选第一个有 key 的                                                       |
-| `LLM_PROVIDER` / `LLM_MODEL`                             | pin 默认 LLM 客户端的 provider / model（其它字段从 catalog 取）                                   |
-| `AGENT_LLM_PROVIDER` / `AGENT_LLM_MODEL`                 | `/agent` scope 专属覆盖（缺省回退默认）                                                           |
-| `AGENT_MAX_TOOL_CALLS`                                   | `/agent` 单次循环最大工具调用次数（默认 5，clamp 1..10）                                          |
-| `LLM_REQUEST_TIMEOUT_MS`                                 | 单次 LLM 请求超时（默认 60000，clamp 1..300_000）                                                 |
-| `INSTRUCTION_IM_ALLOWLIST`                               | 逗号分隔 sender id 白名单（如 `feishu:ou_a,slack:U_b`）；空 = 全开（**仅 dev**；prod 必填）       |
-| `QUANT_DATA_ROOT`                                        | 全局数据目录（默认 `../../data`，含 `users/{userId}/llm-ledger.json` 等用户态文件）               |
+| 变量                                                     | 说明                                                                                        |
+| -------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| `QWEN_API_KEY` / `DEEPSEEK_API_KEY` / `MOONSHOT_API_KEY` | provider key；catalog 顺序选第一个有 key 的                                                 |
+| `LLM_PROVIDER` / `LLM_MODEL`                             | pin 默认 LLM 客户端的 provider / model（其它字段从 catalog 取）                             |
+| `AGENT_LLM_PROVIDER` / `AGENT_LLM_MODEL`                 | `/agent` scope 专属覆盖（缺省回退默认）                                                     |
+| `AGENT_MAX_TOOL_CALLS`                                   | `/agent` 单次循环最大工具调用次数（默认 5，clamp 1..10）                                    |
+| `LLM_REQUEST_TIMEOUT_MS`                                 | 单次 LLM 请求超时（默认 60000，clamp 1..300_000）                                           |
+| `INSTRUCTION_IM_ALLOWLIST`                               | 逗号分隔 sender id 白名单（如 `feishu:ou_a,slack:U_b`）；空 = 全开（**仅 dev**；prod 必填） |
+| `QUANT_DATA_ROOT`                                        | 全局数据目录（默认 `../../data`，含 `users/{userId}/llm-ledger.json` 等用户态文件）         |
 
 ## 日常开发
 

@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 
 import { FlightClient } from '../../adapters/flight/flight-client.js';
 import { SYSTEM_CLOCK_PROVIDER } from '../../common/clock.js';
+import { StockMetaModule } from '../stock-meta/stock-meta.module.js';
 import { SectorInstructionHandler } from './instructions/sector.handler.js';
 import {
   SectorPublishInstructionHandler,
@@ -19,6 +20,7 @@ const DEFAULT_DATA_DIR = '../../data/sectors';
 const DEFAULT_FLIGHT_TARGET = '127.0.0.1:8815';
 
 @Module({
+  imports: [StockMetaModule],
   controllers: [SectorsController],
   providers: [
     {

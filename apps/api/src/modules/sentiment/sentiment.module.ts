@@ -12,7 +12,10 @@ import { Module } from '@nestjs/common';
 
 import { SYSTEM_CLOCK_PROVIDER } from '../../common/clock.js';
 import { LlmModule } from '../llm/llm.module.js';
+import { SectorsModule } from '../sectors/sectors.module.js';
 import { StockMetaModule } from '../stock-meta/stock-meta.module.js';
+import { AnalyzeInstructionHandler } from './instructions/analyze.handler.js';
+import { AnalyzeSectorInstructionHandler } from './instructions/analyze-sector.handler.js';
 import { NewsSentimentService } from './news-sentiment.service.js';
 import { SentimentCacheStore } from './sentiment-cache.store.js';
 import { SentimentController } from './sentiment.controller.js';
@@ -21,7 +24,7 @@ import { SENTIMENT_DATA_DIR } from './sentiment.token.js';
 const DEFAULT_DATA_DIR = '../../data';
 
 @Module({
-  imports: [LlmModule, StockMetaModule],
+  imports: [LlmModule, StockMetaModule, SectorsModule],
   controllers: [SentimentController],
   providers: [
     {
@@ -31,6 +34,8 @@ const DEFAULT_DATA_DIR = '../../data';
     SYSTEM_CLOCK_PROVIDER,
     SentimentCacheStore,
     NewsSentimentService,
+    AnalyzeInstructionHandler,
+    AnalyzeSectorInstructionHandler,
   ],
 })
 export class SentimentModule {}

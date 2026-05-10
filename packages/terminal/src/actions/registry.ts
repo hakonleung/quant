@@ -274,10 +274,7 @@ export const sectorRefreshDynamicAction: DataActionConfig<{ idOrName: string }, 
   invalidates: () => [['sector.list'], ['sector.show']],
 };
 
-export const sectorPublishAction: DataActionConfig<
-  { id: string; published: boolean },
-  Sector
-> = {
+export const sectorPublishAction: DataActionConfig<{ id: string; published: boolean }, Sector> = {
   id: 'sector.publish',
   kind: 'write',
   summary: 'Publish or unpublish a sector you own.',

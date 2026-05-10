@@ -7,14 +7,14 @@
 
 ## 实现（NestJS）
 
-| 层      | 位置                                                                | 说明                                                                                                              |
-| ------- | ------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| Schema  | `packages/shared/src/types/eqty.ts`（`Sentiment` / `MarketSentiment`） | 前端 view-model；slim 投影                                                                                        |
-| Prompt  | `apps/api/src/modules/sentiment/prompts/sentiment.prompt.ts`        | 4 段中文 prompt：search / summarize / cluster / market_synth                                                      |
-| Service | `apps/api/src/modules/sentiment/news-sentiment.service.ts`          | 三步管线：① web_search 分析师文（`LlmService.completeWithWebSearch`，scope=`sentiment`）→ ② flash JSON 抽取（`completeJson`，单次重试）→ ③ 单股缓存写回。多股再叠加 cluster + market_synth 两次 `completeJson` |
-| Cache   | `apps/api/src/modules/sentiment/sentiment-cache.store.ts`           | 文件 KV：`data/sentiment/stock/{code}.json` 单股；`data/sentiment/market/{hash}.json` 多股聚合（hash = sha256 排序后 codes） |
-| API     | `apps/api/src/modules/sentiment/sentiment.controller.ts`            | `GET/POST /api/sentiment/analyze_one`、`/analyze_many`；POST 走 `@CurrentUser` 给 LLM ledger 计费                  |
-| Web     | `feat-ai-eq`、`feat-ai-md`、`feat-ai-sec`                            | 渲染 markdown + 市场层快照                                                                                        |
+| 层      | 位置                                                                   | 说明                                                                                                                                                                                                           |
+| ------- | ---------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Schema  | `packages/shared/src/types/eqty.ts`（`Sentiment` / `MarketSentiment`） | 前端 view-model；slim 投影                                                                                                                                                                                     |
+| Prompt  | `apps/api/src/modules/sentiment/prompts/sentiment.prompt.ts`           | 4 段中文 prompt：search / summarize / cluster / market_synth                                                                                                                                                   |
+| Service | `apps/api/src/modules/sentiment/news-sentiment.service.ts`             | 三步管线：① web_search 分析师文（`LlmService.completeWithWebSearch`，scope=`sentiment`）→ ② flash JSON 抽取（`completeJson`，单次重试）→ ③ 单股缓存写回。多股再叠加 cluster + market_synth 两次 `completeJson` |
+| Cache   | `apps/api/src/modules/sentiment/sentiment-cache.store.ts`              | 文件 KV：`data/sentiment/stock/{code}.json` 单股；`data/sentiment/market/{hash}.json` 多股聚合（hash = sha256 排序后 codes）                                                                                   |
+| API     | `apps/api/src/modules/sentiment/sentiment.controller.ts`               | `GET/POST /api/sentiment/analyze_one`、`/analyze_many`；POST 走 `@CurrentUser` 给 LLM ledger 计费                                                                                                              |
+| Web     | `feat-ai-eq`、`feat-ai-md`、`feat-ai-sec`                              | 渲染 markdown + 市场层快照                                                                                                                                                                                     |
 
 Python 端不再持有任何 sentiment 代码：`news_sentiment_service.py` / `parquet_sentiment_cache.py` / `quant_core/domain/types/sentiment.py` / `quant_rpc/ops/sentiment.py` / `quant_core/prompts/news_sentiment.py` 全部删除。
 

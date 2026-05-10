@@ -69,7 +69,9 @@ const ctx: InstructionCtx = { traceId: 't1', source: 'socket', userId: 'admin' }
 describe('AgentToolBridge.exposeForAgent', () => {
   it('returns one tool per non-self instruction with id + description + schema', () => {
     const r = makeRegistry();
-    const exec = { execute: async () => ({ ok: true, output: { text: '' } }) } as unknown as InstructionExecutor;
+    const exec = {
+      execute: async () => ({ ok: true, output: { text: '' } }),
+    } as unknown as InstructionExecutor;
     const bridge = new AgentToolBridge(r, exec);
     const tools = bridge.exposeForAgent();
     const ids = tools.map((t) => t.id).sort();
@@ -86,7 +88,9 @@ describe('AgentToolBridge.exposeForAgent', () => {
 
   it('does not duplicate tools for aliases', () => {
     const r = makeRegistry();
-    const exec = { execute: async () => ({ ok: true, output: { text: '' } }) } as unknown as InstructionExecutor;
+    const exec = {
+      execute: async () => ({ ok: true, output: { text: '' } }),
+    } as unknown as InstructionExecutor;
     const bridge = new AgentToolBridge(r, exec);
     const tools = bridge.exposeForAgent();
     expect(new Set(tools.map((t) => t.id)).size).toBe(tools.length);
@@ -112,11 +116,14 @@ describe('AgentToolBridge.needsConfirmation', () => {
 });
 
 describe('AgentToolBridge.executeToolCall', () => {
-  it('routes the call through InstructionExecutor.execute', async () => {
+  it('routes the call through InstructionExecutor.executeHandler (bypasses async re-enqueue)', async () => {
     const r = makeRegistry();
     const calls: { id: string; args: unknown }[] = [];
     const exec = {
-      execute: async (id: string, args: unknown) => {
+      // Bridge intentionally uses executeHandler so async-mode tools
+      // (`/ta`, `/screen`, `/analyze`) run inline and the agent loop
+      // sees the real result rather than a "queued" ack.
+      executeHandler: async (id: string, args: unknown) => {
         calls.push({ id, args });
         return { ok: true, output: { text: `executed ${id}` } };
       },

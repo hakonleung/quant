@@ -100,7 +100,10 @@ export function convertRankFromOpTagged(raw: unknown): RankSpecView {
   let topN: number | null = null;
   if (topNRaw !== undefined && topNRaw !== null) {
     if (typeof topNRaw !== 'number' || !Number.isInteger(topNRaw) || topNRaw < 0) {
-      throw invalid('/rank/top_n', `rank.top_n must be a non-negative int or null, got ${String(topNRaw)}`);
+      throw invalid(
+        '/rank/top_n',
+        `rank.top_n must be a non-negative int or null, got ${String(topNRaw)}`,
+      );
     }
     topN = topNRaw;
   }
@@ -126,7 +129,11 @@ function convertPredicate(raw: unknown, path: string): DslPredicate {
   throw invalid(path, `unknown op ${op}`);
 }
 
-function convertLogical(raw: Readonly<Record<string, unknown>>, path: string, op: string): DslPredicate {
+function convertLogical(
+  raw: Readonly<Record<string, unknown>>,
+  path: string,
+  op: string,
+): DslPredicate {
   const argsRaw = raw['args'];
   if (!Array.isArray(argsRaw) || argsRaw.length === 0) {
     throw invalid(path, `logical op '${op}' requires non-empty 'args' list`);
@@ -138,7 +145,11 @@ function convertLogical(raw: Readonly<Record<string, unknown>>, path: string, op
   return { kind: 'logical', op: op as 'and' | 'or' | 'not', args };
 }
 
-function convertCompare(raw: Readonly<Record<string, unknown>>, path: string, op: string): DslPredicate {
+function convertCompare(
+  raw: Readonly<Record<string, unknown>>,
+  path: string,
+  op: string,
+): DslPredicate {
   const left = convertScalar(raw['left'], `${path}/left`);
   const right = convertScalar(raw['right'], `${path}/right`);
   return { kind: 'compare', op, left, right };
@@ -191,7 +202,8 @@ export function convertScalar(raw: unknown, path: string): DslScalar {
 
 function convertAggregate(raw: Readonly<Record<string, unknown>>, path: string): DslScalar {
   const agg = raw['agg'];
-  if (typeof agg !== 'string' || !AGG_OPS.has(agg)) throw invalid(path, `unknown agg ${String(agg)}`);
+  if (typeof agg !== 'string' || !AGG_OPS.has(agg))
+    throw invalid(path, `unknown agg ${String(agg)}`);
   const field = raw['field'];
   if (typeof field !== 'string' || !SCREEN_FIELD_NAMES.has(field)) {
     throw invalid(path, `unknown field ${String(field)}`);
@@ -218,7 +230,8 @@ function convertScale(rawScale: unknown, path: string): DslScalar {
   const factor = parseDecimalString(rawScale['factor'], `${path}/factor`);
   // We store factor as a stringified Decimal on the wire — match Python.
   // Reject zero / negative factors (Python parity).
-  if (Number(factor) <= 0) throw invalid(`${path}/factor`, `scale.factor must be > 0, got ${factor}`);
+  if (Number(factor) <= 0)
+    throw invalid(`${path}/factor`, `scale.factor must be > 0, got ${factor}`);
   return { kind: 'scale', inner, factor };
 }
 

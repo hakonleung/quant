@@ -1,8 +1,4 @@
-import {
-  analyzeManyAction,
-  analyzeOneAction,
-  sectorShowAction,
-} from '../actions/registry.js';
+import { analyzeManyAction, analyzeOneAction, sectorShowAction } from '../actions/registry.js';
 import { ANSI, paint } from '../render/ansi.js';
 import type { CommandSpec } from '../registry.js';
 import { confirmPrompt } from '../widgets/confirm-prompt.js';

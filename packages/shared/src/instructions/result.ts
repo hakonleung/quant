@@ -26,6 +26,18 @@ export type InstructionErrorCode = z.infer<typeof InstructionErrorCodeSchema>;
 export const InstructionOutputSchema = z
   .object({
     text: z.string(),
+    /**
+     * Optional structured side-channel for renderers that can do better
+     * than plain text — e.g. the Feishu adapter switches to a native
+     * `table` element when `meta.stockTableRows` is set instead of
+     * falling back to ASCII column padding inside `lark_md`. Term and
+     * Slack consumers ignore it and still render `text`.
+     *
+     * Free-form `Record<string, unknown>`: schemas live with the
+     * specific renderers (kept here as `unknown` so `@quant/shared`
+     * doesn't take on Feishu-specific dependencies).
+     */
+    meta: z.record(z.unknown()).optional(),
   })
   .strict();
 export type InstructionOutput = z.infer<typeof InstructionOutputSchema>;
@@ -46,6 +58,18 @@ export type InstructionResult = z.infer<typeof InstructionResultSchema>;
 
 export function okResult(text: string): InstructionResult {
   return { ok: true, output: { text } };
+}
+
+/**
+ * `okResult` with an extra structured payload. Renderers that understand
+ * the keys (today: only the Feishu adapter, for `stockTableRows`) use
+ * them to render richer surfaces; others fall back to `text`.
+ */
+export function okResultWithMeta(
+  text: string,
+  meta: Readonly<Record<string, unknown>>,
+): InstructionResult {
+  return { ok: true, output: { text, meta } };
 }
 
 export function errResult(code: InstructionErrorCode, message: string): InstructionResult {

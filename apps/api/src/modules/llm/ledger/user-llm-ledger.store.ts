@@ -69,9 +69,7 @@ export class UserLlmLedgerStore {
   /** Aggregate over all entries from `since` (inclusive) up to now. */
   async summarize(userId: string, since: Date | null = null): Promise<UserLlmLedgerSummary> {
     const sinceIso = since === null ? null : since.toISOString();
-    const entries = (await this.list(userId)).filter(
-      (e) => sinceIso === null || e.ts >= sinceIso,
-    );
+    const entries = (await this.list(userId)).filter((e) => sinceIso === null || e.ts >= sinceIso);
     return aggregate(entries);
   }
 

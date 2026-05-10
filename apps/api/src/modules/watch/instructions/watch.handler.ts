@@ -1,19 +1,29 @@
 /**
- * `watch` instruction. v1 supports `watch list` (and the dotted alias
- * `watch.list`) — list every registered watch task with its group,
- * status, and last hit. `add` / `remove` are deferred until the
- * argument surface settles (group cascade rules, market dispatch);
- * users still go through `POST /api/watch/tasks` for now.
+ * `watch` / `watch.list` — list every registered watch task with its
+ * w-index, market:code, group, status, and stock-table rows (price +
+ * period returns). `watch.add` and `watch.remove` are in separate files.
  */
 
 import { Inject, Injectable } from '@nestjs/common';
-import { instructionId, okResult, type InstructionResult } from '@quant/shared';
+import {
+  instructionId,
+  okResult,
+  okResultWithMeta,
+  type InstructionResult,
+  type StockSnapshotDto,
+} from '@quant/shared';
 import { z } from 'zod';
 
 import type { InstructionCtx } from '../../instruction/instruction.port.js';
 import { InstructionRegistrarBase } from '../../instruction/instruction.provider.js';
 import { InstructionRegistry } from '../../instruction/instruction.registry.js';
 import type { InstructionSpec } from '../../instruction/instruction.types.js';
+import { StockMetaService } from '../../stock-meta/stock-meta.service.js';
+import {
+  formatStockTable,
+  stockTableMetaRows,
+  type StockTableRow,
+} from '../../stock-meta/domain/format-stock-table.js';
 import { WatchService } from '../watch.service.js';
 
 const argsSchema = z
@@ -27,8 +37,8 @@ type Args = z.infer<typeof argsSchema>;
 export class WatchInstructionHandler extends InstructionRegistrarBase<Args> {
   readonly spec: InstructionSpec<Args> = {
     id: instructionId('watch'),
-    summary: 'Inspect watch tasks. v1 only supports `watch list`.',
-    summaryCn: '预警任务列表',
+    summary: 'List watch tasks with price + period returns table.',
+    summaryCn: '预警任务列表（含价格涨跌幅）',
     group: 'watch',
     argsSchema,
     positional: ['sub'],
@@ -39,20 +49,55 @@ export class WatchInstructionHandler extends InstructionRegistrarBase<Args> {
   constructor(
     @Inject(InstructionRegistry) registry: InstructionRegistry,
     @Inject(WatchService) private readonly watch: WatchService,
+    @Inject(StockMetaService) private readonly stockMeta: StockMetaService,
   ) {
     super(registry);
   }
 
   async execute(_args: Args, ctx: InstructionCtx): Promise<InstructionResult> {
-    // v1 only ships `list`; the spec's zod enum guarantees `args.sub === 'list'` at runtime,
-    // so no extra branch is needed. Add subcommands by widening the enum + the switch below.
     const tasks = await this.watch.list(ctx.userId);
     if (tasks.length === 0) return okResult('no watch tasks');
-    const lines = tasks.map((t) => {
-      const status = t.enabled ? 'on' : 'off';
-      const remaining = t.remaining === null ? '∞' : String(t.remaining);
-      return `  ${t.market}:${t.code.padEnd(8)} ${t.name.padEnd(8)} grp=${t.groupName.padEnd(10)} ${status} hits=${String(t.hitCount)} rem=${remaining}`;
+
+    // Task metadata lines: w1  a:600519  name  grp=daily  on/off  hits=3
+    const metaLines = tasks.map((t) => {
+      const wid = `w${String(t.idx)}`.padEnd(4);
+      const key = `${t.market}:${t.code}`.padEnd(10);
+      const name = t.name.slice(0, 8).padEnd(8);
+      const grp = `grp=${t.groupName}`.padEnd(16);
+      const status = t.enabled ? 'on ' : 'off';
+      return `  ${wid}  ${key}  ${name}  ${grp}  ${status}  hits=${String(t.hitCount)}`;
     });
-    return okResult(`watch tasks (${String(tasks.length)}):\n${lines.join('\n')}`);
+
+    // Fetch snapshot data for A-share codes only
+    const aCodes = [...new Set(tasks.filter((t) => t.market === 'a').map((t) => t.code))];
+    let byCode = new Map<string, StockSnapshotDto>();
+    try {
+      const snapshots = await this.stockMeta.snapshotAll(ctx.traceId);
+      byCode = new Map(
+        snapshots.filter((s) => aCodes.includes(s.meta.code)).map((s) => [s.meta.code, s]),
+      );
+    } catch {
+      // Snapshot unavailable — show metadata only
+    }
+
+    const tableRows: StockTableRow[] = tasks.map((t) => {
+      const snap = byCode.get(t.code);
+      return {
+        code: t.code,
+        name: t.name,
+        price: snap?.price ?? null,
+        ret_1d: snap?.returns.ret_1d ?? null,
+        ret_20d: snap?.returns.ret_20d ?? null,
+        ret_90d: snap?.returns.ret_90d ?? null,
+        ret_250d: snap?.returns.ret_250d ?? null,
+      };
+    });
+
+    const subheader = [`watch tasks (${String(tasks.length)}):`, ...metaLines].join('\n');
+    const output = [subheader, '', formatStockTable(tableRows)].join('\n');
+    return okResultWithMeta(output, {
+      stockTableRows: stockTableMetaRows(tableRows),
+      stockTableSubheader: subheader,
+    });
   }
 }

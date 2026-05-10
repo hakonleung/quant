@@ -18,19 +18,22 @@
 
 import { Inject, Injectable } from '@nestjs/common';
 import {
-  KlineBarSchema,
   QuantError,
+  TaSectorAnalysisSchema,
   type KlineBar,
   type StockMetaDto,
   type TaAnalysis,
+  type TaSectorAnalysis,
+  type TaSectorMember,
 } from '@quant/shared';
-import type { Table } from 'apache-arrow';
 
 import { FlightClient } from '../../adapters/flight/flight-client.js';
 import { CLOCK, type Clock } from '../../common/clock.js';
+import { arrowTableToKlineBars } from '../kline/domain/arrow-mapper.js';
 import { LlmService } from '../llm/llm.service.js';
 import { StockMetaService } from '../stock-meta/stock-meta.service.js';
 import { decodeTaAnalysis } from './domain/decode-ta.js';
+import { buildSectorSummaryPrompt } from './prompts/sector-summary.prompt.js';
 import { buildTaSystemPrompt, buildTaUserPrompt } from './prompts/ta-analyze.prompt.js';
 import { TaCacheStore } from './ta-cache.store.js';
 import { TA_FLIGHT_CLIENT } from './ta.token.js';
@@ -65,11 +68,7 @@ export class TaService {
    * resolved `asof`; emits a `data/users/{userId}/llm-ledger.json` row
    * via `LlmService` regardless.
    */
-  async analyzeOne(
-    code: string,
-    bypassCache: boolean,
-    ctx: TaCallContext,
-  ): Promise<TaAnalysis> {
+  async analyzeOne(code: string, bypassCache: boolean, ctx: TaCallContext): Promise<TaAnalysis> {
     const meta = await this.meta.get(code, ctx.traceId);
     const bars = await this.fetchBars(code, ctx.traceId);
     if (bars.length === 0) {
@@ -115,80 +114,155 @@ export class TaService {
     );
     return arrowTableToKlineBars(result.value);
   }
+
+  /**
+   * Sector-level TA: per-stock fan-out + LLM-synthesised narrative.
+   *
+   * Pulled out of {@link TaController.analyzeMany} so the IM
+   * `/ta.sector` handler can reuse it. Per-stock calls hit the local
+   * TA cache first (so a re-run of a sector with warm members is mostly
+   * cache reads). Concurrency is bounded by the caller's `codes` length;
+   * the IM handler caps it at the `codes.length ≤ 50` invariant the
+   * existing HTTP route enforces.
+   */
+  async analyzeSector(args: {
+    readonly codes: readonly string[];
+    readonly label: string;
+    readonly bypassCache?: boolean;
+    readonly ctx: TaCallContext;
+  }): Promise<TaSectorAnalysis> {
+    if (args.codes.length === 0) {
+      throw new QuantError('INVALID_ARGUMENT', 'codes must be non-empty', {});
+    }
+    const codes = [...args.codes];
+    const settled = await Promise.allSettled(
+      codes.map((code) => this.analyzeOne(code, args.bypassCache === true, args.ctx)),
+    );
+    const members: TaSectorMember[] = [];
+    const caveats: string[] = [];
+    let up = 0;
+    let down = 0;
+    let sideways = 0;
+    for (let i = 0; i < settled.length; i += 1) {
+      const code = codes[i] ?? '';
+      const r = settled[i];
+      if (r === undefined) continue;
+      if (r.status === 'rejected') {
+        const msg = r.reason instanceof Error ? r.reason.message : String(r.reason);
+        caveats.push(`${code}: ${msg}`);
+        continue;
+      }
+      const ta = r.value;
+      if (ta.trend.direction === 'up') up += 1;
+      else if (ta.trend.direction === 'down') down += 1;
+      else sideways += 1;
+      members.push({
+        code: ta.code,
+        name: '',
+        asof: ta.asof,
+        trend: ta.trend,
+        keyResistance: ta.resistanceLevels[0]?.price ?? null,
+        keySupport: ta.supportLevels[0]?.price ?? null,
+        headline: ta.trend.rationale,
+      });
+    }
+    if (members.length === 0) {
+      throw new QuantError('EVALUATION_FAILED', 'no member TA could be produced', {
+        codes,
+        caveats,
+      });
+    }
+    const overallDirection = pickOverallDirection({ up, down, sideways });
+    const overallConfidence = avgConfidence(members, overallDirection);
+    const summary = await this.summariseSector({
+      label: args.label,
+      members,
+      trendBreakdown: { up, down, sideways },
+      overallDirection,
+      overallConfidence,
+      ctx: args.ctx,
+    });
+    return TaSectorAnalysisSchema.parse({
+      codes,
+      trendBreakdown: { up, down, sideways },
+      overallDirection,
+      overallConfidence,
+      members,
+      summary,
+      caveats,
+      cachedAt: this.clock.now().toISOString(),
+    });
+  }
+
+  private async summariseSector(input: {
+    readonly label: string;
+    readonly members: readonly TaSectorMember[];
+    readonly trendBreakdown: {
+      readonly up: number;
+      readonly down: number;
+      readonly sideways: number;
+    };
+    readonly overallDirection: 'up' | 'down' | 'sideways';
+    readonly overallConfidence: number;
+    readonly ctx: TaCallContext;
+  }): Promise<string> {
+    const prompt = buildSectorSummaryPrompt({
+      sectorLabel: input.label,
+      members: input.members,
+      trendBreakdown: input.trendBreakdown,
+      overallDirection: input.overallDirection,
+      overallConfidence: input.overallConfidence,
+    });
+    try {
+      const out = await this.llm.completeJson(
+        { system: prompt.system, user: prompt.user },
+        { userId: input.ctx.userId, traceId: input.ctx.traceId, scope: 'ta' },
+      );
+      return out.text.trim();
+    } catch {
+      // Sector view degrades gracefully — caller still gets the
+      // numerical aggregate; we just surface a non-blocking caveat.
+      return '';
+    }
+  }
+}
+
+function pickOverallDirection(b: {
+  readonly up: number;
+  readonly down: number;
+  readonly sideways: number;
+}): 'up' | 'down' | 'sideways' {
+  if (b.up >= b.down && b.up >= b.sideways) return 'up';
+  if (b.down >= b.up && b.down >= b.sideways) return 'down';
+  return 'sideways';
+}
+
+function avgConfidence(
+  members: readonly TaSectorMember[],
+  direction: 'up' | 'down' | 'sideways',
+): number {
+  let sum = 0;
+  let count = 0;
+  for (const m of members) {
+    if (m.trend.direction !== direction) continue;
+    sum += m.trend.confidence;
+    count += 1;
+  }
+  return count === 0 ? 0 : sum / count;
 }
 
 function industriesOf(meta: StockMetaDto): string {
-  // StockMetaDto's `industries` may be array, comma-string, or absent —
-  // the prompt needs a single comma-joined string. Be defensive.
-  const v = (meta as unknown as { industries?: unknown }).industries;
-  if (typeof v === 'string') return v;
-  if (Array.isArray(v)) return v.filter((s): s is string => typeof s === 'string').join(',');
-  return '';
+  // `StockMetaDto.industries` is typed `string` (comma-joined coarse→fine,
+  // e.g. "食品饮料,白酒"). Empty string is allowed. The prompt builder
+  // only needs the raw value — pass it through.
+  return meta.industries;
 }
 
-// ---------------------------------------------------------------------------
-// arrow → KlineBar (local copy; the kline module's mapper is private to
-// that module and we don't want to bleed kline internals through DI just
-// to read 90 rows here).
-// ---------------------------------------------------------------------------
-
-interface RowAccess {
-  readonly trade_date: unknown;
-  readonly volume: unknown;
-  readonly amount: unknown;
-  readonly turnover_rate: unknown;
-  readonly open_qfq: unknown;
-  readonly high_qfq: unknown;
-  readonly low_qfq: unknown;
-  readonly close_qfq: unknown;
-  readonly ma5: unknown;
-  readonly ma10: unknown;
-  readonly ma20: unknown;
-  readonly ma60: unknown;
-}
-
-function arrowTableToKlineBars(table: Table): readonly KlineBar[] {
-  const out: KlineBar[] = [];
-  for (let i = 0; i < table.numRows; i++) {
-    const proxy = table.get(i);
-    if (proxy === null) continue;
-    const row = proxy.toJSON() as RowAccess;
-    const bar = {
-      date: typeof row.trade_date === 'string' ? row.trade_date.slice(0, 10) : '',
-      open: toNumber(row.open_qfq),
-      high: toNumber(row.high_qfq),
-      low: toNumber(row.low_qfq),
-      close: toNumber(row.close_qfq),
-      volume: toNumber(row.volume),
-      turnover: toNumber(row.amount),
-      turnoverRate: toNumber(row.turnover_rate),
-      ma5: toNullable(row.ma5),
-      ma10: toNullable(row.ma10),
-      ma20: toNullable(row.ma20),
-      ma60: toNullable(row.ma60),
-    };
-    const parsed = KlineBarSchema.safeParse(bar);
-    if (parsed.success) out.push(parsed.data);
-  }
-  return out;
-}
-
-function toNumber(v: unknown): number {
-  if (typeof v === 'number' && Number.isFinite(v)) return v;
-  if (typeof v === 'string') {
-    const n = Number(v);
-    return Number.isFinite(n) ? n : 0;
-  }
-  if (typeof v === 'bigint') return Number(v);
-  if (v !== null && typeof v === 'object' && 'toString' in v) {
-    const n = Number((v as { toString(): string }).toString());
-    return Number.isFinite(n) ? n : 0;
-  }
-  return 0;
-}
-
-function toNullable(v: unknown): number | null {
-  if (v === null || v === undefined) return null;
-  const n = toNumber(v);
-  return Number.isFinite(n) ? n : null;
-}
+// Arrow → KlineBar conversion is delegated to the kline module's mapper
+// (`apps/api/src/modules/kline/domain/arrow-mapper.ts`). The previous
+// in-file copy used a homebrew `toNumber` that ignored the Decimal128
+// scale: price columns are persisted as `decimal128(20, 4)`, so a BigInt
+// of unscaled units (e.g. 12345600 for 1234.5600) was returned verbatim
+// — every price (and therefore every TA support / resistance level the
+// LLM produced from those bars) came back ×10^4. The shared mapper
+// reads `field.type.scale` and divides accordingly.

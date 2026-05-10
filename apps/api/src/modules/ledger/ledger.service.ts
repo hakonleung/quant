@@ -28,10 +28,7 @@ import { LlmService } from '../llm/llm.service.js';
 import type { LedgerPatchBody } from './dto/ledger.dto.js';
 import { LedgerCacheStore } from './ledger-cache.store.js';
 import { LedgerStore } from './ledger.store.js';
-import {
-  buildLedgerSystemPrompt,
-  buildLedgerUserPrompt,
-} from './prompts/analyze.prompt.js';
+import { buildLedgerSystemPrompt, buildLedgerUserPrompt } from './prompts/analyze.prompt.js';
 
 const MAX_AI_WINDOW = 30;
 const MAX_RECOMMENDATIONS = 5;
@@ -222,7 +219,7 @@ const FENCE_RE = /^```(?:json)?\s*([\s\S]+?)```$/u;
 function stripFence(raw: string): string {
   const text = raw.trim();
   const fenced = FENCE_RE.exec(text);
-  return fenced !== null ? fenced[1]?.trim() ?? text : text;
+  return fenced !== null ? (fenced[1]?.trim() ?? text) : text;
 }
 
 export { EnrichedLedgerEntrySchema };

@@ -4,6 +4,7 @@ import { InstructionRegistry } from '../../../src/modules/instruction/instructio
 import type { InstructionCtx } from '../../../src/modules/instruction/instruction.port.js';
 import { ScreenInstructionHandler } from '../../../src/modules/screen/instructions/screen.handler.js';
 import type { ScreenService } from '../../../src/modules/screen/screen.service.js';
+import type { StockMetaService } from '../../../src/modules/stock-meta/stock-meta.service.js';
 
 const ctx: InstructionCtx = { traceId: 't1', source: 'im', userId: 'feishu:ou_a' };
 
@@ -16,7 +17,17 @@ function build(opts: { resolve?: NlScreenResult; reject?: Error }): ScreenInstru
       return Promise.resolve(opts.resolve);
     },
   };
-  return new ScreenInstructionHandler(reg, screen as unknown as ScreenService);
+  // Stub the snapshot service so the table formatter falls back to the
+  // bare comma-separated code list — these unit tests cover handler
+  // shape, not table rendering (covered by format-stock-table.spec).
+  const stockMeta: Pick<StockMetaService, 'snapshotAll'> = {
+    snapshotAll: () => Promise.reject(new Error('no snapshot in unit test')),
+  };
+  return new ScreenInstructionHandler(
+    reg,
+    screen as unknown as ScreenService,
+    stockMeta as unknown as StockMetaService,
+  );
 }
 
 const baseAst: NlScreenResult = {
@@ -54,8 +65,8 @@ describe('ScreenInstructionHandler', () => {
     }
   });
 
-  it('renders the top N matches with evidence chips', async () => {
-    const matches = Array.from({ length: 12 }, (_, i) => ({
+  it('renders the unified stock-table header + truncates past the display cap', async () => {
+    const matches = Array.from({ length: 32 }, (_, i) => ({
       code: String(600000 + i).padStart(6, '0'),
       evidence: { score: 0.9 - i * 0.01, name: `n${String(i)}` },
     }));
@@ -63,9 +74,11 @@ describe('ScreenInstructionHandler', () => {
     const r = await handler.execute({ q: 'top picks' }, ctx);
     expect(r.ok).toBe(true);
     if (r.ok) {
-      expect(r.output.text).toContain('matches=12');
+      expect(r.output.text).toContain('matches=32');
       expect(r.output.text).toContain('600000');
-      expect(r.output.text).toContain('600009');
+      expect(r.output.text).toContain('600029');
+      // Snapshot fetch is stubbed to fail → fallback bare-list path,
+      // and the cap message reports how many matches were dropped.
       expect(r.output.text).toContain('(+2 more)');
     }
   });

@@ -57,9 +57,14 @@ export class InstructionAsyncProcessor extends WorkerHost {
 
     let result: InstructionResult;
     try {
-      result = await this.executor.execute(data.instructionId, data.rawArgs, data.ctx);
+      // CRITICAL: must call executeHandler (not execute / dispatch) here.
+      // Async-mode instructions routed through `route()` re-enqueue another
+      // BullMQ job, leaving the user with the "▶ /id queued" ack forever
+      // and the handler never running. executeHandler bypasses async
+      // routing and runs the handler inline.
+      result = await this.executor.executeHandler(data.instructionId, data.rawArgs, data.ctx);
     } catch (err) {
-      // executor.execute already wraps handler throws as errResult, so an
+      // executeHandler already wraps handler throws as errResult, so an
       // exception here means executor itself crashed (registry race etc).
       this.logger.error(
         `instruction_async_executor_throw id=${data.instructionId} jobId=${data.jobId} err=${String(err)}`,

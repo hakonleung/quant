@@ -19,7 +19,9 @@ import { FlightWatchAdapter, WATCH_FLIGHT_CLIENT } from './flight-watch.adapter.
 import { WatchGroupStore } from './watch-group.store.js';
 import { WatchTaskStore } from './watch-task.store.js';
 import { WatchUniverseStore } from './watch-universe.store.js';
+import { WatchAddInstructionHandler } from './instructions/watch-add.handler.js';
 import { WatchInstructionHandler } from './instructions/watch.handler.js';
+import { WatchRemoveInstructionHandler } from './instructions/watch-remove.handler.js';
 import { WatchBroadcaster } from './watch.broadcaster.js';
 import { WatchController } from './watch.controller.js';
 import { WatchScheduler } from './watch.scheduler.js';
@@ -46,6 +48,8 @@ const DEFAULT_FLIGHT_TARGET = '127.0.0.1:8815';
     WatchScheduler,
     WatchBroadcaster,
     WatchInstructionHandler,
+    WatchAddInstructionHandler,
+    WatchRemoveInstructionHandler,
   ],
   exports: [WatchService, WatchScheduler],
 })

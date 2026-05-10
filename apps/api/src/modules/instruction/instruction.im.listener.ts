@@ -56,10 +56,7 @@ interface PendingAsync {
   readonly instructionId: string;
 }
 
-type ReplyKind =
-  | 'instruction.reply'
-  | 'instruction.async.started'
-  | 'agent.paid_confirm';
+type ReplyKind = 'instruction.reply' | 'instruction.async.started' | 'agent.paid_confirm';
 
 interface ReplyEnvelope {
   readonly result: InstructionResult;
@@ -99,6 +96,8 @@ export class InstructionImListener implements OnModuleInit {
   async onInbound(msg: InboundMessage): Promise<void> {
     const traceId = newTraceId();
     const envelope = await this.dispatch(msg, traceId);
+    // null means either: unrecognised message, or async instruction that
+    // has been silently queued — the result arrives via onAsyncCompleted.
     if (envelope === null) return;
     await this.replyResult(msg, traceId, envelope);
   }
@@ -117,6 +116,13 @@ export class InstructionImListener implements OnModuleInit {
     if (pending === undefined) return;
     this.pendingByJobId.delete(payload.jobId);
     try {
+      // Forward handler-side `output.meta` (e.g. `stockTableRows`) the
+      // same way the sync path does, so async screen / TA results render
+      // through the native Feishu table when the handler emits one.
+      const handlerMeta =
+        payload.result.ok && payload.result.output.meta !== undefined
+          ? payload.result.output.meta
+          : undefined;
       await this.channels.send(
         pending.channel,
         {
@@ -129,6 +135,7 @@ export class InstructionImListener implements OnModuleInit {
             jobId: payload.jobId,
             durationMs: payload.durationMs,
             ...(payload.result.ok ? {} : { code: payload.result.error.code }),
+            ...(handlerMeta ?? {}),
           },
         },
         { traceId: pending.traceId, source: 'system' },
@@ -231,10 +238,9 @@ export class InstructionImListener implements OnModuleInit {
     instructionId: string,
     isAsync: boolean,
     rawArgs: Record<string, string>,
-  ): Promise<ReplyEnvelope> {
+  ): Promise<ReplyEnvelope | null> {
     const resolved = await this.resolveImUser(msg);
-    const replyTarget =
-      msg.target !== undefined && msg.target.length > 0 ? msg.target : msg.sender;
+    const replyTarget = msg.target !== undefined && msg.target.length > 0 ? msg.target : msg.sender;
     const ctx: InstructionCtx = {
       traceId,
       source: 'im',
@@ -243,26 +249,22 @@ export class InstructionImListener implements OnModuleInit {
       ...(msg.target !== undefined && msg.target.length > 0 ? { target: msg.target } : {}),
       userId: resolved.userId,
       imBootstrap: resolved.imBootstrap,
-      ...(resolved.originalUserId !== undefined
-        ? { originalUserId: resolved.originalUserId }
-        : {}),
+      ...(resolved.originalUserId !== undefined ? { originalUserId: resolved.originalUserId } : {}),
     };
     const imHints: InstructionImHints | undefined = isAsync
       ? { channel: msg.channel, target: replyTarget }
       : undefined;
     const dispatched = await this.executor.dispatch(instructionId, rawArgs, ctx, imHints);
     if (dispatched.kind === 'async-queued') {
+      // Register the bridge entry so onAsyncCompleted can push the result,
+      // but return null — no immediate "queued" card is sent to IM.
       this.pendingByJobId.set(dispatched.jobId, {
         channel: msg.channel,
         target: replyTarget,
         traceId,
         instructionId: dispatched.instructionId,
       });
-      return {
-        result: dispatched.result,
-        kind: 'instruction.async.started',
-        instructionId: dispatched.instructionId,
-      };
+      return null;
     }
     // Detect the `confirm-required` soft-failure emitted by costsCredits
     // instructions (currently only `/agent`) so the IM reply path can
@@ -280,10 +282,19 @@ export class InstructionImListener implements OnModuleInit {
         meta: { agentQ: envelope.q ?? '' },
       };
     }
+    // Forward any structured side-channel from the handler's output.meta
+    // into the reply envelope so the Feishu adapter can pick a richer
+    // renderer (e.g. native `table` element for stock lists) instead of
+    // the default text card.
+    const handlerMeta =
+      dispatched.result.ok && dispatched.result.output.meta !== undefined
+        ? dispatched.result.output.meta
+        : undefined;
     return {
       result: dispatched.result,
       kind: 'instruction.reply',
       instructionId,
+      ...(handlerMeta !== undefined ? { meta: handlerMeta } : {}),
     };
   }
 

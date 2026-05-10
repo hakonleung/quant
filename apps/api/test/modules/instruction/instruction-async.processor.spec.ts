@@ -47,8 +47,11 @@ function build(execute: () => Promise<InstructionResult>): {
       socketEmits.push({ userId, topic, payload });
     },
   };
-  const executor: Pick<InstructionExecutor, 'execute'> = {
-    execute,
+  // Processor calls `executeHandler` (not `execute`) so it bypasses async
+  // routing — without that, async-mode instructions would re-enqueue
+  // themselves and the user would only ever see the "queued" ack.
+  const executor: Pick<InstructionExecutor, 'executeHandler'> = {
+    executeHandler: execute,
   };
   const bus: Pick<InstructionAsyncBus, 'emitStarted' | 'emitCompleted'> = {
     emitStarted: (p) => busEmits.push({ kind: 'started', payload: p }),

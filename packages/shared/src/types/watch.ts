@@ -162,6 +162,8 @@ export type WatchGroupCreate = z.infer<typeof WatchGroupCreateSchema>;
 
 export const WatchTaskSchema = z
   .object({
+    /** Auto-increment index, displayed as `w1`, `w2`, … in IM. */
+    idx: z.number().int().min(1),
     market: WatchMarketSchema,
     code: z.string().min(1),
     name: z.string(),

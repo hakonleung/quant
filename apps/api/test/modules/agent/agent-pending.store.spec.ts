@@ -7,9 +7,7 @@ import {
 
 function snap(overrides: Partial<AgentPendingSnapshot> = {}): AgentPendingSnapshot {
   const messages: ChatMessage[] = [{ role: 'user', content: 'hi' }];
-  const toolCalls: ChatToolCall[] = [
-    { id: 'tc-1', toolId: 'focus', args: { code: '600519' } },
-  ];
+  const toolCalls: ChatToolCall[] = [{ id: 'tc-1', toolId: 'focus', args: { code: '600519' } }];
   return {
     userId: 'admin',
     traceId: 't-1',

@@ -86,6 +86,50 @@ export class InstructionExecutor {
   }
 
   /**
+   * Run an instruction's handler **inline**, bypassing the async-mode
+   * routing in `route()`. Used by:
+   *   - `InstructionAsyncProcessor` — the worker has already pulled the
+   *     job off the queue, so re-routing through `enqueueAsync` would
+   *     recursively re-enqueue and the actual result would never reach
+   *     the user (manifests as IM showing "▶ /ta queued (jobId=…)" and
+   *     never the analysis).
+   *   - `AgentToolBridge` — when the agent loop calls `/ta` / `/screen`
+   *     mid-loop, we want the handler to run synchronously so the result
+   *     can be appended as a `role:'tool'` message; otherwise the agent
+   *     just sees a queued ack and stalls.
+   *
+   * Args are zod-validated here too so callers can pass raw input.
+   * Handler throws are mapped to `errResult('handler', …)` for symmetry
+   * with `route()`.
+   */
+  async executeHandler(
+    id: string,
+    args: Record<string, unknown>,
+    ctx: InstructionCtx,
+  ): Promise<InstructionResult> {
+    const entry = this.registry.get(id);
+    if (entry === undefined) {
+      return errResult('not-found', `unknown instruction: ${id}`);
+    }
+    const validation = entry.spec.argsSchema.safeParse(args);
+    if (!validation.success) {
+      const issues = validation.error.issues
+        .map((i) => `${i.path.join('.')}: ${i.message}`)
+        .join('; ');
+      return errResult('validation', issues);
+    }
+    const handler: AnyInstructionHandler = entry.handler;
+    try {
+      return await handler.execute(validation.data, ctx);
+    } catch (err) {
+      this.logger.warn(
+        `instruction_handler_throw id=${id} traceId=${ctx.traceId} err=${String(err)}`,
+      );
+      return errResult('handler', err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  /**
    * Line entry — parses the leading id, tokenizes the rest into a
    * `Record<string, string>`, then delegates to `execute`. Used by the
    * IM listener (and any future text-driven entry point).

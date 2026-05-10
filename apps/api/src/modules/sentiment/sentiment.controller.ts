@@ -13,16 +13,7 @@
  * sentiment ops + cache are gone with the migration.
  */
 
-import {
-  Body,
-  Controller,
-  Get,
-  Inject,
-  NotFoundException,
-  Post,
-  Query,
-  Req,
-} from '@nestjs/common';
+import { Body, Controller, Get, Inject, NotFoundException, Post, Query, Req } from '@nestjs/common';
 import type { MarketSentiment, Sentiment } from '@quant/shared';
 import type { Request } from 'express';
 import { z } from 'zod';

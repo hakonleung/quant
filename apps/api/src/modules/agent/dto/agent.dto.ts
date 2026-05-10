@@ -18,14 +18,12 @@ import { z } from 'zod';
 const TRUTHY = new Set(['1', 'true', 'TRUE', 'yes', 'on']);
 const FALSY = new Set(['', '0', 'false', 'FALSE', 'no', 'off']);
 
-const flexibleBool = z
-  .union([z.boolean(), z.string()])
-  .transform((v) => {
-    if (typeof v === 'boolean') return v;
-    if (TRUTHY.has(v)) return true;
-    if (FALSY.has(v)) return false;
-    throw new Error(`invalid boolean: ${v}`);
-  });
+const flexibleBool = z.union([z.boolean(), z.string()]).transform((v) => {
+  if (typeof v === 'boolean') return v;
+  if (TRUTHY.has(v)) return true;
+  if (FALSY.has(v)) return false;
+  throw new Error(`invalid boolean: ${v}`);
+});
 
 export const AgentArgsSchema = z
   .object({

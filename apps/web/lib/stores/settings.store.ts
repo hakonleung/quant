@@ -11,13 +11,7 @@
 
 'use client';
 
-import type {
-  ColumnFilter,
-  DragDirection,
-  SlackTarget,
-  SysCfg,
-  ThemeMode,
-} from '@quant/shared';
+import type { ColumnFilter, DragDirection, SlackTarget, SysCfg, ThemeMode } from '@quant/shared';
 import { useEffect, useRef } from 'react';
 import { create } from 'zustand';
 

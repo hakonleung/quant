@@ -25,6 +25,12 @@ const RawSchema = z.object({
   CHANNEL_FEISHU_APP_ID: z.string().min(1).optional(),
   CHANNEL_FEISHU_APP_SECRET: z.string().min(1).optional(),
   CHANNEL_FEISHU_DEFAULT_CHAT_ID: z.string().min(1).optional(),
+  // Optional — only required if the Feishu app has Encrypt Key /
+  // Verification Token configured for the Card Request URL callback.
+  // See `docs/integrations/auth.md` and the Feishu console under
+  // 事件与回调 → 加密策略.
+  CHANNEL_FEISHU_ENCRYPT_KEY: z.string().min(1).optional(),
+  CHANNEL_FEISHU_VERIFICATION_TOKEN: z.string().min(1).optional(),
 });
 
 export interface SlackConfig {
@@ -38,6 +44,10 @@ export interface FeishuConfig {
   readonly appId: string;
   readonly appSecret: string;
   readonly defaultChatId: string;
+  /** AES key for encrypted callbacks; null when the app uses plain payloads. */
+  readonly encryptKey: string | null;
+  /** Verification token used by the SHA1 signature on schema-1 card callbacks. */
+  readonly verificationToken: string | null;
 }
 
 export interface ChannelConfig {
@@ -75,6 +85,8 @@ export function loadChannelConfig(env: NodeJS.ProcessEnv = process.env): Channel
     CHANNEL_FEISHU_APP_ID: env['CHANNEL_FEISHU_APP_ID'],
     CHANNEL_FEISHU_APP_SECRET: env['CHANNEL_FEISHU_APP_SECRET'],
     CHANNEL_FEISHU_DEFAULT_CHAT_ID: env['CHANNEL_FEISHU_DEFAULT_CHAT_ID'],
+    CHANNEL_FEISHU_ENCRYPT_KEY: env['CHANNEL_FEISHU_ENCRYPT_KEY'],
+    CHANNEL_FEISHU_VERIFICATION_TOKEN: env['CHANNEL_FEISHU_VERIFICATION_TOKEN'],
   });
   const enabled = parseEnabled(raw.CHANNEL_ENABLED);
   const dryRun = raw.CHANNEL_DRY_RUN === '1' || raw.CHANNEL_DRY_RUN === 'true';
@@ -100,6 +112,8 @@ export function loadChannelConfig(env: NodeJS.ProcessEnv = process.env): Channel
       appId: raw.CHANNEL_FEISHU_APP_ID,
       appSecret: raw.CHANNEL_FEISHU_APP_SECRET,
       defaultChatId: raw.CHANNEL_FEISHU_DEFAULT_CHAT_ID ?? '',
+      encryptKey: raw.CHANNEL_FEISHU_ENCRYPT_KEY ?? null,
+      verificationToken: raw.CHANNEL_FEISHU_VERIFICATION_TOKEN ?? null,
     };
   }
 

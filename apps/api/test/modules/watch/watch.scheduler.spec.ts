@@ -71,7 +71,13 @@ async function tmpRoot(): Promise<string> {
 }
 
 function cfg(dataRoot: string): AuthConfigShape {
-  return { mode: 'disabled', nextauthSecret: null, dataRoot, adminUserId: 'admin', adminUserIds: new Set<string>() };
+  return {
+    mode: 'disabled',
+    nextauthSecret: null,
+    dataRoot,
+    adminUserId: 'admin',
+    adminUserIds: new Set<string>(),
+  };
 }
 
 function quote(overrides: Partial<SpotQuote> = {}): SpotQuote {
@@ -91,6 +97,7 @@ function quote(overrides: Partial<SpotQuote> = {}): SpotQuote {
 
 function task(overrides: Partial<WatchTask> = {}): WatchTask {
   return {
+    idx: 1,
     market: 'a',
     code: '600000',
     name: '浦发银行',

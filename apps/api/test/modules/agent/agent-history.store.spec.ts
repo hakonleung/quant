@@ -14,7 +14,11 @@ describe('AgentHistoryStore', () => {
   it('append + recent return entries in oldest-first order', () => {
     const store = new AgentHistoryStore(fakeAuth());
     store.append('admin', 'feishu', { role: 'user', content: 'a', ts: '2026-05-09T00:00:00Z' });
-    store.append('admin', 'feishu', { role: 'assistant', content: 'b', ts: '2026-05-09T00:00:01Z' });
+    store.append('admin', 'feishu', {
+      role: 'assistant',
+      content: 'b',
+      ts: '2026-05-09T00:00:01Z',
+    });
     const recent = store.recent('admin', 'feishu');
     expect(recent.map((e) => e.content)).toEqual(['a', 'b']);
   });
@@ -28,11 +32,7 @@ describe('AgentHistoryStore', () => {
         ts: '2026-05-09T00:00:00Z',
       });
     }
-    expect(store.recent('admin', 'feishu', 3).map((e) => e.content)).toEqual([
-      'm9',
-      'm10',
-      'm11',
-    ]);
+    expect(store.recent('admin', 'feishu', 3).map((e) => e.content)).toEqual(['m9', 'm10', 'm11']);
   });
 
   it('isolates per (userId, channel) — slots do not bleed', () => {

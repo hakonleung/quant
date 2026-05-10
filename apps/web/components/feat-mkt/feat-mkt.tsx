@@ -40,8 +40,7 @@ export function FeatMkt(): React.ReactElement {
   // streaming in. `useIsFetching` returns the count of matching queries
   // currently fetching, so any non-zero value keeps us on amber.
   const eqtyFetching =
-    useIsFetching({ queryKey: ['kline.bulk'] }) +
-    useIsFetching({ queryKey: ['stock.snapshots'] });
+    useIsFetching({ queryKey: ['kline.bulk'] }) + useIsFetching({ queryKey: ['stock.snapshots'] });
   const isLoading = stocks.isLoading || blacklist.isLoading || eqtyFetching > 0;
   const tone = stocks.error !== null ? 'red' : isLoading ? 'amber' : 'green';
   const [dialogOpen, setDialogOpen] = useState(false);

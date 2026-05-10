@@ -166,30 +166,30 @@ host (apps/web `use-terminal.ts`) consumes the effects:
 
 ## 5. Commands & interactive sub-flows
 
-| Command                      | Form                   | Interactive                                                          |
-| ---------------------------- | ---------------------- | -------------------------------------------------------------------- |
-| `help [cmd]`                 | text                   | —                                                                    |
-| `clear` / `cls`              | text                   | —                                                                    |
-| `:cache stats / clear`       | text                   | —                                                                    |
-| `stock find <q>`             | interactive            | SelectableList → `stock info <code>`                                 |
-| `stock info <code>`          | text                   | —                                                                    |
-| `stock kline <code>`         | text                   | —                                                                    |
+| Command                      | Form                   | Interactive                                                                                                         |
+| ---------------------------- | ---------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `help [cmd]`                 | text                   | —                                                                                                                   |
+| `clear` / `cls`              | text                   | —                                                                                                                   |
+| `:cache stats / clear`       | text                   | —                                                                                                                   |
+| `stock find <q>`             | interactive            | SelectableList → `stock info <code>`                                                                                |
+| `stock info <code>`          | text                   | —                                                                                                                   |
+| `stock kline <code>`         | text                   | —                                                                                                                   |
 | `sector list`                | interactive            | SelectableList; `a` → analyze (paid+confirm), `d` → remove (owner+confirm), `p` → publish/unpublish (owner+confirm) |
-| `sector show <id>`           | interactive            | members SelectableList; `a` → analyze, `f` → focus                   |
-| `sector add`                 | interactive            | form (name) → enum (kind) → user/dynamic flow                        |
-| `sector refresh <id>`        | text                   | any user may refresh dynamic sectors (server persists)               |
-| `sector publish <id>`        | text                   | owner-only; toggles `published`                                      |
-| `sector unpublish <id>`      | text                   | owner-only                                                            |
-| `sector rm <id>`             | text                   | owner-only                                                            |
-| `analyze [<code>] [--force]` | text or guided picker  | confirm widget for paid path                                         |
-| `analyze sector <id>`        | text or confirm        | confirm for `--force`                                                |
-| `ta [<code>] [--force]`      | text or guided picker  | technical analysis; subcommand `ta sector <id>` fans out + AI summary |
-| `ta sector <id> [--force]`   | text or confirm        | per-stock TA fan-out + LLM sector narrative                          |
-| `screen nl <text>`           | confirm → results list | save matches as dynamic sector                                       |
-| `watch list`                 | interactive            | SelectableList; `d` → remove (confirm)                               |
-| `watch add [--flags]`        | text or full form      | `code` field is search-style (live picker)                           |
-| `watch rm <m> <c>`           | text                   | —                                                                    |
-| `focus [<code>]`             | text or picker         | —                                                                    |
+| `sector show <id>`           | interactive            | members SelectableList; `a` → analyze, `f` → focus                                                                  |
+| `sector add`                 | interactive            | form (name) → enum (kind) → user/dynamic flow                                                                       |
+| `sector refresh <id>`        | text                   | any user may refresh dynamic sectors (server persists)                                                              |
+| `sector publish <id>`        | text                   | owner-only; toggles `published`                                                                                     |
+| `sector unpublish <id>`      | text                   | owner-only                                                                                                          |
+| `sector rm <id>`             | text                   | owner-only                                                                                                          |
+| `analyze [<code>] [--force]` | text or guided picker  | confirm widget for paid path                                                                                        |
+| `analyze sector <id>`        | text or confirm        | confirm for `--force`                                                                                               |
+| `ta [<code>] [--force]`      | text or guided picker  | technical analysis; subcommand `ta sector <id>` fans out + AI summary                                               |
+| `ta sector <id> [--force]`   | text or confirm        | per-stock TA fan-out + LLM sector narrative                                                                         |
+| `screen nl <text>`           | confirm → results list | save matches as dynamic sector                                                                                      |
+| `watch list`                 | interactive            | SelectableList; `d` → remove (confirm)                                                                              |
+| `watch add [--flags]`        | text or full form      | `code` field is search-style (live picker)                                                                          |
+| `watch rm <m> <c>`           | text                   | —                                                                                                                   |
+| `focus [<code>]`             | text or picker         | —                                                                                                                   |
 
 ### Cross-cutting rules
 

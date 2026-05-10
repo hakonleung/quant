@@ -82,12 +82,7 @@ export const ChatTokenUsageSchema = z
   .strict();
 export type ChatTokenUsage = z.infer<typeof ChatTokenUsageSchema>;
 
-export const ChatFinishReasonSchema = z.enum([
-  'stop',
-  'tool_calls',
-  'length',
-  'content_filter',
-]);
+export const ChatFinishReasonSchema = z.enum(['stop', 'tool_calls', 'length', 'content_filter']);
 export type ChatFinishReason = z.infer<typeof ChatFinishReasonSchema>;
 
 /**
@@ -125,12 +120,5 @@ export type ChatStreamChunk = z.infer<typeof ChatStreamChunkSchema>;
  * separate `/agent` cost from `/screen` and `/analyze`, and by the logger
  * to surface per-feature spend.
  */
-export const LlmScopeSchema = z.enum([
-  'agent',
-  'screen',
-  'analyze',
-  'sentiment',
-  'ta',
-  'other',
-]);
+export const LlmScopeSchema = z.enum(['agent', 'screen', 'analyze', 'sentiment', 'ta', 'other']);
 export type LlmScope = z.infer<typeof LlmScopeSchema>;

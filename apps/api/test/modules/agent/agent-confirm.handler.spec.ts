@@ -73,10 +73,13 @@ describe('AgentConfirmInstructionHandler', () => {
     const { svc } = fakeAgent();
     const { store, correlationId } = makePending('alice');
     const h = new AgentConfirmInstructionHandler(new InstructionRegistry(), svc, store);
-    const r = await h.execute({ correlationId, approve: true }, {
-      ...ctx,
-      userId: 'mallory',
-    });
+    const r = await h.execute(
+      { correlationId, approve: true },
+      {
+        ...ctx,
+        userId: 'mallory',
+      },
+    );
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.error.code).toBe('forbidden');
     store.shutdown();

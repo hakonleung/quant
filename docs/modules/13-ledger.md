@@ -23,20 +23,20 @@
 
 ## 实现
 
-| 层      | 位置                                                | 说明                                                                                                |
-| ------- | --------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
-| Schema  | `packages/shared/src/types/ledger.ts`               | `LedgerEntry` / `LedgerSnapshot` / `EnrichedLedgerEntry` / `LedgerAnalysis`                         |
-| FP      | `packages/shared/src/fp/ledger.ts`                  | `validateLedger` / `enrichEntries` / `mergeEntries` + summary helpers（纯函数，零 IO）              |
-| Domain  | `services/py/quant_core/domain/types/ledger.py`     | `EnrichedLedgerEntry` / `LedgerAnalysis` 数据类（仅 schema 镜像，已无 LLM 路径）                    |
-| Prompt  | `apps/api/src/modules/ledger/prompts/analyze.prompt.ts` | 中文 system + user prompt（CSV 表头 + closing_provided / cash_flow 显式标志）                       |
-| Persist | `apps/api/src/modules/ledger/ledger.store.ts`       | `data/_ledger/entries.json`，atomic `tmp+rename` + 1Hz 节流                                         |
-| Cache   | `apps/api/src/modules/ledger/ledger-cache.store.ts` | `data/_ledger/ai-cache.json`，键 = SHA-256(最近 30 enriched)                                        |
-| Service | `apps/api/src/modules/ledger/ledger.service.ts`     | CRUD + 校验 + 直接调 `LlmService.completeJson(scope='analyze')` + JSON→`LedgerAnalysis` 解码 + 缓存读写。Python `ledger_service` / `analyze_ledger` op 已弃用 |
-| API     | `apps/api/src/modules/ledger/ledger.controller.ts`  | REST：list / enriched / create / patch / delete / import / export / analyze (GET cache, POST fresh) |
-| BFF     | `apps/web/app/api/ledger/**`                        | Next.js → NestJS 透传（含 `[date]` 动态段、import / export / analyze）                              |
-| Hooks   | `apps/web/lib/hooks/use-ledger.ts`                  | react-query 包装：list / enriched / mutations / cached + analyze                                    |
-| Web     | `apps/web/components/feat-ledger/`                  | `LDG.MAIN` Feat：summary bar + 三 tab（list / daily / cumulative）+ AI 面板 + 导入/导出             |
-| Term    | `packages/terminal/src/commands/ledger.ts`          | `ledger ls / add / rm / analyze`，全局 RevalidateScope `'ledger'`                                   |
+| 层      | 位置                                                    | 说明                                                                                                                                                          |
+| ------- | ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Schema  | `packages/shared/src/types/ledger.ts`                   | `LedgerEntry` / `LedgerSnapshot` / `EnrichedLedgerEntry` / `LedgerAnalysis`                                                                                   |
+| FP      | `packages/shared/src/fp/ledger.ts`                      | `validateLedger` / `enrichEntries` / `mergeEntries` + summary helpers（纯函数，零 IO）                                                                        |
+| Domain  | `services/py/quant_core/domain/types/ledger.py`         | `EnrichedLedgerEntry` / `LedgerAnalysis` 数据类（仅 schema 镜像，已无 LLM 路径）                                                                              |
+| Prompt  | `apps/api/src/modules/ledger/prompts/analyze.prompt.ts` | 中文 system + user prompt（CSV 表头 + closing_provided / cash_flow 显式标志）                                                                                 |
+| Persist | `apps/api/src/modules/ledger/ledger.store.ts`           | `data/_ledger/entries.json`，atomic `tmp+rename` + 1Hz 节流                                                                                                   |
+| Cache   | `apps/api/src/modules/ledger/ledger-cache.store.ts`     | `data/_ledger/ai-cache.json`，键 = SHA-256(最近 30 enriched)                                                                                                  |
+| Service | `apps/api/src/modules/ledger/ledger.service.ts`         | CRUD + 校验 + 直接调 `LlmService.completeJson(scope='analyze')` + JSON→`LedgerAnalysis` 解码 + 缓存读写。Python `ledger_service` / `analyze_ledger` op 已弃用 |
+| API     | `apps/api/src/modules/ledger/ledger.controller.ts`      | REST：list / enriched / create / patch / delete / import / export / analyze (GET cache, POST fresh)                                                           |
+| BFF     | `apps/web/app/api/ledger/**`                            | Next.js → NestJS 透传（含 `[date]` 动态段、import / export / analyze）                                                                                        |
+| Hooks   | `apps/web/lib/hooks/use-ledger.ts`                      | react-query 包装：list / enriched / mutations / cached + analyze                                                                                              |
+| Web     | `apps/web/components/feat-ledger/`                      | `LDG.MAIN` Feat：summary bar + 三 tab（list / daily / cumulative）+ AI 面板 + 导入/导出                                                                       |
+| Term    | `packages/terminal/src/commands/ledger.ts`              | `ledger ls / add / rm / analyze`，全局 RevalidateScope `'ledger'`                                                                                             |
 
 ## 持久化与 Git
 
@@ -57,7 +57,8 @@
 - 输出 schema（`LedgerAnalysisSchema`）：`summary` / `operationStyle` / `marketView` / `recommendations[]`（≤5 条），外加 `windowStart` / `windowEnd` / `entryCount` / `provider` / `generatedAt`。
 - 缓存：服务端按 enriched payload 的 SHA-256 命中；用户每次编辑 / 删除 / 导入都会改变 hash → 自动失效。
 - 计费：每次 LLM 调用写入 `data/users/{userId}/llm-ledger.json`（scope `analyze`），由 `/usr` 汇总。
-- `/analyze` spec 标 `costsCredits=true`，被 `/agent` 提议时会触发二次确认。
+- `/ledger.analyze` spec 标 `costsCredits=true`（与 term `analyze.ledger` 按钮等价），被 `/agent` 提议时会触发二次确认。
+  注：旧的 `/analyze` 指令已重新命名为 sentiment 单只分析（对齐 term `analyze.one`）；账本复盘走 `/ledger analyze`，由 subcommand parser 路由到 `ledger-analyze.handler.ts`（spec id `ledger.analyze`）。
 - 强刷：`POST /api/ledger/analyze {bypassCache:true}` 或 term `ledger analyze --force`。
 
 ## 测试

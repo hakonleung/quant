@@ -107,6 +107,7 @@ describe('snapshotToTerm', () => {
         gross_margin_ttm: null,
       },
       returns: {
+        ret_1d: null,
         ret_5d: null,
         ret_10d: null,
         ret_20d: null,
@@ -136,6 +137,7 @@ describe('snapshotToTerm', () => {
         gross_margin_ttm: null,
       },
       returns: {
+        ret_1d: null,
         ret_5d: null,
         ret_10d: null,
         ret_20d: null,
@@ -258,6 +260,7 @@ describe('screenToTerm', () => {
 
 describe('watchToTerm / watchToCreate', () => {
   const sharedTask = {
+    idx: 1,
     market: 'a' as const,
     code: '600519',
     name: '贵州茅台',
