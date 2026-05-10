@@ -46,14 +46,14 @@ describe('WatchRemoveInstructionHandler', () => {
     expect(handler.spec.group).toBe('watch');
   });
 
-  it('golden path returns removal confirmation with market:code and name', async () => {
+  it('golden path returns the trimmed `done` ack on successful deletion', async () => {
     const { handler } = build({ deleteResult: removedTask });
     const r = await handler.execute({ id: 'w3' }, ctx);
     expect(r.ok).toBe(true);
     if (r.ok) {
-      expect(r.output.text).toContain('w3');
-      expect(r.output.text).toContain('a:000858');
-      expect(r.output.text).toContain('五粮液');
+      // IM users asked for the success reply to collapse to "done" so the
+      // card surface stays compact — see the May 2026 IM cleanup pass.
+      expect(r.output.text).toBe('done');
     }
   });
 

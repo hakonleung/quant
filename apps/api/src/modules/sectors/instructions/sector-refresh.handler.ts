@@ -32,6 +32,7 @@ export class SectorRefreshInstructionHandler extends InstructionRegistrarBase<Ar
     group: 'market',
     argsSchema,
     positional: ['id'],
+    examples: ['sector.refresh s1'],
   };
 
   constructor(
@@ -43,8 +44,8 @@ export class SectorRefreshInstructionHandler extends InstructionRegistrarBase<Ar
 
   async execute(args: Args, ctx: InstructionCtx): Promise<InstructionResult> {
     try {
-      const sector = await this.sectors.refreshDynamic(ctx.userId, args.id, ctx.traceId);
-      return okResult(`refreshed ${sector.name} (${String(sector.codes.length)} codes)`);
+      await this.sectors.refreshDynamic(ctx.userId, args.id, ctx.traceId);
+      return okResult('done');
     } catch (err) {
       if (err instanceof QuantError) {
         if (err.code === 'NOT_FOUND') return errResult('not-found', err.message);

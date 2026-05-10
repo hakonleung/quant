@@ -38,9 +38,8 @@ abstract class SectorPublishToggleBase extends InstructionRegistrarBase<Args> {
 
   async execute(args: Args, ctx: InstructionCtx): Promise<InstructionResult> {
     try {
-      const sector = await this.sectors.setPublished(ctx.userId, args.id, this.publish);
-      const verb = this.publish ? 'published' : 'unpublished';
-      return okResult(`${verb} sector ${sector.name} (${sector.id})`);
+      await this.sectors.setPublished(ctx.userId, args.id, this.publish);
+      return okResult('done');
     } catch (err) {
       if (err instanceof QuantError) {
         if (err.code === 'FORBIDDEN') return errResult('forbidden', err.message);
@@ -62,6 +61,7 @@ export class SectorPublishInstructionHandler extends SectorPublishToggleBase {
     argsSchema,
     positional: ['id'],
     destructive: true,
+    examples: ['sector.publish s1'],
   };
 }
 
@@ -76,5 +76,6 @@ export class SectorUnpublishInstructionHandler extends SectorPublishToggleBase {
     argsSchema,
     positional: ['id'],
     destructive: true,
+    examples: ['sector.unpublish s1'],
   };
 }

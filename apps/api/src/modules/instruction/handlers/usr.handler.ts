@@ -9,12 +9,15 @@
  */
 
 import { Inject, Injectable } from '@nestjs/common';
-import { instructionId, okResult, type InstructionResult } from '@quant/shared';
+import { instructionId, okResultWithMeta, type InstructionResult } from '@quant/shared';
 import { z } from 'zod';
 
 import { AuthConfig } from '../../auth/config/auth.config.js';
 import { CLOCK, type Clock } from '../../../common/clock.js';
-import { UserLlmLedgerStore } from '../../llm/ledger/user-llm-ledger.store.js';
+import {
+  UserLlmLedgerStore,
+  type UserLlmLedgerSummary,
+} from '../../llm/ledger/user-llm-ledger.store.js';
 import type { InstructionCtx } from '../instruction.port.js';
 import { InstructionRegistrarBase } from '../instruction.provider.js';
 import { InstructionRegistry } from '../instruction.registry.js';
@@ -43,23 +46,17 @@ export class UsrHandler extends InstructionRegistrarBase<Args> {
   }
 
   async execute(_args: Args, ctx: InstructionCtx): Promise<InstructionResult> {
-    const isAdmin = ctx.userId === this.authCfg.adminUserId;
-    const identityRows: ReadonlyArray<readonly [string, string]> = [
-      ['user_id', ctx.userId],
-      ['role', isAdmin ? 'admin' : 'user'],
-      ['source', ctx.source],
-      ...(ctx.channelId !== undefined ? [['channel', ctx.channelId] as const] : []),
-      ...(ctx.sender !== undefined ? [['im_id', ctx.sender] as const] : []),
-      ...(ctx.originalUserId !== undefined
-        ? [['mapped_from', `${ctx.originalUserId} (AUTH_ADMIN_USER_IDS)`] as const]
-        : []),
-      ...(ctx.imBootstrap === true ? [['bootstrap', 'true (no Web login yet)'] as const] : []),
+    const identityRows = buildIdentityRows(ctx, this.authCfg.adminUserId);
+    const ledgerData = await this.collectLedger(ctx.userId);
+    const text = [renderKvTable(identityRows), this.ledgerTextSection(ledgerData)].join('\n\n');
+    const tableSections: Record<string, unknown>[] = [
+      identityTableSection(identityRows),
+      ...ledgerTableSections(ledgerData),
     ];
-    const sections = [renderKvTable(identityRows), await this.ledgerSection(ctx.userId)];
-    return okResult(sections.join('\n\n'));
+    return okResultWithMeta(text, { tableSections });
   }
 
-  private async ledgerSection(userId: string): Promise<string> {
+  private async collectLedger(userId: string): Promise<LedgerSnapshot | null> {
     const now = this.clock.now();
     const startOfTodayMs = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
     const startOfMonthMs = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1);
@@ -68,21 +65,24 @@ export class UsrHandler extends InstructionRegistrarBase<Args> {
       this.ledger.summarize(userId, new Date(startOfMonthMs)),
       this.ledger.summarize(userId, null),
     ]);
-    if (total.callCount === 0) {
-      return '【LLM 消耗】\n```\n(no calls yet)\n```';
-    }
-    const spendRows: ReadonlyArray<readonly [string, string, string, string]> = [
+    if (total.callCount === 0) return null;
+    const byScope = Array.from(total.byScope.entries()).sort((a, b) => b[1].cnyCost - a[1].cnyCost);
+    return { today, month, total, byScope };
+  }
+
+  private ledgerTextSection(data: LedgerSnapshot | null): string {
+    if (data === null) return '【LLM 消耗】\n```\n(no calls yet)\n```';
+    const spendRows: readonly (readonly [string, string, string, string])[] = [
       ['scope', 'cny', 'calls', 'tokens'],
-      ['today', `¥ ${today.totalCnyCost.toFixed(4)}`, String(today.callCount), String(today.totalUsage.total)],
-      ['month', `¥ ${month.totalCnyCost.toFixed(4)}`, String(month.callCount), String(month.totalUsage.total)],
-      ['total', `¥ ${total.totalCnyCost.toFixed(4)}`, String(total.callCount), String(total.totalUsage.total)],
+      ['today', `¥ ${data.today.totalCnyCost.toFixed(4)}`, String(data.today.callCount), String(data.today.totalUsage.total)],
+      ['month', `¥ ${data.month.totalCnyCost.toFixed(4)}`, String(data.month.callCount), String(data.month.totalUsage.total)],
+      ['total', `¥ ${data.total.totalCnyCost.toFixed(4)}`, String(data.total.callCount), String(data.total.totalUsage.total)],
     ];
     const out = [`【LLM 消耗】`, render4ColTable(spendRows)];
-    const scopes = Array.from(total.byScope.entries()).sort((a, b) => b[1].cnyCost - a[1].cnyCost);
-    if (scopes.length > 0) {
-      const byScopeRows: ReadonlyArray<readonly [string, string, string]> = [
+    if (data.byScope.length > 0) {
+      const byScopeRows: readonly (readonly [string, string, string])[] = [
         ['scope', 'cny', 'calls'],
-        ...scopes.map(
+        ...data.byScope.map(
           ([scope, agg]) =>
             [scope, `¥ ${agg.cnyCost.toFixed(4)}`, String(agg.callCount)] as const,
         ),
@@ -93,13 +93,106 @@ export class UsrHandler extends InstructionRegistrarBase<Args> {
   }
 }
 
+type ScopeKey = Parameters<UserLlmLedgerSummary['byScope']['get']>[0];
+type ScopeAgg = NonNullable<ReturnType<UserLlmLedgerSummary['byScope']['get']>>;
+interface LedgerSnapshot {
+  readonly today: UserLlmLedgerSummary;
+  readonly month: UserLlmLedgerSummary;
+  readonly total: UserLlmLedgerSummary;
+  readonly byScope: readonly (readonly [ScopeKey, ScopeAgg])[];
+}
+
+function spendCells(s: UserLlmLedgerSummary): Record<string, string> {
+  return {
+    cny: `¥ ${s.totalCnyCost.toFixed(4)}`,
+    calls: String(s.callCount),
+    tokens: String(s.totalUsage.total),
+  };
+}
+
+function buildIdentityRows(
+  ctx: InstructionCtx,
+  adminUserId: string,
+): readonly (readonly [string, string])[] {
+  const isAdmin = ctx.userId === adminUserId;
+  return [
+    ['user_id', ctx.userId],
+    ['role', isAdmin ? 'admin' : 'user'],
+    ['source', ctx.source],
+    ...(ctx.channelId !== undefined ? [['channel', ctx.channelId] as const] : []),
+    ...(ctx.sender !== undefined ? [['im_id', ctx.sender] as const] : []),
+    ...(ctx.originalUserId !== undefined
+      ? [['mapped_from', `${ctx.originalUserId} (AUTH_ADMIN_USER_IDS)`] as const]
+      : []),
+    ...(ctx.imBootstrap === true ? [['bootstrap', 'true (no Web login yet)'] as const] : []),
+  ];
+}
+
+function identityTableSection(
+  identityRows: readonly (readonly [string, string])[],
+): Record<string, unknown> {
+  return {
+    title: '身份',
+    columns: [
+      { name: 'k', displayName: 'key', horizontalAlign: 'left', width: '110px' },
+      { name: 'v', displayName: 'value', horizontalAlign: 'left' },
+    ],
+    rows: identityRows.map(([k, v]) => ({ k, v })),
+  };
+}
+
+function ledgerTableSections(data: LedgerSnapshot | null): Record<string, unknown>[] {
+  if (data === null) {
+    return [
+      {
+        title: 'LLM 消耗',
+        columns: [{ name: 'note', displayName: '', horizontalAlign: 'left' }],
+        rows: [{ note: '(no calls yet)' }],
+      },
+    ];
+  }
+  const sections: Record<string, unknown>[] = [
+    {
+      title: 'LLM 消耗',
+      columns: [
+        { name: 'scope', displayName: 'scope', horizontalAlign: 'left', width: '90px' },
+        { name: 'cny', displayName: 'cny', horizontalAlign: 'right', width: '110px' },
+        { name: 'calls', displayName: 'calls', horizontalAlign: 'right', width: '80px' },
+        { name: 'tokens', displayName: 'tokens', horizontalAlign: 'right', width: '100px' },
+      ],
+      rows: [
+        { scope: 'today', ...spendCells(data.today) },
+        { scope: 'month', ...spendCells(data.month) },
+        { scope: 'total', ...spendCells(data.total) },
+      ],
+    },
+  ];
+  if (data.byScope.length > 0) {
+    sections.push({
+      title: '按 scope 拆分',
+      columns: [
+        { name: 'scope', displayName: 'scope', horizontalAlign: 'left', width: '160px' },
+        { name: 'cny', displayName: 'cny', horizontalAlign: 'right', width: '120px' },
+        { name: 'calls', displayName: 'calls', horizontalAlign: 'right', width: '90px' },
+      ],
+      rows: data.byScope.map(([scope, agg]) => ({
+        scope,
+        cny: `¥ ${agg.cnyCost.toFixed(4)}`,
+        calls: String(agg.callCount),
+      })),
+    });
+  }
+  return sections;
+}
+
+
 // ── pure render helpers ──────────────────────────────────────────────────
 //
 // Code-fenced fixed-width tables — same approach as `format-stock-table.ts`
 // and the help handler. lark_md collapses multi-space runs unless the
 // block is fenced, so without ``` the columns drift visibly.
 
-function renderKvTable(rows: ReadonlyArray<readonly [string, string]>): string {
+function renderKvTable(rows: readonly (readonly [string, string])[]): string {
   const w0 = maxWidth(rows.map((r) => r[0]));
   const w1 = maxWidth(rows.map((r) => r[1]));
   const lines = rows.map(([k, v]) => `${pad(k, w0, 'left')}  ${pad(v, w1, 'left')}`);
@@ -107,7 +200,7 @@ function renderKvTable(rows: ReadonlyArray<readonly [string, string]>): string {
 }
 
 function render4ColTable(
-  rows: ReadonlyArray<readonly [string, string, string, string]>,
+  rows: readonly (readonly [string, string, string, string])[],
 ): string {
   const widths: [number, number, number, number] = [
     maxWidth(rows.map((r) => r[0])),
@@ -124,7 +217,7 @@ function render4ColTable(
   return ['```', fmt(header), sep, ...body.map(fmt), '```'].join('\n');
 }
 
-function render3ColTable(rows: ReadonlyArray<readonly [string, string, string]>): string {
+function render3ColTable(rows: readonly (readonly [string, string, string])[]): string {
   const widths: [number, number, number] = [
     maxWidth(rows.map((r) => r[0])),
     maxWidth(rows.map((r) => r[1])),

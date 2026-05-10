@@ -1,5 +1,10 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { instructionId, okResult, type InstructionResult } from '@quant/shared';
+import {
+  instructionId,
+  okResult,
+  okResultWithMeta,
+  type InstructionResult,
+} from '@quant/shared';
 import { z } from 'zod';
 
 import type { InstructionCtx } from '../instruction.port.js';
@@ -36,6 +41,7 @@ export class HelpHandler extends InstructionRegistrarBase<Args> {
     argsSchema,
     positional: ['id'],
     imAliases: ['帮助'],
+    examples: ['help', 'help sector', 'help watch.add'],
   };
 
   constructor(@Inject(InstructionRegistry) registry: InstructionRegistry) {
@@ -44,76 +50,79 @@ export class HelpHandler extends InstructionRegistrarBase<Args> {
 
   execute(args: Args, _ctx: InstructionCtx): Promise<InstructionResult> {
     if (args.id !== undefined && args.id.length > 0) {
-      return Promise.resolve(okResult(this.formatDetail(args.id)));
+      return Promise.resolve(this.replyDetail(args.id));
     }
-    return Promise.resolve(okResult(this.formatList()));
+    return Promise.resolve(this.replyList());
   }
 
   // ── list ──────────────────────────────────────────────────────────────
 
-  /**
-   * Render the registered instructions as a single fixed-width table.
-   *
-   * Why a code-fenced table: previous output put the CN summary and the
-   * EN summary on the same line, joined by ` · `. In Feishu's `lark_md`
-   * panels that line was usually wider than the card and wrapped, so the
-   * user saw the Chinese half on top and the English half below — the
-   * "上中下英" effect they reported. A code-fenced table forces a
-   * monospace column layout and prevents Lark from collapsing whitespace
-   * or wrapping individual rows, so each row stays on one line and the
-   * CN / EN columns sit side-by-side.
-   */
-  private formatList(): string {
+  private replyList(): InstructionResult {
     const entries = this.registry.list();
     const byGroup = new Map<InstructionGroup, InstructionEntry[]>();
     for (const group of GROUP_ORDER) byGroup.set(group, []);
-
+    // The pre-seeded buckets above guarantee `byGroup.get(group)` is
+    // defined for every InstructionGroup; `system` exists by construction
+    // as the safe fallback for unknown groups (no `!` needed).
+    const systemBucket = byGroup.get('system') ?? [];
+    if (!byGroup.has('system')) byGroup.set('system', systemBucket);
     for (const entry of entries) {
-      const group = entry.spec.group;
-      const bucket = byGroup.get(group);
-      // Unknown groups fall into system as a safe fallback.
-      const target = bucket ?? (byGroup.get('system') as InstructionEntry[]);
-      target.push(entry);
+      const bucket = byGroup.get(entry.spec.group) ?? systemBucket;
+      bucket.push(entry);
     }
 
-    const sections: string[] = [];
+    const tableSections: Record<string, unknown>[] = [];
+    const textSections: string[] = [];
     for (const group of GROUP_ORDER) {
       const bucket = byGroup.get(group);
       if (bucket === undefined || bucket.length === 0) continue;
       const sorted = [...bucket].sort((a, b) => a.spec.id.localeCompare(b.spec.id));
       const rows = sorted.map((e) => buildHelpRow(e.spec));
-      sections.push(`【${GROUP_LABEL[group]}】\n${renderHelpTable(rows)}`);
+      tableSections.push({
+        title: GROUP_LABEL[group],
+        columns: [
+          { name: 'id', displayName: 'id', horizontalAlign: 'left', width: '160px' },
+          { name: 'tags', displayName: 'tag', horizontalAlign: 'left', width: '70px' },
+          { name: 'cn', displayName: '中文', horizontalAlign: 'left' },
+          { name: 'example', displayName: '示例', horizontalAlign: 'left', width: '220px' },
+        ],
+        rows: rows.map((r) => ({
+          id: r.id,
+          tags: r.tags,
+          cn: r.cn,
+          example: r.example,
+        })),
+      });
+      textSections.push(`【${GROUP_LABEL[group]}】\n${renderHelpTable(rows)}`);
     }
-    return sections.join('\n\n');
+    return okResultWithMeta(textSections.join('\n\n'), {
+      tableSections,
+      tablesSubheader: '使用 `help <id>` 查看单条指令详情',
+    });
   }
 
   // ── detail ────────────────────────────────────────────────────────────
 
-  private formatDetail(id: string): string {
+  private replyDetail(id: string): InstructionResult {
     const entry = this.registry.get(id);
-    if (entry === undefined) return `unknown instruction: ${id}`;
+    if (entry === undefined) return okResult(`unknown instruction: ${id}`);
     const { spec } = entry;
-
-    const header = buildAliasLine(spec);
-    const lines: string[] = [
-      `${header}  ·  ${GROUP_LABEL[spec.group]}`,
-      `中文: ${spec.summaryCn}`,
-      `英文: ${spec.summary}`,
-    ];
-    if (spec.help !== undefined) lines.push(spec.help);
-    if (spec.positional !== undefined && spec.positional.length > 0) {
-      lines.push(`用法: ${String(spec.id)} ${spec.positional.join(' ')}`);
-    }
-    if (spec.aliases !== undefined && spec.aliases.length > 0) {
-      lines.push(`别名: ${spec.aliases.join(', ')}`);
-    }
-    if (spec.imAliases !== undefined && spec.imAliases.length > 0) {
-      lines.push(`中文别名: ${spec.imAliases.join('、')}`);
-    }
-    if (spec.mode === 'async') lines.push('执行方式: 异步（收到开始通知后等待完成回调）');
-    if (spec.costsCredits === true) lines.push('标签: [$] 调用会触发外部付费 LLM');
-    if (spec.destructive === true) lines.push('标签: [!] 写操作 / 不可逆');
-    return lines.join('\n');
+    const fields = detailFields(spec);
+    const lines = [`${buildAliasLine(spec)}  ·  ${GROUP_LABEL[spec.group]}`];
+    for (const [k, v] of fields) lines.push(`${k}: ${v}`);
+    const text = lines.join('\n');
+    return okResultWithMeta(text, {
+      tableSections: [
+        {
+          title: `/${String(spec.id)}`,
+          columns: [
+            { name: 'k', displayName: '字段', horizontalAlign: 'left', width: '110px' },
+            { name: 'v', displayName: '内容', horizontalAlign: 'left' },
+          ],
+          rows: fields.map(([k, v]) => ({ k, v })),
+        },
+      ],
+    });
   }
 }
 
@@ -124,6 +133,7 @@ interface HelpRow {
   readonly tags: string;
   readonly cn: string;
   readonly en: string;
+  readonly example: string;
 }
 
 function buildAliasLine(spec: InstructionSpec<unknown>): string {
@@ -142,38 +152,92 @@ function formatTags(spec: InstructionSpec<unknown>): string {
   return tags.length > 0 ? `[${tags.join('')}]` : '';
 }
 
+/**
+ * Produce a representative invocation. Uses the first explicit example
+ * when provided, else builds a stub from `positional` (`<sub>` /
+ * `<code>` placeholders), else falls back to the bare id.
+ */
+function buildExample(spec: InstructionSpec<unknown>): string {
+  if (spec.examples !== undefined && spec.examples.length > 0) {
+    const first = spec.examples[0];
+    if (typeof first === 'string' && first.length > 0) return first;
+  }
+  const id = String(spec.id);
+  if (spec.positional !== undefined && spec.positional.length > 0) {
+    return `${id} ${spec.positional.map((p) => `<${p}>`).join(' ')}`;
+  }
+  return id;
+}
+
 function buildHelpRow(spec: InstructionSpec<unknown>): HelpRow {
   return {
     id: buildAliasLine(spec),
     tags: formatTags(spec),
     cn: spec.summaryCn,
     en: spec.summary,
+    example: buildExample(spec),
   };
 }
 
+function paramsField(spec: InstructionSpec<unknown>): string {
+  if (spec.positional !== undefined && spec.positional.length > 0) {
+    return `${spec.positional.map((p) => `<${p}>`).join(' ')} （位置参数，按顺序）；其余以 key=value 形式传入`;
+  }
+  return '无 / 仅 key=value 形式';
+}
+
+function tagFields(spec: InstructionSpec<unknown>): readonly (readonly [string, string])[] {
+  const out: (readonly [string, string])[] = [];
+  if (spec.mode === 'async') out.push(['执行方式', '异步（先收到开始通知，再收到完成回调）']);
+  if (spec.costsCredits === true) out.push(['标签', '[$] 调用会触发外部付费 LLM']);
+  if (spec.destructive === true) out.push(['标签', '[!] 写操作 / 不可逆']);
+  return out;
+}
+
+function detailFields(spec: InstructionSpec<unknown>): readonly (readonly [string, string])[] {
+  const examples =
+    spec.examples !== undefined && spec.examples.length > 0
+      ? spec.examples
+      : [buildExample(spec)];
+  const fields: (readonly [string, string])[] = [
+    ['中文', spec.summaryCn],
+    ['English', spec.summary],
+  ];
+  if (spec.help !== undefined && spec.help.length > 0) fields.push(['说明', spec.help]);
+  fields.push(['参数', paramsField(spec)]);
+  fields.push(['示例', examples.join('\n')]);
+  if (spec.aliases !== undefined && spec.aliases.length > 0) {
+    fields.push(['别名', spec.aliases.join(', ')]);
+  }
+  if (spec.imAliases !== undefined && spec.imAliases.length > 0) {
+    fields.push(['中文别名', spec.imAliases.join('、')]);
+  }
+  fields.push(...tagFields(spec));
+  return fields;
+}
+
 /**
- * Render the help rows as a fixed-width text table wrapped in a
- * triple-backtick fence so Feishu / Slack preserve the column padding
- * and stop trying to wrap or collapse whitespace. CN and EN sit in
- * separate columns side-by-side — addresses the "上中下英" report.
+ * Code-fenced fixed-width fallback used by terminal / Slack consumers
+ * (`text`). Feishu picks `tableSections` from `meta` and renders native
+ * tables instead.
  */
 function renderHelpTable(rows: readonly HelpRow[]): string {
-  const HEADER: HelpRow = { id: 'id', tags: 'tag', cn: '中文', en: 'English' };
+  const HEADER: HelpRow = { id: 'id', tags: 'tag', cn: '中文', en: 'English', example: '示例' };
   const all: readonly HelpRow[] = [HEADER, ...rows];
   const w = {
     id: maxWidth(all, (r) => r.id),
     tags: maxWidth(all, (r) => r.tags),
     cn: maxWidth(all, (r) => r.cn),
-    en: maxWidth(all, (r) => r.en),
+    example: maxWidth(all, (r) => r.example),
   };
   const fmt = (r: HelpRow): string =>
     [
       pad(r.id, w.id, 'left'),
       pad(r.tags, w.tags, 'left'),
       pad(r.cn, w.cn, 'left'),
-      pad(r.en, w.en, 'left'),
+      pad(r.example, w.example, 'left'),
     ].join('  ');
-  const sep = `${'─'.repeat(w.id)}  ${'─'.repeat(w.tags)}  ${'─'.repeat(w.cn)}  ${'─'.repeat(w.en)}`;
+  const sep = `${'─'.repeat(w.id)}  ${'─'.repeat(w.tags)}  ${'─'.repeat(w.cn)}  ${'─'.repeat(w.example)}`;
   const lines = ['```', fmt(HEADER), sep, ...rows.map(fmt), '```'];
   return lines.join('\n');
 }
@@ -187,12 +251,6 @@ function maxWidth(rows: readonly HelpRow[], pick: (r: HelpRow) => string): numbe
   return m;
 }
 
-/**
- * East-Asian wide chars (most CJK) take ~2 monospace columns.
- * Mirrors the helper in `format-stock-table.ts` — kept inline here to
- * keep the help handler self-contained (CLAUDE.md §2.5.2 rule-of-three:
- * two callers is not yet enough to justify extracting a shared module).
- */
 function displayWidth(s: string): number {
   let w = 0;
   for (const ch of s) {

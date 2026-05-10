@@ -47,6 +47,7 @@ export class TaInstructionHandler extends InstructionRegistrarBase<Args> {
     argsSchema,
     positional: ['code'],
     imAliases: ['技术', '走势', '技分'],
+    examples: ['ta 600519', 'ta 600519 fresh=1'],
   };
 
   constructor(

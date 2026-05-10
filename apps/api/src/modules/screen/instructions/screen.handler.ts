@@ -69,6 +69,7 @@ export class ScreenInstructionHandler extends InstructionRegistrarBase<Args> {
     imAliases: ['筛选', '选股'],
     mode: 'async',
     costsCredits: true,
+    examples: ['screen "市值大于100亿且年线上"', 'screen q="科技股 PE<30"'],
   };
 
   constructor(

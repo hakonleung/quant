@@ -62,6 +62,7 @@ export class AnalyzeInstructionHandler extends InstructionRegistrarBase<Args> {
     imAliases: ['舆情', '分析'],
     mode: 'async',
     costsCredits: true,
+    examples: ['analyze 600519', 'analyze 600519 windowDays=7'],
   };
 
   constructor(

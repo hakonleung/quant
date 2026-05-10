@@ -61,6 +61,7 @@ export class TaSectorInstructionHandler extends InstructionRegistrarBase<Args> {
     costsCredits: true,
     argsSchema,
     positional: ['id'],
+    examples: ['ta.sector s1', 'ta.sector s1 fresh=1'],
   };
 
   constructor(

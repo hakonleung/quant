@@ -32,6 +32,7 @@ export class SectorRmInstructionHandler extends InstructionRegistrarBase<Args> {
     argsSchema,
     positional: ['id'],
     destructive: true,
+    examples: ['sector.rm s1'],
   };
 
   constructor(
@@ -44,7 +45,7 @@ export class SectorRmInstructionHandler extends InstructionRegistrarBase<Args> {
   async execute(args: Args, ctx: InstructionCtx): Promise<InstructionResult> {
     try {
       await this.sectors.remove(ctx.userId, args.id);
-      return okResult(`removed sector ${args.id}`);
+      return okResult('done');
     } catch (err) {
       if (err instanceof QuantError) {
         if (err.code === 'NOT_FOUND') return errResult('not-found', err.message);

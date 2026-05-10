@@ -48,6 +48,7 @@ export class SectorShowInstructionHandler extends InstructionRegistrarBase<Args>
     group: 'market',
     argsSchema,
     positional: ['id'],
+    examples: ['sector.show s1', 'sector.show 白酒'],
   };
 
   constructor(

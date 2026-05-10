@@ -31,6 +31,7 @@ export class WatchRemoveInstructionHandler extends InstructionRegistrarBase<Args
     group: 'watch',
     argsSchema,
     positional: ['id'],
+    examples: ['watch.remove w1', 'watch.remove 2'],
   };
 
   constructor(
@@ -55,6 +56,7 @@ export class WatchRemoveInstructionHandler extends InstructionRegistrarBase<Args
       return errResult('not-found', `watch task w${String(idx)} not found`);
     }
 
-    return okResult(`w${String(idx)} removed: ${removed.market}:${removed.code} "${removed.name}"`);
+    void removed;
+    return okResult('done');
   }
 }

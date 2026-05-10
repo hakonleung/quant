@@ -44,6 +44,7 @@ export class WatchAddInstructionHandler extends InstructionRegistrarBase<Args> {
     group: 'watch',
     argsSchema,
     positional: ['code'],
+    examples: ['watch.add 600519 group=daily', 'watch.add 600519 group=daily name=茅台'],
   };
 
   constructor(

@@ -44,6 +44,7 @@ export class WatchInstructionHandler extends InstructionRegistrarBase<Args> {
     positional: ['sub'],
     aliases: [instructionId('watch.list')],
     imAliases: ['自选'],
+    examples: ['watch'],
   };
 
   constructor(

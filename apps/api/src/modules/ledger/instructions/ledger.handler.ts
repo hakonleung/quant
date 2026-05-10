@@ -19,7 +19,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import {
   instructionId,
   okResult,
-  type EnrichedLedgerEntry,
+  okResultWithMeta,
   type InstructionResult,
 } from '@quant/shared';
 import { z } from 'zod';
@@ -48,8 +48,8 @@ export class LedgerInstructionHandler extends InstructionRegistrarBase<Args> {
     group: 'portfolio',
     argsSchema,
     positional: ['sub'],
-    aliases: [instructionId('ledger.list')],
     imAliases: ['账本', '账单'],
+    examples: ['ledger', 'ledger limit=10'],
   };
 
   constructor(
@@ -62,15 +62,45 @@ export class LedgerInstructionHandler extends InstructionRegistrarBase<Args> {
   async execute(args: Args, ctx: InstructionCtx): Promise<InstructionResult> {
     const enriched = await this.ledger.enriched(ctx.userId);
     if (enriched.length === 0) return okResult('ledger is empty');
-    return okResult(formatList(enriched, args.limit));
+    const tail = enriched.slice(-args.limit).reverse();
+    const subheader = `ledger (last ${String(tail.length)} of ${String(enriched.length)})`;
+    const text = `${subheader}:\n${tail
+      .map(
+        (e) =>
+          `  ${e.date}  pnl=${e.pnlAmount.padStart(10)}  pos=${e.derivedClosingPosition.padStart(12)}  pct=${formatPct(e.derivedDailyPct)}`,
+      )
+      .join('\n')}`;
+    return okResultWithMeta(text, {
+      tableSections: [
+        {
+          columns: [
+            { name: 'date', displayName: 'date', horizontalAlign: 'left', width: '110px' },
+            { name: 'pnl', displayName: 'pnl', horizontalAlign: 'right', width: '110px' },
+            { name: 'pos', displayName: 'pos', horizontalAlign: 'right', width: '120px' },
+            { name: 'pct', displayName: 'pct%', horizontalAlign: 'right', width: '80px' },
+          ],
+          rows: tail.map((e) => ({
+            date: e.date,
+            pnl: e.pnlAmount,
+            pos: e.derivedClosingPosition,
+            pct: formatPct(e.derivedDailyPct),
+          })),
+        },
+      ],
+      tablesSubheader: subheader,
+    });
   }
 }
 
-function formatList(entries: readonly EnrichedLedgerEntry[], limit: number): string {
-  const tail = entries.slice(-limit).reverse();
-  const lines = tail.map((e) => {
-    const pct = e.derivedDailyPct;
-    return `  ${e.date}  pnl=${e.pnlAmount.padStart(10)}  pos=${e.derivedClosingPosition.padStart(12)}  pct=${pct}%`;
-  });
-  return `ledger (last ${String(tail.length)} of ${String(entries.length)}):\n${lines.join('\n')}`;
+/**
+ * Force the daily-pct cell to 2 decimals. `derivedDailyPct` is a
+ * pre-formatted string (e.g. "1.234"); reparse so we can round the
+ * display without depending on Decimal.js here.
+ */
+function formatPct(raw: string): string {
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return `${raw}%`;
+  const sign = n > 0 ? '+' : '';
+  return `${sign}${n.toFixed(2)}%`;
 }
+

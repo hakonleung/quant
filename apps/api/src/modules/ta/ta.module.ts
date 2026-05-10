@@ -19,7 +19,6 @@ import { TaCacheStore } from './ta-cache.store.js';
 import { TaController } from './ta.controller.js';
 import { TaInstructionHandler } from './instructions/ta.handler.js';
 import { TaSectorInstructionHandler } from './instructions/ta-sector.handler.js';
-import { TaShowInstructionHandler } from './instructions/ta-show.handler.js';
 import { TaService } from './ta.service.js';
 import { TA_DATA_DIR, TA_FLIGHT_CLIENT } from './ta.token.js';
 
@@ -45,7 +44,6 @@ const DEFAULT_DATA_DIR = '../../data';
     TaCacheStore,
     TaService,
     TaInstructionHandler,
-    TaShowInstructionHandler,
     TaSectorInstructionHandler,
   ],
 })

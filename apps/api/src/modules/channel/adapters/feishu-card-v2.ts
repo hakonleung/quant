@@ -78,13 +78,13 @@ function readColumn(obj: Readonly<Record<string, unknown>>): StockTableMetaColum
   // doesn't fight optional-field assignment. Single conversion at the
   // return boundary keeps type-safety end-to-end and drops the four
   // narrow-cast workarounds the previous version needed.
-  type MutableColumn = {
+  interface MutableColumn {
     name: string;
     displayName?: string;
     dataType?: 'text' | 'lark_md';
     horizontalAlign?: 'left' | 'center' | 'right';
     width?: string;
-  };
+  }
   const col: MutableColumn = { name };
   const displayName = obj['displayName'];
   if (typeof displayName === 'string') col.displayName = displayName;
@@ -188,4 +188,130 @@ export function maybeStockTableCard(
     columns,
     rows,
   });
+}
+
+// ── generic multi-table card ─────────────────────────────────────────────
+//
+// Generalised version of the stock-table renderer for handlers that want
+// one or more native Feishu tables in a single reply (help, usr, sector
+// list, stock search, ledger). Handlers attach
+// `meta.tableSections: { title?, columns, rows }[]` and the dispatcher
+// emits a schema-2.0 card with a `markdown` title above each table.
+
+export interface MetaTableSection {
+  readonly title?: string;
+  readonly columns: readonly StockTableMetaColumn[];
+  readonly rows: readonly StockTableMetaRow[];
+}
+
+function isPlainObject(v: unknown): v is Readonly<Record<string, unknown>> {
+  return typeof v === 'object' && v !== null;
+}
+
+function parseSectionColumns(raw: readonly unknown[]): StockTableMetaColumn[] {
+  const columns: StockTableMetaColumn[] = [];
+  for (const c of raw) {
+    if (!isPlainObject(c)) continue;
+    const parsed = readColumn(c);
+    if (parsed !== null) columns.push(parsed);
+  }
+  return columns;
+}
+
+function parseSectionRows(raw: readonly unknown[]): StockTableMetaRow[] {
+  const rows: StockTableMetaRow[] = [];
+  for (const r of raw) {
+    if (!isPlainObject(r)) continue;
+    const row: Record<string, string | null> = {};
+    for (const [k, v] of Object.entries(r)) {
+      if (v === null || v === undefined) row[k] = null;
+      else if (isScalar(v)) row[k] = String(v);
+    }
+    rows.push(row);
+  }
+  return rows;
+}
+
+function readSection(obj: Readonly<Record<string, unknown>>): MetaTableSection | null {
+  const rawCols = obj['columns'];
+  const rawRows = obj['rows'];
+  if (!Array.isArray(rawCols) || !Array.isArray(rawRows)) return null;
+  const columns = parseSectionColumns(rawCols);
+  if (columns.length === 0) return null;
+  const rows = parseSectionRows(rawRows);
+  const title = obj['title'];
+  return typeof title === 'string' && title.length > 0
+    ? { title, columns, rows }
+    : { columns, rows };
+}
+
+function metaSections(meta: Readonly<Record<string, unknown>>): readonly MetaTableSection[] | null {
+  const raw = meta['tableSections'];
+  if (!Array.isArray(raw) || raw.length === 0) return null;
+  const out: MetaTableSection[] = [];
+  for (const item of raw) {
+    if (!isPlainObject(item)) continue;
+    const parsed = readSection(item);
+    if (parsed !== null) out.push(parsed);
+  }
+  return out.length > 0 ? out : null;
+}
+
+function tableElement(section: MetaTableSection): unknown {
+  return {
+    tag: 'table',
+    page_size: 10,
+    row_height: 'low',
+    freeze_first_column: true,
+    header_style: { background_style: 'grey', bold: true, text_align: 'left' },
+    columns: section.columns.map((c) => ({
+      name: c.name,
+      display_name: c.displayName ?? c.name,
+      data_type: c.dataType ?? 'text',
+      ...(c.horizontalAlign !== undefined ? { horizontal_align: c.horizontalAlign } : {}),
+      ...(c.width !== undefined ? { width: c.width } : {}),
+    })),
+    rows: section.rows.map((r) => {
+      const out: Record<string, string> = {};
+      for (const col of section.columns) {
+        out[col.name] = r[col.name] ?? '—';
+      }
+      return out;
+    }),
+  };
+}
+
+/**
+ * Multi-table sibling of {@link maybeStockTableCard}. When the handler
+ * surfaces `meta.tableSections`, render a schema-2.0 card with one
+ * `table` element per section (preceded by a `markdown` title element
+ * when the section has one). An optional `meta.tablesSubheader` adds a
+ * single markdown line at the top of the card.
+ */
+export function maybeMetaTablesCard(
+  meta: Readonly<Record<string, unknown>>,
+  defaults: {
+    readonly headerTitle: string;
+    readonly headerTemplate: FeishuV2Card['header']['template'];
+  },
+): FeishuV2Card | null {
+  const sections = metaSections(meta);
+  if (sections === null) return null;
+  const elements: unknown[] = [];
+  const subheader = metaString(meta, 'tablesSubheader');
+  if (subheader !== null) elements.push({ tag: 'markdown', content: subheader });
+  for (const section of sections) {
+    if (section.title !== undefined && section.title.length > 0) {
+      elements.push({ tag: 'markdown', content: `**${section.title}**` });
+    }
+    elements.push(tableElement(section));
+  }
+  return {
+    schema: '2.0',
+    header: {
+      template: defaults.headerTemplate,
+      title: { tag: 'plain_text', content: defaults.headerTitle },
+    },
+    body: { elements },
+  };
 }

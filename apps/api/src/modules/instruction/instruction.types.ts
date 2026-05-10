@@ -82,6 +82,13 @@ export interface InstructionSpec<TArgs> {
    * help renders a `[!]` tag.
    */
   readonly destructive?: boolean;
+  /**
+   * Concrete invocation examples shown by `/help <id>` (and its IM
+   * detail card). Each entry is a full command line, e.g.
+   * `'sector.show s1'` or `'ledger limit=10'`. Falls back to a
+   * positional-derived stub when omitted.
+   */
+  readonly examples?: readonly string[];
 }
 
 /**

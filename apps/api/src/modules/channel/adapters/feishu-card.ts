@@ -11,7 +11,7 @@
  * `<font color='red'>...</font>`, and emoji shortcodes natively.
  */
 
-import { maybeStockTableCard } from './feishu-card-v2.js';
+import { maybeMetaTablesCard, maybeStockTableCard } from './feishu-card-v2.js';
 
 /**
  * Two card envelopes ride on the same outbound channel:
@@ -303,6 +303,62 @@ import {
  * Choose a card for the message kind, or return null to fall back to
  * the stripped-mrkdwn plain-text path.
  */
+/**
+ * Build the colored title used by `instruction.reply` and
+ * `instruction.async.completed` cards. Centralised so success ✓
+ * vs failure ✗ formatting stays in lockstep across both kinds.
+ */
+function instructionCardTitle(
+  meta: Readonly<Record<string, unknown>>,
+  doneSuffix: string,
+  failPrefix: string,
+): { readonly ok: boolean; readonly title: string } {
+  const ok = meta['ok'] === true;
+  const idLabel = metaString(meta, 'instructionId') ?? 'instruction';
+  const code = metaString(meta, 'code');
+  const title = ok
+    ? `✓ /${idLabel}${doneSuffix}`
+    : code !== null
+      ? `✗ /${idLabel} (${code})`
+      : `✗ /${idLabel}${failPrefix}`;
+  return { ok, title };
+}
+
+/**
+ * Try the schema-2.0 native-table renderers in priority order:
+ * the multi-table `tableSections` flow first, then the single-stock-
+ * table fallback. Returns null when neither meta shape applies.
+ */
+function pickInstructionTableCard(
+  text: string,
+  meta: Readonly<Record<string, unknown>>,
+  defaults: {
+    readonly headerTitle: string;
+    readonly headerTemplate: FeishuV2Card['header']['template'];
+  },
+): FeishuV2Card | null {
+  return maybeMetaTablesCard(meta, defaults) ?? maybeStockTableCard(text, meta, defaults);
+}
+
+function instructionReplyCard(
+  text: string,
+  meta: Readonly<Record<string, unknown>>,
+): FeishuCard {
+  const { ok, title } = instructionCardTitle(meta, '', '');
+  const defaults = { headerTitle: title, headerTemplate: ok ? 'green' : 'red' } as const;
+  return pickInstructionTableCard(text, meta, defaults) ?? buildInstructionReplyCard(text, meta);
+}
+
+function instructionAsyncCompletedCard(
+  text: string,
+  meta: Readonly<Record<string, unknown>>,
+): FeishuCard {
+  const { ok, title } = instructionCardTitle(meta, ' done', ' failed');
+  const defaults = { headerTitle: title, headerTemplate: ok ? 'green' : 'red' } as const;
+  return pickInstructionTableCard(text, meta, defaults)
+    ?? buildInstructionAsyncCompletedCard(text, meta);
+}
+
 export function pickCard(message: {
   readonly kind?: string;
   readonly title?: string;
@@ -313,38 +369,12 @@ export function pickCard(message: {
   switch (message.kind) {
     case 'watch.hit':
       return buildWatchHitCard(message.text, meta);
-    case 'instruction.reply': {
-      const ok = meta['ok'] === true;
-      const idLabel = metaString(meta, 'instructionId') ?? 'instruction';
-      const code = metaString(meta, 'code');
-      const title = ok
-        ? `✓ /${idLabel}`
-        : code !== null
-          ? `✗ /${idLabel} (${code})`
-          : `✗ /${idLabel}`;
-      const tableCard = maybeStockTableCard(message.text, meta, {
-        headerTitle: title,
-        headerTemplate: ok ? 'green' : 'red',
-      });
-      return tableCard ?? buildInstructionReplyCard(message.text, meta);
-    }
+    case 'instruction.reply':
+      return instructionReplyCard(message.text, meta);
     case 'instruction.async.started':
       return buildInstructionAsyncStartedCard(message.text, meta);
-    case 'instruction.async.completed': {
-      const ok = meta['ok'] === true;
-      const idLabel = metaString(meta, 'instructionId') ?? 'instruction';
-      const code = metaString(meta, 'code');
-      const title = ok
-        ? `✓ /${idLabel} done`
-        : code !== null
-          ? `✗ /${idLabel} (${code})`
-          : `✗ /${idLabel} failed`;
-      const tableCard = maybeStockTableCard(message.text, meta, {
-        headerTitle: title,
-        headerTemplate: ok ? 'green' : 'red',
-      });
-      return tableCard ?? buildInstructionAsyncCompletedCard(message.text, meta);
-    }
+    case 'instruction.async.completed':
+      return instructionAsyncCompletedCard(message.text, meta);
     case 'agent.paid_confirm':
       return buildAgentPaidConfirmCard(message.text, meta);
     case 'agent.tool_proposal':

@@ -1,5 +1,10 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { instructionId, okResult, type InstructionResult } from '@quant/shared';
+import {
+  instructionId,
+  okResult,
+  okResultWithMeta,
+  type InstructionResult,
+} from '@quant/shared';
 import { z } from 'zod';
 
 import type { InstructionCtx } from '../../instruction/instruction.port.js';
@@ -27,6 +32,7 @@ export class StockInstructionHandler extends InstructionRegistrarBase<Args> {
     argsSchema,
     positional: ['q'],
     imAliases: ['股票'],
+    examples: ['stock 600519', 'stock 茅台', 'stock mt limit=20'],
   };
 
   constructor(
@@ -51,7 +57,25 @@ export class StockInstructionHandler extends InstructionRegistrarBase<Args> {
             )
             .slice(0, args.limit);
     if (matches.length === 0) return okResult(`no match for "${args.q ?? ''}"`);
-    const lines = matches.map((m) => `  ${m.code}  ${m.name.padEnd(8)}  ${m.industries}`);
-    return okResult(`stock matches (${String(matches.length)}):\n${lines.join('\n')}`);
+    const text = `stock matches (${String(matches.length)}):\n${matches
+      .map((m) => `  ${m.code}  ${m.name.padEnd(8)}  ${m.industries}`)
+      .join('\n')}`;
+    return okResultWithMeta(text, {
+      tableSections: [
+        {
+          columns: [
+            { name: 'code', displayName: 'code', horizontalAlign: 'left', width: '90px' },
+            { name: 'name', displayName: 'name', horizontalAlign: 'left', width: '140px' },
+            { name: 'industries', displayName: 'industry', horizontalAlign: 'left' },
+          ],
+          rows: matches.map((m) => ({
+            code: m.code,
+            name: m.name,
+            industries: m.industries,
+          })),
+        },
+      ],
+      tablesSubheader: `stock matches (${String(matches.length)})`,
+    });
   }
 }

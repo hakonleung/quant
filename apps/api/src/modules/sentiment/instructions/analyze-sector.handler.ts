@@ -61,6 +61,7 @@ export class AnalyzeSectorInstructionHandler extends InstructionRegistrarBase<Ar
     positional: ['id'],
     mode: 'async',
     costsCredits: true,
+    examples: ['analyze.sector s1', 'analyze.sector s1 fresh=1'],
   };
 
   constructor(
