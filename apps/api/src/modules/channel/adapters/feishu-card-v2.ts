@@ -126,7 +126,7 @@ function buildStockTableV2Card(args: {
   if (args.subheaderMd !== null && args.subheaderMd.length > 0) {
     elements.push({ tag: 'markdown', content: args.subheaderMd });
   }
-  elements.push(buildTableComponent({ columns: args.columns, rows: args.rows, name: 'tbl0' }));
+  elements.push(buildTableComponent({ columns: args.columns, rows: args.rows }));
   return wrapV2Card({
     headerTitle: args.headerTitle,
     headerTemplate: args.headerTemplate,
@@ -177,7 +177,7 @@ export function maybeStockTableCard(
   if (rows === null) return null;
   const columns = metaColumns(meta);
   const explicit = metaString(meta, 'stockTableSubheader');
-  const fallback = explicit ?? (text.split('\n\n')[0]?.trim() ?? '');
+  const fallback = explicit ?? text.split('\n\n')[0]?.trim() ?? '';
   return buildStockTableV2Card({
     headerTitle: defaults.headerTitle,
     headerTemplate: defaults.headerTemplate,
@@ -254,38 +254,34 @@ function metaSections(meta: Readonly<Record<string, unknown>>): readonly MetaTab
   return out.length > 0 ? out : null;
 }
 
-function tableElement(section: MetaTableSection, name: string): unknown {
-  return buildTableComponent({ columns: section.columns, rows: section.rows, name });
+function tableElement(section: MetaTableSection): unknown {
+  return buildTableComponent({ columns: section.columns, rows: section.rows });
 }
 
 /**
  * Single source of truth for the schema-2.0 `table` component shape.
  *
- * Two Feishu-specific gotchas baked in here that we got wrong on first
- * pass and that surfaced as `AxiosError 400` from `im.message.create`:
+ * Field-level constraints learned the hard way (each one returned a
+ * per-property 400 from `im.message.create` so they're real, not
+ * defensive guesses):
  *
- *   1. `header_style.bold_font` — the field is `bold_font`, not `bold`
- *      (which Feishu silently rejected together with the rest of the
- *      payload, returning a generic 400 instead of a per-field error).
- *   2. `name` is required at the element level for v2 components when
- *      a card carries multiple `table` elements; we pass a stable
- *      `tbl{i}` per section.
- *   3. Column `display_name` must be non-empty — Feishu treats `""` as
- *      a missing field and 400s the whole card; we fall back to `name`.
+ *   - **No `name`/`element_id` on `table`** — Feishu's parser raises
+ *     `parse card json err … unknown property, property: name, path:
+ *     ROOT -> body -> elements -> [i](tag: table)`. v2 components
+ *     reject the element-id slot that v1 schema-2 docs imply.
+ *   - **No `freeze_first_column`** — also not in the v2 table spec.
+ *   - **`bold` (boolean), not `bold_font`** — header weight key.
+ *   - **Column `display_name` must be non-empty** — Feishu treats `""`
+ *     as a missing field; we coalesce to `name` when empty.
  */
 function buildTableComponent(args: {
   readonly columns: readonly StockTableMetaColumn[];
   readonly rows: readonly StockTableMetaRow[];
-  readonly name: string;
 }): unknown {
   return {
     tag: 'table',
-    name: args.name,
     page_size: 10,
     row_height: 'low',
-    // `freeze_first_column` is NOT a valid v2-table field; keeping it
-    // out. `bold` is the spec field name for header weight (not
-    // `bold_font` — that mistake was the cause of an earlier 400).
     header_style: { background_style: 'grey', bold: true, text_align: 'left' },
     columns: args.columns.map((c) => {
       const dn = c.displayName !== undefined && c.displayName.length > 0 ? c.displayName : c.name;
@@ -326,12 +322,12 @@ export function maybeMetaTablesCard(
   const elements: unknown[] = [];
   const subheader = metaString(meta, 'tablesSubheader');
   if (subheader !== null) elements.push({ tag: 'markdown', content: subheader });
-  sections.forEach((section, i) => {
+  for (const section of sections) {
     if (section.title !== undefined && section.title.length > 0) {
       elements.push({ tag: 'markdown', content: `**${section.title}**` });
     }
-    elements.push(tableElement(section, `tbl${String(i)}`));
-  });
+    elements.push(tableElement(section));
+  }
   return wrapV2Card({
     headerTitle: defaults.headerTitle,
     headerTemplate: defaults.headerTemplate,
