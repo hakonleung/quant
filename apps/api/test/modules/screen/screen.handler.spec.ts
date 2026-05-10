@@ -57,7 +57,7 @@ describe('ScreenInstructionHandler', () => {
 
   it('renders no-match output when matches is empty', async () => {
     const handler = build({ resolve: baseAst });
-    const r = await handler.execute({ q: 'find ma5 cross' }, ctx);
+    const r = await handler.execute({ q: 'find ma5 cross', confirm: false }, ctx);
     expect(r.ok).toBe(true);
     if (r.ok) {
       expect(r.output.text).toContain('matches=0');
@@ -71,7 +71,7 @@ describe('ScreenInstructionHandler', () => {
       evidence: { score: 0.9 - i * 0.01, name: `n${String(i)}` },
     }));
     const handler = build({ resolve: { ...baseAst, matches } });
-    const r = await handler.execute({ q: 'top picks' }, ctx);
+    const r = await handler.execute({ q: 'top picks', confirm: false }, ctx);
     expect(r.ok).toBe(true);
     if (r.ok) {
       expect(r.output.text).toContain('matches=32');
@@ -87,7 +87,7 @@ describe('ScreenInstructionHandler', () => {
     const handler = build({
       reject: new QuantError('NL_TRANSLATION_FAILED', 'llm down', { nl: 'x' }),
     });
-    const r = await handler.execute({ q: 'x' }, ctx);
+    const r = await handler.execute({ q: 'x', confirm: false }, ctx);
     expect(r.ok).toBe(false);
     if (!r.ok) {
       expect(r.error.code).toBe('handler');

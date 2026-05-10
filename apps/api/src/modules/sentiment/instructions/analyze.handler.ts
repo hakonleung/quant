@@ -44,6 +44,15 @@ const argsSchema = z
         return truthy.has(v.toLowerCase());
       }),
     windowDays: z.coerce.number().int().min(1).max(30).optional(),
+    confirm: z
+      .union([z.string(), z.boolean()])
+      .optional()
+      .transform((v) => {
+        if (v === undefined) return false;
+        if (typeof v === 'boolean') return v;
+        return truthy.has(v.toLowerCase());
+      })
+      .describe('IM paid-confirm token, set by the card button'),
   })
   .strict();
 
@@ -62,6 +71,7 @@ export class AnalyzeInstructionHandler extends InstructionRegistrarBase<Args> {
     imAliases: ['舆情', '分析'],
     mode: 'async',
     costsCredits: true,
+    requiresImConfirm: true,
     examples: ['analyze 600519', 'analyze 600519 windowDays=7'],
   };
 
@@ -70,6 +80,28 @@ export class AnalyzeInstructionHandler extends InstructionRegistrarBase<Args> {
     @Inject(NewsSentimentService) private readonly sentiment: NewsSentimentService,
   ) {
     super(registry);
+  }
+
+  /**
+   * IM paid-confirm bypass: served from cache for free? skip the gate.
+   * `fresh=1` always falls through (the user explicitly asked for a
+   * re-run, which is paid). Cache lookup mirrors `analyzeOne`'s key
+   * (today's asof + windowDays).
+   */
+  async peekImConfirmBypass(
+    rawArgs: Record<string, unknown>,
+    _ctx: InstructionCtx,
+  ): Promise<boolean> {
+    const parsed = argsSchema.safeParse(rawArgs);
+    if (!parsed.success) return false;
+    if (parsed.data.fresh) return false;
+    const windowDays = parsed.data.windowDays ?? 30;
+    try {
+      const cached = await this.sentiment.getCachedStock(parsed.data.code, windowDays);
+      return cached !== null;
+    } catch {
+      return false;
+    }
   }
 
   async execute(args: Args, ctx: InstructionCtx): Promise<InstructionResult> {
@@ -103,11 +135,10 @@ export function formatSentiment(s: Sentiment): string {
     .join('\n');
   const body = s.result.trim();
   if (body.length === 0) return head;
-  // Cap the analyst write-up — Feishu cards have a 3000-char body limit
-  // and the full LLM output can be long. Tail truncated rather than
-  // head so the user sees the most recent / strongest signals.
-  const MAX_BODY = 1600;
-  const trimmed =
-    body.length > MAX_BODY ? `${body.slice(0, MAX_BODY)}\n…(truncated)` : body;
-  return `${head}\n\n${trimmed}`;
+  // No handler-side truncation: the analyst prompt now caps output at
+  // ≤1000 chars (`buildSentimentSearchSystem`), so head + body fits
+  // well under Feishu's 3000-char card limit. Trusting the prompt is
+  // simpler than re-trimming here and avoids the visible "…(truncated)"
+  // suffix the user reported.
+  return `${head}\n\n${body}`;
 }

@@ -56,7 +56,11 @@ interface PendingAsync {
   readonly instructionId: string;
 }
 
-type ReplyKind = 'instruction.reply' | 'instruction.async.started' | 'agent.paid_confirm';
+type ReplyKind =
+  | 'instruction.reply'
+  | 'instruction.async.started'
+  | 'agent.paid_confirm'
+  | 'instruction.paid_confirm';
 
 interface ReplyEnvelope {
   readonly result: InstructionResult;
@@ -174,6 +178,65 @@ export class InstructionImListener implements OnModuleInit {
     return this.runEntry(msg, traceId, parsed.id, entry.spec.mode === 'async', rawArgs);
   }
 
+  private isConfirmTokenSet(rawArgs: Record<string, string>): boolean {
+    const v = rawArgs['confirm'];
+    if (v === undefined) return false;
+    const n = v.toLowerCase();
+    return n === '1' || n === 'true' || n === 'yes';
+  }
+
+  /**
+   * Decide whether to interpose the paid-confirm card. Returns the
+   * envelope when the gate should fire, or `null` to fall through to
+   * normal dispatch. The `requiresImConfirm` spec flag is a hard
+   * prerequisite; on top of that we honour two bypasses:
+   *
+   *   1. Caller already passed `confirm=1` via the card-button round-trip.
+   *   2. Handler exposes `peekImConfirmBypass(rawArgs, ctx)` and reports
+   *      a cache hit — the work is free, so don't bother the user.
+   *      Probe failures fall through to the gate (fail closed).
+   */
+  private async maybePaidConfirmGate(
+    instructionId: string,
+    rawArgs: Record<string, string>,
+    ctx: InstructionCtx,
+  ): Promise<ReplyEnvelope | null> {
+    const entry = this.registry.get(instructionId);
+    if (entry?.spec.requiresImConfirm !== true) return null;
+    if (this.isConfirmTokenSet(rawArgs)) return null;
+    const peek = entry.handler.peekImConfirmBypass?.bind(entry.handler);
+    if (peek !== undefined) {
+      try {
+        if (await peek(rawArgs, ctx)) return null;
+      } catch (err) {
+        this.logger.warn(
+          `paid_confirm_peek_failed id=${instructionId} traceId=${ctx.traceId} err=${String(err)}`,
+        );
+      }
+    }
+    return this.buildGenericPaidConfirm(instructionId, rawArgs);
+  }
+
+  private buildGenericPaidConfirm(
+    instructionId: string,
+    rawArgs: Record<string, string>,
+  ): ReplyEnvelope {
+    const argsForCard: Record<string, string> = {};
+    for (const [k, v] of Object.entries(rawArgs)) {
+      if (k === 'confirm') continue;
+      argsForCard[k] = v;
+    }
+    return {
+      result: errResult(
+        'confirm-required',
+        JSON.stringify({ kind: 'paid', cmd: instructionId, args: argsForCard }),
+      ),
+      kind: 'instruction.paid_confirm',
+      instructionId,
+      meta: { confirmCmd: instructionId, confirmArgs: argsForCard },
+    };
+  }
+
   /**
    * Casual-chat fallback: route the bare message to `/agent q="<text>"`.
    * Skipped for empty / whitespace bodies and gated on the same allowlist
@@ -232,13 +295,10 @@ export class InstructionImListener implements OnModuleInit {
     return reply(errResult('forbidden', 'sender not in allowlist'), instructionId);
   }
 
-  private async runEntry(
+  private async buildImCtx(
     msg: InboundMessage,
     traceId: string,
-    instructionId: string,
-    isAsync: boolean,
-    rawArgs: Record<string, string>,
-  ): Promise<ReplyEnvelope | null> {
+  ): Promise<{ readonly ctx: InstructionCtx; readonly replyTarget: string }> {
     const resolved = await this.resolveImUser(msg);
     const replyTarget = msg.target !== undefined && msg.target.length > 0 ? msg.target : msg.sender;
     const ctx: InstructionCtx = {
@@ -251,13 +311,30 @@ export class InstructionImListener implements OnModuleInit {
       imBootstrap: resolved.imBootstrap,
       ...(resolved.originalUserId !== undefined ? { originalUserId: resolved.originalUserId } : {}),
     };
+    return { ctx, replyTarget };
+  }
+
+  private async runEntry(
+    msg: InboundMessage,
+    traceId: string,
+    instructionId: string,
+    isAsync: boolean,
+    rawArgs: Record<string, string>,
+  ): Promise<ReplyEnvelope | null> {
+    const { ctx, replyTarget } = await this.buildImCtx(msg, traceId);
     const imHints: InstructionImHints | undefined = isAsync
       ? { channel: msg.channel, target: replyTarget }
       : undefined;
+    // Paid-confirm gate (generic): for instructions tagged
+    // `requiresImConfirm`, intercept the first call and ask for explicit
+    // approval before the (typically `costsCredits`) handler runs. The
+    // card button echoes back `/<id> confirm=1 <args>` so the second
+    // pass falls through. Distinct from `/agent`'s handler-internal
+    // gate (preserved below) — that one builds a different card.
+    const gate = await this.maybePaidConfirmGate(instructionId, rawArgs, ctx);
+    if (gate !== null) return gate;
     const dispatched = await this.executor.dispatch(instructionId, rawArgs, ctx, imHints);
     if (dispatched.kind === 'async-queued') {
-      // Register the bridge entry so onAsyncCompleted can push the result,
-      // but return null — no immediate "queued" card is sent to IM.
       this.pendingByJobId.set(dispatched.jobId, {
         channel: msg.channel,
         target: replyTarget,
@@ -266,32 +343,36 @@ export class InstructionImListener implements OnModuleInit {
       });
       return null;
     }
-    // Detect the `confirm-required` soft-failure emitted by costsCredits
-    // instructions (currently only `/agent`) so the IM reply path can
-    // render a paid-confirm card instead of a red error.
+    return this.envelopeFromDispatch(instructionId, dispatched.result);
+  }
+
+  /**
+   * Map a sync dispatch result onto the IM reply envelope, including
+   * the `/agent` confirm-required → agent.paid_confirm card upgrade.
+   * Pulled out of `runEntry` so the orchestrator stays under the
+   * 50-line / complexity-10 ceiling.
+   */
+  private envelopeFromDispatch(
+    instructionId: string,
+    result: InstructionResult,
+  ): ReplyEnvelope {
     if (
-      !dispatched.result.ok &&
-      dispatched.result.error.code === 'confirm-required' &&
+      !result.ok &&
+      result.error.code === 'confirm-required' &&
       instructionId === 'agent'
     ) {
-      const envelope = decodeAgentPaidConfirm(dispatched.result.error.message);
+      const envelope = decodeAgentPaidConfirm(result.error.message);
       return {
-        result: dispatched.result,
+        result,
         kind: 'agent.paid_confirm',
         instructionId,
         meta: { agentQ: envelope.q ?? '' },
       };
     }
-    // Forward any structured side-channel from the handler's output.meta
-    // into the reply envelope so the Feishu adapter can pick a richer
-    // renderer (e.g. native `table` element for stock lists) instead of
-    // the default text card.
     const handlerMeta =
-      dispatched.result.ok && dispatched.result.output.meta !== undefined
-        ? dispatched.result.output.meta
-        : undefined;
+      result.ok && result.output.meta !== undefined ? result.output.meta : undefined;
     return {
-      result: dispatched.result,
+      result,
       kind: 'instruction.reply',
       instructionId,
       ...(handlerMeta !== undefined ? { meta: handlerMeta } : {}),

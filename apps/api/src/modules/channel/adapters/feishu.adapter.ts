@@ -47,8 +47,21 @@ interface LarkMessageEvent {
   };
 }
 
+/**
+ * Per Feishu's `card.action.trigger` callback contract — the response
+ * body atomically swaps the original card with `card.data` and renders
+ * `toast` briefly above. Both fields optional; an empty object is a
+ * valid "do nothing" ack. Same shape on WS and HTTP paths.
+ */
+interface CardActionResponse {
+  readonly toast?: { readonly type: 'info' | 'success' | 'warning' | 'error'; readonly content: string };
+  readonly card?: { readonly type: 'raw'; readonly data: FeishuV1Card };
+}
+
 interface ExtraHandles {
-  'card.action.trigger': (data: Lark.RawCardActionEvent) => Promise<void>;
+  'card.action.trigger': (
+    data: Lark.RawCardActionEvent,
+  ) => CardActionResponse | Promise<CardActionResponse>;
 }
 
 /**
@@ -120,9 +133,14 @@ export class FeishuChannelAdapter implements ChannelAdapter {
         'im.message.receive_v1': async (data: LarkMessageEvent) => {
           await this.dispatchEvent(data);
         },
-        'card.action.trigger': async (data: Lark.RawCardActionEvent) => {
-          await this.dispatchCardAction(data);
-        },
+        // The Lark Node SDK forwards whatever the handler returns back to
+        // Feishu over the same WS frame (mirroring the HTTP callback's
+        // synchronous-response contract — see Feishu doc "处理卡片回调").
+        // Returning the `{toast, card}` envelope is therefore the
+        // recommended way to update the card; no `im.v1.message.patch`
+        // call is required.
+        'card.action.trigger': (data: Lark.RawCardActionEvent) =>
+          Promise.resolve(this.cardActionResponseFor(data)),
       });
       try {
         // WSClient.start() returns void but kicks off the long-conn loop.
@@ -222,25 +240,6 @@ export class FeishuChannelAdapter implements ChannelAdapter {
   }
 
   /**
-   * Patch a previously sent interactive message with a new card payload.
-   * Used by the WS card-action path where there's no synchronous
-   * response channel — we have to call `im.v1.message.patch` to replace
-   * the card in-place. Failures degrade gracefully (log + continue) so a
-   * patch error never blocks the underlying agent dispatch.
-   */
-  private async patchMessageCard(messageId: string, card: FeishuV1Card): Promise<void> {
-    if (this.dryRun || messageId.length === 0) return;
-    try {
-      await this.client.im.v1.message.patch({
-        path: { message_id: messageId },
-        data: { content: JSON.stringify(card) },
-      });
-    } catch (err) {
-      this.logger.warn(`feishu_card_patch_failed messageId=${messageId} err=${String(err)}`);
-    }
-  }
-
-  /**
    * Handles an HTTP Card Request URL callback from Feishu.
    *
    * Pipeline:
@@ -281,48 +280,51 @@ export class FeishuChannelAdapter implements ChannelAdapter {
       return { kind: 'ignored', reason: 'unknown_payload' };
     }
 
-    // Pre-parse the action up-front so we can return the "decided" card
-    // synchronously to Feishu — the HTTP callback's response body is the
-    // *only* way to update the card without a separate `im.v1.message.patch`
-    // call, and Feishu requires the response within 3 seconds.
-    const action = parseCardAction(inner, this.logger);
-    void this.dispatchCardAction(inner, { skipPatch: true }).catch((err: unknown) => {
-      this.logger.warn(`feishu_http_card_dispatch_err err=${String(err)}`);
-    });
-    if (action === null) {
-      return { kind: 'accepted' };
+    // Both delivery paths use the same response shape — see the WS
+    // dispatcher registration above. HTTP just propagates the result
+    // through the controller's response body.
+    const response = this.cardActionResponseFor(inner);
+    if (response.card !== undefined) {
+      return { kind: 'replace_card', card: response.card.data };
     }
-    return {
-      kind: 'replace_card',
-      card: this.decidedCardFor(action),
-    };
+    return { kind: 'accepted' };
   }
 
-  private async dispatchCardAction(
-    raw: Lark.RawCardActionEvent,
-    opts: { readonly skipPatch?: boolean } = {},
-  ): Promise<void> {
+  /**
+   * Single source of truth for the callback response: parse the click,
+   * render the "decided" card, fire the synthetic re-dispatch in the
+   * background, and return `{toast, card}` for Feishu to apply.
+   * Returns an empty envelope (no card swap) on unrecognised payloads.
+   */
+  private cardActionResponseFor(raw: Lark.RawCardActionEvent): CardActionResponse {
     const action = parseCardAction(raw, this.logger);
-    if (action === null) return;
+    if (action === null) return {};
     const syntheticText = syntheticTextForAction(action.value);
     if (syntheticText === null) {
       this.logger.warn(
         `feishu_card_action_no_synthetic action=${action.value.action} corr=${action.value.correlationId ?? '-'}`,
       );
-      return;
+      return {};
     }
     this.logger.log(
       `feishu_card_dispatch openId=${action.openId} chatId=${action.chatId} action=${action.value.action}`,
     );
+    // Detach: instruction execution can take seconds; the 3 s response
+    // window must close with the card swap regardless.
+    void this.fanOutSyntheticInbound(action, raw, syntheticText);
+    const decided = this.decidedCardFor(action);
+    const toastContent = action.value.action === 'confirm' ? '已确认' : '已取消';
+    return {
+      toast: { type: 'info', content: toastContent },
+      card: { type: 'raw', data: decided },
+    };
+  }
 
-    // WS path → no synchronous response, so patch the message ourselves.
-    // HTTP path passes `skipPatch:true` because the controller will
-    // include the decided card in the callback response and Feishu does
-    // the swap atomically; calling patch here would just race that.
-    if (opts.skipPatch !== true) {
-      void this.patchMessageCard(action.messageId, this.decidedCardFor(action));
-    }
-
+  private async fanOutSyntheticInbound(
+    action: ParsedCardAction,
+    raw: Lark.RawCardActionEvent,
+    syntheticText: string,
+  ): Promise<void> {
     // eslint-disable-next-line no-restricted-globals -- adapter has no Clock; mirrors dispatchEvent pattern
     const receivedAt = new Date().toISOString();
     const inbound: InboundMessage = {

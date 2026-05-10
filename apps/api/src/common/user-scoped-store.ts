@@ -123,6 +123,17 @@ export class UserScopedJsonStore<T> {
     let slot = this.slots.get(userId);
     if (slot !== undefined) {
       slot.lastTouchedAt = Date.now();
+      // First call after restart wins the load; concurrent callers find
+      // the slot already in the map but with `loaded: false` and the
+      // fallback (empty) value still in place. Without waiting for the
+      // initial load, those callers would be served the empty fallback
+      // and the user sees stale / blank data on the very first /usr
+      // (or any other call that issues N parallel reads). Awaiting the
+      // mutex blocks just long enough for the in-flight load to publish
+      // the on-disk snapshot before we hand back the slot.
+      if (!slot.loaded) {
+        await slot.mutex;
+      }
       this.evictIdleAndOverflow(userId);
       return slot;
     }

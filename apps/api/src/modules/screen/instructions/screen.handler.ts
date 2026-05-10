@@ -32,11 +32,22 @@ import { InstructionRegistry } from '../../instruction/instruction.registry.js';
 import type { InstructionSpec } from '../../instruction/instruction.types.js';
 import {
   formatStockTable,
+  rowFromSnapshot,
   stockTableMetaRows,
   type StockTableRow,
 } from '../../stock-meta/domain/format-stock-table.js';
 import { StockMetaService } from '../../stock-meta/stock-meta.service.js';
 import { ScreenService } from '../screen.service.js';
+
+const boolFlag = z
+  .union([z.string(), z.boolean()])
+  .optional()
+  .transform((v) => {
+    if (v === undefined) return false;
+    if (typeof v === 'boolean') return v;
+    const lower = v.toLowerCase();
+    return lower === '1' || lower === 'true' || lower === 'yes';
+  });
 
 const argsSchema = z
   .object({
@@ -49,6 +60,7 @@ const argsSchema = z
       .string()
       .regex(/^\d{4}-\d{2}-\d{2}$/u, 'asof must be YYYY-MM-DD')
       .optional(),
+    confirm: boolFlag.describe('IM paid-confirm token, set by the card button'),
   })
   .strict();
 
@@ -69,6 +81,7 @@ export class ScreenInstructionHandler extends InstructionRegistrarBase<Args> {
     imAliases: ['筛选', '选股'],
     mode: 'async',
     costsCredits: true,
+    requiresImConfirm: true,
     examples: ['screen "市值大于100亿且年线上"', 'screen q="科技股 PE<30"'],
   };
 
@@ -107,15 +120,7 @@ export class ScreenInstructionHandler extends InstructionRegistrarBase<Args> {
       const byCode = new Map<string, StockSnapshotDto>(allSnapshots.map((s) => [s.meta.code, s]));
       rows = codes.map((code) => {
         const snap = byCode.get(code);
-        return {
-          code,
-          name: snap?.meta.name ?? code,
-          price: snap?.price ?? null,
-          ret_1d: snap?.returns.ret_1d ?? null,
-          ret_20d: snap?.returns.ret_20d ?? null,
-          ret_90d: snap?.returns.ret_90d ?? null,
-          ret_250d: snap?.returns.ret_250d ?? null,
-        };
+        return rowFromSnapshot({ code, name: snap?.meta.name ?? code, snapshot: snap });
       });
       table = formatStockTable(rows);
     } catch {

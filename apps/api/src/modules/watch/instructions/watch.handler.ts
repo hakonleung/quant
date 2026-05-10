@@ -21,6 +21,7 @@ import type { InstructionSpec } from '../../instruction/instruction.types.js';
 import { StockMetaService } from '../../stock-meta/stock-meta.service.js';
 import {
   formatStockTable,
+  rowFromSnapshot,
   stockTableMetaRows,
   type StockTableRow,
 } from '../../stock-meta/domain/format-stock-table.js';
@@ -81,18 +82,9 @@ export class WatchInstructionHandler extends InstructionRegistrarBase<Args> {
       // Snapshot unavailable — show metadata only
     }
 
-    const tableRows: StockTableRow[] = tasks.map((t) => {
-      const snap = byCode.get(t.code);
-      return {
-        code: t.code,
-        name: t.name,
-        price: snap?.price ?? null,
-        ret_1d: snap?.returns.ret_1d ?? null,
-        ret_20d: snap?.returns.ret_20d ?? null,
-        ret_90d: snap?.returns.ret_90d ?? null,
-        ret_250d: snap?.returns.ret_250d ?? null,
-      };
-    });
+    const tableRows: StockTableRow[] = tasks.map((t) =>
+      rowFromSnapshot({ code: t.code, name: t.name, snapshot: byCode.get(t.code) }),
+    );
 
     const subheader = [`watch tasks (${String(tasks.length)}):`, ...metaLines].join('\n');
     const output = [subheader, '', formatStockTable(tableRows)].join('\n');

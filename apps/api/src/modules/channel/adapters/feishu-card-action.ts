@@ -25,6 +25,9 @@ export const cardButtonSchema = z.object({
   action: z.enum(['confirm', 'cancel']),
   correlationId: z.string().optional(),
   agentQ: z.string().optional(),
+  /** Generic instruction confirm-card path: `/<cmd> confirm=1 <cmdArgs>`. */
+  cmd: z.string().optional(),
+  cmdArgs: z.record(z.string(), z.string()).optional(),
 });
 export type CardButtonValue = z.infer<typeof cardButtonSchema>;
 
@@ -73,16 +76,47 @@ export function parseCardAction(
 }
 
 export function syntheticTextForAction(value: CardButtonValue): string | null {
-  if (value.action === 'confirm' && value.agentQ !== undefined) {
+  if (value.action === 'confirm') return syntheticForConfirm(value);
+  return syntheticForCancel(value);
+}
+
+function syntheticForConfirm(value: CardButtonValue): string | null {
+  if (value.agentQ !== undefined) {
     return `/agent confirm=1 q="${value.agentQ.replace(/"/g, '\\"')}"`;
   }
-  if (value.action === 'confirm' && value.correlationId !== undefined) {
+  if (value.cmd !== undefined && value.cmd.length > 0) {
+    return buildInstructionConfirmLine(value.cmd, value.cmdArgs ?? {});
+  }
+  if (value.correlationId !== undefined) {
     return `/agent.confirm correlationId=${value.correlationId} approve=1`;
   }
-  if (value.action === 'cancel' && value.correlationId !== undefined) {
+  return null;
+}
+
+function syntheticForCancel(value: CardButtonValue): string | null {
+  if (value.correlationId !== undefined) {
     return `/agent.confirm correlationId=${value.correlationId} approve=0`;
   }
+  // Generic cancel for the new instruction.paid_confirm card: nothing
+  // to re-issue, so we surface a no-op acknowledgement that still flows
+  // through the IM listener (for ACL gating + decided-card patching).
+  if (value.cmd !== undefined && value.cmd.length > 0) return '/ping';
   return null;
+}
+
+function buildInstructionConfirmLine(cmd: string, args: Readonly<Record<string, string>>): string {
+  const parts: string[] = [`/${cmd}`, 'confirm=1'];
+  for (const [k, v] of Object.entries(args)) {
+    if (k === 'confirm') continue;
+    parts.push(`${k}=${quoteIfNeeded(v)}`);
+  }
+  return parts.join(' ');
+}
+
+function quoteIfNeeded(v: string): string {
+  if (v.length === 0) return '""';
+  if (/[\s"=]/u.test(v)) return `"${v.replace(/"/g, '\\"')}"`;
+  return v;
 }
 
 /**
@@ -102,6 +136,36 @@ export function buildDecidedCard(
   decidedAtIso: string,
 ): FeishuV1Card {
   const decision: 'approved' | 'cancelled' = value.action === 'confirm' ? 'approved' : 'cancelled';
+  const { headerTitle, bodyMd } = decidedCardCopy(value);
+  return buildDecidedConfirmCard({
+    headerTitle,
+    bodyMd,
+    decision,
+    operatorOpenId,
+    decidedAtIso,
+  });
+}
+
+function decidedCardCopy(value: CardButtonValue): {
+  readonly headerTitle: string;
+  readonly bodyMd: string;
+} {
+  // Generic instruction.paid_confirm flow (`{cmd, cmdArgs}`) — title /
+  // body should reflect the actual command, not the agent fallback.
+  if (value.cmd !== undefined && value.cmd.length > 0) {
+    const argsLine = renderCmdArgs(value.cmdArgs ?? {});
+    const body = argsLine.length > 0 ? `参数：\`${argsLine}\`` : '（无附加参数）';
+    return { headerTitle: `❓ /${value.cmd} 需要确认`, bodyMd: body };
+  }
+  return decidedAgentCopy(value);
+}
+
+function decidedAgentCopy(value: CardButtonValue): {
+  readonly headerTitle: string;
+  readonly bodyMd: string;
+} {
+  // Agent flows: correlationId = mid-loop tool proposal,
+  // agentQ = up-front /agent paid_confirm.
   const headerTitle =
     value.correlationId !== undefined ? '❓ Agent 工具调用 需要确认' : '❓ /agent 需要确认';
   const bodyParts: string[] = [];
@@ -112,11 +176,13 @@ export function buildDecidedCard(
     bodyParts.push(`correlationId: \`${value.correlationId}\``);
   }
   const bodyMd = bodyParts.length > 0 ? bodyParts.join('\n') : '（无附加信息）';
-  return buildDecidedConfirmCard({
-    headerTitle,
-    bodyMd,
-    decision,
-    operatorOpenId,
-    decidedAtIso,
-  });
+  return { headerTitle, bodyMd };
+}
+
+function renderCmdArgs(args: Readonly<Record<string, string>>): string {
+  return Object.entries(args)
+    .filter(([k]) => k !== 'confirm')
+    .map(([k, v]) => `${k}=${v}`)
+    .join(' ')
+    .slice(0, 200);
 }

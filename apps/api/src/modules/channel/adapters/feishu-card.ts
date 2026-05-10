@@ -300,10 +300,12 @@ export {
   buildAgentPaidConfirmCard,
   buildAgentToolProposalCard,
   buildDecidedConfirmCard,
+  buildInstructionPaidConfirmCard,
 } from './feishu-card-agent.js';
 import {
   buildAgentPaidConfirmCard,
   buildAgentToolProposalCard,
+  buildInstructionPaidConfirmCard,
 } from './feishu-card-agent.js';
 
 // Schema-2.0 native-table renderer lives in `feishu-card-v2.ts` (kept
@@ -391,6 +393,8 @@ export function pickCard(message: {
       return buildAgentPaidConfirmCard(message.text, meta);
     case 'agent.tool_proposal':
       return buildAgentToolProposalCard(message.text, meta);
+    case 'instruction.paid_confirm':
+      return buildInstructionPaidConfirmCard(message.text, meta);
     default:
       return null;
   }

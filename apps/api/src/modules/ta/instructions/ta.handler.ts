@@ -23,14 +23,19 @@ import { InstructionRegistry } from '../../instruction/instruction.registry.js';
 import type { InstructionSpec } from '../../instruction/instruction.types.js';
 import { TaService } from '../ta.service.js';
 
+const boolFlag = z
+  .enum(['0', '1', 'true', 'false'])
+  .default('0')
+  .transform((v) => v === '1' || v === 'true');
+
 const argsSchema = z
   .object({
     code: z.string().min(1).describe('A-share 6-digit stock code, e.g. 600519'),
-    fresh: z
-      .enum(['0', '1', 'true', 'false'])
-      .default('0')
-      .transform((v) => v === '1' || v === 'true')
-      .describe('Bypass cache and run fresh LLM analysis'),
+    fresh: boolFlag.describe('Bypass cache and run fresh LLM analysis'),
+    // `confirm` is consumed by the IM listener's paid-confirm gate
+    // before this handler runs; accept it in-schema so strict zod
+    // doesn't reject the round-tripped command line.
+    confirm: boolFlag.optional().describe('IM paid-confirm token, set by the card button'),
   })
   .strict();
 type Args = z.infer<typeof argsSchema>;
@@ -44,6 +49,7 @@ export class TaInstructionHandler extends InstructionRegistrarBase<Args> {
     group: 'market',
     mode: 'async',
     costsCredits: true,
+    requiresImConfirm: true,
     argsSchema,
     positional: ['code'],
     imAliases: ['技术', '走势', '技分'],
@@ -55,6 +61,27 @@ export class TaInstructionHandler extends InstructionRegistrarBase<Args> {
     @Inject(TaService) private readonly ta: TaService,
   ) {
     super(registry);
+  }
+
+  /**
+   * IM paid-confirm bypass: when the caller hasn't asked for `fresh=1`
+   * and a TA cache row already exists for this code, the work is free
+   * → skip the confirm card and run inline. Anything that would touch
+   * the LLM still falls through to the gate.
+   */
+  async peekImConfirmBypass(
+    rawArgs: Record<string, unknown>,
+    ctx: InstructionCtx,
+  ): Promise<boolean> {
+    const parsed = argsSchema.safeParse(rawArgs);
+    if (!parsed.success) return false;
+    if (parsed.data.fresh) return false;
+    try {
+      const cached = await this.ta.getCached(parsed.data.code, ctx.traceId);
+      return cached !== null;
+    } catch {
+      return false;
+    }
   }
 
   async execute(args: Args, ctx: InstructionCtx): Promise<InstructionResult> {

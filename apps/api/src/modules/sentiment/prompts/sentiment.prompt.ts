@@ -22,8 +22,15 @@ export interface SentimentMeta {
   readonly industries: string;
 }
 
-const STOCK_SEARCH_SYSTEM =
-  '你是资深股票分析师，擅长从产业趋势/消息面/预期差等方面分析股票的上涨动因。';
+const STOCK_SEARCH_SYSTEM = [
+  '你是资深股票分析师，擅长从产业趋势/消息面/预期差等方面分析股票的上涨动因。',
+  '',
+  '硬性输出要求（必须遵守）：',
+  '  1. 全文中文，纯文本，不要 markdown 表格、代码块或图片。',
+  '  2. **总字数严格 ≤ 1000 个字**（含标点；超出会被裁掉，请自行精简）。',
+  '  3. 行文紧凑，分要点，不要寒暄、不要复述用户提问、不要免责声明。',
+  '  4. 末尾不要写"以上仅供参考""请投资者自行判断"等套话。',
+].join('\n');
 
 export function buildSentimentSearchSystem(): string {
   return STOCK_SEARCH_SYSTEM;
@@ -41,6 +48,8 @@ export function buildSentimentSearchUser(args: {
     '',
     '从并购/热点题材/核心产品/产品价格信号/竞争格局/竞争对手/市场份额/' +
       '供需/研报目标/情绪评分等角度分析。',
+    '',
+    '再次强调：**总字数严格 ≤ 1000 字**，行文务必紧凑。',
   ].join('\n');
 }
 

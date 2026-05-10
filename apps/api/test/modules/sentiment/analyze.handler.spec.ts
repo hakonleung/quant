@@ -52,7 +52,7 @@ describe('AnalyzeInstructionHandler', () => {
 
   it('golden path renders score, target, 主题, 驱动', async () => {
     const { handler } = build({ resolve: baseSentiment });
-    const r = await handler.execute({ code: '600519', fresh: false }, ctx);
+    const r = await handler.execute({ code: '600519', fresh: false, confirm: false }, ctx);
     expect(r.ok).toBe(true);
     if (r.ok) {
       expect(r.output.text).toContain('600519');
@@ -63,23 +63,28 @@ describe('AnalyzeInstructionHandler', () => {
     }
   });
 
-  it('truncates body when result exceeds 1600 chars', async () => {
+  it('does NOT truncate body even when raw result exceeds 1600 chars', async () => {
+    // Truncation moved off the handler — the analyst prompt now caps
+    // output at ≤1000 chars. The handler emits the LLM output verbatim
+    // and never appends a "…(truncated)" suffix.
     const longResult = 'X'.repeat(2000);
     const { handler } = build({ resolve: { ...baseSentiment, result: longResult } });
-    const r = await handler.execute({ code: '600519', fresh: false }, ctx);
-    expect(r.ok).toBe(true);
-    if (r.ok) {
-      expect(r.output.text).toContain('…(truncated)');
-    }
-  });
-
-  it('does not truncate when result is exactly 1600 chars', async () => {
-    const exactResult = 'Y'.repeat(1600);
-    const { handler } = build({ resolve: { ...baseSentiment, result: exactResult } });
-    const r = await handler.execute({ code: '600519', fresh: false }, ctx);
+    const r = await handler.execute({ code: '600519', fresh: false, confirm: false }, ctx);
     expect(r.ok).toBe(true);
     if (r.ok) {
       expect(r.output.text).not.toContain('…(truncated)');
+      expect(r.output.text).toContain('X'.repeat(2000));
+    }
+  });
+
+  it('emits the full body when result is exactly 1600 chars', async () => {
+    const exactResult = 'Y'.repeat(1600);
+    const { handler } = build({ resolve: { ...baseSentiment, result: exactResult } });
+    const r = await handler.execute({ code: '600519', fresh: false, confirm: false }, ctx);
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.output.text).not.toContain('…(truncated)');
+      expect(r.output.text).toContain(exactResult);
     }
   });
 
@@ -87,7 +92,7 @@ describe('AnalyzeInstructionHandler', () => {
     const { handler } = build({
       reject: new QuantError('LLM_FAILED', 'llm quota exceeded', {}),
     });
-    const r = await handler.execute({ code: '600519', fresh: false }, ctx);
+    const r = await handler.execute({ code: '600519', fresh: false, confirm: false }, ctx);
     expect(r.ok).toBe(false);
     if (!r.ok) {
       expect(r.error.code).toBe('handler');
@@ -97,7 +102,7 @@ describe('AnalyzeInstructionHandler', () => {
 
   it('rethrows non-QuantError', async () => {
     const { handler } = build({ reject: new Error('net error') });
-    await expect(handler.execute({ code: '600519', fresh: false }, ctx)).rejects.toThrow(
+    await expect(handler.execute({ code: '600519', fresh: false, confirm: false }, ctx)).rejects.toThrow(
       'net error',
     );
   });

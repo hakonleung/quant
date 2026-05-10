@@ -69,6 +69,72 @@ export function buildAgentPaidConfirmCard(
   };
 }
 
+/**
+ * Generic "this command will spend credits — confirm?" card for any
+ * instruction tagged `requiresImConfirm`. Distinct from the agent
+ * paid-confirm card because the round-trip is `/<cmd> confirm=1 <args>`
+ * rather than `/agent confirm=1 q=...`. Args are serialised onto the
+ * button value and echoed back unchanged on click.
+ */
+export function buildInstructionPaidConfirmCard(
+  text: string,
+  meta: Readonly<Record<string, unknown>>,
+): FeishuV1Card {
+  void text;
+  const cmd = metaString(meta, 'confirmCmd') ?? metaString(meta, 'instructionId') ?? 'instruction';
+  const argsObj = readStringArgs(meta['confirmArgs']);
+  const argsLine = Object.entries(argsObj)
+    .map(([k, v]) => `${k}=${v}`)
+    .join(' ');
+  const body = [
+    `**确认调用 \`/${cmd}\` ?**`,
+    '该指令会触发外部付费 LLM 调用。',
+    argsLine.length > 0 ? `参数：\`${truncateForCard(stripSlackMrkdwn(argsLine))}\`` : '',
+  ]
+    .filter((s) => s.length > 0)
+    .join('\n');
+  return {
+    config: { wide_screen_mode: true },
+    header: {
+      template: 'purple',
+      title: { tag: 'plain_text', content: `❓ /${cmd} 需要确认` },
+    },
+    elements: [
+      { tag: 'div', text: { tag: 'lark_md', content: body } },
+      buildPaidConfirmActions(cmd, argsObj),
+    ],
+  };
+}
+
+function readStringArgs(raw: unknown): Record<string, string> {
+  if (typeof raw !== 'object' || raw === null) return {};
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(raw)) {
+    if (typeof v === 'string') out[k] = v;
+  }
+  return out;
+}
+
+function buildPaidConfirmActions(cmd: string, argsObj: Readonly<Record<string, string>>): unknown {
+  return {
+    tag: 'action',
+    actions: [
+      {
+        tag: 'button',
+        text: { tag: 'plain_text', content: '✓ 确认' },
+        type: 'primary',
+        value: { action: 'confirm', cmd, cmdArgs: argsObj },
+      },
+      {
+        tag: 'button',
+        text: { tag: 'plain_text', content: '✗ 取消' },
+        type: 'danger',
+        value: { action: 'cancel', cmd },
+      },
+    ],
+  };
+}
+
 export function buildAgentToolProposalCard(
   text: string,
   meta: Readonly<Record<string, unknown>>,

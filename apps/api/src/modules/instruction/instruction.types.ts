@@ -83,6 +83,16 @@ export interface InstructionSpec<TArgs> {
    */
   readonly destructive?: boolean;
   /**
+   * `true` when the IM listener should render a paid-confirm card
+   * before invoking the handler. The card's ✓ button echoes back
+   * `/<id> confirm=1 <args>` and the second pass actually runs.
+   * Distinct from `costsCredits` (a help-tag flag): not every paid
+   * instruction wants a per-call gate (e.g. `/agent` has its own
+   * handler-internal flow), and `costsCredits` is also surfaced via
+   * agent-tool gating where this generic IM card would be redundant.
+   */
+  readonly requiresImConfirm?: boolean;
+  /**
    * Concrete invocation examples shown by `/help <id>` (and its IM
    * detail card). Each entry is a full command line, e.g.
    * `'sector.show s1'` or `'ledger limit=10'`. Falls back to a

@@ -85,6 +85,12 @@ export function buildNlToDslSystemPrompt(asof: string): string {
      predicate 内嵌的 \`rank\`（用顶层 \`rank\`）、\`pe\` / \`market_cap\`
      / \`circ_mv\` / \`listing_age\`（用 \`listed_days\`）、\`last_n\`（用
      窗口聚合替代）。
+ 7a. **绝不**输出 \`{"op": "true"}\` / \`{"op": "false"}\` / \`{"op": true}\`
+     / \`{"op": "always"}\` / \`{"op": "any"}\` / \`{"op": "all"}\`。
+     **绝不**用裸布尔常量当 predicate。如果用户的请求没有任何具体筛选条件
+     （"全部 / 所有股票 / 不限"），必须给出一个语义上恒真的合法 predicate，
+     例如 \`{"op": "gt", "left": {"field": "close_qfq"}, "right": {"const": 0}}\`，
+     并在 \`warnings\` 中说明该条件被替换。
   8. 即使措辞松散，也要尽可能映射到封闭 Schema，**不要**随便丢弃条件。
      看上去不支持但实际可表达的例子：
        * \`介于 a 到 b 之间\`         → \`and(gte a, lte b)\`

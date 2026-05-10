@@ -1,7 +1,13 @@
 /**
  * `/sector show <idOrName>` — print one sector's basic info + stock table.
- * Fetches the full snapshot universe (60 s SWR cache) and joins on sector
- * codes so IM users see price + multi-period returns inline.
+ *
+ * The IM table mirrors the frontend EQ.LIST default columns (code, name,
+ * price, chg%, 换手, 成交额, 连涨, 5d%, 20d%, 90d%, 250d%) so users
+ * working in Feishu see the same shape as the web pane. Fields the
+ * snapshot endpoint doesn't carry (turnoverRate / turnover / consecUp
+ * — those are kline-derived) render as `—`. For dynamic sectors we
+ * append one extra column per evaluator-evidence key so screening
+ * results show their underlying metric inline.
  */
 
 import { Inject, Injectable } from '@nestjs/common';
@@ -12,6 +18,7 @@ import {
   okResultWithMeta,
   QuantError,
   type InstructionResult,
+  type Sector,
   type StockSnapshotDto,
 } from '@quant/shared';
 import { z } from 'zod';
@@ -23,15 +30,15 @@ import type { InstructionSpec } from '../../instruction/instruction.types.js';
 import { StockMetaService } from '../../stock-meta/stock-meta.service.js';
 import {
   formatStockTable,
+  rowFromSnapshot,
+  stockTableMetaColumns,
   stockTableMetaRows,
   type StockTableRow,
 } from '../../stock-meta/domain/format-stock-table.js';
 import { SectorsService } from '../sectors.service.js';
 
 // 30 rows of the code-fenced stock table fits comfortably under
-// `truncateForCard`'s 3000-char ceiling. Bumping this any higher risks
-// the truncate cutting the closing ``` fence and the entire table
-// rendering as inline-style text in Feishu.
+// `truncateForCard`'s 3000-char ceiling.
 const MAX_TABLE_ROWS = 30;
 
 const argsSchema = z
@@ -43,8 +50,8 @@ type Args = z.infer<typeof argsSchema>;
 export class SectorShowInstructionHandler extends InstructionRegistrarBase<Args> {
   readonly spec: InstructionSpec<Args> = {
     id: instructionId('sector.show'),
-    summary: 'Show one sector: stock table with price + period returns.',
-    summaryCn: '查看板块股票列表（价格 + 涨跌幅）',
+    summary: 'Show one sector: stock table aligned with the frontend EQ.LIST columns.',
+    summaryCn: '查看板块股票列表（列与前端 mkt 列表一致；动态板块附带 evidence 列）',
     group: 'market',
     argsSchema,
     positional: ['id'],
@@ -85,39 +92,75 @@ export class SectorShowInstructionHandler extends InstructionRegistrarBase<Args>
         ? `\n(+${String(sector.codes.length - MAX_TABLE_ROWS)} more)`
         : '';
 
+    const evidenceKeys = collectEvidenceKeys(sector, codes);
+
     let rows: StockTableRow[] | null = null;
     let tableText: string;
     try {
       const allSnapshots = await this.stockMeta.snapshotAll(ctx.traceId);
       const byCode = new Map<string, StockSnapshotDto>(allSnapshots.map((s) => [s.meta.code, s]));
-      rows = codes.map((code) => {
-        const snap = byCode.get(code);
-        return {
-          code,
-          name: snap?.meta.name ?? code,
-          price: snap?.price ?? null,
-          ret_1d: snap?.returns.ret_1d ?? null,
-          ret_20d: snap?.returns.ret_20d ?? null,
-          ret_90d: snap?.returns.ret_90d ?? null,
-          ret_250d: snap?.returns.ret_250d ?? null,
-        };
-      });
+      rows = codes.map((code) => buildRow(code, byCode.get(code), sector, evidenceKeys));
       tableText = formatStockTable(rows);
     } catch {
-      // Fallback: snapshot fetch failed, show code list only.
-      // No structured rows in this branch — Feishu falls back to the
-      // legacy markdown card automatically when `stockTableRows` is absent.
       tableText = codes.join(', ');
     }
 
     const text = `${headerLine}\n\n${tableText}${tail}`;
     if (rows === null) return okResult(text);
-    // Surface the structured rows on `output.meta` so the Feishu adapter
-    // upgrades the card to the schema-2.0 native `table` element. Slack
-    // and the term widget ignore the meta and render `text`.
     return okResultWithMeta(text, {
-      stockTableRows: stockTableMetaRows(rows),
+      stockTableColumns: stockTableMetaColumns(evidenceKeys),
+      stockTableRows: stockTableMetaRows(rows, evidenceKeys),
       stockTableSubheader: `${headerLine}${tail.length > 0 ? `  ·  ${tail.trim()}` : ''}`,
     });
   }
+}
+
+function buildRow(
+  code: string,
+  snap: StockSnapshotDto | undefined,
+  sector: Sector,
+  evidenceKeys: readonly string[],
+): StockTableRow {
+  const evidence = pickEvidence(sector, code, evidenceKeys);
+  return rowFromSnapshot({
+    code,
+    name: snap?.meta.name ?? code,
+    snapshot: snap,
+    evidence,
+  });
+}
+
+function pickEvidence(
+  sector: Sector,
+  code: string,
+  evidenceKeys: readonly string[],
+): Readonly<Record<string, string | null>> {
+  const raw =
+    sector.kind === 'dynamic' && sector.evidence !== undefined
+      ? (sector.evidence[code] ?? {})
+      : {};
+  const out: Record<string, string | null> = {};
+  for (const k of evidenceKeys) out[k] = formatEvidenceValue(raw[k]);
+  return out;
+}
+
+function collectEvidenceKeys(sector: Sector, codes: readonly string[]): readonly string[] {
+  if (sector.kind !== 'dynamic' || sector.evidence === undefined) return [];
+  const seen = new Set<string>();
+  for (const code of codes) {
+    const inner = sector.evidence[code];
+    if (inner === undefined) continue;
+    for (const k of Object.keys(inner)) seen.add(k);
+  }
+  return [...seen].sort();
+}
+
+function formatEvidenceValue(raw: unknown): string | null {
+  if (raw === null || raw === undefined) return null;
+  if (typeof raw === 'number' && Number.isFinite(raw)) {
+    return Math.abs(raw) < 1 ? raw.toFixed(4) : raw.toFixed(2);
+  }
+  if (typeof raw === 'string') return raw.length > 0 ? raw : null;
+  if (typeof raw === 'boolean') return raw ? 'true' : 'false';
+  return null;
 }

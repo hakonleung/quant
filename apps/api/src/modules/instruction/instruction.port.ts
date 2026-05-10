@@ -36,6 +36,19 @@ export interface InstructionCtx {
 
 export interface InstructionHandler<TArgs> {
   execute(args: TArgs, ctx: InstructionCtx): Promise<InstructionResult>;
+  /**
+   * Optional cache-hot probe used by the IM paid-confirm gate. Return
+   * `true` when the handler can serve this request from cache without
+   * touching the LLM / external paid services — the gate then skips
+   * the confirm card and runs the instruction directly. Implementations
+   * **must not** mutate state and should swallow non-fatal errors
+   * (returning `false` to fall through to the gate).
+   *
+   * Only consulted when `spec.requiresImConfirm === true` and the
+   * caller hasn't already passed `confirm=1`. Handlers that don't
+   * implement it are treated as "no bypass" (always show the card).
+   */
+  peekImConfirmBypass?(rawArgs: Record<string, unknown>, ctx: InstructionCtx): Promise<boolean>;
 }
 
 export type AnyInstructionHandler = InstructionHandler<unknown>;

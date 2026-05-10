@@ -4,6 +4,7 @@ import {
   okResult,
   okResultWithMeta,
   type InstructionResult,
+  type StockSnapshotDto,
 } from '@quant/shared';
 import { z } from 'zod';
 
@@ -11,6 +12,13 @@ import type { InstructionCtx } from '../../instruction/instruction.port.js';
 import { InstructionRegistrarBase } from '../../instruction/instruction.provider.js';
 import { InstructionRegistry } from '../../instruction/instruction.registry.js';
 import type { InstructionSpec } from '../../instruction/instruction.types.js';
+import {
+  formatStockTable,
+  rowFromSnapshot,
+  stockTableMetaColumns,
+  stockTableMetaRows,
+  type StockTableRow,
+} from '../domain/format-stock-table.js';
 import { StockMetaService } from '../stock-meta.service.js';
 
 const argsSchema = z
@@ -57,25 +65,36 @@ export class StockInstructionHandler extends InstructionRegistrarBase<Args> {
             )
             .slice(0, args.limit);
     if (matches.length === 0) return okResult(`no match for "${args.q ?? ''}"`);
-    const text = `stock matches (${String(matches.length)}):\n${matches
-      .map((m) => `  ${m.code}  ${m.name.padEnd(8)}  ${m.industries}`)
-      .join('\n')}`;
+
+    const subheader = `stock matches (${String(matches.length)})`;
+    const rows = await this.buildRows(matches, ctx.traceId);
+    const text = `${subheader}\n\n${formatStockTable(rows)}`;
     return okResultWithMeta(text, {
-      tableSections: [
-        {
-          columns: [
-            { name: 'code', displayName: 'code', horizontalAlign: 'left', width: '90px' },
-            { name: 'name', displayName: 'name', horizontalAlign: 'left', width: '140px' },
-            { name: 'industries', displayName: 'industry', horizontalAlign: 'left' },
-          ],
-          rows: matches.map((m) => ({
-            code: m.code,
-            name: m.name,
-            industries: m.industries,
-          })),
-        },
-      ],
-      tablesSubheader: `stock matches (${String(matches.length)})`,
+      stockTableColumns: stockTableMetaColumns(),
+      stockTableRows: stockTableMetaRows(rows),
+      stockTableSubheader: subheader,
     });
+  }
+
+  /**
+   * Join the matched meta rows with the cached snapshot universe so the
+   * IM table renders price + multi-period returns in addition to the
+   * code/name/industry columns. Falls back to meta-only rows if the
+   * snapshot fetch fails — still better than no table at all.
+   */
+  private async buildRows(
+    matches: readonly { readonly code: string; readonly name: string }[],
+    traceId: string,
+  ): Promise<readonly StockTableRow[]> {
+    let byCode: Map<string, StockSnapshotDto>;
+    try {
+      const snapshots = await this.stockMeta.snapshotAll(traceId);
+      byCode = new Map(snapshots.map((s) => [s.meta.code, s]));
+    } catch {
+      byCode = new Map();
+    }
+    return matches.map((m) =>
+      rowFromSnapshot({ code: m.code, name: m.name, snapshot: byCode.get(m.code) }),
+    );
   }
 }

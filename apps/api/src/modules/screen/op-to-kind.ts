@@ -118,10 +118,29 @@ export function convertRankFromOpTagged(raw: unknown): RankSpecView {
 // predicate (kline)
 // ---------------------------------------------------------------------------
 
+// Common LLM hallucinations that aren't real ops — caught early so the
+// retry prompt sees a concrete remediation, not just "unknown op X".
+const TAUTOLOGY_OPS: ReadonlySet<string> = new Set(['true', 'false', 'always', 'any', 'all']);
+
 function convertPredicate(raw: unknown, path: string): DslPredicate {
   if (!isRecord(raw)) throw invalid(path, 'predicate must be an object');
   const op = raw['op'];
-  if (typeof op !== 'string') throw invalid(path, "predicate is missing string 'op'");
+  if (typeof op !== 'string') {
+    throw invalid(
+      path,
+      `predicate is missing string 'op' (got ${typeof op === 'boolean' ? `bool ${String(op)}` : String(op)}); ` +
+        `predicates cannot be bare booleans — for an unconditional filter use ` +
+        `{"op":"gt","left":{"field":"close_qfq"},"right":{"const":0}} as a tautology`,
+    );
+  }
+  if (TAUTOLOGY_OPS.has(op)) {
+    throw invalid(
+      path,
+      `op '${op}' is not a valid predicate op; for an unconditional filter use ` +
+        `{"op":"gt","left":{"field":"close_qfq"},"right":{"const":0}} as a tautology and ` +
+        `add a warning explaining the substitution`,
+    );
+  }
   if (LOGICAL_OPS.has(op)) return convertLogical(raw, path, op);
   if (COMPARE_OPS.has(op)) return convertCompare(raw, path, op);
   if (op === 'for_all' || op === 'exists') return convertWindowAssertion(raw, path, op);

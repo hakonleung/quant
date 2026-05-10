@@ -44,6 +44,15 @@ const argsSchema = z
         return truthy.has(v.toLowerCase());
       }),
     windowDays: z.coerce.number().int().min(1).max(30).optional(),
+    confirm: z
+      .union([z.string(), z.boolean()])
+      .optional()
+      .transform((v) => {
+        if (v === undefined) return false;
+        if (typeof v === 'boolean') return v;
+        return truthy.has(v.toLowerCase());
+      })
+      .describe('IM paid-confirm token, set by the card button'),
   })
   .strict();
 
@@ -61,6 +70,7 @@ export class AnalyzeSectorInstructionHandler extends InstructionRegistrarBase<Ar
     positional: ['id'],
     mode: 'async',
     costsCredits: true,
+    requiresImConfirm: true,
     examples: ['analyze.sector s1', 'analyze.sector s1 fresh=1'],
   };
 

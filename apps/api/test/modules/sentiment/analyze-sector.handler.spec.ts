@@ -74,7 +74,7 @@ describe('AnalyzeSectorInstructionHandler', () => {
 
   it('golden path renders sector header, theme clusters, and market trend summary', async () => {
     const { handler } = build({});
-    const r = await handler.execute({ id: 's2', fresh: false }, ctx);
+    const r = await handler.execute({ id: 's2', fresh: false, confirm: false }, ctx);
     expect(r.ok).toBe(true);
     if (r.ok) {
       expect(r.output.text).toContain('s2');
@@ -90,7 +90,7 @@ describe('AnalyzeSectorInstructionHandler', () => {
     const { handler } = build({
       sectorError: new QuantError('NOT_FOUND', 'sector s99 not found', {}),
     });
-    const r = await handler.execute({ id: 's99', fresh: false }, ctx);
+    const r = await handler.execute({ id: 's99', fresh: false, confirm: false }, ctx);
     expect(r.ok).toBe(false);
     if (!r.ok) {
       expect(r.error.code).toBe('not-found');
@@ -99,7 +99,7 @@ describe('AnalyzeSectorInstructionHandler', () => {
 
   it('returns errResult validation when sector has no codes', async () => {
     const { handler } = build({ sector: { ...baseSector, codes: [] } });
-    const r = await handler.execute({ id: 's2', fresh: false }, ctx);
+    const r = await handler.execute({ id: 's2', fresh: false, confirm: false }, ctx);
     expect(r.ok).toBe(false);
     if (!r.ok) {
       expect(r.error.code).toBe('validation');
@@ -110,7 +110,7 @@ describe('AnalyzeSectorInstructionHandler', () => {
   it('returns errResult validation when sector exceeds 50 codes', async () => {
     const manyCodes = Array.from({ length: 51 }, (_, i) => String(i).padStart(6, '0'));
     const { handler } = build({ sector: { ...baseSector, codes: manyCodes } });
-    const r = await handler.execute({ id: 's2', fresh: false }, ctx);
+    const r = await handler.execute({ id: 's2', fresh: false, confirm: false }, ctx);
     expect(r.ok).toBe(false);
     if (!r.ok) {
       expect(r.error.code).toBe('validation');
@@ -122,7 +122,7 @@ describe('AnalyzeSectorInstructionHandler', () => {
     const { handler } = build({
       marketReject: new QuantError('LLM_FAILED', 'quota exceeded', {}),
     });
-    const r = await handler.execute({ id: 's2', fresh: false }, ctx);
+    const r = await handler.execute({ id: 's2', fresh: false, confirm: false }, ctx);
     expect(r.ok).toBe(false);
     if (!r.ok) {
       expect(r.error.code).toBe('handler');
@@ -132,7 +132,7 @@ describe('AnalyzeSectorInstructionHandler', () => {
 
   it('rethrows non-QuantError from analyzeMany', async () => {
     const { handler } = build({ marketReject: new Error('rpc down') });
-    await expect(handler.execute({ id: 's2', fresh: false }, ctx)).rejects.toThrow('rpc down');
+    await expect(handler.execute({ id: 's2', fresh: false, confirm: false }, ctx)).rejects.toThrow('rpc down');
   });
 
   describe('formatMarketSentiment', () => {

@@ -37,14 +37,16 @@ import { TaService } from '../ta.service.js';
 
 const MAX_SECTOR_CODES = 50;
 
+const boolFlag = z
+  .enum(['0', '1', 'true', 'false'])
+  .default('0')
+  .transform((v) => v === '1' || v === 'true');
+
 const argsSchema = z
   .object({
     id: z.string().min(1).describe('Sector id (e.g. s1) or sector name'),
-    fresh: z
-      .enum(['0', '1', 'true', 'false'])
-      .default('0')
-      .transform((v) => v === '1' || v === 'true')
-      .describe('Bypass per-stock TA cache and re-run every member'),
+    fresh: boolFlag.describe('Bypass per-stock TA cache and re-run every member'),
+    confirm: boolFlag.optional().describe('IM paid-confirm token, set by the card button'),
   })
   .strict();
 type Args = z.infer<typeof argsSchema>;
@@ -59,6 +61,7 @@ export class TaSectorInstructionHandler extends InstructionRegistrarBase<Args> {
     group: 'market',
     mode: 'async',
     costsCredits: true,
+    requiresImConfirm: true,
     argsSchema,
     positional: ['id'],
     examples: ['ta.sector s1', 'ta.sector s1 fresh=1'],
