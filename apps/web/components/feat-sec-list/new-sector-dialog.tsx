@@ -82,24 +82,33 @@ export function NewSectorDialog({ open, onClose }: Props): React.ReactElement | 
     closeAndReset();
   };
 
-  const saveDynamic = (): void => {
+  const saveDynamic = async (): Promise<void> => {
     const t = title.trim();
-    if (t.length === 0 || preview === null) return;
-    const evidence = matchesToEvidence(preview.matches);
-    const codes = preview.matches.map((m) => m.code);
+    const trimmedNl = nl.trim();
+    if (t.length === 0 || trimmedNl.length === 0 || screen.isPending) return;
+    // NL → DSL must be in sync with the saved sector. If the user edited
+    // the prompt after the last preview (or never previewed), re-translate
+    // before persisting so screenPlan / universePlan / rank match `nl`.
+    let snapshot: NlScreenResult | null = preview;
+    if (snapshot === null || snapshot.nl !== trimmedNl) {
+      snapshot = await screen.mutateAsync({ nl: trimmedNl });
+      setPreview(snapshot);
+    }
+    const evidence = matchesToEvidence(snapshot.matches);
+    const codes = snapshot.matches.map((m) => m.code);
     const s: Sector = {
       id: '',
       name: t,
       kind: 'dynamic',
       count: codes.length,
-      meta: preview.nl,
+      meta: snapshot.nl,
       chgPct: null,
       codes,
-      nl: preview.nl,
+      nl: snapshot.nl,
       evidence,
-      screenPlan: preview.screenPlan,
-      universePlan: preview.universePlan,
-      rank: preview.rank,
+      screenPlan: snapshot.screenPlan,
+      universePlan: snapshot.universePlan,
+      rank: snapshot.rank,
       lastScreenedAt: new Date().toISOString(),
       createdBy: currentUserId,
       published: false,
@@ -154,9 +163,17 @@ export function NewSectorDialog({ open, onClose }: Props): React.ReactElement | 
         </Box>
         <Footer
           onCancel={closeAndReset}
-          onSave={tab === 'user' ? saveUser : saveDynamic}
+          onSave={
+            tab === 'user'
+              ? saveUser
+              : (): void => {
+                  void saveDynamic();
+                }
+          }
           canSave={
-            tab === 'user' ? title.trim().length > 0 : title.trim().length > 0 && preview !== null
+            tab === 'user'
+              ? title.trim().length > 0
+              : title.trim().length > 0 && nl.trim().length > 0 && !screen.isPending
           }
           saveLabel={tab === 'user' ? 'CREATE' : 'SAVE'}
         />

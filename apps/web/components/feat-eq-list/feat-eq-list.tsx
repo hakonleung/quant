@@ -15,13 +15,13 @@
 
 import { Box, Flex, Text } from '@chakra-ui/react';
 import type { ColumnFilter, StockMetaDto } from '@quant/shared';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { Feat } from '../../lib/eqty/feat.js';
 import {
   BUILTIN_KEYS,
   buildRows,
-  compareRows,
+  compareValues,
   evaluateColumnFilter,
   flattenEvidence,
   type ListRow,
@@ -118,12 +118,23 @@ export function FeatEqList({ bare }: FeatEqListProps = {}): React.ReactElement {
   );
 
   const [filter, setFilter] = useState('');
+  // Drop rows whose rank_metric is null when the dynamic sector ranks by
+  // a metric — the screen pipeline will eventually filter these server-
+  // side, but legacy cached results may still carry them.
+  const hasRankMetric = isDynamic && sector?.rank != null;
   const filteredRows: readonly ListRow[] = useMemo(() => {
-    if (isDynamic || isUserSector) return baseRows;
+    let rows: readonly ListRow[] = baseRows;
+    if (hasRankMetric) {
+      rows = rows.filter((r) => {
+        const v = r['rank_metric'];
+        return v !== null && v !== undefined;
+      });
+    }
+    if (isDynamic || isUserSector) return rows;
     const q = filter.trim().toLowerCase();
-    if (q === '') return baseRows;
-    return baseRows.filter((r) => r.code.startsWith(q) || r.name.toLowerCase().includes(q));
-  }, [baseRows, filter, isDynamic, isUserSector]);
+    if (q === '') return rows;
+    return rows.filter((r) => r.code.startsWith(q) || r.name.toLowerCase().includes(q));
+  }, [baseRows, filter, isDynamic, isUserSector, hasRankMetric]);
 
   const appliedColumns = useSettingsStore((s) => s.appliedColumns);
   const columnFilters = useSettingsStore((s) => s.columnFilters);
@@ -160,23 +171,48 @@ export function FeatEqList({ bare }: FeatEqListProps = {}): React.ReactElement {
     return filteredRows.filter((row) => {
       for (const { col, filter } of filterEntries) {
         const res = evaluateColumnFilter(col.sortValue(row), filter);
+        // For dynamic sectors, treat "no value" as "drop" so DSL filters
+        // exclude stocks with missing metrics (e.g. fresh listings with
+        // no 20D% history).
         if (res === false) return false;
+        if (res === null && isDynamic) return false;
       }
       return true;
     });
-  }, [filteredRows, filterEntries]);
+  }, [filteredRows, filterEntries, isDynamic]);
 
-  // Default sort: descending by chgPct so winners surface first.
-  // `null` is reserved for the "use sector-defined order" mode (kept
-  // accessible by clicking the active sort header twice to clear it).
-  const [sort, setSort] = useState<SortState | null>({ key: 'chgPct', dir: 'desc' });
+  // Default sort: dynamic sectors with a rank metric sort by rank_metric
+  // (using the rank's order); otherwise descending by chgPct so winners
+  // surface first. `null` is reserved for the "use sector-defined order"
+  // mode (kept accessible by clicking the active sort header twice).
+  const defaultSort: SortState = useMemo(() => {
+    if (isDynamic && sector !== null && sector.rank !== undefined && sector.rank !== null) {
+      return { key: 'ev:rank_metric', dir: sector.rank.order === 'asc' ? 'asc' : 'desc' };
+    }
+    return { key: 'chgPct', dir: 'desc' };
+  }, [isDynamic, sector]);
+  const [sort, setSort] = useState<SortState | null>(defaultSort);
+  const lastSectorIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    const id = sector?.id ?? null;
+    if (lastSectorIdRef.current === id) return;
+    lastSectorIdRef.current = id;
+    setSort(defaultSort);
+  }, [sector?.id, defaultSort]);
+  const columnsByKey = useMemo(() => {
+    const m = new Map<string, ColumnDef>();
+    for (const c of columns) m.set(c.key, c);
+    return m;
+  }, [columns]);
   const sortedRows: readonly ListRow[] = useMemo(() => {
     if (sort === null) return predicateRows;
+    const col = columnsByKey.get(sort.key);
+    if (col === undefined) return predicateRows;
     const arr = [...predicateRows];
-    arr.sort((a, b) => compareRows(a, b, sort.key));
+    arr.sort((a, b) => compareValues(col.sortValue(a), col.sortValue(b)));
     if (sort.dir === 'desc') arr.reverse();
     return arr;
-  }, [predicateRows, sort]);
+  }, [predicateRows, sort, columnsByKey]);
 
   // Auto-default focus to the first visible row of the active sector.
   // Fires when (a) nothing is focused yet, or (b) the persisted focus

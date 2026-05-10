@@ -200,14 +200,19 @@ export function sortValue(r: ListRow, key: string): number | string | null {
   return null;
 }
 
-export function compareRows(a: ListRow, b: ListRow, key: string): number {
-  const va = sortValue(a, key);
-  const vb = sortValue(b, key);
+export function compareValues(
+  va: number | string | null,
+  vb: number | string | null,
+): number {
   if (va === null && vb === null) return 0;
   if (va === null) return -1;
   if (vb === null) return 1;
   if (typeof va === 'number' && typeof vb === 'number') return va - vb;
   return String(va).localeCompare(String(vb));
+}
+
+export function compareRows(a: ListRow, b: ListRow, key: string): number {
+  return compareValues(sortValue(a, key), sortValue(b, key));
 }
 
 /**

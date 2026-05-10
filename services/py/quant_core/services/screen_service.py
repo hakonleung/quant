@@ -163,27 +163,25 @@ def _apply_rank(matches: list[ScreenMatch], rank: RankSpec) -> list[ScreenMatch]
     """Sort ``matches`` by their pre-computed ``evidence['rank_metric']``.
 
     Codes whose metric is missing (e.g. insufficient history for
-    ``period_return``) sink to the bottom regardless of order.
+    ``period_return``) are dropped — a rank-by-X result with null X
+    rows is never useful and confuses the downstream UI.
     """
     from decimal import Decimal
 
-    def key(m: ScreenMatch) -> tuple[int, Decimal]:
+    keyed: list[tuple[Decimal, ScreenMatch]] = []
+    for m in matches:
         v = m.evidence.get("rank_metric")
         if v is None:
-            return (1, Decimal(0))
+            continue
         try:
-            return (0, Decimal(str(v)))
+            keyed.append((Decimal(str(v)), m))
         except (ValueError, ArithmeticError):
-            return (1, Decimal(0))
-
-    matches = sorted(
-        matches,
-        key=key,
-        reverse=(rank.order == "desc"),
-    )
+            continue
+    keyed.sort(key=lambda pair: pair[0], reverse=(rank.order == "desc"))
+    out = [m for _, m in keyed]
     if rank.top_n is not None and rank.top_n >= 0:
-        matches = matches[: rank.top_n]
-    return matches
+        out = out[: rank.top_n]
+    return out
 
 
 _EVIDENCE_QUANT: Final = "0.0001"
