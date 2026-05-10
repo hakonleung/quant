@@ -92,6 +92,14 @@ export class HelpHandler extends InstructionRegistrarBase<Args> {
           cn: r.cn,
           example: r.example,
         })),
+        // Why: Feishu's native `table` defaults to page_size=10. Help
+        // groups regularly grow past that (market currently has 12 rows
+        // including ta / ta.sector); without this hint the tail entries
+        // get hidden on page 2 and look "deleted".
+        pageSize: Math.max(10, rows.length),
+        // Default `low` clips long Chinese summaries / multi-arg
+        // example commands on a single line; `auto` lets cells wrap.
+        rowHeight: 'auto',
       });
       textSections.push(`【${GROUP_LABEL[group]}】\n${renderHelpTable(rows)}`);
     }

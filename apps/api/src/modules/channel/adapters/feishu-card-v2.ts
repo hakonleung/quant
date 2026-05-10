@@ -246,6 +246,25 @@ export interface MetaTableSection {
   readonly title?: string;
   readonly columns: readonly StockTableMetaColumn[];
   readonly rows: readonly StockTableMetaRow[];
+  /**
+   * Per-section override for the Feishu table `page_size`. Without this
+   * the default 10 silently truncates fixed-size tables (help groups,
+   * usr summaries, sector lists) and rows past the first page look
+   * "missing" — see the bug where `/help` market group hid `ta` /
+   * `ta.sector` on page 2. Handlers pass this so the table fits without
+   * pagination.
+   */
+  readonly pageSize?: number;
+  /**
+   * Per-section override for the Feishu table `row_height`. Default
+   * `'low'` clips long text on a single line. Set to `'auto'` (with
+   * optional `rowMaxHeight`) for tables whose cells benefit from
+   * wrapping (help descriptions, ledger comments, …). Feishu has no
+   * column-level wrap toggle — this is the only knob available.
+   */
+  readonly rowHeight?: 'low' | 'middle' | 'high' | 'auto' | number;
+  /** Cap when `rowHeight: 'auto'`. 32–999 px per Feishu spec. */
+  readonly rowMaxHeight?: number;
 }
 
 function isPlainObject(v: unknown): v is Readonly<Record<string, unknown>> {
@@ -284,9 +303,33 @@ function readSection(obj: Readonly<Record<string, unknown>>): MetaTableSection |
   if (columns.length === 0) return null;
   const rows = parseSectionRows(rawRows);
   const title = obj['title'];
-  return typeof title === 'string' && title.length > 0
-    ? { title, columns, rows }
-    : { columns, rows };
+  const rawPageSize = obj['pageSize'];
+  const pageSize =
+    typeof rawPageSize === 'number' && Number.isFinite(rawPageSize) && rawPageSize > 0
+      ? Math.floor(rawPageSize)
+      : undefined;
+  const rowHeight = readRowHeight(obj['rowHeight']);
+  const rawRowMaxHeight = obj['rowMaxHeight'];
+  const rowMaxHeight =
+    typeof rawRowMaxHeight === 'number' && Number.isFinite(rawRowMaxHeight) && rawRowMaxHeight > 0
+      ? Math.floor(rawRowMaxHeight)
+      : undefined;
+  const base: MetaTableSection =
+    typeof title === 'string' && title.length > 0
+      ? { title, columns, rows }
+      : { columns, rows };
+  return {
+    ...base,
+    ...(pageSize !== undefined ? { pageSize } : {}),
+    ...(rowHeight !== undefined ? { rowHeight } : {}),
+    ...(rowMaxHeight !== undefined ? { rowMaxHeight } : {}),
+  };
+}
+
+function readRowHeight(raw: unknown): MetaTableSection['rowHeight'] | undefined {
+  if (raw === 'low' || raw === 'middle' || raw === 'high' || raw === 'auto') return raw;
+  if (typeof raw === 'number' && Number.isFinite(raw) && raw > 0) return Math.floor(raw);
+  return undefined;
 }
 
 function metaSections(meta: Readonly<Record<string, unknown>>): readonly MetaTableSection[] | null {
@@ -302,7 +345,13 @@ function metaSections(meta: Readonly<Record<string, unknown>>): readonly MetaTab
 }
 
 function tableElement(section: MetaTableSection): unknown {
-  return buildTableComponent({ columns: section.columns, rows: section.rows });
+  return buildTableComponent({
+    columns: section.columns,
+    rows: section.rows,
+    ...(section.pageSize !== undefined ? { pageSize: section.pageSize } : {}),
+    ...(section.rowHeight !== undefined ? { rowHeight: section.rowHeight } : {}),
+    ...(section.rowMaxHeight !== undefined ? { rowMaxHeight: section.rowMaxHeight } : {}),
+  });
 }
 
 /**
@@ -324,11 +373,17 @@ function tableElement(section: MetaTableSection): unknown {
 function buildTableComponent(args: {
   readonly columns: readonly StockTableMetaColumn[];
   readonly rows: readonly StockTableMetaRow[];
+  readonly pageSize?: number;
+  readonly rowHeight?: MetaTableSection['rowHeight'];
+  readonly rowMaxHeight?: number;
 }): unknown {
   return {
     tag: 'table',
-    page_size: 10,
-    row_height: 'low',
+    page_size: args.pageSize ?? 10,
+    row_height: args.rowHeight ?? 'low',
+    ...(args.rowHeight === 'auto' && args.rowMaxHeight !== undefined
+      ? { row_max_height: args.rowMaxHeight }
+      : {}),
     header_style: { background_style: 'grey', bold: true, text_align: 'left' },
     columns: args.columns.map((c) => {
       const dn = c.displayName !== undefined && c.displayName.length > 0 ? c.displayName : c.name;
