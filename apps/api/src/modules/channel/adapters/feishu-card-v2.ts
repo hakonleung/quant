@@ -126,28 +126,7 @@ function buildStockTableV2Card(args: {
   if (args.subheaderMd !== null && args.subheaderMd.length > 0) {
     elements.push({ tag: 'markdown', content: args.subheaderMd });
   }
-  elements.push({
-    tag: 'table',
-    page_size: 10,
-    row_height: 'low',
-    freeze_first_column: true,
-    header_style: { background_style: 'grey', bold: true, text_align: 'left' },
-    columns: args.columns.map((c) => ({
-      name: c.name,
-      display_name: c.displayName ?? c.name,
-      data_type: c.dataType ?? 'text',
-      ...(c.horizontalAlign !== undefined ? { horizontal_align: c.horizontalAlign } : {}),
-      ...(c.width !== undefined ? { width: c.width } : {}),
-    })),
-    rows: args.rows.map((r) => {
-      const out: Record<string, string> = {};
-      for (const col of args.columns) {
-        const v = r[col.name];
-        out[col.name] = v === null || v === undefined ? '—' : v;
-      }
-      return out;
-    }),
-  });
+  elements.push(buildTableComponent({ columns: args.columns, rows: args.rows, name: 'tbl0' }));
   return {
     schema: '2.0',
     header: {
@@ -257,23 +236,50 @@ function metaSections(meta: Readonly<Record<string, unknown>>): readonly MetaTab
   return out.length > 0 ? out : null;
 }
 
-function tableElement(section: MetaTableSection): unknown {
+function tableElement(section: MetaTableSection, name: string): unknown {
+  return buildTableComponent({ columns: section.columns, rows: section.rows, name });
+}
+
+/**
+ * Single source of truth for the schema-2.0 `table` component shape.
+ *
+ * Two Feishu-specific gotchas baked in here that we got wrong on first
+ * pass and that surfaced as `AxiosError 400` from `im.message.create`:
+ *
+ *   1. `header_style.bold_font` — the field is `bold_font`, not `bold`
+ *      (which Feishu silently rejected together with the rest of the
+ *      payload, returning a generic 400 instead of a per-field error).
+ *   2. `name` is required at the element level for v2 components when
+ *      a card carries multiple `table` elements; we pass a stable
+ *      `tbl{i}` per section.
+ *   3. Column `display_name` must be non-empty — Feishu treats `""` as
+ *      a missing field and 400s the whole card; we fall back to `name`.
+ */
+function buildTableComponent(args: {
+  readonly columns: readonly StockTableMetaColumn[];
+  readonly rows: readonly StockTableMetaRow[];
+  readonly name: string;
+}): unknown {
   return {
     tag: 'table',
+    name: args.name,
     page_size: 10,
     row_height: 'low',
     freeze_first_column: true,
-    header_style: { background_style: 'grey', bold: true, text_align: 'left' },
-    columns: section.columns.map((c) => ({
-      name: c.name,
-      display_name: c.displayName ?? c.name,
-      data_type: c.dataType ?? 'text',
-      ...(c.horizontalAlign !== undefined ? { horizontal_align: c.horizontalAlign } : {}),
-      ...(c.width !== undefined ? { width: c.width } : {}),
-    })),
-    rows: section.rows.map((r) => {
+    header_style: { background_style: 'grey', bold_font: true, text_align: 'left' },
+    columns: args.columns.map((c) => {
+      const dn = c.displayName !== undefined && c.displayName.length > 0 ? c.displayName : c.name;
+      return {
+        name: c.name,
+        display_name: dn,
+        data_type: c.dataType ?? 'text',
+        ...(c.horizontalAlign !== undefined ? { horizontal_align: c.horizontalAlign } : {}),
+        ...(c.width !== undefined ? { width: c.width } : {}),
+      };
+    }),
+    rows: args.rows.map((r) => {
       const out: Record<string, string> = {};
-      for (const col of section.columns) {
+      for (const col of args.columns) {
         out[col.name] = r[col.name] ?? '—';
       }
       return out;
@@ -300,12 +306,12 @@ export function maybeMetaTablesCard(
   const elements: unknown[] = [];
   const subheader = metaString(meta, 'tablesSubheader');
   if (subheader !== null) elements.push({ tag: 'markdown', content: subheader });
-  for (const section of sections) {
+  sections.forEach((section, i) => {
     if (section.title !== undefined && section.title.length > 0) {
       elements.push({ tag: 'markdown', content: `**${section.title}**` });
     }
-    elements.push(tableElement(section));
-  }
+    elements.push(tableElement(section, `tbl${String(i)}`));
+  });
   return {
     schema: '2.0',
     header: {

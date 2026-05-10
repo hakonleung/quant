@@ -51,6 +51,27 @@ interface ExtraHandles {
   'card.action.trigger': (data: Lark.RawCardActionEvent) => Promise<void>;
 }
 
+/**
+ * Pull `{code, msg, error}` out of an AxiosError-like SDK rejection so
+ * the caller can log a useful message instead of the bare HTTP status.
+ * Returns a stable JSON string so the operator can grep for codes like
+ * `230006` (invalid card payload).
+ */
+function extractFeishuErrorBody(err: unknown): string {
+  if (typeof err !== 'object' || err === null) return String(err);
+  const maybeResponse = (err as { response?: unknown }).response;
+  if (typeof maybeResponse !== 'object' || maybeResponse === null) {
+    return (err as { message?: string }).message ?? 'unknown';
+  }
+  const data = (maybeResponse as { data?: unknown }).data;
+  if (data === undefined) return (err as { message?: string }).message ?? 'unknown';
+  try {
+    return JSON.stringify(data);
+  } catch {
+    return String(data);
+  }
+}
+
 // Card-action helpers (`cardButtonSchema` / `parseCardAction` /
 // `syntheticTextForAction` / `buildDecidedCard`) live in
 // `./feishu-card-action.ts`. Card-callback decoding (URL-verification challenge schema, schema-1 /
@@ -162,10 +183,26 @@ export class FeishuChannelAdapter implements ChannelAdapter {
               ),
             }),
           };
-    const res = await this.client.im.message.create({
-      params: { receive_id_type: 'chat_id' },
-      data,
-    });
+    let res;
+    try {
+      res = await this.client.im.message.create({
+        params: { receive_id_type: 'chat_id' },
+        data,
+      });
+    } catch (err) {
+      // Feishu's open-api SDK wraps a real HTTP 400 in an AxiosError whose
+      // `response.data` carries the actual `{ code, msg, error }` payload —
+      // without surfacing it the operator only sees "Request failed with
+      // status code 400" and has to grep raw network logs. Log the body
+      // (with a small preview of the card we sent) before rethrowing so
+      // card-shape regressions are debuggable from the API logs alone.
+      const body = extractFeishuErrorBody(err);
+      const preview = card !== null ? JSON.stringify(card).slice(0, 600) : data.content.slice(0, 200);
+      this.logger.error(
+        `feishu_send_failed trace_id=${traceId} target=${target} body=${body} card_preview=${preview}`,
+      );
+      throw err;
+    }
     const messageId = typeof res.data?.message_id === 'string' ? res.data.message_id : null;
     return {
       status: 'sent',
