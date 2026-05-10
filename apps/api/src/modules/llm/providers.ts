@@ -46,8 +46,27 @@ export interface LlmProviderRow {
  * Priority-ordered catalog. Prices reflect 2026-Q2 published rates;
  * adjust here when vendors update their pricing — the ledger picks up
  * the new numbers automatically on next call.
+ *
+ * Ordering policy:
+ *   - **Deepseek first** so the no-override default (`/screen` NL→DSL,
+ *     `/ta`, JSON-mode aggregator, agent loop without `AGENT_LLM_*`)
+ *     lands on Deepseek — cheapest and good enough for tool-use.
+ *   - **Qwen next** so the web-search filter (`webSearchKind !==
+ *     undefined`) picks Qwen first when a caller asks for native search
+ *     (`/analyze`'s analyst pass, `/agent web.search`). Deepseek has no
+ *     web-search backend, so it's skipped automatically by that filter.
+ *   - **Moonshot last** as the fallback web-search provider.
  */
 export const LLM_PROVIDERS: readonly LlmProviderRow[] = [
+  {
+    provider: 'deepseek',
+    modelPro: 'deepseek-v4-pro',
+    modelFlash: 'deepseek-v4-flash',
+    baseUrl: 'https://api.deepseek.com',
+    apiKeyEnv: 'DEEPSEEK_API_KEY',
+    cnyPerKInputToken: 0.001,
+    cnyPerKOutputToken: 0.002,
+  },
   {
     provider: 'qwen',
     modelPro: 'qwen-plus',
@@ -56,15 +75,6 @@ export const LLM_PROVIDERS: readonly LlmProviderRow[] = [
     apiKeyEnv: 'QWEN_API_KEY',
     webSearchKind: 'qwen_extra_body',
     cnyPerKInputToken: 0.0008,
-    cnyPerKOutputToken: 0.002,
-  },
-  {
-    provider: 'deepseek',
-    modelPro: 'deepseek-v4-pro',
-    modelFlash: 'deepseek-v4-flash',
-    baseUrl: 'https://api.deepseek.com',
-    apiKeyEnv: 'DEEPSEEK_API_KEY',
-    cnyPerKInputToken: 0.001,
     cnyPerKOutputToken: 0.002,
   },
   {
