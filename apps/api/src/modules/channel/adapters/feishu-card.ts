@@ -41,11 +41,23 @@ export interface FeishuV1Card {
 
 export interface FeishuV2Card {
   readonly schema: '2.0';
+  /**
+   * Required when sending an inline schema-2.0 card via
+   * `im.message.create` with `msg_type: 'interactive'`. Without this
+   * block Feishu rejects the request with HTTP 400 ("invalid card
+   * payload") — the success cases for legacy v1 cards happen to omit
+   * `config` because v1 has its own `config` shape, but v2 strictly
+   * requires `update_multi` (so the card can be patched in place by
+   * later async-completion replies).
+   */
+  readonly config?: { readonly update_multi?: boolean; readonly streaming_mode?: boolean };
   readonly header: {
     readonly template: 'red' | 'green' | 'grey' | 'blue' | 'orange' | 'purple';
     readonly title: { readonly tag: 'plain_text'; readonly content: string };
   };
   readonly body: {
+    /** Optional in spec, defaults to 'vertical' but some receivers 400 without it. */
+    readonly direction?: 'vertical' | 'horizontal';
     readonly elements: readonly unknown[];
   };
 }

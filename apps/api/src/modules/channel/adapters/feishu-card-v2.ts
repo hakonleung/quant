@@ -127,13 +127,31 @@ function buildStockTableV2Card(args: {
     elements.push({ tag: 'markdown', content: args.subheaderMd });
   }
   elements.push(buildTableComponent({ columns: args.columns, rows: args.rows, name: 'tbl0' }));
+  return wrapV2Card({
+    headerTitle: args.headerTitle,
+    headerTemplate: args.headerTemplate,
+    elements,
+  });
+}
+
+/**
+ * Standard schema-2.0 card envelope used by every v2-table builder.
+ * Centralises the `config.update_multi` + `body.direction` requirements
+ * Feishu enforces for inline-JSON v2 cards (see `FeishuV2Card` doc).
+ */
+function wrapV2Card(args: {
+  readonly headerTitle: string;
+  readonly headerTemplate: FeishuV2Card['header']['template'];
+  readonly elements: readonly unknown[];
+}): FeishuV2Card {
   return {
     schema: '2.0',
+    config: { update_multi: true },
     header: {
       template: args.headerTemplate,
       title: { tag: 'plain_text', content: args.headerTitle },
     },
-    body: { elements },
+    body: { direction: 'vertical', elements: args.elements },
   };
 }
 
@@ -265,7 +283,8 @@ function buildTableComponent(args: {
     name: args.name,
     page_size: 10,
     row_height: 'low',
-    freeze_first_column: true,
+    // `freeze_first_column` is NOT a valid v2-table field — keeping it
+    // is one of the reasons Feishu was 400ing every table card. Drop it.
     header_style: { background_style: 'grey', bold_font: true, text_align: 'left' },
     columns: args.columns.map((c) => {
       const dn = c.displayName !== undefined && c.displayName.length > 0 ? c.displayName : c.name;
@@ -312,12 +331,9 @@ export function maybeMetaTablesCard(
     }
     elements.push(tableElement(section, `tbl${String(i)}`));
   });
-  return {
-    schema: '2.0',
-    header: {
-      template: defaults.headerTemplate,
-      title: { tag: 'plain_text', content: defaults.headerTitle },
-    },
-    body: { elements },
-  };
+  return wrapV2Card({
+    headerTitle: defaults.headerTitle,
+    headerTemplate: defaults.headerTemplate,
+    elements,
+  });
 }
