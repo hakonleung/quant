@@ -18,7 +18,12 @@ import {
 
 import { UserStore } from '../auth/user.store.js';
 import { StockMetaService } from '../stock-meta/stock-meta.service.js';
-import type { WatchGroupCreate, WatchTaskCreate, WatchTaskPatch } from './dto/watch.dto.js';
+import type {
+  WatchGroupCreate,
+  WatchGroupPatch,
+  WatchTaskCreate,
+  WatchTaskPatch,
+} from './dto/watch.dto.js';
 import { WatchGroupStore } from './watch-group.store.js';
 import { WatchTaskStore } from './watch-task.store.js';
 import { WatchUniverseStore } from './watch-universe.store.js';
@@ -79,10 +84,26 @@ export class WatchService implements OnModuleInit {
       conditions: payload.conditions,
       intervalSec: payload.intervalSec,
       pushIntervalSec: payload.pushIntervalSec,
+      enabled: payload.enabled,
       createdAt: new Date().toISOString(),
     };
     await this.groups.upsert(userId, group, false);
     return group;
+  }
+
+  async patchGroup(
+    userId: string,
+    name: string,
+    payload: WatchGroupPatch,
+  ): Promise<WatchGroup> {
+    const next = await this.groups.patch(userId, name, (g) => ({
+      ...g,
+      ...(payload.enabled !== undefined ? { enabled: payload.enabled } : {}),
+    }));
+    if (next === undefined) {
+      throw new QuantError('NOT_FOUND', `watch group ${name} not found`, { name });
+    }
+    return next;
   }
 
   async deleteGroup(userId: string, name: string): Promise<void> {
@@ -107,6 +128,7 @@ export class WatchService implements OnModuleInit {
           conditions: task.conditions,
           intervalSec: task.intervalSec,
           pushIntervalSec: task.pushIntervalSec,
+          enabled: true,
           createdAt: task.createdAt,
         },
         false,

@@ -8,8 +8,9 @@
 
 ## Group 模型（2026-05）
 
-- `WatchGroup{ name, conditions, intervalSec, pushIntervalSec, createdAt }` 是一等存储对象，保存在 `data/watch/groups.json`。
+- `WatchGroup{ name, conditions, intervalSec, pushIntervalSec, enabled, createdAt }` 是一等存储对象，保存在 `data/watch/groups.json`。
 - `WatchTask` 通过 `groupName` 外键引用一个 group。`POST /api/watch` 必须传 `groupName`，且 group 必须先于 task 存在；服务端总是用 group 自己的 conds / intervals 覆盖 task 创建请求里的对应字段——避免同 group 下 task 之间漂移。
+- `enabled` 是 group 级"通知开关"：`PATCH /api/watch/groups/:name { enabled }` 暂停或恢复整组。`enabled=false` 时调度器跳过该 group 下的全部 task（不抓行情、不推送），但 task 数据保留——重新置为 `true` 即恢复，无需重新填表。默认 `true`，旧文件迁移时一律视为开启。
 - 删除 group（`DELETE /api/watch/groups/:name`）级联：先删除 group 下所有 task（调度器立即停掉），再删除 group 配置；顺序保证调度器永远不会看到 dangling task。
 - 旧 `tasks.json`（无 `groupName`）由 `migrateLegacyTasks` 按 `legacy-<sha1(conds)[0..6]>` 自动补一个组名，相同条件签名的旧 task 收敛到同一组；启动时 `WatchService.seedLegacyGroups()` 把这些组写回 `groups.json`，幂等。
 
@@ -21,7 +22,7 @@
 | Source  | `quant_io/sources/akshare_watch.py`                                                   | A: `stock_bid_ask_em`；HK/US: `stock_{hk,us}_hist_min_em`（BJT 墙钟窗口）                                                                                                          |
 | Service | `quant_core/services/watch_quote_service.py`                                          | 拉行情 + 评估 hit                                                                                                                                                                  |
 | RPC     | `quant_rpc/ops/watch.py`                                                              | ops `watch.quote_one` / `watch.universe_refresh`（schema 含 amount/volume）                                                                                                        |
-| API     | `apps/api/src/modules/watch/`                                                         | `GET /api/watch`、`POST /api/watch`、`GET/POST /api/watch/groups`、`DELETE /api/watch/groups/:name`；实时流通过 Socket.IO `watch.snapshot` topic（[12-socket.md](./12-socket.md)） |
+| API     | `apps/api/src/modules/watch/`                                                         | `GET /api/watch`、`POST /api/watch`、`GET/POST /api/watch/groups`、`PATCH/DELETE /api/watch/groups/:name`；实时流通过 Socket.IO `watch.snapshot` topic（[12-socket.md](./12-socket.md)） |
 | Notify  | `apps/api/src/modules/watch/domain/{evaluate,format}.ts` + `ChannelService.broadcast` | 条件求值 + 文本渲染 + 多 IM 投递（[11-channel.md](./11-channel.md)）                                                                                                               |
 | Web     | `feat-watch-live`、`feat-watch-live/watch-add-form`                                   | 实时表格 + 多选 + 状态徽标；trend baseline 含 window 字段                                                                                                                          |
 

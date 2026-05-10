@@ -7,6 +7,7 @@ import type { ChannelOutboundRequest, ChannelOutboundResponse } from '@quant/sha
 import type { AuthConfigShape } from '../../../src/modules/auth/config/auth.config.js';
 import type { ChannelService } from '../../../src/modules/channel/channel.service.js';
 import type { UserStore, UserRecord } from '../../../src/modules/auth/user.store.js';
+import { WatchGroupStore } from '../../../src/modules/watch/watch-group.store.js';
 import { WatchScheduler } from '../../../src/modules/watch/watch.scheduler.js';
 import { WatchTaskStore } from '../../../src/modules/watch/watch-task.store.js';
 import type { WatchQuotePort } from '../../../src/modules/watch/domain/watch-port.js';
@@ -122,12 +123,14 @@ const TICK_TIME = new Date('2026-05-04T01:30:00Z');
 
 function newScheduler(
   store: WatchTaskStore,
+  groups: WatchGroupStore,
   port: WatchQuotePort,
   notifier: FakeNotifier,
   users: FakeUserStore,
 ): WatchScheduler {
   return new WatchScheduler(
     store,
+    groups,
     port,
     notifier as unknown as ChannelService,
     users as unknown as UserStore,
@@ -136,23 +139,25 @@ function newScheduler(
 
 async function buildEnv(seed: WatchTask): Promise<{
   store: WatchTaskStore;
+  groups: WatchGroupStore;
   users: FakeUserStore;
   root: string;
 }> {
   const root = await tmpRoot();
   const store = new WatchTaskStore(cfg(root));
+  const groups = new WatchGroupStore(cfg(root));
   await store.upsert(USER, seed);
   const users = new FakeUserStore([USER]);
-  return { store, users, root };
+  return { store, groups, users, root };
 }
 
 describe('WatchScheduler.tick', () => {
   it('fetches quote and pushes when condition hits (no prior hit)', async () => {
-    const { store, users } = await buildEnv(task());
+    const { store, groups, users } = await buildEnv(task());
     const port = new FakeQuotePort();
     port.responses.push(quote());
     const notifier = new FakeNotifier();
-    const sched = newScheduler(store, port, notifier, users);
+    const sched = newScheduler(store, groups, port, notifier, users);
 
     await sched.tick(TICK_TIME);
 
@@ -166,7 +171,7 @@ describe('WatchScheduler.tick', () => {
   });
 
   it('suppresses second hit when last drifts < 2% from lastHitPrice (price gate)', async () => {
-    const { store, users } = await buildEnv(
+    const { store, groups, users } = await buildEnv(
       task({
         lastPushAt: new Date(TICK_TIME.getTime() - 120_000).toISOString(),
         lastHitPrice: '10.5',
@@ -176,7 +181,7 @@ describe('WatchScheduler.tick', () => {
     const port = new FakeQuotePort();
     port.responses.push(quote({ last: '10.55' }));
     const notifier = new FakeNotifier();
-    const sched = newScheduler(store, port, notifier, users);
+    const sched = newScheduler(store, groups, port, notifier, users);
 
     await sched.tick(TICK_TIME);
 
@@ -185,7 +190,7 @@ describe('WatchScheduler.tick', () => {
   });
 
   it('suppresses second hit while pushIntervalSec time gate is open', async () => {
-    const { store, users } = await buildEnv(
+    const { store, groups, users } = await buildEnv(
       task({
         lastPushAt: new Date(TICK_TIME.getTime() - 30_000).toISOString(),
         lastHitPrice: '9.5',
@@ -195,7 +200,7 @@ describe('WatchScheduler.tick', () => {
     const port = new FakeQuotePort();
     port.responses.push(quote({ last: '10.50' }));
     const notifier = new FakeNotifier();
-    const sched = newScheduler(store, port, notifier, users);
+    const sched = newScheduler(store, groups, port, notifier, users);
 
     await sched.tick(TICK_TIME);
 
@@ -204,7 +209,7 @@ describe('WatchScheduler.tick', () => {
   });
 
   it('fires when both gates clear (drift ≥ 2% AND interval elapsed)', async () => {
-    const { store, users } = await buildEnv(
+    const { store, groups, users } = await buildEnv(
       task({
         lastPushAt: new Date(TICK_TIME.getTime() - 120_000).toISOString(),
         lastHitPrice: '10.5',
@@ -214,7 +219,7 @@ describe('WatchScheduler.tick', () => {
     const port = new FakeQuotePort();
     port.responses.push(quote({ last: '10.71' }));
     const notifier = new FakeNotifier();
-    const sched = newScheduler(store, port, notifier, users);
+    const sched = newScheduler(store, groups, port, notifier, users);
 
     await sched.tick(TICK_TIME);
 
@@ -225,11 +230,11 @@ describe('WatchScheduler.tick', () => {
   });
 
   it('decrements remaining and disables on hit zero', async () => {
-    const { store, users } = await buildEnv(task({ remaining: 1 }));
+    const { store, groups, users } = await buildEnv(task({ remaining: 1 }));
     const port = new FakeQuotePort();
     port.responses.push(quote());
     const notifier = new FakeNotifier();
-    const sched = newScheduler(store, port, notifier, users);
+    const sched = newScheduler(store, groups, port, notifier, users);
 
     await sched.tick(TICK_TIME);
 
@@ -239,11 +244,11 @@ describe('WatchScheduler.tick', () => {
   });
 
   it('quote failure bumps lastTickAt without throwing', async () => {
-    const { store, users } = await buildEnv(task());
+    const { store, groups, users } = await buildEnv(task());
     const port = new FakeQuotePort();
     port.failNext = true;
     const notifier = new FakeNotifier();
-    const sched = newScheduler(store, port, notifier, users);
+    const sched = newScheduler(store, groups, port, notifier, users);
 
     await expect(sched.tick(TICK_TIME)).resolves.toBeUndefined();
     expect((await store.get(USER, 'a', '600000'))?.lastTickAt).toBe(TICK_TIME.toISOString());
@@ -251,7 +256,7 @@ describe('WatchScheduler.tick', () => {
   });
 
   it('trend baseline (window in seconds) only fires once a sample is old enough', async () => {
-    const { store, users } = await buildEnv(
+    const { store, groups, users } = await buildEnv(
       task({
         conditions: [{ kind: 'pct', baseline: 'trend', op: 'gte', thresholdPct: '5', window: 30 }],
       }),
@@ -261,7 +266,7 @@ describe('WatchScheduler.tick', () => {
     port.responses.push(quote({ last: '10.10', ts: '2026-05-04T01:30:30Z' }));
     port.responses.push(quote({ last: '10.62', ts: '2026-05-04T01:31:00Z' }));
     const notifier = new FakeNotifier();
-    const sched = newScheduler(store, port, notifier, users);
+    const sched = newScheduler(store, groups, port, notifier, users);
 
     await sched.tick(TICK_TIME);
     await sched.tick(new Date(TICK_TIME.getTime() + 30_000));
@@ -272,11 +277,11 @@ describe('WatchScheduler.tick', () => {
   });
 
   it('treats quote with ts >30 min off server clock as no match', async () => {
-    const { store, users } = await buildEnv(task());
+    const { store, groups, users } = await buildEnv(task());
     const port = new FakeQuotePort();
     port.responses.push(quote({ ts: '2026-05-04T00:59:00Z' }));
     const notifier = new FakeNotifier();
-    const sched = newScheduler(store, port, notifier, users);
+    const sched = newScheduler(store, groups, port, notifier, users);
 
     await sched.tick(TICK_TIME);
 
@@ -288,11 +293,11 @@ describe('WatchScheduler.tick', () => {
   });
 
   it('does not snapshot the task store when every market is closed', async () => {
-    const { store, users } = await buildEnv(task());
+    const { store, groups, users } = await buildEnv(task());
     const port = new FakeQuotePort();
     port.responses.push(quote());
     const notifier = new FakeNotifier();
-    const sched = newScheduler(store, port, notifier, users);
+    const sched = newScheduler(store, groups, port, notifier, users);
 
     await sched.tick(new Date('2026-05-09T05:00:00Z'));
 
@@ -301,11 +306,11 @@ describe('WatchScheduler.tick', () => {
   });
 
   it('skips tasks while market is closed', async () => {
-    const { store, users } = await buildEnv(task());
+    const { store, groups, users } = await buildEnv(task());
     const port = new FakeQuotePort();
     port.responses.push(quote());
     const notifier = new FakeNotifier();
-    const sched = newScheduler(store, port, notifier, users);
+    const sched = newScheduler(store, groups, port, notifier, users);
 
     await sched.tick(new Date('2026-05-09T01:30:00Z'));
 

@@ -20,6 +20,7 @@ import { WatchGroupStore } from './watch-group.store.js';
 import { WatchTaskStore } from './watch-task.store.js';
 import { WatchUniverseStore } from './watch-universe.store.js';
 import { WatchAddInstructionHandler } from './instructions/watch-add.handler.js';
+import { WatchGroupInstructionHandler } from './instructions/watch-group.handler.js';
 import { WatchInstructionHandler } from './instructions/watch.handler.js';
 import { WatchRemoveInstructionHandler } from './instructions/watch-remove.handler.js';
 import { WatchBroadcaster } from './watch.broadcaster.js';
@@ -50,6 +51,7 @@ const DEFAULT_FLIGHT_TARGET = '127.0.0.1:8815';
     WatchInstructionHandler,
     WatchAddInstructionHandler,
     WatchRemoveInstructionHandler,
+    WatchGroupInstructionHandler,
   ],
   exports: [WatchService, WatchScheduler],
 })

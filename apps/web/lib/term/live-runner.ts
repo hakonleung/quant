@@ -109,6 +109,7 @@ const REVALIDATE_AFTER: Readonly<Record<string, readonly RevalidateScope[]>> = {
   'sector.publish': ['sectors'],
   'watch.upsert': ['watch'],
   'watch.remove': ['watch'],
+  'watch.group.toggle': ['watch'],
   'ledger.upsert': ['ledger'],
   'ledger.remove': ['ledger'],
   'analyze.ledger': ['ledger'],
@@ -316,6 +317,19 @@ function buildFetchers(deps: LiveRunnerDeps): Record<string, Fetcher> {
         throw new QuantError('WATCH_CODE_NOT_FOUND', `watch ${market}/${code} not found`);
       }
       return { market, code };
+    },
+
+    'watch.group.toggle': async ({ name, enabled }: { name: string; enabled: boolean }) => {
+      const res = await fetch(`/api/watch/groups/${encodeURIComponent(name)}`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ enabled }),
+      });
+      if (!res.ok) {
+        throw new QuantError('NOT_FOUND', `watch group ${name} not found`);
+      }
+      const group = WatchGroupSchema.parse(await res.json());
+      return { name: group.name, enabled: group.enabled };
     },
 
     'ledger.list': async () => {

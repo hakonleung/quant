@@ -60,6 +60,13 @@ interface TaskGroup {
   readonly conditions: readonly WatchCondition[];
   readonly intervalSec: number;
   readonly pushIntervalSec: number;
+  /**
+   * Group-level monitoring switch. `false` means the scheduler skips
+   * every task in this group — render the row dimmed and surface a
+   * resume affordance instead of suggesting it's still ticking. Falls
+   * back to `true` for tasks whose group config hasn't loaded yet.
+   */
+  readonly enabled: boolean;
   readonly tasks: readonly WatchTask[];
 }
 
@@ -93,6 +100,7 @@ function groupTasks(
       conditions: cfg?.conditions ?? first.conditions,
       intervalSec: cfg?.intervalSec ?? first.intervalSec,
       pushIntervalSec: cfg?.pushIntervalSec ?? first.pushIntervalSec,
+      enabled: cfg?.enabled ?? true,
       tasks: ts,
     });
   }
@@ -229,6 +237,16 @@ export function FeatWatchLive({ bare }: FeatWatchLiveProps = {}): React.ReactEle
     const targets = tasks.filter((t) => selected.has(taskKey(t)));
     await Promise.all(targets.map((t) => deleteTask(t)));
     setSelected(new Set());
+  };
+
+  const onToggleGroupEnabled = async (group: TaskGroup): Promise<void> => {
+    markGroupBusy(group.key, true);
+    try {
+      await patchGroup(group.name, { enabled: !group.enabled });
+      refreshGroupConfigs();
+    } finally {
+      markGroupBusy(group.key, false);
+    }
   };
 
   const onOverrideGroup = async (group: TaskGroup): Promise<void> => {
@@ -384,6 +402,9 @@ export function FeatWatchLive({ bare }: FeatWatchLiveProps = {}): React.ReactEle
             onOverrideGroup={(g): void => {
               void onOverrideGroup(g);
             }}
+            onToggleEnabled={(g): void => {
+              void onToggleGroupEnabled(g);
+            }}
           />
         </Box>
       </Flex>
@@ -401,6 +422,7 @@ interface BodyStatusProps {
   readonly onToggleGroup: (group: TaskGroup) => void;
   readonly onDeleteGroup: (group: TaskGroup) => void;
   readonly onOverrideGroup: (group: TaskGroup) => void;
+  readonly onToggleEnabled: (group: TaskGroup) => void;
 }
 
 function BodyStatus({
@@ -412,6 +434,7 @@ function BodyStatus({
   onToggleGroup,
   onDeleteGroup,
   onOverrideGroup,
+  onToggleEnabled,
 }: BodyStatusProps): React.ReactElement {
   if (state.kind === 'connecting') return <Text>connecting…</Text>;
   if (state.kind === 'error') {
@@ -432,6 +455,7 @@ function BodyStatus({
           onToggleGroup={onToggleGroup}
           onDelete={onDeleteGroup}
           onOverride={onOverrideGroup}
+          onToggleEnabled={onToggleEnabled}
         />
       ))}
     </Flex>
@@ -446,6 +470,7 @@ interface GroupProps {
   readonly onToggleGroup: (group: TaskGroup) => void;
   readonly onDelete: (group: TaskGroup) => void;
   readonly onOverride: (group: TaskGroup) => void;
+  readonly onToggleEnabled: (group: TaskGroup) => void;
 }
 
 function Group({
@@ -456,6 +481,7 @@ function Group({
   onToggleGroup,
   onDelete,
   onOverride,
+  onToggleEnabled,
 }: GroupProps): React.ReactElement {
   const taskKeys = group.tasks.map(taskKey);
   const selectedInGroup = taskKeys.filter((k) => selected.has(k)).length;
@@ -467,7 +493,12 @@ function Group({
   ];
 
   return (
-    <Box borderWidth="1px" borderColor="term.line" bg="transparent">
+    <Box
+      borderWidth="1px"
+      borderColor="term.line"
+      bg="transparent"
+      opacity={group.enabled ? 1 : 0.55}
+    >
       <Flex
         align="center"
         gap="6px"
@@ -526,6 +557,17 @@ function Group({
         <Text fontSize="10px" color="term.ink3" letterSpacing="0.14em" flexShrink={0}>
           ×{group.tasks.length}
         </Text>
+        {!group.enabled && (
+          <Text
+            fontSize="9px"
+            color="term.red"
+            letterSpacing="0.18em"
+            fontWeight="600"
+            flexShrink={0}
+          >
+            PAUSED
+          </Text>
+        )}
         {allSelected ? (
           <MonoButton
             icon="refresh"
@@ -539,6 +581,17 @@ function Group({
             OVERRIDE
           </MonoButton>
         ) : null}
+        <MonoButton
+          icon={group.enabled ? 'block' : 'push'}
+          label={group.enabled ? 'pause monitoring for this group' : 'resume monitoring'}
+          disabled={busy}
+          onClick={(e: React.MouseEvent<HTMLButtonElement>): void => {
+            e.stopPropagation();
+            onToggleEnabled(group);
+          }}
+        >
+          {group.enabled ? 'PAUSE' : 'RESUME'}
+        </MonoButton>
         <MonoButton
           icon="delete"
           label="delete group"
@@ -571,6 +624,18 @@ async function deleteTask(task: WatchTask): Promise<string | null> {
   });
   if (res.ok || res.status === 204) return null;
   return `delete ${String(res.status)}`;
+}
+
+async function patchGroup(name: string, body: { readonly enabled?: boolean }): Promise<void> {
+  const res = await fetch(`/api/watch/groups/${encodeURIComponent(name)}`, {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`group patch failed: ${String(res.status)} ${text.slice(0, 100)}`);
+  }
 }
 
 async function deleteGroup(name: string): Promise<void> {

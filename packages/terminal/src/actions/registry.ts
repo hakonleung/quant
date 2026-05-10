@@ -372,6 +372,18 @@ export const watchRemoveAction: DataActionConfig<
   invalidates: () => [['watch.list']],
 };
 
+export const watchGroupToggleAction: DataActionConfig<
+  { name: string; enabled: boolean },
+  { name: string; enabled: boolean }
+> = {
+  id: 'watch.group.toggle',
+  kind: 'write',
+  summary: 'Pause or resume a watch group without deleting its tasks.',
+  args: z.object({ name: z.string().min(1), enabled: z.boolean() }),
+  result: z.object({ name: z.string(), enabled: z.boolean() }),
+  invalidates: () => [['watch.list']],
+};
+
 // ---------- ledger ----------
 
 export const ledgerListAction: DataActionConfig<
@@ -456,6 +468,7 @@ export const ALL_ACTIONS = [
   watchListAction,
   watchUpsertAction,
   watchRemoveAction,
+  watchGroupToggleAction,
   ledgerListAction,
   ledgerUpsertAction,
   ledgerRemoveAction,

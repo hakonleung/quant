@@ -55,6 +55,24 @@ export class WatchGroupStore {
     });
   }
 
+  async patch(
+    userId: string,
+    name: string,
+    apply: (current: WatchGroup) => WatchGroup,
+  ): Promise<WatchGroup | undefined> {
+    let next: WatchGroup | undefined;
+    await this.inner.mutate(userId, (current) => {
+      const idx = current.findIndex((g) => g.name === name);
+      if (idx < 0) return current;
+      const updated = apply(current[idx]!);
+      next = updated;
+      const out = [...current];
+      out[idx] = updated;
+      return out;
+    });
+    return next;
+  }
+
   async delete(userId: string, name: string): Promise<boolean> {
     let removed = false;
     await this.inner.mutate(userId, (current) => {

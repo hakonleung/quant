@@ -1,11 +1,14 @@
 /**
  * BFF: DELETE /api/watch/groups/:name → NestJS cascade-delete.
+ *      PATCH  /api/watch/groups/:name → flip enabled flag (monitoring on/off).
  *
  * Cascades on the server: deletes every task referencing the group,
  * then drops the group config. Mirrors the upstream 204 status.
  */
 
-import { TRACE_HEADER, newTraceId } from '@quant/shared';
+import { TRACE_HEADER, WatchGroupPatchSchema, WatchGroupSchema, newTraceId } from '@quant/shared';
+
+import { bffErrorResponse, nestJson, readTrace } from '../../../_lib/proxy.js';
 
 const DEFAULT_NEST_BASE = 'http://127.0.0.1:3001';
 
@@ -48,4 +51,22 @@ export async function DELETE(request: Request, ctx: RouteCtx): Promise<Response>
       'content-type': upstream.headers.get('content-type') ?? 'application/json',
     },
   });
+}
+
+export async function PATCH(request: Request, ctx: RouteCtx): Promise<Response> {
+  const traceId = readTrace(request);
+  const { name } = await ctx.params;
+  try {
+    const raw: unknown = await request.json();
+    const body = WatchGroupPatchSchema.parse(raw);
+    const updated = await nestJson(
+      request,
+      `/api/watch/groups/${encodeURIComponent(name)}`,
+      (r) => WatchGroupSchema.parse(r),
+      { method: 'PATCH', body },
+    );
+    return Response.json(updated, { headers: { [TRACE_HEADER]: traceId } });
+  } catch (err) {
+    return bffErrorResponse(err, traceId);
+  }
 }

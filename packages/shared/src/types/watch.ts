@@ -145,6 +145,14 @@ export const WatchGroupSchema = z
     conditions: z.array(WatchConditionSchema).min(1),
     intervalSec: z.number().int().min(5).default(20),
     pushIntervalSec: z.number().int().min(60).default(300),
+    /**
+     * Group-level monitoring switch. When `false` the scheduler skips
+     * every task whose `groupName` points here (no quote fetches, no
+     * notifications) but the tasks themselves are preserved — flip back
+     * to `true` to resume. Defaults to `true` so legacy groups (written
+     * before this field existed) stay armed.
+     */
+    enabled: z.boolean().default(true),
     createdAt: z.string().datetime({ offset: true }),
   })
   .strict();
@@ -156,9 +164,17 @@ export const WatchGroupCreateSchema = z
     conditions: z.array(WatchConditionSchema).min(1),
     intervalSec: z.number().int().min(5).default(20),
     pushIntervalSec: z.number().int().min(60).default(300),
+    enabled: z.boolean().default(true),
   })
   .strict();
 export type WatchGroupCreate = z.infer<typeof WatchGroupCreateSchema>;
+
+export const WatchGroupPatchSchema = z
+  .object({
+    enabled: z.boolean().optional(),
+  })
+  .strict();
+export type WatchGroupPatch = z.infer<typeof WatchGroupPatchSchema>;
 
 export const WatchTaskSchema = z
   .object({

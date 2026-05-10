@@ -29,12 +29,14 @@ import {
   UniverseQuerySchema,
   WatchGroupCreateSchema,
   WatchGroupParamsSchema,
+  WatchGroupPatchSchema,
   WatchTaskCreateSchema,
   WatchTaskParamsSchema,
   WatchTaskPatchSchema,
   type UniverseQuery,
   type WatchGroupCreate,
   type WatchGroupParams,
+  type WatchGroupPatch,
   type WatchTaskCreate,
   type WatchTaskParams,
   type WatchTaskPatch,
@@ -46,6 +48,7 @@ const patchPipe = new ZodValidationPipe(WatchTaskPatchSchema);
 const paramsPipe = new ZodValidationPipe(WatchTaskParamsSchema);
 const universePipe = new ZodValidationPipe(UniverseQuerySchema);
 const groupCreatePipe = new ZodValidationPipe(WatchGroupCreateSchema);
+const groupPatchPipe = new ZodValidationPipe(WatchGroupPatchSchema);
 const groupParamsPipe = new ZodValidationPipe(WatchGroupParamsSchema);
 
 @Controller('watch')
@@ -63,6 +66,15 @@ export class WatchController {
     @Body(groupCreatePipe) body: WatchGroupCreate,
   ): Promise<WatchGroup> {
     return this.service.createGroup(user.id, body);
+  }
+
+  @Patch('groups/:name')
+  async patchGroup(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param(groupParamsPipe) params: WatchGroupParams,
+    @Body(groupPatchPipe) body: WatchGroupPatch,
+  ): Promise<WatchGroup> {
+    return this.service.patchGroup(user.id, params.name, body);
   }
 
   @Delete('groups/:name')

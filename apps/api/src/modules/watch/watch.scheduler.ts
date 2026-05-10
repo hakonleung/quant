@@ -38,6 +38,7 @@ import { evaluate, type IntradaySample } from './domain/evaluate.js';
 import { buildPayload } from './domain/format.js';
 import { isMarketOpen, marketTradingDayKey } from './domain/market-hours.js';
 import { WATCH_QUOTE_PORT, type WatchQuotePort } from './domain/watch-port.js';
+import { WatchGroupStore } from './watch-group.store.js';
 import { WatchTaskStore } from './watch-task.store.js';
 
 const MASTER_TICK_MS = 5_000;
@@ -73,6 +74,7 @@ export class WatchScheduler implements OnModuleInit, OnModuleDestroy {
 
   constructor(
     @Inject(WatchTaskStore) private readonly store: WatchTaskStore,
+    @Inject(WatchGroupStore) private readonly groups: WatchGroupStore,
     @Inject(WATCH_QUOTE_PORT) private readonly port: WatchQuotePort,
     @Inject(ChannelService) private readonly channels: ChannelService,
     @Inject(UserStore) private readonly users: UserStore,
@@ -128,7 +130,11 @@ export class WatchScheduler implements OnModuleInit, OnModuleDestroy {
     const due: UserTask[] = [];
     for (const user of this.users.list()) {
       const tasks = await this.store.snapshot(user.id);
+      const groups = await this.groups.list(user.id);
+      const disabledGroups = new Set<string>();
+      for (const g of groups) if (!g.enabled) disabledGroups.add(g.name);
       for (const t of tasks) {
+        if (disabledGroups.has(t.groupName)) continue;
         if (this.isDue(t, marketsOpen, nowMs)) due.push({ userId: user.id, task: t });
       }
     }

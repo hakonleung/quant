@@ -1,6 +1,7 @@
 import { isValidWatchCode, type WatchMarket } from '@quant/shared';
 
 import {
+  watchGroupToggleAction,
   watchListAction,
   watchRemoveAction,
   watchUpsertAction,
@@ -53,14 +54,15 @@ function isWatchMarket(s: string): s is WatchMarket {
 
 export const watchCommand: CommandSpec = {
   name: 'watch',
-  summary: 'Watch tasks. Subcommands: list, add, rm.',
-  subcommands: ['list', 'add', 'rm'],
+  summary: 'Watch tasks. Subcommands: list, add, rm, group.',
+  subcommands: ['list', 'add', 'rm', 'group'],
   async run(argv, ctx) {
     const sub = argv.positional[0];
-    if (sub === undefined) return textErr('watch: missing subcommand (list/add/rm)');
+    if (sub === undefined) return textErr('watch: missing subcommand (list/add/rm/group)');
     if (sub === 'list') return runList(ctx);
     if (sub === 'add') return runAdd(ctx);
     if (sub === 'rm') return runRemove(argv, ctx);
+    if (sub === 'group') return runGroup(argv, ctx);
     return textErr(`watch: unknown subcommand ${sub}`);
   },
 };
@@ -303,6 +305,23 @@ function runAdd(ctx: Parameters<CommandSpec['run']>[1]) {
       },
     }),
   );
+}
+
+async function runGroup(
+  argv: { positional: readonly string[] },
+  ctx: Parameters<CommandSpec['run']>[1],
+) {
+  const name = argv.positional[1];
+  const state = argv.positional[2];
+  if (name === undefined || state === undefined) {
+    return textErr('usage: watch group <name> <on|off>');
+  }
+  let enabled: boolean;
+  if (state === 'on' || state === 'resume') enabled = true;
+  else if (state === 'off' || state === 'pause') enabled = false;
+  else return textErr(`watch group: state must be on/off (got ${state})`);
+  await ctx.actions.run(watchGroupToggleAction, { name, enabled }, { signal: ctx.signal });
+  return textOk(`watch group ${name} ${enabled ? 'resumed' : 'paused'}`);
 }
 
 async function runRemove(

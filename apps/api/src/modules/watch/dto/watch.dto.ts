@@ -10,13 +10,24 @@ import { z } from 'zod';
 import {
   WatchGroupCreateSchema,
   WatchGroupNameSchema,
+  WatchGroupPatchSchema,
   WatchMarketSchema,
   WatchTaskCreateSchema,
   WatchTaskPatchSchema,
 } from '@quant/shared';
 
-export { WatchGroupCreateSchema, WatchTaskCreateSchema, WatchTaskPatchSchema };
-export type { WatchGroupCreate, WatchTaskCreate, WatchTaskPatch } from '@quant/shared';
+export {
+  WatchGroupCreateSchema,
+  WatchGroupPatchSchema,
+  WatchTaskCreateSchema,
+  WatchTaskPatchSchema,
+};
+export type {
+  WatchGroupCreate,
+  WatchGroupPatch,
+  WatchTaskCreate,
+  WatchTaskPatch,
+} from '@quant/shared';
 
 export const WatchTaskParamsSchema = z
   .object({
