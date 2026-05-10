@@ -34,6 +34,7 @@ export class UsrHandler extends InstructionRegistrarBase<Args> {
     summaryCn: '显示当前用户 ID、权限与 LLM 累计消耗',
     group: 'system',
     argsSchema,
+    imAliases: ['我的', '账号', '我'],
   };
 
   constructor(

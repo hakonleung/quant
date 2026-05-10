@@ -55,6 +55,7 @@ export class SectorShowInstructionHandler extends InstructionRegistrarBase<Args>
     group: 'market',
     argsSchema,
     positional: ['id'],
+    imAliases: ['查看板块', '板块详情'],
     examples: ['sector.show s1', 'sector.show 白酒'],
   };
 

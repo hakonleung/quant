@@ -44,6 +44,7 @@ export class WatchAddInstructionHandler extends InstructionRegistrarBase<Args> {
     group: 'watch',
     argsSchema,
     positional: ['code'],
+    imAliases: ['添加自选', '加自选', '添加预警'],
     examples: ['watch.add 600519 group=daily', 'watch.add 600519 group=daily name=茅台'],
   };
 

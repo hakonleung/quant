@@ -32,6 +32,7 @@ export class SectorRefreshInstructionHandler extends InstructionRegistrarBase<Ar
     group: 'market',
     argsSchema,
     positional: ['id'],
+    imAliases: ['刷新板块', '重跑板块'],
     examples: ['sector.refresh s1'],
   };
 

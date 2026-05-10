@@ -61,6 +61,7 @@ export class SectorPublishInstructionHandler extends SectorPublishToggleBase {
     argsSchema,
     positional: ['id'],
     destructive: true,
+    imAliases: ['发布板块', '公开板块'],
     examples: ['sector.publish s1'],
   };
 }
@@ -76,6 +77,7 @@ export class SectorUnpublishInstructionHandler extends SectorPublishToggleBase {
     argsSchema,
     positional: ['id'],
     destructive: true,
+    imAliases: ['取消发布板块', '下架板块'],
     examples: ['sector.unpublish s1'],
   };
 }

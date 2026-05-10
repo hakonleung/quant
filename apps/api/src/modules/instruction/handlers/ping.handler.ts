@@ -19,6 +19,7 @@ export class PingHandler extends InstructionRegistrarBase<Args> {
     summaryCn: '延迟探测，回显参数和 traceId（调试）',
     group: 'system',
     argsSchema,
+    imAliases: ['探测', '心跳'],
   };
 
   constructor(

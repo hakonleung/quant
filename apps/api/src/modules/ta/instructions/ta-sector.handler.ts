@@ -64,6 +64,7 @@ export class TaSectorInstructionHandler extends InstructionRegistrarBase<Args> {
     requiresImConfirm: true,
     argsSchema,
     positional: ['id'],
+    imAliases: ['板块技术', '板块走势', '板块技分'],
     examples: ['ta.sector s1', 'ta.sector s1 fresh=1'],
   };
 

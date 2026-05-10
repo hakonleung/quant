@@ -71,6 +71,7 @@ export class AnalyzeSectorInstructionHandler extends InstructionRegistrarBase<Ar
     mode: 'async',
     costsCredits: true,
     requiresImConfirm: true,
+    imAliases: ['板块舆情', '板块分析', '舆情板块'],
     examples: ['analyze.sector s1', 'analyze.sector s1 fresh=1'],
   };
 

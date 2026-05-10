@@ -44,6 +44,7 @@ export class ChannelSendHandler extends InstructionRegistrarBase<Args> {
     group: 'system',
     argsSchema,
     positional: ['channel', 'text'],
+    imAliases: ['发消息', '发送消息'],
   };
 
   constructor(

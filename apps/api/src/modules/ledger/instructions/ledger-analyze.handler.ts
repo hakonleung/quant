@@ -65,6 +65,7 @@ export class LedgerAnalyzeInstructionHandler extends InstructionRegistrarBase<Ar
     argsSchema,
     mode: 'async',
     costsCredits: true,
+    imAliases: ['复盘', '账本复盘', '账本分析'],
   };
 
   constructor(

@@ -43,6 +43,7 @@ export class WebSearchInstructionHandler extends InstructionRegistrarBase<Args> 
     group: 'system',
     argsSchema,
     positional: ['q'],
+    imAliases: ['网搜', '联网搜索', '搜网'],
   };
 
   constructor(

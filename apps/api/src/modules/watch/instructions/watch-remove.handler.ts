@@ -31,6 +31,7 @@ export class WatchRemoveInstructionHandler extends InstructionRegistrarBase<Args
     group: 'watch',
     argsSchema,
     positional: ['id'],
+    imAliases: ['删除自选', '移除自选', '删除预警'],
     examples: ['watch.remove w1', 'watch.remove 2'],
   };
 

@@ -19,6 +19,7 @@ export class ChannelEchoHandler extends InstructionRegistrarBase<Args> {
     summaryCn: '回显消息至当前频道（调试）',
     group: 'system',
     argsSchema,
+    imAliases: ['回显', '回声'],
   };
 
   constructor(

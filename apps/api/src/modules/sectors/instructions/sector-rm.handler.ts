@@ -32,6 +32,7 @@ export class SectorRmInstructionHandler extends InstructionRegistrarBase<Args> {
     argsSchema,
     positional: ['id'],
     destructive: true,
+    imAliases: ['删除板块', '移除板块'],
     examples: ['sector.rm s1'],
   };
 
