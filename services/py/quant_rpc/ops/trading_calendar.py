@@ -66,9 +66,7 @@ class GetLatestTradeDayHandler:
 
         if self._result_cache is not None and self._result_cache[0] == bucket_key:
             latest = self._result_cache[1]
-            return pa.Table.from_pylist(
-                [{"trade_date": latest}], schema=_SCHEMA
-            )
+            return pa.Table.from_pylist([{"trade_date": latest}], schema=_SCHEMA)
 
         trade_days = self._fetch_calendar(today)
         if not trade_days:
@@ -96,6 +94,7 @@ class GetLatestTradeDayHandler:
             if self._calendar_cache is not None and self._calendar_cache[0] == today:
                 return self._calendar_cache[1]
             import akshare as ak  # noqa: PLC0415 — heavy import deferred
+
             try:
                 df = ak.tool_trade_date_hist_sina()
             except Exception as exc:  # noqa: BLE001 — adapter boundary

@@ -133,9 +133,7 @@ def _datetime_or_none(value: object) -> datetime | None:
     if value is None:
         return None
     if not isinstance(value, datetime):
-        raise ValueError(
-            f"financials_updated_at must be a datetime, got {type(value).__name__}"
-        )
+        raise ValueError(f"financials_updated_at must be a datetime, got {type(value).__name__}")
     if value.tzinfo is None:
         raise ValueError("financials_updated_at must be timezone-aware")
     return value
@@ -163,9 +161,7 @@ def _json_to_quarterlies(value: object) -> tuple[QuarterlyFinancials, ...]:
     if value is None or value == "":
         return ()
     if not isinstance(value, str):
-        raise ValueError(
-            f"quarterlies_json must be a string, got {type(value).__name__}"
-        )
+        raise ValueError(f"quarterlies_json must be a string, got {type(value).__name__}")
     raw = json.loads(value)
     if not isinstance(raw, list):
         raise ValueError("quarterlies_json must decode to a list")
@@ -179,9 +175,7 @@ def _json_to_quarterlies(value: object) -> tuple[QuarterlyFinancials, ...]:
                 revenue=_str_to_decimal_or_none(entry.get("revenue")),
                 operating_cost=_str_to_decimal_or_none(entry.get("operating_cost")),
                 net_profit=_str_to_decimal_or_none(entry.get("net_profit")),
-                net_profit_excl_nr=_str_to_decimal_or_none(
-                    entry.get("net_profit_excl_nr")
-                ),
+                net_profit_excl_nr=_str_to_decimal_or_none(entry.get("net_profit_excl_nr")),
             )
         )
     return tuple(out)

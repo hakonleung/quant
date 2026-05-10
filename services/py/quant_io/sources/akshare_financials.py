@@ -182,9 +182,7 @@ class AKShareFinancialsBulkSource:
             return self._gateway
         ak = lazy_import("akshare")
         if ak is None:
-            raise QuantError(
-                "SOURCE_UNAVAILABLE", "akshare package not installed"
-            )
+            raise QuantError("SOURCE_UNAVAILABLE", "akshare package not installed")
         if not isinstance(ak, _AkshareGateway):
             raise QuantError(
                 "SOURCE_UNAVAILABLE",
@@ -255,12 +253,7 @@ class AKShareFinancialsPerStockEnricher:
         gw = self._resolve_gateway()
         total_share, float_share = self._fetch_share_counts(gw, code)
         op_cost, np_excl = self._fetch_ths(gw, code)
-        if (
-            total_share is None
-            and float_share is None
-            and not op_cost
-            and not np_excl
-        ):
+        if total_share is None and float_share is None and not op_cost and not np_excl:
             return None
         return FinancialsEnrichmentDelta(
             code=code,
@@ -275,9 +268,7 @@ class AKShareFinancialsPerStockEnricher:
             return self._gateway
         ak = lazy_import("akshare")
         if ak is None:
-            raise QuantError(
-                "SOURCE_UNAVAILABLE", "akshare package not installed"
-            )
+            raise QuantError("SOURCE_UNAVAILABLE", "akshare package not installed")
         if not isinstance(ak, _AkshareGateway):
             raise QuantError(
                 "SOURCE_UNAVAILABLE",

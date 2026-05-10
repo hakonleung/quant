@@ -141,9 +141,7 @@ class DTWPatternEngine:
             cand = z_score(closes)
             d = dtw_distance(cand, ref, window=self._band)
             cand_period_return = _period_return(first, last)
-            similarity = d + _RETURN_DEVIATION_WEIGHT * abs(
-                cand_period_return - ref_period_return
-            )
+            similarity = d + _RETURN_DEVIATION_WEIGHT * abs(cand_period_return - ref_period_return)
             out.append(
                 PatternMatch(
                     code=code,

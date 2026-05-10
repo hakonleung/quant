@@ -42,7 +42,8 @@ _OP: Final[str] = "list_stock_snapshots"
 
 # Period-return windows surfaced by EQ.LIST. Order matters — the largest
 # value also doubles as the kline read depth (we slice once per code).
-RETURN_WINDOWS: Final[tuple[int, ...]] = (5, 10, 20, 90, 250)
+# 1-day window added for IM stock-table "pct" column.
+RETURN_WINDOWS: Final[tuple[int, ...]] = (1, 5, 10, 20, 90, 250)
 
 
 def _build_snapshot_schema() -> pa.Schema:
@@ -131,7 +132,7 @@ class ListStockSnapshotsHandler:
     op = _OP
     schema = STOCK_SNAPSHOT_SCHEMA
 
-    __slots__ = ("_kline", "_meta", "_full_cache", "_full_cache_at")
+    __slots__ = ("_full_cache", "_full_cache_at", "_kline", "_meta")
 
     def __init__(self, meta_service: StockMetaService, kline_service: KlineService) -> None:
         self._meta = meta_service

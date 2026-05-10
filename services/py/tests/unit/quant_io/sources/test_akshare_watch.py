@@ -107,9 +107,7 @@ class TestFetchUsWindow:
         assert end_s == "2026-05-05 22:12:00"
         assert start_s == "2026-05-05 20:42:00"
 
-    def test_window_crosses_bjt_midnight_boundary(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_window_crosses_bjt_midnight_boundary(self, monkeypatch: pytest.MonkeyPatch) -> None:
         # 2026-05-05 16:31 UTC == 2026-05-06 00:31 BJT (= 12:31 ET, mid-session).
         # 90 min earlier in BJT is 2026-05-05 23:01 — different calendar day.
         instant = datetime(2026, 5, 5, 16, 31, 0, tzinfo=UTC)
@@ -150,9 +148,7 @@ class TestFetchUsWindow:
         assert ei.value.code == "WATCH_QUOTE_UPSTREAM_FAIL"
         assert "empty minute frame for us:DEAD" in str(ei.value)
 
-    def test_returns_spot_quote_with_session_summary(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_returns_spot_quote_with_session_summary(self, monkeypatch: pytest.MonkeyPatch) -> None:
         instant = datetime(2026, 5, 5, 20, 0, 0, tzinfo=UTC)
         _freeze(monkeypatch, instant)
         gw = _FakeGateway(

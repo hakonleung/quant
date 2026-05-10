@@ -38,7 +38,9 @@ class _FakeBulkGateway:
         raise AssertionError("not used by bulk source")
 
 
-def _row(code: str, *, revenue_ytd: str | None, np_ytd: str | None, eps: str | None) -> dict[str, object]:
+def _row(
+    code: str, *, revenue_ytd: str | None, np_ytd: str | None, eps: str | None
+) -> dict[str, object]:
     return {
         "股票代码": code,
         "营业总收入": revenue_ytd,
@@ -211,8 +213,16 @@ class TestPerStockEnricher:
             },
             ths_by_code={
                 "600519": [
-                    {"报告期": "2025-09-30", "营业成本": "11000000000", "扣非净利润": "51800000000"},
-                    {"报告期": "2025-06-30", "营业成本": "10000000000", "扣非净利润": "30000000000"},
+                    {
+                        "报告期": "2025-09-30",
+                        "营业成本": "11000000000",
+                        "扣非净利润": "51800000000",
+                    },
+                    {
+                        "报告期": "2025-06-30",
+                        "营业成本": "10000000000",
+                        "扣非净利润": "30000000000",
+                    },
                 ]
             },
         )
@@ -224,15 +234,15 @@ class TestPerStockEnricher:
         assert delta.net_profit_excl_nr_by_period[date(2025, 6, 30)] == Decimal("30000000000")
 
     def test_invalid_code_returns_none(self) -> None:
-        delta = AKShareFinancialsPerStockEnricher(
-            gateway=_FakePerStockGateway()
-        ).fetch_for("BAD123")
+        delta = AKShareFinancialsPerStockEnricher(gateway=_FakePerStockGateway()).fetch_for(
+            "BAD123"
+        )
         assert delta is None
 
     def test_both_endpoints_empty_returns_none(self) -> None:
-        delta = AKShareFinancialsPerStockEnricher(
-            gateway=_FakePerStockGateway()
-        ).fetch_for("600519")
+        delta = AKShareFinancialsPerStockEnricher(gateway=_FakePerStockGateway()).fetch_for(
+            "600519"
+        )
         assert delta is None
 
     def test_partial_failure_keeps_other_endpoint(self) -> None:

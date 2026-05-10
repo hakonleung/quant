@@ -159,7 +159,9 @@ def main() -> int:
     registry.register(FindSimilarPatternsHandler(pattern_service, meta_repo, clock))
     registry.register(
         ComputeAshareBlacklistHandler(
-            meta_repo=meta_repo, kline_repo=kline_repo, clock=clock,
+            meta_repo=meta_repo,
+            kline_repo=kline_repo,
+            clock=clock,
         )
     )
     registry.register(GetLatestTradeDayHandler(clock))

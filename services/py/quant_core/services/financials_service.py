@@ -198,9 +198,13 @@ def _merge_bulk(
         # the slow-path enricher's contribution on every cron tick.
         merged = QuarterlyFinancials(
             period=incoming.period,
-            revenue=incoming.revenue if incoming.revenue is not None else (prev.revenue if prev else None),
+            revenue=incoming.revenue
+            if incoming.revenue is not None
+            else (prev.revenue if prev else None),
             operating_cost=prev.operating_cost if prev else None,
-            net_profit=incoming.net_profit if incoming.net_profit is not None else (prev.net_profit if prev else None),
+            net_profit=incoming.net_profit
+            if incoming.net_profit is not None
+            else (prev.net_profit if prev else None),
             net_profit_excl_nr=prev.net_profit_excl_nr if prev else None,
         )
         by_period[incoming.period] = merged

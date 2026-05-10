@@ -48,9 +48,7 @@ class _FakeBulk:
     def __init__(self, payloads: dict[str, FinancialsBulkPayload]) -> None:
         self._payloads = payloads
 
-    def fetch_recent(
-        self, *, today: date, quarters: int = 8
-    ) -> dict[str, FinancialsBulkPayload]:
+    def fetch_recent(self, *, today: date, quarters: int = 8) -> dict[str, FinancialsBulkPayload]:
         del today, quarters
         return dict(self._payloads)
 
@@ -107,9 +105,7 @@ class TestBulkRefresh:
                 ),
             }
         )
-        svc = FinancialsService(
-            repo=repo, clock=clock, bulk=bulk, enricher=_FakeEnricher({})
-        )
+        svc = FinancialsService(repo=repo, clock=clock, bulk=bulk, enricher=_FakeEnricher({}))
         report = svc.bulk_refresh()
         assert report.fetched_codes == 1
         assert report.updated_codes == 1
@@ -131,9 +127,7 @@ class TestBulkRefresh:
                 ),
             }
         )
-        svc = FinancialsService(
-            repo=repo, clock=clock, bulk=bulk, enricher=_FakeEnricher({})
-        )
+        svc = FinancialsService(repo=repo, clock=clock, bulk=bulk, enricher=_FakeEnricher({}))
         report = svc.bulk_refresh()
         assert report.updated_codes == 0
         assert repo.upserts == []

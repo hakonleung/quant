@@ -42,7 +42,9 @@ def _meta(
     )
 
 
-def _q(period: date, np: Decimal | None, rev: Decimal | None = None, cost: Decimal | None = None) -> QuarterlyFinancials:
+def _q(
+    period: date, np: Decimal | None, rev: Decimal | None = None, cost: Decimal | None = None
+) -> QuarterlyFinancials:
     return QuarterlyFinancials(
         period=period,
         revenue=rev,
@@ -69,7 +71,10 @@ def _eight_quarters(net_profits: list[Decimal]) -> tuple[QuarterlyFinancials, ..
         date(2025, 6, 30),
         date(2025, 9, 30),
     ]
-    return tuple(_q(p, np, rev=Decimal("100"), cost=Decimal("40")) for p, np in zip(periods, net_profits, strict=True))
+    return tuple(
+        _q(p, np, rev=Decimal("100"), cost=Decimal("40"))
+        for p, np in zip(periods, net_profits, strict=True)
+    )
 
 
 # -- mkt_cap / float_mkt_cap ----------------------------------------------
@@ -108,9 +113,7 @@ class TestMktCap:
 class TestPeTtm:
     def test_golden(self) -> None:
         meta = _meta(
-            quarterlies=_eight_quarters(
-                [Decimal(p) for p in [10, 10, 10, 10, 10, 10, 10, 10]]
-            )
+            quarterlies=_eight_quarters([Decimal(p) for p in [10, 10, 10, 10, 10, 10, 10, 10]])
         )
         d = derive_metrics(meta, Decimal("100"))
         # mkt_cap 100_000 / sum(last 4 net_profit) 40 = 2500
@@ -201,9 +204,7 @@ class TestPeg:
         # prior 4Q sum = 40, recent 4Q sum = 80 → growth_pct = 100
         # pe_ttm = 100_000 / 80 = 1250 → peg = 1250 / 100 = 12.5
         meta = _meta(
-            quarterlies=_eight_quarters(
-                [Decimal(p) for p in [10, 10, 10, 10, 20, 20, 20, 20]]
-            )
+            quarterlies=_eight_quarters([Decimal(p) for p in [10, 10, 10, 10, 20, 20, 20, 20]])
         )
         d = derive_metrics(meta, Decimal("100"))
         assert d.pe_ttm == Decimal("1250")
@@ -221,9 +222,7 @@ class TestPeg:
 
     def test_negative_growth_returns_none(self) -> None:
         meta = _meta(
-            quarterlies=_eight_quarters(
-                [Decimal(p) for p in [20, 20, 20, 20, 10, 10, 10, 10]]
-            )
+            quarterlies=_eight_quarters([Decimal(p) for p in [20, 20, 20, 20, 10, 10, 10, 10]])
         )
         d = derive_metrics(meta, Decimal("100"))
         assert d.peg is None
@@ -231,9 +230,7 @@ class TestPeg:
     def test_prior_period_loss_returns_none(self) -> None:
         # If prior TTM is ≤ 0, growth is undefined → None.
         meta = _meta(
-            quarterlies=_eight_quarters(
-                [Decimal(p) for p in [-5, -5, -5, -5, 10, 10, 10, 10]]
-            )
+            quarterlies=_eight_quarters([Decimal(p) for p in [-5, -5, -5, -5, 10, 10, 10, 10]])
         )
         d = derive_metrics(meta, Decimal("100"))
         assert d.peg is None
@@ -247,7 +244,12 @@ class TestGrossMargin:
         # 4Q rev = 400, cost = 160 → margin = 0.6
         meta = _meta(
             quarterlies=tuple(
-                _q(date(2025, m, 31 if m in {3, 12} else 30), Decimal("10"), Decimal("100"), Decimal("40"))
+                _q(
+                    date(2025, m, 31 if m in {3, 12} else 30),
+                    Decimal("10"),
+                    Decimal("100"),
+                    Decimal("40"),
+                )
                 for m in [3, 6, 9, 12]
             )
         )
@@ -261,7 +263,12 @@ class TestGrossMargin:
 
     def test_missing_revenue_in_any_quarter(self) -> None:
         qs = list(
-            _q(date(2025, m, 31 if m in {3, 12} else 30), Decimal("10"), Decimal("100"), Decimal("40"))
+            _q(
+                date(2025, m, 31 if m in {3, 12} else 30),
+                Decimal("10"),
+                Decimal("100"),
+                Decimal("40"),
+            )
             for m in [3, 6, 9, 12]
         )
         qs[-1] = _q(date(2025, 12, 31), Decimal("10"), None, Decimal("40"))
