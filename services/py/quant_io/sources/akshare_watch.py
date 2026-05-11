@@ -16,6 +16,8 @@ to a warn log without taking down the whole tick.
 
 from __future__ import annotations
 
+import random
+import time
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 from typing import TYPE_CHECKING, Final, Protocol, cast, runtime_checkable
@@ -27,7 +29,7 @@ from quant_core.errors import QuantError
 from quant_io.sources._common import lazy_import
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable
+    from collections.abc import Callable, Iterable
 
 
 _NAME: Final[str] = "akshare_watch"
@@ -36,6 +38,53 @@ _NAME: Final[str] = "akshare_watch"
 # silently returns an empty frame when the (start_date, end_date)
 # window doesn't overlap any BJT-stamped bar.
 _BJT: Final[ZoneInfo] = ZoneInfo("Asia/Shanghai")
+# US minute history window. We only need the most recent bar plus a buffer
+# for early-tick delays; 10 min is plenty and minimises both the upstream
+# payload size and the surface area for `Connection aborted` mid-stream.
+_US_WINDOW_MINUTES: Final[int] = 10
+# One quick retry for transient transport failures (Connection aborted /
+# ProxyError / ChunkedEncodingError). Timeouts are NOT retried — they
+# already burnt the per-tick budget; the next 3s tick will retry.
+_TRANSPORT_RETRY_DELAY_MS: Final[int] = 1000
+_TRANSPORT_RETRY_JITTER_MS: Final[int] = 100
+
+# Exception-class-name allowlists. We match by `__name__` walking the MRO
+# so we don't have to hard-depend on `requests` (akshare's HTTP layer is
+# an implementation detail). Names cover the requests / urllib3 families
+# we have actually seen in production.
+_TRANSPORT_EXC_NAMES: Final[frozenset[str]] = frozenset(
+    {
+        "ConnectionError",
+        "ConnectionResetError",
+        "ConnectionAbortedError",
+        "ProxyError",
+        "ChunkedEncodingError",
+        "ProtocolError",
+        "RemoteDisconnected",
+        "IncompleteRead",
+        "ContentDecodingError",
+    }
+)
+_TIMEOUT_EXC_NAMES: Final[frozenset[str]] = frozenset(
+    {"Timeout", "ReadTimeout", "ConnectTimeout", "ReadTimeoutError"}
+)
+
+
+def _classify_exc(exc: BaseException) -> str:
+    """Return one of ``"transport" | "timeout" | "other"`` for routing.
+
+    Walks the MRO so subclasses (e.g. ``requests.exceptions.ProxyError``
+    → ``ConnectionError``) still match. ``transport`` is the only class
+    we retry inline; the NestJS scheduler trips its per-market cooldown
+    on the same flag.
+    """
+    for cls in type(exc).__mro__:
+        name = cls.__name__
+        if name in _TRANSPORT_EXC_NAMES:
+            return "transport"
+        if name in _TIMEOUT_EXC_NAMES:
+            return "timeout"
+    return "other"
 
 
 @runtime_checkable
@@ -117,11 +166,68 @@ def _decimal_or_zero(v: object, *, label: str) -> Decimal:
 class AKShareWatchSource:
     """Implements both :class:`WatchQuoteSource` and :class:`UniverseSource`."""
 
-    __slots__ = ("_ak", "_prev_close_cache")
+    __slots__ = ("_ak", "_jitter", "_prev_close_cache", "_sleep")
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        *,
+        sleep: Callable[[float], None] | None = None,
+        jitter: Callable[[float, float], float] | None = None,
+    ) -> None:
         self._ak: object = lazy_import("akshare")
         self._prev_close_cache: dict[tuple[str, str], tuple[date, Decimal]] = {}
+        # Injected for testability — `_call_with_transport_retry` sleeps
+        # between attempts, and tests want to assert delays without
+        # actually waiting.
+        self._sleep: Callable[[float], None] = sleep if sleep is not None else time.sleep
+        self._jitter: Callable[[float, float], float] = (
+            jitter if jitter is not None else random.uniform
+        )
+
+    def _call_with_transport_retry(
+        self,
+        fn: Callable[[], object],
+        *,
+        market: str,
+        code: str,
+        label: str,
+    ) -> object:
+        """Run ``fn`` and retry once on transport-class failures.
+
+        On non-transport errors raises immediately; on transport errors
+        sleeps ``_TRANSPORT_RETRY_DELAY_MS`` ± jitter and retries one
+        time. The raised :class:`QuantError` always carries a
+        ``reason ∈ {"transport","timeout","other"}`` in ``details`` so
+        the NestJS scheduler can trip its per-market cooldown.
+        """
+        try:
+            return fn()
+        except Exception as exc:
+            reason = _classify_exc(exc)
+            if reason != "transport":
+                raise QuantError(
+                    "WATCH_QUOTE_UPSTREAM_FAIL",
+                    f"{_NAME}: {label}({code}) failed: {exc!r}",
+                    {"market": market, "code": code, "reason": reason},
+                ) from exc
+            delay_s = max(
+                0.0,
+                (
+                    _TRANSPORT_RETRY_DELAY_MS
+                    + self._jitter(-_TRANSPORT_RETRY_JITTER_MS, _TRANSPORT_RETRY_JITTER_MS)
+                )
+                / 1000.0,
+            )
+            self._sleep(delay_s)
+        try:
+            return fn()
+        except Exception as exc2:
+            reason2 = _classify_exc(exc2)
+            raise QuantError(
+                "WATCH_QUOTE_UPSTREAM_FAIL",
+                f"{_NAME}: {label}({code}) failed after retry: {exc2!r}",
+                {"market": market, "code": code, "reason": reason2, "retried": True},
+            ) from exc2
 
     def _require_ak(self) -> _AkshareGateway:
         if self._ak is None:
@@ -147,14 +253,12 @@ class AKShareWatchSource:
 
     def _fetch_a(self, code: str) -> SpotQuote:
         ak = self._require_ak()
-        try:
-            raw = ak.stock_bid_ask_em(symbol=code)
-        except Exception as exc:
-            raise QuantError(
-                "WATCH_QUOTE_UPSTREAM_FAIL",
-                f"{_NAME}: stock_bid_ask_em({code}) failed: {exc!r}",
-                {"market": "a", "code": code},
-            ) from exc
+        raw = self._call_with_transport_retry(
+            lambda: ak.stock_bid_ask_em(symbol=code),
+            market="a",
+            code=code,
+            label="stock_bid_ask_em",
+        )
         kv = _bid_ask_to_kv(raw)
         return SpotQuote(
             market="a",
@@ -174,14 +278,12 @@ class AKShareWatchSource:
 
     def _fetch_hk(self, code: str) -> SpotQuote:
         ak = self._require_ak()
-        try:
-            raw = ak.stock_hk_hist_min_em(symbol=code, period="1")
-        except Exception as exc:
-            raise QuantError(
-                "WATCH_QUOTE_UPSTREAM_FAIL",
-                f"{_NAME}: stock_hk_hist_min_em({code}) failed: {exc!r}",
-                {"market": "hk", "code": code},
-            ) from exc
+        raw = self._call_with_transport_retry(
+            lambda: ak.stock_hk_hist_min_em(symbol=code, period="1"),
+            market="hk",
+            code=code,
+            label="stock_hk_hist_min_em",
+        )
         last, hi, lo, amount, volume = _minute_session_summary(raw, label=f"hk:{code}")
         prev_close = self._cached_prev_close(
             ("hk", code),
@@ -204,28 +306,29 @@ class AKShareWatchSource:
         # Unlike the HK variant, ``stock_us_hist_min_em`` does NOT accept a
         # ``period`` kwarg (TypeError if passed). It also returns ALL minute
         # bars of the requested window — without a bound, that's the entire
-        # available history. We only need session-level last/high/low, so a
-        # 90-minute trailing window is plenty to cover the most recent bar
-        # plus a buffer for early-tick delays.
+        # available history. We only need the most recent session-level
+        # bar, so ``_US_WINDOW_MINUTES`` (10) is enough — and a narrower
+        # window also cuts the payload size that was causing frequent
+        # ``Connection aborted`` mid-stream.
         # The upstream endpoint filters and stamps bars in BJT
         # (Asia/Shanghai), NOT ET — despite quoting US tickers. Passing
         # any other clock yields an empty frame because the BJT-stamped
         # bars don't overlap the requested window.
         end_bjt = datetime.now(_BJT)
-        start_bjt = end_bjt - timedelta(minutes=90)
+        start_bjt = end_bjt - timedelta(minutes=_US_WINDOW_MINUTES)
         fmt = "%Y-%m-%d %H:%M:%S"
-        try:
-            raw = ak.stock_us_hist_min_em(
+        start_str = start_bjt.strftime(fmt)
+        end_str = end_bjt.strftime(fmt)
+        raw = self._call_with_transport_retry(
+            lambda: ak.stock_us_hist_min_em(
                 symbol=code,
-                start_date=start_bjt.strftime(fmt),
-                end_date=end_bjt.strftime(fmt),
-            )
-        except Exception as exc:
-            raise QuantError(
-                "WATCH_QUOTE_UPSTREAM_FAIL",
-                f"{_NAME}: stock_us_hist_min_em({code}) failed: {exc!r}",
-                {"market": "us", "code": code},
-            ) from exc
+                start_date=start_str,
+                end_date=end_str,
+            ),
+            market="us",
+            code=code,
+            label="stock_us_hist_min_em",
+        )
         last, hi, lo, amount, volume = _minute_session_summary(raw, label=f"us:{code}")
         # ``stock_us_daily`` rejects the secid prefix (``105.AAPL`` ->
         # IndexError) — it only accepts the bare ticker. The minute
@@ -256,14 +359,12 @@ class AKShareWatchSource:
         cached = self._prev_close_cache.get(key)
         if cached is not None and cached[0] == today:
             return cached[1]
-        try:
-            raw = fetch()
-        except Exception as exc:
-            raise QuantError(
-                "WATCH_QUOTE_UPSTREAM_FAIL",
-                f"{_NAME}: prev_close fetch failed for {key}: {exc!r}",
-                {"market": key[0], "code": key[1]},
-            ) from exc
+        raw = self._call_with_transport_retry(
+            fetch,
+            market=key[0],
+            code=key[1],
+            label="prev_close_daily",
+        )
         records = _to_records(raw, label=f"daily:{key[0]}:{key[1]}")
         if not records:
             raise QuantError(

@@ -25,6 +25,7 @@ import {
   type OnModuleInit,
 } from '@nestjs/common';
 import {
+  QuantError,
   WATCH_TREND_WINDOW_MAX_SEC,
   newTraceId,
   type WatchMarket,
@@ -49,6 +50,77 @@ const STALE_QUOTE_MAX_MS = 30 * 60 * 1000;
 
 /** Min ±% drift of `last` from `lastHitPrice` to count as a hit. */
 const HIT_PRICE_DELTA_PCT = new Decimal('2');
+
+/**
+ * Per-market upstream-fetch concurrency. Each market gets its own pool
+ * because the akshare endpoints behind each market are different upstreams
+ * (Eastmoney spot for A, hist_min_em for HK/US) — a US outage shouldn't
+ * starve A/HK fetches.
+ */
+const MARKET_FETCH_CONCURRENCY = 8;
+
+/**
+ * Circuit-breaker base cooldown (ms) after a transport-class fetch failure.
+ * Doubles on each consecutive failure up to {@link MARKET_COOLDOWN_CAP_MS},
+ * resets to 0 (== healthy) on the first successful fetch.
+ */
+const MARKET_COOLDOWN_BASE_MS = 3_000;
+const MARKET_COOLDOWN_CAP_MS = 30_000;
+
+/** Pool over `max` concurrent `run` calls; rest queue FIFO. */
+class Semaphore {
+  private inFlight = 0;
+  private readonly queue: (() => void)[] = [];
+
+  constructor(private readonly max: number) {}
+
+  async run<T>(fn: () => Promise<T>): Promise<T> {
+    if (this.inFlight >= this.max) {
+      await new Promise<void>((resolve) => this.queue.push(resolve));
+    }
+    this.inFlight += 1;
+    try {
+      return await fn();
+    } finally {
+      this.inFlight -= 1;
+      const next = this.queue.shift();
+      if (next !== undefined) next();
+    }
+  }
+}
+
+/**
+ * Per-market transport health. Trips on `transport`-classed failures
+ * (Python side surfaces `details.reason === "transport"` via the Flight
+ * error envelope); on trip, all due tasks in that market are skipped
+ * until `cooldownUntilMs`. Doubling cooldown lets persistent upstream
+ * failures back off without a fixed bound; a single success resets.
+ */
+class MarketTransportHealth {
+  private cooldownUntilMs = 0;
+  private consecutiveTrips = 0;
+
+  isHealthy(nowMs: number): boolean {
+    return nowMs >= this.cooldownUntilMs;
+  }
+
+  trip(nowMs: number): number {
+    this.consecutiveTrips += 1;
+    const factor = Math.min(2 ** (this.consecutiveTrips - 1), MARKET_COOLDOWN_CAP_MS / MARKET_COOLDOWN_BASE_MS);
+    const delay = Math.min(MARKET_COOLDOWN_BASE_MS * factor, MARKET_COOLDOWN_CAP_MS);
+    this.cooldownUntilMs = nowMs + delay;
+    return delay;
+  }
+
+  reset(): void {
+    this.cooldownUntilMs = 0;
+    this.consecutiveTrips = 0;
+  }
+}
+
+function isTransportError(err: unknown): boolean {
+  return err instanceof QuantError && err.details['reason'] === 'transport';
+}
 
 /** Per-task in-memory intraday sample series + the day they belong to. */
 interface IntradayBuffer {
@@ -77,6 +149,20 @@ export class WatchScheduler implements OnModuleInit, OnModuleDestroy {
   private readonly hitBuffer = new Map<string, HitArgs[]>();
   /** Debounce timers for flushing each user's hit buffer. */
   private readonly flushTimers = new Map<string, NodeJS.Timeout>();
+
+  /** Per-market concurrent-fetch pool (size = {@link MARKET_FETCH_CONCURRENCY}). */
+  private readonly fetchPools: Record<WatchMarket, Semaphore> = {
+    a: new Semaphore(MARKET_FETCH_CONCURRENCY),
+    hk: new Semaphore(MARKET_FETCH_CONCURRENCY),
+    us: new Semaphore(MARKET_FETCH_CONCURRENCY),
+  };
+
+  /** Per-market circuit-breaker for transport failures. */
+  private readonly health: Record<WatchMarket, MarketTransportHealth> = {
+    a: new MarketTransportHealth(),
+    hk: new MarketTransportHealth(),
+    us: new MarketTransportHealth(),
+  };
 
   constructor(
     @Inject(WatchTaskStore) private readonly store: WatchTaskStore,
@@ -136,7 +222,30 @@ export class WatchScheduler implements OnModuleInit, OnModuleDestroy {
     };
     if (!marketsOpen.a && !marketsOpen.hk && !marketsOpen.us) return;
 
+    const due = await this.collectDue(marketsOpen, nowMs);
+    if (due.length === 0) return;
+
+    // Bound concurrency per market — different markets hit different
+    // upstream endpoints, so US misbehaviour shouldn't starve A/HK.
+    await Promise.allSettled(
+      due.map((u) =>
+        this.fetchPools[u.task.market].run(() => this.processOne(u.userId, u.task, now, nowMs)),
+      ),
+    );
+  }
+
+  /**
+   * Walk every user's tasks once; return the ones that are due and not
+   * currently in their market's transport-cooldown window. Tasks skipped
+   * by cooldown do NOT have `lastTickAt` bumped — they remain due the
+   * instant the cooldown lifts.
+   */
+  private async collectDue(
+    marketsOpen: Readonly<Record<WatchMarket, boolean>>,
+    nowMs: number,
+  ): Promise<UserTask[]> {
     const due: UserTask[] = [];
+    const skippedByMarket: Partial<Record<WatchMarket, number>> = {};
     for (const user of this.users.list()) {
       const tasks = await this.store.snapshot(user.id);
       const groups = await this.groups.list(user.id);
@@ -144,12 +253,18 @@ export class WatchScheduler implements OnModuleInit, OnModuleDestroy {
       for (const g of groups) if (!g.enabled) disabledGroups.add(g.name);
       for (const t of tasks) {
         if (disabledGroups.has(t.groupName)) continue;
-        if (this.isDue(t, marketsOpen, nowMs)) due.push({ userId: user.id, task: t });
+        if (!this.isDue(t, marketsOpen, nowMs)) continue;
+        if (!this.health[t.market].isHealthy(nowMs)) {
+          skippedByMarket[t.market] = (skippedByMarket[t.market] ?? 0) + 1;
+          continue;
+        }
+        due.push({ userId: user.id, task: t });
       }
     }
-    if (due.length === 0) return;
-
-    await Promise.allSettled(due.map((u) => this.processOne(u.userId, u.task, now, nowMs)));
+    for (const [market, count] of Object.entries(skippedByMarket)) {
+      this.logger.debug(`watch_market_cooldown market=${market} skipped=${String(count)}`);
+    }
+    return due;
   }
 
   private isDue(
@@ -201,17 +316,29 @@ export class WatchScheduler implements OnModuleInit, OnModuleDestroy {
     return buf.samples;
   }
 
-  private async processOne(
+  /**
+   * Fetch a quote, updating per-market transport health. Returns the
+   * quote DTO on success, or `null` after recording a failure (which
+   * bumps `lastTickAt` and, for transport errors, trips the breaker).
+   */
+  private async fetchWithHealth(
     userId: string,
     task: WatchTask,
+    traceId: string,
     now: Date,
     nowMs: number,
-  ): Promise<void> {
-    const traceId = newTraceId();
-    let quoteDto;
+  ): Promise<Awaited<ReturnType<WatchQuotePort['fetchOne']>> | null> {
     try {
-      quoteDto = await this.port.fetchOne(task.market, task.code, traceId);
+      const quoteDto = await this.port.fetchOne(task.market, task.code, traceId);
+      this.health[task.market].reset();
+      return quoteDto;
     } catch (err) {
+      if (isTransportError(err)) {
+        const cooldownMs = this.health[task.market].trip(nowMs);
+        this.logger.warn(
+          `watch_market_transport_trip market=${task.market} code=${task.code} cooldown_ms=${String(cooldownMs)} trace_id=${traceId}`,
+        );
+      }
       this.logger.warn(
         `watch_quote_fail user=${userId} market=${task.market} code=${task.code} trace_id=${traceId} err=${String(err)}`,
       );
@@ -219,8 +346,19 @@ export class WatchScheduler implements OnModuleInit, OnModuleDestroy {
         ...t,
         lastTickAt: now.toISOString(),
       }));
-      return;
+      return null;
     }
+  }
+
+  private async processOne(
+    userId: string,
+    task: WatchTask,
+    now: Date,
+    nowMs: number,
+  ): Promise<void> {
+    const traceId = newTraceId();
+    const quoteDto = await this.fetchWithHealth(userId, task, traceId, now, nowMs);
+    if (quoteDto === null) return;
 
     const quoteTsMs = Date.parse(quoteDto.ts);
     const ageMs = Number.isNaN(quoteTsMs) ? Number.POSITIVE_INFINITY : Math.abs(nowMs - quoteTsMs);

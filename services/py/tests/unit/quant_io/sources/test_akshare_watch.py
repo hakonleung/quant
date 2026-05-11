@@ -8,7 +8,7 @@ frame.
 
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from decimal import Decimal
 from zoneinfo import ZoneInfo
 
@@ -78,11 +78,18 @@ def _freeze(monkeypatch: pytest.MonkeyPatch, instant: datetime) -> None:
     monkeypatch.setattr(mod, "datetime", cls)
 
 
-def _make_source(gw: _FakeGateway) -> AKShareWatchSource:
+def _make_source(
+    gw: _FakeGateway,
+    *,
+    sleeps: list[float] | None = None,
+    jitter_value: float = 0.0,
+) -> AKShareWatchSource:
     src = AKShareWatchSource.__new__(AKShareWatchSource)
     # Bypass ``__init__`` (which lazy-imports akshare); seed slots directly.
     src._ak = gw
     src._prev_close_cache = {}
+    src._sleep = (lambda s: sleeps.append(s)) if sleeps is not None else (lambda _s: None)
+    src._jitter = lambda _lo, _hi: jitter_value
     return src
 
 
@@ -103,14 +110,14 @@ class TestFetchUsWindow:
         assert len(gw.minute_calls) == 1
         symbol, start_s, end_s = gw.minute_calls[0]
         assert symbol == "105.SNDK"
-        # BJT wall-clock 22:12 (and 90 minutes earlier 20:42).
+        # BJT wall-clock 22:12 (and 10 minutes earlier 22:02).
         assert end_s == "2026-05-05 22:12:00"
-        assert start_s == "2026-05-05 20:42:00"
+        assert start_s == "2026-05-05 22:02:00"
 
     def test_window_crosses_bjt_midnight_boundary(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        # 2026-05-05 16:31 UTC == 2026-05-06 00:31 BJT (= 12:31 ET, mid-session).
-        # 90 min earlier in BJT is 2026-05-05 23:01 — different calendar day.
-        instant = datetime(2026, 5, 5, 16, 31, 0, tzinfo=UTC)
+        # 2026-05-05 16:05 UTC == 2026-05-06 00:05 BJT (= 12:05 ET, mid-session).
+        # 10 min earlier in BJT is 2026-05-05 23:55 — different calendar day.
+        instant = datetime(2026, 5, 5, 16, 5, 0, tzinfo=UTC)
         _freeze(monkeypatch, instant)
         gw = _FakeGateway(minute_records=[_minute_row("1", "1", "1")])
         src = _make_source(gw)
@@ -118,8 +125,8 @@ class TestFetchUsWindow:
         src.fetch_one("us", "106.VRT")
 
         _, start_s, end_s = gw.minute_calls[0]
-        assert end_s == "2026-05-06 00:31:00"
-        assert start_s == "2026-05-05 23:01:00"
+        assert end_s == "2026-05-06 00:05:00"
+        assert start_s == "2026-05-05 23:55:00"
 
     def test_window_outside_us_dst(self, monkeypatch: pytest.MonkeyPatch) -> None:
         # BJT is fixed UTC+8 year-round (no DST). 2026-01-15 19:30 UTC == 2026-01-16 03:30 BJT.
@@ -132,7 +139,7 @@ class TestFetchUsWindow:
 
         _, start_s, end_s = gw.minute_calls[0]
         assert end_s == "2026-01-16 03:30:00"
-        assert start_s == "2026-01-16 02:00:00"
+        assert start_s == "2026-01-16 03:20:00"
 
     def test_empty_minute_frame_still_raises_quant_error(
         self, monkeypatch: pytest.MonkeyPatch
@@ -193,3 +200,154 @@ class TestFetchUsWindow:
         quote = src.fetch_one("us", "105.SNDK")
         assert captured == ["SNDK"]
         assert quote.prev_close == Decimal("98.5")
+
+
+class _ProxyError(ConnectionError):
+    """Stand-in for ``requests.exceptions.ProxyError`` — MRO inherits from
+    builtin ``ConnectionError`` so ``_classify_exc`` should still return
+    ``transport`` despite the local class name."""
+
+
+class ChunkedEncodingError(Exception):
+    """Name must match the entry in ``_TRANSPORT_EXC_NAMES`` exactly —
+    ``_classify_exc`` walks the MRO and matches by ``cls.__name__``."""
+
+
+class ReadTimeout(Exception):  # noqa: N818 — name must match `requests.exceptions.ReadTimeout`
+    """Stand-in for ``requests.exceptions.ReadTimeout``."""
+
+
+class TestClassifyExc:
+    def test_classifies_builtin_connection_error_as_transport(self) -> None:
+        assert mod._classify_exc(ConnectionAbortedError("boom")) == "transport"
+
+    def test_classifies_proxy_error_via_mro(self) -> None:
+        assert mod._classify_exc(_ProxyError("via mro")) == "transport"
+
+    def test_classifies_chunked_encoding_by_name(self) -> None:
+        assert mod._classify_exc(ChunkedEncodingError("partial")) == "transport"
+
+    def test_classifies_read_timeout(self) -> None:
+        assert mod._classify_exc(ReadTimeout("slow")) == "timeout"
+
+    def test_unknown_falls_through_to_other(self) -> None:
+        assert mod._classify_exc(ValueError("nope")) == "other"
+
+
+class _FlakyGateway(_FakeGateway):
+    """First call raises a transport-like error; subsequent calls succeed."""
+
+    def __init__(self, *, exc: BaseException, minute_records: list[dict[str, object]]) -> None:
+        super().__init__(minute_records=minute_records)
+        self._exc: BaseException | None = exc
+        self.bid_ask_calls = 0
+        self.us_minute_attempts = 0
+
+    def stock_bid_ask_em(self, symbol: str) -> object:
+        self.bid_ask_calls += 1
+        if self._exc is not None:
+            err, self._exc = self._exc, None
+            raise err
+        return [
+            {"item": "最新", "value": "10.0"},
+            {"item": "最高", "value": "10.5"},
+            {"item": "最低", "value": "9.5"},
+            {"item": "昨收", "value": "9.8"},
+            {"item": "成交额", "value": "100"},
+            {"item": "成交量", "value": "10"},
+        ]
+
+    def stock_us_hist_min_em(
+        self, symbol: str, start_date: str, end_date: str
+    ) -> list[dict[str, object]]:
+        self.us_minute_attempts += 1
+        if self._exc is not None:
+            err, self._exc = self._exc, None
+            raise err
+        return super().stock_us_hist_min_em(symbol, start_date, end_date)
+
+
+class TestTransportRetry:
+    def test_a_market_retries_once_on_transport_error_and_succeeds(self) -> None:
+        sleeps: list[float] = []
+        gw = _FlakyGateway(exc=ConnectionAbortedError("aborted"), minute_records=[])
+        src = _make_source(gw, sleeps=sleeps, jitter_value=0.0)
+
+        quote = src.fetch_one("a", "600000")
+
+        assert gw.bid_ask_calls == 2
+        assert quote.last == Decimal("10.0")
+        # Sleep delay ≈ 1.0s (jitter forced to 0 in tests).
+        assert sleeps == [1.0]
+
+    def test_us_market_retries_once_on_chunked_encoding_error(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        instant = datetime(2026, 5, 5, 20, 0, 0, tzinfo=UTC)
+        _freeze(monkeypatch, instant)
+        gw = _FlakyGateway(
+            exc=ChunkedEncodingError("short read"),
+            minute_records=[_minute_row("100.0", "101.0", "99.0")],
+        )
+        src = _make_source(gw, sleeps=[], jitter_value=0.0)
+
+        quote = src.fetch_one("us", "AAPL")
+
+        assert gw.us_minute_attempts == 2
+        assert quote.last == Decimal("100.0")
+
+    def test_does_not_retry_timeout(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        instant = datetime(2026, 5, 5, 20, 0, 0, tzinfo=UTC)
+        _freeze(monkeypatch, instant)
+        sleeps: list[float] = []
+        gw = _FlakyGateway(exc=ReadTimeout("slow"), minute_records=[])
+        src = _make_source(gw, sleeps=sleeps, jitter_value=0.0)
+
+        with pytest.raises(QuantError) as ei:
+            src.fetch_one("us", "AAPL")
+
+        assert gw.us_minute_attempts == 1  # no retry
+        assert sleeps == []  # never slept
+        assert ei.value.code == "WATCH_QUOTE_UPSTREAM_FAIL"
+        assert ei.value.details.get("reason") == "timeout"
+        assert ei.value.details.get("market") == "us"
+
+    def test_transport_error_after_retry_carries_reason(self) -> None:
+        sleeps: list[float] = []
+
+        class _AlwaysFails(_FakeGateway):
+            calls = 0
+
+            def stock_bid_ask_em(self, symbol: str) -> object:
+                type(self).calls += 1
+                raise ConnectionAbortedError("still aborted")
+
+        gw = _AlwaysFails()
+        src = _make_source(gw, sleeps=sleeps, jitter_value=0.0)
+
+        with pytest.raises(QuantError) as ei:
+            src.fetch_one("a", "600000")
+
+        assert _AlwaysFails.calls == 2  # one retry
+        assert ei.value.details.get("reason") == "transport"
+        assert ei.value.details.get("retried") is True
+
+    def test_value_error_classified_other_no_retry(self) -> None:
+        sleeps: list[float] = []
+
+        class _Bad(_FakeGateway):
+            calls = 0
+
+            def stock_bid_ask_em(self, symbol: str) -> object:
+                type(self).calls += 1
+                raise ValueError("garbage payload")
+
+        gw = _Bad()
+        src = _make_source(gw, sleeps=sleeps, jitter_value=0.0)
+
+        with pytest.raises(QuantError) as ei:
+            src.fetch_one("a", "600000")
+
+        assert _Bad.calls == 1
+        assert sleeps == []
+        assert ei.value.details.get("reason") == "other"
