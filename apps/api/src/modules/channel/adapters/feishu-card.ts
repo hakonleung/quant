@@ -143,34 +143,100 @@ function watchHitElements(summaryMd: string, condsLine: string): unknown[] {
   return elements;
 }
 
+interface HitMeta {
+  readonly market: string;
+  readonly code: string;
+  readonly name: string;
+  readonly last: string | null;
+  readonly text: string;
+}
+
+function readHits(text: string, meta: Readonly<Record<string, unknown>>): HitMeta[] {
+  const raw = meta['hits'];
+  if (Array.isArray(raw) && raw.length > 0) {
+    return raw.flatMap((entry): HitMeta[] => {
+      if (entry === null || typeof entry !== 'object') return [];
+      const r = entry as Record<string, unknown>;
+      const market = typeof r['market'] === 'string' ? r['market'] : 'a';
+      const code = typeof r['code'] === 'string' ? r['code'] : '';
+      const name = typeof r['name'] === 'string' ? r['name'] : code;
+      const last = typeof r['last'] === 'string' ? r['last'] : null;
+      const t = typeof r['text'] === 'string' ? r['text'] : '';
+      return [{ market, code, name, last, text: t }];
+    });
+  }
+  return [
+    {
+      market: metaString(meta, 'market') ?? 'a',
+      code: metaString(meta, 'code') ?? '',
+      name: metaString(meta, 'name') ?? (metaString(meta, 'code') ?? ''),
+      last: metaString(meta, 'last'),
+      text,
+    },
+  ];
+}
+
+function hitSummaryMd(hit: HitMeta): { summaryMd: string; condsLine: string; direction: Direction } {
+  const lines = hit.text.split('\n');
+  const pctLine = lines[1] ?? '';
+  const condsLine = lines[2] ?? '';
+  const direction = inferDirection(pctLine);
+  const prefix = PRICE_PREFIX[hit.market] ?? '';
+  const priceLine = hit.last !== null ? `${prefix}${hit.last}` : '';
+  const summaryMd =
+    `<font color='${DIR_TO_COLOR[direction]}'>${pctText(pctLine)}</font>` +
+    (priceLine.length > 0 ? `   ${priceLine}` : '');
+  return { summaryMd, condsLine, direction };
+}
+
 export function buildWatchHitCard(
   text: string,
   meta: Readonly<Record<string, unknown>>,
 ): FeishuV1Card {
-  const market = metaString(meta, 'market') ?? 'a';
-  const code = metaString(meta, 'code') ?? '';
-  const name = metaString(meta, 'name') ?? code;
-  const last = metaString(meta, 'last');
-  const prefix = PRICE_PREFIX[market] ?? '';
-  const priceLine = last !== null ? `${prefix}${last}` : '';
+  const hits = readHits(text, meta);
 
-  // Pull the % line (2nd line) and condition list (3rd) from the
-  // pre-rendered text payload so we don't re-implement formatting.
-  const lines = text.split('\n');
-  const pctLine = lines[1] ?? '';
-  const condsLine = lines[2] ?? '';
-  const direction = inferDirection(pctLine);
-  const summaryMd =
-    `<font color='${DIR_TO_COLOR[direction]}'>${pctText(pctLine)}</font>` +
-    (priceLine.length > 0 ? `   ${priceLine}` : '');
+  if (hits.length === 1) {
+    const hit = hits[0]!;
+    const { summaryMd, condsLine, direction } = hitSummaryMd(hit);
+    return {
+      config: { wide_screen_mode: true },
+      header: {
+        template: DIR_TO_TEMPLATE[direction],
+        title: {
+          tag: 'plain_text',
+          content: `WATCH · [${hit.market}]${hit.name} ${hit.code}`.trim(),
+        },
+      },
+      elements: watchHitElements(summaryMd, condsLine),
+    };
+  }
+
+  const elements: unknown[] = [];
+  hits.forEach((hit, idx) => {
+    if (idx > 0) elements.push({ tag: 'hr' });
+    const { summaryMd, condsLine } = hitSummaryMd(hit);
+    elements.push({
+      tag: 'div',
+      text: {
+        tag: 'lark_md',
+        content: `**[${hit.market}]${hit.name} ${hit.code}**\n${summaryMd}`,
+      },
+    });
+    if (condsLine.length > 0) {
+      elements.push({
+        tag: 'note',
+        elements: [{ tag: 'lark_md', content: stripSlackMrkdwn(condsLine) }],
+      });
+    }
+  });
 
   return {
     config: { wide_screen_mode: true },
     header: {
-      template: DIR_TO_TEMPLATE[direction],
-      title: { tag: 'plain_text', content: `WATCH · [${market}]${name} ${code}`.trim() },
+      template: 'blue',
+      title: { tag: 'plain_text', content: `WATCH · ${String(hits.length)} hits` },
     },
-    elements: watchHitElements(summaryMd, condsLine),
+    elements,
   };
 }
 

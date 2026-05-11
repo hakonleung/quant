@@ -69,14 +69,31 @@ function contextNote(text: string): unknown {
  */
 export function buildWatchHitBlocks(
   text: string,
-  _meta: Readonly<Record<string, unknown>>,
+  meta: Readonly<Record<string, unknown>>,
 ): SlackBlocks {
-  void _meta;
-  const lines = text.split('\n');
-  const titleLine = lines[0] ?? 'WATCH';
-  const body = lines.slice(1).join('\n').trim();
-  const blocks: unknown[] = [header(stripSlackMrkdwn(titleLine))];
-  if (body.length > 0) blocks.push(mrkdwnSection(body));
+  const rawHits = meta['hits'];
+  const hitTexts: string[] = Array.isArray(rawHits)
+    ? rawHits.flatMap((e): string[] => {
+        if (e === null || typeof e !== 'object') return [];
+        const t = (e as Record<string, unknown>)['text'];
+        return typeof t === 'string' ? [t] : [];
+      })
+    : [text];
+
+  if (hitTexts.length <= 1) {
+    const single = hitTexts[0] ?? text;
+    const lines = single.split('\n');
+    const titleLine = lines[0] ?? 'WATCH';
+    const body = lines.slice(1).join('\n').trim();
+    const blocks: unknown[] = [header(stripSlackMrkdwn(titleLine))];
+    if (body.length > 0) blocks.push(mrkdwnSection(body));
+    return { blocks };
+  }
+
+  const blocks: unknown[] = [header(`WATCH · ${String(hitTexts.length)} hits`)];
+  for (const hitText of hitTexts) {
+    blocks.push(mrkdwnSection(hitText));
+  }
   return { blocks };
 }
 

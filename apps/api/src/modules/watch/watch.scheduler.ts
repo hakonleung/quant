@@ -35,7 +35,7 @@ import { ChannelService } from '../channel/channel.service.js';
 import { UserStore } from '../auth/user.store.js';
 import { decimalQuoteFromDto } from './domain/decimal-mapper.js';
 import { evaluate, type IntradaySample } from './domain/evaluate.js';
-import { buildBatchPayload, type HitArgs } from './domain/format.js';
+import { buildBatchPayload, buildPayload, type HitArgs } from './domain/format.js';
 import { isMarketOpen, marketTradingDayKey } from './domain/market-hours.js';
 import { WATCH_QUOTE_PORT, type WatchQuotePort } from './domain/watch-port.js';
 import { WatchGroupStore } from './watch-group.store.js';
@@ -298,17 +298,26 @@ export class WatchScheduler implements OnModuleInit, OnModuleDestroy {
     if (hits === undefined || hits.length === 0) return;
     const traceId = newTraceId();
     const payload = buildBatchPayload(hits);
+    const hitMetas = hits.map((h) => ({
+      market: h.market,
+      code: h.code,
+      name: h.name,
+      last: h.quote.last.toString(),
+      text: buildPayload(h).text,
+    }));
     try {
       await this.channels.broadcast(
         {
           text: payload.text,
           kind: 'watch.hit',
-          meta: { userId, count: hits.length },
+          meta: { userId, hits: hitMetas },
         },
         { traceId, source: 'system' },
       );
     } catch (err) {
-      this.logger.warn(`watch_hit_flush_failed user=${userId} count=${String(hits.length)} err=${String(err)}`);
+      this.logger.warn(
+        `watch_hit_flush_failed user=${userId} count=${String(hits.length)} err=${String(err)}`,
+      );
     }
   }
 
