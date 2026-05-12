@@ -8,7 +8,10 @@ import { FrozenClock } from '../../../src/common/clock.js';
 import type { AuthConfigShape } from '../../../src/modules/auth/config/auth.config.js';
 import { LedgerCacheStore } from '../../../src/modules/ledger/ledger-cache.store.js';
 import { LedgerService } from '../../../src/modules/ledger/ledger.service.js';
-import { LedgerStore } from '../../../src/modules/ledger/ledger.store.js';
+import {
+  LedgerStore,
+  buildLedgerUserScopedStore,
+} from '../../../src/modules/ledger/ledger.store.js';
 import type { LlmService } from '../../../src/modules/llm/llm.service.js';
 
 const FROZEN = new Date('2026-05-08T00:00:00.000Z');
@@ -86,8 +89,10 @@ async function setup(seed: readonly LedgerEntry[] = []): Promise<{
     await fs.mkdir(dir, { recursive: true });
     await fs.writeFile(path.join(dir, 'entries.json'), JSON.stringify({ entries: seed }));
   }
-  const store = new LedgerStore(cfg(root));
-  const cache = new LedgerCacheStore(cfg(root));
+  const cfgVal = cfg(root);
+  const inner = buildLedgerUserScopedStore(cfgVal, { warn: () => undefined, log: () => undefined });
+  const store = new LedgerStore(inner, cfgVal);
+  const cache = new LedgerCacheStore(cfgVal);
   return { store, cache, root };
 }
 

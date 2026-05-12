@@ -5,7 +5,13 @@ import path from 'node:path';
 import type { LedgerEntry } from '@quant/shared';
 
 import type { AuthConfigShape } from '../../../src/modules/auth/config/auth.config.js';
-import { LedgerStore } from '../../../src/modules/ledger/ledger.store.js';
+import {
+  LedgerStore,
+  buildLedgerUserScopedStore,
+  type LedgerRow,
+  LEDGER_TABLE_SPEC,
+} from '../../../src/modules/ledger/ledger.store.js';
+import { InMemoryUserScopedRecordStore } from '../../fakes/in-memory-user-scoped-record.store.js';
 
 async function tmpRoot(): Promise<string> {
   return fs.mkdtemp(path.join(os.tmpdir(), 'ledger-store-'));
@@ -21,6 +27,15 @@ function cfg(dataRoot: string): AuthConfigShape {
   };
 }
 
+function makeStore(): {
+  store: LedgerStore;
+  inner: InMemoryUserScopedRecordStore<LedgerRow>;
+} {
+  const inner = new InMemoryUserScopedRecordStore<LedgerRow>(LEDGER_TABLE_SPEC);
+  const store = new LedgerStore(inner, cfg('/unused'));
+  return { store, inner };
+}
+
 const USER = 'admin';
 const fixture: readonly LedgerEntry[] = [
   { date: '2026-05-01', pnlAmount: '0', closingPosition: '100000' },
@@ -28,44 +43,39 @@ const fixture: readonly LedgerEntry[] = [
 ];
 
 describe('LedgerStore', () => {
-  it('returns an empty snapshot when entries.json is missing', async () => {
-    const root = await tmpRoot();
-    const store = new LedgerStore(cfg(root));
+  it('returns an empty snapshot when no rows exist', async () => {
+    const { store } = makeStore();
     expect(await store.list(USER)).toEqual([]);
   });
 
-  it('loads + validates an existing snapshot', async () => {
-    const root = await tmpRoot();
-    const userDir = path.join(root, 'users', USER, '_ledger');
-    await fs.mkdir(userDir, { recursive: true });
-    await fs.writeFile(path.join(userDir, 'entries.json'), JSON.stringify({ entries: fixture }));
-    const store = new LedgerStore(cfg(root));
-    expect(await store.list(USER)).toEqual(fixture);
-  });
-
-  it('falls back to empty when entries.json fails validation', async () => {
-    const root = await tmpRoot();
-    const userDir = path.join(root, 'users', USER, '_ledger');
-    await fs.mkdir(userDir, { recursive: true });
-    await fs.writeFile(path.join(userDir, 'entries.json'), JSON.stringify({ entries: 'oops' }));
-    const store = new LedgerStore(cfg(root));
-    expect(await store.list(USER)).toEqual([]);
-  });
-
-  it('replace persists atomically and updates in-memory state', async () => {
-    const root = await tmpRoot();
-    const store = new LedgerStore(cfg(root));
+  it('round-trips a fixture through the record store', async () => {
+    const { store } = makeStore();
     await store.replace(USER, fixture);
-    await store.flushNow(USER);
     expect(await store.list(USER)).toEqual(fixture);
-    const target = path.join(root, 'users', USER, '_ledger', 'entries.json');
-    const raw = JSON.parse(await fs.readFile(target, 'utf8')) as unknown;
-    expect(raw).toEqual({ entries: fixture });
+  });
+
+  it('replace persists rows in the record store', async () => {
+    const { store, inner } = makeStore();
+    await store.replace(USER, fixture);
+    const rows = await inner.list(USER, { orderBy: [{ column: 'date', dir: 'asc' }] });
+    expect(rows).toEqual([
+      { date: '2026-05-01', pnlAmount: '0', closingPosition: '100000' },
+      { date: '2026-05-02', pnlAmount: '500', closingPosition: null },
+    ]);
+  });
+
+  it('replace wipes prior rows that drop out of the new list', async () => {
+    const { store } = makeStore();
+    await store.replace(USER, fixture);
+    const slimmed: readonly LedgerEntry[] = [
+      { date: '2026-05-01', pnlAmount: '0', closingPosition: '100000' },
+    ];
+    await store.replace(USER, slimmed);
+    expect(await store.list(USER)).toEqual(slimmed);
   });
 
   it('replace rejects when earliest entry has no closingPosition', async () => {
-    const root = await tmpRoot();
-    const store = new LedgerStore(cfg(root));
+    const { store } = makeStore();
     const bad: LedgerEntry[] = [{ date: '2026-05-01', pnlAmount: '0' }];
     await expect(store.replace(USER, bad)).rejects.toMatchObject({
       code: 'LEDGER_FIRST_NEEDS_CLOSING_POSITION',
@@ -73,8 +83,7 @@ describe('LedgerStore', () => {
   });
 
   it('replace rejects on duplicate dates', async () => {
-    const root = await tmpRoot();
-    const store = new LedgerStore(cfg(root));
+    const { store } = makeStore();
     const bad: LedgerEntry[] = [
       { date: '2026-05-01', pnlAmount: '0', closingPosition: '100' },
       { date: '2026-05-01', pnlAmount: '5' },
@@ -85,10 +94,38 @@ describe('LedgerStore', () => {
   });
 
   it('isolates per-user state', async () => {
-    const root = await tmpRoot();
-    const store = new LedgerStore(cfg(root));
+    const { store } = makeStore();
     await store.replace('alice', fixture);
     expect(await store.list('bob')).toEqual([]);
     expect(await store.list('alice')).toEqual(fixture);
+  });
+
+  it('snapshot wraps list in { entries }', async () => {
+    const { store } = makeStore();
+    await store.replace(USER, fixture);
+    expect(await store.snapshot(USER)).toEqual({ entries: fixture });
+  });
+});
+
+describe('LedgerStore filesystem migration (self-healing)', () => {
+  it('imports a legacy entries.json on first access and renames it .bak', async () => {
+    const root = await tmpRoot();
+    const userDir = path.join(root, 'users', USER, '_ledger');
+    await fs.mkdir(userDir, { recursive: true });
+    await fs.writeFile(
+      path.join(userDir, 'entries.json'),
+      JSON.stringify({ entries: fixture }),
+    );
+
+    const inner = buildLedgerUserScopedStore(cfg(root), {
+      warn: () => undefined,
+      log: () => undefined,
+    });
+    const store = new LedgerStore(inner, cfg(root));
+
+    expect(await store.list(USER)).toEqual(fixture);
+    await expect(fs.access(path.join(userDir, 'entries.json'))).rejects.toBeDefined();
+    await expect(fs.access(path.join(userDir, 'entries.json.bak'))).resolves.toBeUndefined();
+    await expect(fs.stat(path.join(root, 'users', USER, 'ledger.parquet'))).resolves.toBeDefined();
   });
 });
