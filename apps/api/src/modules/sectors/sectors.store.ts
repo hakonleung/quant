@@ -1,28 +1,63 @@
 /**
- * File-backed sectors store.
+ * Shared sectors store. Backed by `RecordStore<SectorRow>` — every
+ * sector is one row `(id, payload_json)`. The in-memory `sectors`
+ * array stays the canonical query surface (sync `list*` / `findById`);
+ * parquet round-trips the whole list.
  *
- * Sectors are a *shared* resource: a single `data/sectors/sectors.json`
- * holds every user's sectors. Ownership is encoded by `createdBy` and
- * cross-user visibility by `published`. The store deliberately does not
- * partition by user — published sectors must be readable by everyone, so
- * a single file keeps the read path one stat.
+ * Why a single `payload_json` column? The `Sector` DTO has nested
+ * lists (`codes`), records (`evidence`), and AST objects (`screenPlan`,
+ * `universePlan`) — none of which benefit from columnar projection
+ * today and all of which the port can't express without `LIST<...>` /
+ * `STRUCT<...>` support. JSON-in-VARCHAR is the same shortcut used for
+ * `BlacklistStore`.
  *
- * Atomicity: `tmp + rename`. A single mutex serialises read/write.
+ * Atomicity: a single mutex serialises read/write. After every
+ * mutation we `flush()` the record store so the on-disk parquet
+ * matches the in-memory state — sectors are tiny (10s of rows) so the
+ * full rewrite is cheap.
  *
- * Lazy migration: pre-ownership records are missing `createdBy`. On first
- * load we coerce them to the synthetic admin user (`AUTH_MODE=disabled`
- * default) and `published = false`. The migrated values land back on disk
- * the next time anything writes; reads remain pure (no implicit fsync).
+ * Self-migration: on first load, if the record store is empty AND a
+ * legacy `data/sectors/sectors.json` exists, the JSON is imported and
+ * renamed `.bak`. The legacy `s{n}` id reseq + `createdBy/published`
+ * backfill from the JSON version are preserved.
  */
 
+import { promises as fs } from 'node:fs';
+import path from 'node:path';
 import { Inject, Injectable, Logger, type OnModuleInit } from '@nestjs/common';
 import { QuantError, SectorsListSchema, type Sector } from '@quant/shared';
-import { atomicWriteJson, readJsonOr } from '../watch/domain/atomic-json.js';
+import { z } from 'zod';
+
+import type {
+  RecordStore,
+  RecordTableSpec,
+} from '../../common/storage/ports/record-store.port.js';
 
 export const SECTORS_DATA_DIR = Symbol('SECTORS_DATA_DIR');
+export const SECTORS_RECORD_STORE = Symbol('SECTORS_RECORD_STORE');
 
 const LEGACY_OWNER_ID = 'admin';
 const SEQ_ID_RE = /^s(\d+)$/u;
+
+export interface SectorRow {
+  readonly id: string;
+  readonly payload_json: string;
+}
+
+export const SectorRowSchema = z.object({
+  id: z.string(),
+  payload_json: z.string(),
+});
+
+export const SECTORS_TABLE_SPEC: RecordTableSpec<SectorRow> = {
+  table: 'sectors',
+  schema: SectorRowSchema,
+  pk: (row) => row.id,
+  columns: [
+    { name: 'id', type: 'VARCHAR', nullable: false, primaryKey: true },
+    { name: 'payload_json', type: 'VARCHAR', nullable: false },
+  ],
+};
 
 @Injectable()
 export class SectorsStore implements OnModuleInit {
@@ -32,52 +67,50 @@ export class SectorsStore implements OnModuleInit {
   private loaded = false;
   private nextSeq = 1;
 
-  constructor(@Inject(SECTORS_DATA_DIR) private readonly dataDir: string) {}
+  constructor(
+    @Inject(SECTORS_RECORD_STORE) private readonly store: RecordStore<SectorRow>,
+    @Inject(SECTORS_DATA_DIR) private readonly legacyDir: string,
+  ) {}
 
   async onModuleInit(): Promise<void> {
     await this.load();
   }
 
-  private get file(): string {
-    return `${this.dataDir}/sectors.json`;
-  }
-
   async load(): Promise<void> {
     return this.withLock(async () => {
       if (this.loaded) return;
-      const raw = await readJsonOr<unknown>(this.file, []);
-      const migrated = migrateLegacy(raw);
-      const { records: reseqRecords, idMutated } = reseqIds(migrated);
-      const parsed = SectorsListSchema.safeParse(reseqRecords);
-      if (!parsed.success) {
-        this.logger.warn(`sectors.json failed validation, starting empty: ${parsed.error.message}`);
-        this.loaded = true;
+      const rows = await this.store.list({ orderBy: [{ column: 'id', dir: 'asc' }] });
+      if (rows.length === 0) {
+        const migrated = await this.migrateLegacyIfPresent();
+        if (migrated !== null) {
+          this.adoptSectors(migrated);
+          await this.persistAll();
+          this.logger.log(
+            `migrated legacy sectors.json (${String(migrated.length)} records) → record store`,
+          );
+          return;
+        }
+        this.adoptSectors([]);
         return;
       }
-      this.sectors = parsed.data;
-      this.nextSeq = computeNextSeq(this.sectors);
-      this.loaded = true;
-      if (idMutated) {
-        await atomicWriteJson(this.file, this.sectors);
-        this.logger.log(
-          `migrated sector ids to s{n}, wrote ${String(this.sectors.length)} records`,
+      const decoded = decodeRows(rows, this.logger);
+      const { records, idMutated } = reseqIds(decoded);
+      const parsed = SectorsListSchema.safeParse(records);
+      if (!parsed.success) {
+        this.logger.warn(
+          `sectors rows failed validation, starting empty: ${parsed.error.message}`,
         );
+        this.adoptSectors([]);
+        return;
       }
-      this.logger.log(`loaded ${String(this.sectors.length)} sectors`);
+      this.adoptSectors(parsed.data);
+      if (idMutated) {
+        await this.persistAll();
+        this.logger.log(`migrated sector ids to s{n}, rewrote ${String(this.sectors.length)} records`);
+      } else {
+        this.logger.log(`loaded ${String(this.sectors.length)} sectors`);
+      }
     });
-  }
-
-  /**
-   * Allocate the next `s{n}` id under the store mutex. Caller must already
-   * be inside `withLock` (use `assignNewIdAndUpsert` for the public path).
-   */
-  private allocId(): string {
-    while (this.sectors.some((s) => s.id === `s${String(this.nextSeq)}`)) {
-      this.nextSeq += 1;
-    }
-    const id = `s${String(this.nextSeq)}`;
-    this.nextSeq += 1;
-    return id;
   }
 
   list(): readonly Sector[] {
@@ -96,17 +129,9 @@ export class SectorsStore implements OnModuleInit {
     return this.sectors.find((s) => s.id === id) ?? null;
   }
 
-  /**
-   * Replace only the sectors owned by `userId`. Sectors in `incoming` that
-   * collide with another user's id are rejected as FORBIDDEN. Other users'
-   * sectors (and `published` records owned by others) pass through
-   * unchanged.
-   */
   async replaceForUser(userId: string, incoming: readonly Sector[]): Promise<readonly Sector[]> {
     return this.withLock(async () => {
       const byId = new Map(this.sectors.map((s) => [s.id, s] as const));
-      // Sectors with empty / non-`s{n}` ids are new — allocate before
-      // ownership validation so the FORBIDDEN check sees stable ids.
       const stamped: Sector[] = incoming.map((s) =>
         s.id.length > 0 && SEQ_ID_RE.test(s.id) ? s : { ...s, id: this.allocId() },
       );
@@ -118,17 +143,12 @@ export class SectorsStore implements OnModuleInit {
       for (const candidate of stamped) {
         next.push(mergeForOwner(userId, candidate, byId.get(candidate.id)));
       }
-      this.sectors = next;
-      await atomicWriteJson(this.file, this.sectors);
+      this.adoptSectors(next);
+      await this.persistAll();
       return this.sectors;
     });
   }
 
-  /**
-   * Upsert a single sector. Owner of an existing record is preserved; the
-   * caller is responsible for owner checks (use `requireOwner` first).
-   * If `sector.id` is empty / non-`s{n}` a fresh id is allocated.
-   */
   async upsert(sector: Sector): Promise<Sector> {
     return this.withLock(async () => {
       const id = sector.id.length > 0 && SEQ_ID_RE.test(sector.id) ? sector.id : this.allocId();
@@ -137,8 +157,9 @@ export class SectorsStore implements OnModuleInit {
       const next = [...this.sectors];
       if (idx >= 0) next[idx] = stamped;
       else next.push(stamped);
-      this.sectors = next;
-      await atomicWriteJson(this.file, this.sectors);
+      this.adoptSectors(next);
+      await this.store.upsert(rowFor(stamped));
+      await this.store.flush();
       return stamped;
     });
   }
@@ -149,10 +170,67 @@ export class SectorsStore implements OnModuleInit {
       if (idx < 0) return false;
       const next = [...this.sectors];
       next.splice(idx, 1);
-      this.sectors = next;
-      await atomicWriteJson(this.file, this.sectors);
+      this.adoptSectors(next);
+      await this.store.delete(id);
+      await this.store.flush();
       return true;
     });
+  }
+
+  private adoptSectors(next: readonly Sector[]): void {
+    this.sectors = next;
+    this.nextSeq = computeNextSeq(next);
+    this.loaded = true;
+  }
+
+  private async persistAll(): Promise<void> {
+    const existing = await this.store.list();
+    const targetIds = new Set(this.sectors.map((s) => s.id));
+    const stale = existing.filter((row) => !targetIds.has(row.id)).map((row) => row.id);
+    if (stale.length > 0) await this.store.deleteMany(stale);
+    if (this.sectors.length > 0) {
+      await this.store.upsertMany(this.sectors.map(rowFor));
+    }
+    await this.store.flush();
+  }
+
+  private allocId(): string {
+    while (this.sectors.some((s) => s.id === `s${String(this.nextSeq)}`)) {
+      this.nextSeq += 1;
+    }
+    const id = `s${String(this.nextSeq)}`;
+    this.nextSeq += 1;
+    return id;
+  }
+
+  private async migrateLegacyIfPresent(): Promise<readonly Sector[] | null> {
+    const legacyPath = path.join(this.legacyDir, 'sectors.json');
+    let raw: string;
+    try {
+      raw = await fs.readFile(legacyPath, 'utf8');
+    } catch {
+      return null;
+    }
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(raw);
+    } catch (err) {
+      this.logger.warn(`legacy sectors.json malformed JSON, ignoring: ${String(err)}`);
+      return null;
+    }
+    const migrated = migrateLegacy(parsed);
+    const { records } = reseqIds(migrated);
+    const result = SectorsListSchema.safeParse(records);
+    if (!result.success) {
+      this.logger.warn(`legacy sectors.json failed validation: ${result.error.message}`);
+      return null;
+    }
+    try {
+      await fs.rename(legacyPath, `${legacyPath}.bak`);
+    } catch (err) {
+      this.logger.warn(`could not rename ${legacyPath} to .bak: ${String(err)}`);
+    }
+    return result.data;
   }
 
   private async withLock<T>(fn: () => Promise<T>): Promise<T> {
@@ -162,11 +240,22 @@ export class SectorsStore implements OnModuleInit {
   }
 }
 
-/**
- * Backfill `createdBy` / `published` on records that pre-date the
- * ownership model. Operates on raw JSON before zod validation so the
- * schema can require the new fields without breaking old data files.
- */
+function rowFor(sector: Sector): SectorRow {
+  return { id: sector.id, payload_json: JSON.stringify(sector) };
+}
+
+function decodeRows(rows: readonly SectorRow[], logger: { warn: (m: string) => void }): unknown[] {
+  const out: unknown[] = [];
+  for (const row of rows) {
+    try {
+      out.push(JSON.parse(row.payload_json));
+    } catch (err) {
+      logger.warn(`sector ${row.id} payload malformed, dropping: ${String(err)}`);
+    }
+  }
+  return out;
+}
+
 function migrateLegacy(raw: unknown): unknown {
   if (!Array.isArray(raw)) return raw;
   return raw.map((item) => {
@@ -182,11 +271,6 @@ function migrateLegacy(raw: unknown): unknown {
   });
 }
 
-/**
- * Reassign any non-`s{n}` id to the next free `s{n}`, scanning records in
- * disk order (deterministic). Existing `s{n}` ids are preserved; the
- * counter steps over them so we never collide.
- */
 function isRecord(x: unknown): x is Record<string, unknown> {
   return typeof x === 'object' && x !== null;
 }

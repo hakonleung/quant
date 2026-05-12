@@ -12,15 +12,21 @@ import { Module } from '@nestjs/common';
 
 import { FlightClient } from '../../adapters/flight/flight-client.js';
 import { SYSTEM_CLOCK_PROVIDER } from '../../common/clock.js';
+import { DuckDBParquetRecordStore } from '../../common/storage/adapters/duckdb-parquet-record.store.js';
+import type { RecordStore } from '../../common/storage/ports/record-store.port.js';
 import { LlmModule } from '../llm/llm.module.js';
 import { SectorsModule } from '../sectors/sectors.module.js';
 import { StockMetaModule } from '../stock-meta/stock-meta.module.js';
-import { TaCacheStore } from './ta-cache.store.js';
+import {
+  TA_CACHE_TABLE_SPEC,
+  TaCacheStore,
+  type TaCacheRow,
+} from './ta-cache.store.js';
 import { TaController } from './ta.controller.js';
 import { TaInstructionHandler } from './instructions/ta.handler.js';
 import { TaSectorInstructionHandler } from './instructions/ta-sector.handler.js';
 import { TaService } from './ta.service.js';
-import { TA_DATA_DIR, TA_FLIGHT_CLIENT } from './ta.token.js';
+import { TA_CACHE_RECORD_STORE, TA_DATA_DIR, TA_FLIGHT_CLIENT } from './ta.token.js';
 
 const DEFAULT_FLIGHT_TARGET = '127.0.0.1:8815';
 const DEFAULT_DATA_DIR = '../../data';
@@ -39,6 +45,15 @@ const DEFAULT_DATA_DIR = '../../data';
     {
       provide: TA_DATA_DIR,
       useFactory: (): string => process.env['QUANT_DATA_ROOT'] ?? DEFAULT_DATA_DIR,
+    },
+    {
+      provide: TA_CACHE_RECORD_STORE,
+      inject: [TA_DATA_DIR],
+      useFactory: (dataRoot: string): RecordStore<TaCacheRow> =>
+        new DuckDBParquetRecordStore<TaCacheRow>({
+          dataRoot,
+          spec: TA_CACHE_TABLE_SPEC,
+        }),
     },
     SYSTEM_CLOCK_PROVIDER,
     TaCacheStore,

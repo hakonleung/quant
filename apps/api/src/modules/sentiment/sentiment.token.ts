@@ -1,2 +1,4 @@
 /** DI tokens for the sentiment module. */
 export const SENTIMENT_DATA_DIR = Symbol('SENTIMENT_DATA_DIR');
+export const SENTIMENT_STOCK_RECORD_STORE = Symbol('SENTIMENT_STOCK_RECORD_STORE');
+export const SENTIMENT_MARKET_RECORD_STORE = Symbol('SENTIMENT_MARKET_RECORD_STORE');

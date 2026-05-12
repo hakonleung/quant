@@ -7,8 +7,13 @@ import type { Sector } from '@quant/shared';
 
 import { SectorsController } from '../../../src/modules/sectors/sectors.controller.js';
 import { SectorsService } from '../../../src/modules/sectors/sectors.service.js';
-import { SectorsStore } from '../../../src/modules/sectors/sectors.store.js';
+import {
+  SECTORS_TABLE_SPEC,
+  SectorsStore,
+  type SectorRow,
+} from '../../../src/modules/sectors/sectors.store.js';
 import { FrozenClock } from '../../../src/common/clock.js';
+import { InMemoryRecordStore } from '../../fakes/in-memory-record.store.js';
 import type { FlightClient } from '../../../src/adapters/flight/flight-client.js';
 import type { AuthenticatedUser } from '../../../src/modules/auth/request-with-user.js';
 import type { RequestWithTraceId } from '../../../src/common/trace.middleware.js';
@@ -97,8 +102,11 @@ async function freshController(
   flight: FlightClient,
 ): Promise<{ store: SectorsStore; service: SectorsService; ctrl: SectorsController }> {
   const dir = await tmpDir();
-  await fs.writeFile(path.join(dir, 'sectors.json'), JSON.stringify(initial));
-  const store = new SectorsStore(dir);
+  const record = new InMemoryRecordStore<SectorRow>(SECTORS_TABLE_SPEC);
+  for (const s of initial) {
+    await record.upsert({ id: s.id, payload_json: JSON.stringify(s) });
+  }
+  const store = new SectorsStore(record, dir);
   await store.load();
   const service = new SectorsService(store, flight, new FrozenClock(FROZEN));
   const ctrl = new SectorsController(service);
