@@ -55,8 +55,12 @@ export function renderCondition(c: WatchCondition): string {
       c.baseline === 'trend' && c.window !== undefined ? `trend(${String(c.window)}s)` : c.baseline;
     return `pct($, ${baselineLabel}) ${renderOp(c.op)} ${v.toString()}%`;
   }
-  const price = new Decimal(c.thresholdPrice);
-  return `abs($) ${renderOp(c.op)} ${price.toFixed(2)}`;
+  if (c.kind === 'abs') {
+    const price = new Decimal(c.thresholdPrice);
+    return `abs($) ${renderOp(c.op)} ${price.toFixed(2)}`;
+  }
+  const arrow = c.op === 'crossUp' ? '↑' : '↓';
+  return `${c.indicator.toUpperCase()} ${arrow} ${c.op}`;
 }
 
 export type HitArgs = {

@@ -103,8 +103,33 @@ export const WatchAbsConditionSchema = z
   })
   .strict();
 
+/**
+ * Moving-average crossover indicator. Live-MA is recomputed each tick
+ * by replacing the oldest close in the kline window with the current
+ * price:  liveMA_N = (maOfKline * N - close[d-N] + currentPrice) / N.
+ * Edge-triggered: fires only when the previous tick was on one side
+ * of its respective live-MA and the current tick is on the other side
+ * (or equal, in the firing direction).
+ *
+ * Only meaningful for A-share — non-A tasks silently skip evaluation.
+ */
+export const WatchMaIndicatorSchema = z.enum(['ma5', 'ma10', 'ma20']);
+export type WatchMaIndicator = z.infer<typeof WatchMaIndicatorSchema>;
+
+export const WatchMaConditionSchema = z
+  .object({
+    kind: z.literal('ma'),
+    indicator: WatchMaIndicatorSchema,
+    op: z.enum(['crossUp', 'crossDown']),
+  })
+  .strict();
+
 export const WatchConditionSchema = z
-  .discriminatedUnion('kind', [WatchPctConditionSchema, WatchAbsConditionSchema])
+  .discriminatedUnion('kind', [
+    WatchPctConditionSchema,
+    WatchAbsConditionSchema,
+    WatchMaConditionSchema,
+  ])
   .superRefine((c, ctx) => {
     if (c.kind !== 'pct') return;
     if (c.baseline === 'trend' && c.window === undefined) {
@@ -125,6 +150,7 @@ export const WatchConditionSchema = z
 export type WatchCondition = z.infer<typeof WatchConditionSchema>;
 export type WatchPctCondition = z.infer<typeof WatchPctConditionSchema>;
 export type WatchAbsCondition = z.infer<typeof WatchAbsConditionSchema>;
+export type WatchMaCondition = z.infer<typeof WatchMaConditionSchema>;
 
 const isoDateTime = z.string().datetime({ offset: true });
 

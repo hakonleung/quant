@@ -39,8 +39,19 @@ type WatchCondition =
       thresholdPct: string; // 带符号 Decimal-as-string
       window?: number; // 仅 baseline === 'trend' 必填，单位**秒**，1..14400 (4h)
     }
-  | { kind: 'abs'; op: 'gte' | 'lte'; thresholdPrice: string };
+  | { kind: 'abs'; op: 'gte' | 'lte'; thresholdPrice: string }
+  | { kind: 'ma'; indicator: 'ma5' | 'ma10' | 'ma20'; op: 'crossUp' | 'crossDown' };
 ```
+
+### `ma` 指标（2026-05）
+
+- 仅对 A 股生效；非 A 任务静默跳过求值。
+- 调度器在每个交易日按需从 Python `list_kline_for_code(code, n=21)` 拉取最近 21 根日线，缓存 `{ma5, ma10, ma20}` 及窗口外即将"被替换"的收盘价 `dropClose[N] = close[L-N]`（`L` 为最新一根 = 昨日）。
+- 实时 MA：`liveMA_N = (maOfKline * N - dropClose[N] + currentPrice) / N`。
+- 边沿触发：仅当**上一笔**采样在 MA 一侧、**当前**采样在另一侧（含相等的方向）才记为 hit：
+  - `crossUp`：`prev_price < prev_liveMA && curr_price >= curr_liveMA`
+  - `crossDown`：`prev_price > prev_liveMA && curr_price <= curr_liveMA`
+- 缺历史（< 21 根）/ kline ref 拉取失败 / 当日仅 1 个样本时不触发；价格门与 push 间隔等 hit 节流规则同样适用。
 
 求值用 `Decimal`，禁用 `number`（`apps/api/.../evaluate.ts`）。基线含义：
 

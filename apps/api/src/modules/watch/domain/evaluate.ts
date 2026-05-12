@@ -22,13 +22,27 @@
  */
 
 import { Decimal } from 'decimal.js';
-import type { WatchBaseline, WatchCondition } from '@quant/shared';
+import type { WatchBaseline, WatchCondition, WatchMaIndicator } from '@quant/shared';
 import type { SpotQuoteDecimal } from './types.js';
 
 /** One cached intraday sample — `ts` is the quote's reported tick time. */
 export interface IntradaySample {
   readonly ts: Date;
   readonly price: Decimal;
+}
+
+/**
+ * Snapshot of yesterday's kline figures needed to compute a live MA
+ * during the current trading session. `dropClose[N]` is the close
+ * price falling out of the window when today's price replaces it —
+ * i.e. the close `N` rows back from the latest kline row, inclusive of
+ * latest. Live formula:
+ *
+ *     liveMA_N = (ma[N] * N - dropClose[N] + currentPrice) / N
+ */
+export interface KlineMaRef {
+  readonly ma: Readonly<Record<WatchMaIndicator, Decimal>>;
+  readonly dropClose: Readonly<Record<WatchMaIndicator, Decimal>>;
 }
 
 export interface EvalContext {
@@ -39,6 +53,23 @@ export interface EvalContext {
    * disables the `trend` baseline (the condition will not fire).
    */
   readonly intradaySamples: readonly IntradaySample[];
+  /**
+   * Yesterday's MA snapshot, present only for A-share tasks with a
+   * fresh kline cache. Required for `kind: 'ma'` conditions; absent
+   * means MA conditions silently do not fire.
+   */
+  readonly klineMaRef?: KlineMaRef | null;
+}
+
+const MA_WINDOW: Readonly<Record<WatchMaIndicator, number>> = {
+  ma5: 5,
+  ma10: 10,
+  ma20: 20,
+};
+
+function liveMa(ref: KlineMaRef, indicator: WatchMaIndicator, price: Decimal): Decimal {
+  const n = MA_WINDOW[indicator];
+  return ref.ma[indicator].mul(n).minus(ref.dropClose[indicator]).plus(price).div(n);
 }
 
 export function resolveBaseline(
@@ -85,6 +116,24 @@ export function evaluate(ctx: EvalContext, c: WatchCondition): boolean {
     const thr = new Decimal(c.thresholdPct);
     return c.op === 'gte' ? deltaPct.gte(thr) : deltaPct.lte(thr);
   }
-  const thr = new Decimal(c.thresholdPrice);
-  return c.op === 'gte' ? ctx.quote.last.gte(thr) : ctx.quote.last.lte(thr);
+  if (c.kind === 'abs') {
+    const thr = new Decimal(c.thresholdPrice);
+    return c.op === 'gte' ? ctx.quote.last.gte(thr) : ctx.quote.last.lte(thr);
+  }
+  // kind === 'ma' — edge-triggered crossover. Needs a fresh kline
+  // reference and at least one prior intraday sample to detect the
+  // transition; non-A markets / cold start silently no-op.
+  const ref = ctx.klineMaRef;
+  if (ref === undefined || ref === null) return false;
+  const n = ctx.intradaySamples.length;
+  if (n < 2) return false;
+  const curr = ctx.intradaySamples[n - 1];
+  const prev = ctx.intradaySamples[n - 2];
+  if (curr === undefined || prev === undefined) return false;
+  const currMa = liveMa(ref, c.indicator, curr.price);
+  const prevMa = liveMa(ref, c.indicator, prev.price);
+  if (c.op === 'crossUp') {
+    return prev.price.lt(prevMa) && curr.price.gte(currMa);
+  }
+  return prev.price.gt(prevMa) && curr.price.lte(currMa);
 }

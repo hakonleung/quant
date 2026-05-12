@@ -14,7 +14,8 @@ import { Module } from '@nestjs/common';
 import { FlightClient } from '../../adapters/flight/flight-client.js';
 import { ChannelModule } from '../channel/channel.module.js';
 import { StockMetaModule } from '../stock-meta/stock-meta.module.js';
-import { WATCH_QUOTE_PORT } from './domain/watch-port.js';
+import { WATCH_KLINE_REF_PORT, WATCH_QUOTE_PORT } from './domain/watch-port.js';
+import { FlightKlineRefAdapter } from './flight-kline-ref.adapter.js';
 import { FlightWatchAdapter, WATCH_FLIGHT_CLIENT } from './flight-watch.adapter.js';
 import { WatchGroupStore } from './watch-group.store.js';
 import { WatchTaskStore } from './watch-task.store.js';
@@ -42,6 +43,7 @@ const DEFAULT_FLIGHT_TARGET = '127.0.0.1:8815';
       },
     },
     { provide: WATCH_QUOTE_PORT, useClass: FlightWatchAdapter },
+    { provide: WATCH_KLINE_REF_PORT, useClass: FlightKlineRefAdapter },
     WatchTaskStore,
     WatchGroupStore,
     WatchUniverseStore,

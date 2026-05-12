@@ -79,11 +79,19 @@ function describeCondition(
       value: `${c.thresholdPct}%`,
     };
   }
+  if (c.kind === 'abs') {
+    return {
+      kind: 'abs',
+      base: '—',
+      op: c.op === 'gte' ? '≥' : '≤',
+      value: `${c.thresholdPrice} ${currencySuffix(market)}`,
+    };
+  }
   return {
-    kind: 'abs',
-    base: '—',
-    op: c.op === 'gte' ? '≥' : '≤',
-    value: `${c.thresholdPrice} ${currencySuffix(market)}`,
+    kind: 'ma',
+    base: c.indicator,
+    op: c.op === 'crossUp' ? '↑' : '↓',
+    value: c.op,
   };
 }
 

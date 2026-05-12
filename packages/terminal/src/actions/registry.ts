@@ -152,9 +152,18 @@ const watchAbsConditionSchema = z
   })
   .strict();
 
+const watchMaConditionSchema = z
+  .object({
+    kind: z.literal('ma'),
+    indicator: z.enum(['ma5', 'ma10', 'ma20']),
+    op: z.enum(['crossUp', 'crossDown']),
+  })
+  .strict();
+
 const watchConditionSchema = z.discriminatedUnion('kind', [
   watchPctConditionSchema,
   watchAbsConditionSchema,
+  watchMaConditionSchema,
 ]);
 export type WatchCondition = z.infer<typeof watchConditionSchema>;
 

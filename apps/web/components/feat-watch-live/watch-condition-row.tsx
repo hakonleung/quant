@@ -8,16 +8,19 @@
  */
 
 import { Box, Flex, Input, Text } from '@chakra-ui/react';
-import type { WatchBaseline } from '@quant/shared';
+import type { WatchBaseline, WatchMaIndicator } from '@quant/shared';
 
 import {
   BASELINE_ITEMS,
   describeCondition,
   INITIAL_CONDITION,
   KIND_ITEMS,
+  MA_INDICATOR_ITEMS,
+  MA_OP_ITEMS,
   OP_ITEMS,
   type ConditionDraft,
   type Kind,
+  type MaOp,
   type Op,
 } from '../../lib/fp/watch-add-fp.js';
 import { MonoButton } from '../ui/mono-button.js';
@@ -116,8 +119,10 @@ function ConditionRow({
       />
       {cond.kind === 'pct' ? (
         <PctConditionFields cond={cond} onChange={onChange} />
-      ) : (
+      ) : cond.kind === 'abs' ? (
         <AbsConditionFields cond={cond} onChange={onChange} />
+      ) : (
+        <MaConditionFields cond={cond} onChange={onChange} />
       )}
       <Box ml="auto">
         <MonoButton
@@ -181,6 +186,32 @@ function PctConditionFields({ cond, onChange }: FieldsProps): React.ReactElement
           onChange({ ...cond, thresholdPct: v });
         }}
       />
+    </>
+  );
+}
+
+function MaConditionFields({ cond, onChange }: FieldsProps): React.ReactElement {
+  return (
+    <>
+      <TermSelect<WatchMaIndicator>
+        value={cond.maIndicator}
+        items={MA_INDICATOR_ITEMS}
+        width="80px"
+        onChange={(v): void => {
+          onChange({ ...cond, maIndicator: v });
+        }}
+      />
+      <TermSelect<MaOp>
+        value={cond.maOp}
+        items={MA_OP_ITEMS}
+        width="120px"
+        onChange={(v): void => {
+          onChange({ ...cond, maOp: v });
+        }}
+      />
+      <Text color="term.ink3" fontSize="11px">
+        A-share only
+      </Text>
     </>
   );
 }

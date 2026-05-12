@@ -15,20 +15,24 @@ import {
   WatchTaskCreateSchema,
   type WatchBaseline,
   type WatchCondition,
+  type WatchMaIndicator,
   type WatchMarket,
   type WatchTaskCreate,
 } from '@quant/shared';
 
 import { z } from 'zod';
 
-export const KindSchema = z.enum(['pct', 'abs']);
+export const KindSchema = z.enum(['pct', 'abs', 'ma']);
 export type Kind = z.infer<typeof KindSchema>;
 export const OpSchema = z.enum(['gte', 'lte']);
 export type Op = z.infer<typeof OpSchema>;
+export const MaOpSchema = z.enum(['crossUp', 'crossDown']);
+export type MaOp = z.infer<typeof MaOpSchema>;
 
 export const KIND_ITEMS = [
   { label: 'pct', value: 'pct' as const },
   { label: 'abs', value: 'abs' as const },
+  { label: 'ma', value: 'ma' as const },
 ];
 export const BASELINE_ITEMS = [
   { label: 'prev_close', value: 'prev_close' as const },
@@ -40,6 +44,15 @@ export const BASELINE_ITEMS = [
 export const OP_ITEMS = [
   { label: '≥', value: 'gte' as const },
   { label: '≤', value: 'lte' as const },
+];
+export const MA_INDICATOR_ITEMS = [
+  { label: 'MA5', value: 'ma5' as const },
+  { label: 'MA10', value: 'ma10' as const },
+  { label: 'MA20', value: 'ma20' as const },
+];
+export const MA_OP_ITEMS = [
+  { label: '↑ crossUp', value: 'crossUp' as const },
+  { label: '↓ crossDown', value: 'crossDown' as const },
 ];
 
 /** Default trend lookback in **seconds** (1 minute). */
@@ -61,6 +74,10 @@ export interface ConditionDraft {
   readonly thresholdPrice: string;
   /** Trend lookback in **seconds**; only used when baseline === 'trend'. */
   readonly windowSec: string;
+  /** Only used when kind === 'ma'. */
+  readonly maIndicator: WatchMaIndicator;
+  /** Only used when kind === 'ma'. */
+  readonly maOp: MaOp;
 }
 
 export interface AddFormState {
@@ -84,6 +101,8 @@ export const INITIAL_CONDITION: ConditionDraft = {
   op: 'gte',
   thresholdPrice: '100',
   windowSec: String(DEFAULT_TREND_WINDOW_SEC),
+  maIndicator: 'ma5',
+  maOp: 'crossUp',
 };
 
 export const INITIAL_STATE: AddFormState = {
@@ -121,15 +140,31 @@ export function fromCondition(c: WatchCondition): ConditionDraft {
       op: c.op,
       thresholdPrice: '100',
       windowSec: c.window === undefined ? String(DEFAULT_TREND_WINDOW_SEC) : String(c.window),
+      maIndicator: 'ma5',
+      maOp: 'crossUp',
+    };
+  }
+  if (c.kind === 'abs') {
+    return {
+      kind: 'abs',
+      baseline: 'prev_close',
+      thresholdPct: '5',
+      op: c.op,
+      thresholdPrice: c.thresholdPrice,
+      windowSec: String(DEFAULT_TREND_WINDOW_SEC),
+      maIndicator: 'ma5',
+      maOp: 'crossUp',
     };
   }
   return {
-    kind: 'abs',
+    kind: 'ma',
     baseline: 'prev_close',
     thresholdPct: '5',
-    op: c.op,
-    thresholdPrice: c.thresholdPrice,
+    op: 'gte',
+    thresholdPrice: '100',
     windowSec: String(DEFAULT_TREND_WINDOW_SEC),
+    maIndicator: c.indicator,
+    maOp: c.op,
   };
 }
 
@@ -164,7 +199,10 @@ export function toCondition(c: ConditionDraft): WatchCondition {
     }
     return { kind: 'pct', baseline: c.baseline, op: c.op, thresholdPct: c.thresholdPct };
   }
-  return { kind: 'abs', op: c.op, thresholdPrice: c.thresholdPrice };
+  if (c.kind === 'abs') {
+    return { kind: 'abs', op: c.op, thresholdPrice: c.thresholdPrice };
+  }
+  return { kind: 'ma', indicator: c.maIndicator, op: c.maOp };
 }
 
 export function buildDraft(stock: PickedStock, groupName: string): WatchTaskCreate {
@@ -180,6 +218,10 @@ export function buildDraft(stock: PickedStock, groupName: string): WatchTaskCrea
  *  the read-only "existing group" badge to show what the group's
  *  conditions are without the user having to expand them. */
 export function describeCondition(c: ConditionDraft): string {
+  if (c.kind === 'ma') {
+    const arrow = c.maOp === 'crossUp' ? '↑' : '↓';
+    return `${c.maIndicator.toUpperCase()} ${arrow} ${c.maOp} (A-share only)`;
+  }
   const op = c.op === 'gte' ? '≥' : '≤';
   if (c.kind === 'pct') {
     if (c.baseline === 'trend') {

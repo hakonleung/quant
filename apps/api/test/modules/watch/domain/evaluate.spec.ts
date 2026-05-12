@@ -1,5 +1,9 @@
 import { Decimal } from 'decimal.js';
-import { evaluate, type IntradaySample } from '../../../../src/modules/watch/domain/evaluate.js';
+import {
+  evaluate,
+  type IntradaySample,
+  type KlineMaRef,
+} from '../../../../src/modules/watch/domain/evaluate.js';
 import type { SpotQuoteDecimal } from '../../../../src/modules/watch/domain/types.js';
 
 const baseQuote: SpotQuoteDecimal = {
@@ -168,6 +172,89 @@ describe('evaluate pct (trend baseline — window in seconds)', () => {
       // window=0 is rejected by zod (.min(1)) but the resolver still
       // behaves correctly if it ever escapes — covers the lower edge.
     ).toBe(true);
+  });
+});
+
+describe('evaluate ma (crossover)', () => {
+  // Construct a ref where yesterday's ma5 = 10 and the close falling
+  // out of the window is 10. liveMa5 = (10*5 - 10 + price) / 5 =
+  // (40 + price) / 5  → equals price when price = 10.
+  // For price < 10: liveMa > price (price below MA).
+  // For price > 10: liveMa < price (price above MA).
+  const ref: KlineMaRef = {
+    ma: {
+      ma5: new Decimal('10'),
+      ma10: new Decimal('10'),
+      ma20: new Decimal('10'),
+    },
+    dropClose: {
+      ma5: new Decimal('10'),
+      ma10: new Decimal('10'),
+      ma20: new Decimal('10'),
+    },
+  };
+  const makeQuote = (last: string): SpotQuoteDecimal => ({ ...baseQuote, last: new Decimal(last) });
+
+  it('crossUp fires when prev was below MA and curr is at/above MA', () => {
+    const samples: IntradaySample[] = [
+      sample('2026-05-04T01:29:30Z', '9.9'),
+      sample('2026-05-04T01:30:00Z', '10.05'),
+    ];
+    expect(
+      evaluate(
+        { quote: makeQuote('10.05'), intradaySamples: samples, klineMaRef: ref },
+        { kind: 'ma', indicator: 'ma5', op: 'crossUp' },
+      ),
+    ).toBe(true);
+  });
+
+  it('crossUp does not fire when prev was already above MA', () => {
+    const samples: IntradaySample[] = [
+      sample('2026-05-04T01:29:30Z', '10.1'),
+      sample('2026-05-04T01:30:00Z', '10.2'),
+    ];
+    expect(
+      evaluate(
+        { quote: makeQuote('10.2'), intradaySamples: samples, klineMaRef: ref },
+        { kind: 'ma', indicator: 'ma5', op: 'crossUp' },
+      ),
+    ).toBe(false);
+  });
+
+  it('crossDown fires when prev was above MA and curr is at/below MA', () => {
+    const samples: IntradaySample[] = [
+      sample('2026-05-04T01:29:30Z', '10.1'),
+      sample('2026-05-04T01:30:00Z', '9.95'),
+    ];
+    expect(
+      evaluate(
+        { quote: makeQuote('9.95'), intradaySamples: samples, klineMaRef: ref },
+        { kind: 'ma', indicator: 'ma5', op: 'crossDown' },
+      ),
+    ).toBe(true);
+  });
+
+  it('does not fire when klineMaRef is missing', () => {
+    const samples: IntradaySample[] = [
+      sample('2026-05-04T01:29:30Z', '9.9'),
+      sample('2026-05-04T01:30:00Z', '10.05'),
+    ];
+    expect(
+      evaluate(
+        { quote: makeQuote('10.05'), intradaySamples: samples, klineMaRef: null },
+        { kind: 'ma', indicator: 'ma5', op: 'crossUp' },
+      ),
+    ).toBe(false);
+  });
+
+  it('does not fire on the first sample of the day', () => {
+    const samples: IntradaySample[] = [sample('2026-05-04T01:30:00Z', '10.05')];
+    expect(
+      evaluate(
+        { quote: makeQuote('10.05'), intradaySamples: samples, klineMaRef: ref },
+        { kind: 'ma', indicator: 'ma5', op: 'crossUp' },
+      ),
+    ).toBe(false);
   });
 });
 

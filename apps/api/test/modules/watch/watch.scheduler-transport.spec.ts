@@ -146,6 +146,7 @@ function newScheduler(
     store,
     groups,
     port,
+    { loadMaRef: async () => null },
     notifier as unknown as ChannelService,
     users as unknown as UserStore,
   );

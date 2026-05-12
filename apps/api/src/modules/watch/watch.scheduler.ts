@@ -35,10 +35,19 @@ import { Decimal } from 'decimal.js';
 import { ChannelService } from '../channel/channel.service.js';
 import { UserStore } from '../auth/user.store.js';
 import { decimalQuoteFromDto } from './domain/decimal-mapper.js';
-import { evaluate, type IntradaySample } from './domain/evaluate.js';
+import {
+  evaluate,
+  type IntradaySample,
+  type KlineMaRef,
+} from './domain/evaluate.js';
 import { buildBatchPayload, buildPayload, type HitArgs } from './domain/format.js';
 import { isMarketOpen, marketTradingDayKey } from './domain/market-hours.js';
-import { WATCH_QUOTE_PORT, type WatchQuotePort } from './domain/watch-port.js';
+import {
+  WATCH_KLINE_REF_PORT,
+  WATCH_QUOTE_PORT,
+  type WatchKlineRefPort,
+  type WatchQuotePort,
+} from './domain/watch-port.js';
 import { WatchGroupStore } from './watch-group.store.js';
 import { WatchTaskStore } from './watch-task.store.js';
 
@@ -128,6 +137,12 @@ interface IntradayBuffer {
   samples: IntradaySample[];
 }
 
+/** Cached MA ref (per A-share code) keyed by the trading day it was loaded under. */
+interface MaRefEntry {
+  readonly day: string;
+  readonly ref: KlineMaRef | null;
+}
+
 interface UserTask {
   readonly userId: string;
   readonly task: WatchTask;
@@ -144,6 +159,16 @@ export class WatchScheduler implements OnModuleInit, OnModuleDestroy {
    * Keyed by `userId|market:code`. In-memory only.
    */
   private readonly samples = new Map<string, IntradayBuffer>();
+
+  /**
+   * MA snapshot cache for A-share codes — keyed by `code`. Lazily loaded
+   * on first MA-condition tick of each trading day; reused across users
+   * because kline data is shared. `null` ref means upstream returned
+   * insufficient history (don't fire MA conditions for this code today).
+   */
+  private readonly maRefs = new Map<string, MaRefEntry>();
+  /** In-flight MA-ref loads, dedupes concurrent fetches for the same code. */
+  private readonly maRefInFlight = new Map<string, Promise<KlineMaRef | null>>();
 
   /** Pending hits waiting to be batched, keyed by userId. */
   private readonly hitBuffer = new Map<string, HitArgs[]>();
@@ -168,6 +193,7 @@ export class WatchScheduler implements OnModuleInit, OnModuleDestroy {
     @Inject(WatchTaskStore) private readonly store: WatchTaskStore,
     @Inject(WatchGroupStore) private readonly groups: WatchGroupStore,
     @Inject(WATCH_QUOTE_PORT) private readonly port: WatchQuotePort,
+    @Inject(WATCH_KLINE_REF_PORT) private readonly klineRefPort: WatchKlineRefPort,
     @Inject(ChannelService) private readonly channels: ChannelService,
     @Inject(UserStore) private readonly users: UserStore,
   ) {}
@@ -376,8 +402,9 @@ export class WatchScheduler implements OnModuleInit, OnModuleDestroy {
     const decimalQuote = decimalQuoteFromDto(quoteDto);
     const quoteTs = new Date(quoteTsMs);
     const intradaySamples = this.updateSamples(userId, task, now, quoteTs, decimalQuote.last);
+    const klineMaRef = await this.loadMaRefIfNeeded(task, now, traceId);
     const matched = task.conditions.filter((c) =>
-      evaluate({ quote: decimalQuote, intradaySamples }, c),
+      evaluate({ quote: decimalQuote, intradaySamples, klineMaRef }, c),
     );
 
     const isHit =
@@ -457,6 +484,43 @@ export class WatchScheduler implements OnModuleInit, OnModuleDestroy {
         `watch_hit_flush_failed user=${userId} count=${String(hits.length)} err=${String(err)}`,
       );
     }
+  }
+
+  /**
+   * Load (or reuse) the A-share MA snapshot for `task.code`. Returns
+   * `null` if the task has no MA conditions, the market is non-A, or
+   * the upstream lacks history — all three are silent no-fire paths.
+   * Cached per trading day; refreshed when the day key rolls over.
+   */
+  private async loadMaRefIfNeeded(
+    task: WatchTask,
+    now: Date,
+    traceId: string,
+  ): Promise<KlineMaRef | null> {
+    if (task.market !== 'a') return null;
+    if (!task.conditions.some((c) => c.kind === 'ma')) return null;
+    const day = marketTradingDayKey(task.market, now);
+    const cached = this.maRefs.get(task.code);
+    if (cached !== undefined && cached.day === day) return cached.ref;
+    const pending = this.maRefInFlight.get(task.code);
+    if (pending !== undefined) return pending;
+    const load = (async (): Promise<KlineMaRef | null> => {
+      try {
+        const ref = await this.klineRefPort.loadMaRef(task.code, traceId);
+        this.maRefs.set(task.code, { day, ref });
+        return ref;
+      } catch (err) {
+        this.logger.warn(
+          `watch_ma_ref_fail code=${task.code} trace_id=${traceId} err=${String(err)}`,
+        );
+        this.maRefs.set(task.code, { day, ref: null });
+        return null;
+      } finally {
+        this.maRefInFlight.delete(task.code);
+      }
+    })();
+    this.maRefInFlight.set(task.code, load);
+    return load;
   }
 
   private priceTriggersHit(task: WatchTask, now: Date, last: Decimal): boolean {

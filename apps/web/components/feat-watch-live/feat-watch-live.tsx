@@ -725,6 +725,10 @@ function RowSummary({ task }: { readonly task: WatchTask }): React.ReactElement 
 }
 
 function formatCondition(c: WatchCondition): string {
+  if (c.kind === 'ma') {
+    const arrow = c.op === 'crossUp' ? '↑' : '↓';
+    return `${c.indicator.toUpperCase()} ${arrow} ${c.op}`;
+  }
   const op = c.op === 'gte' ? '≥' : '≤';
   if (c.kind === 'pct') {
     const base =
