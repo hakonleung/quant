@@ -2,10 +2,20 @@ import { Module } from '@nestjs/common';
 
 import { FlightClient } from '../../adapters/flight/flight-client.js';
 import { SYSTEM_CLOCK_PROVIDER } from '../../common/clock.js';
+import { DuckDBParquetRecordStore } from '../../common/storage/adapters/duckdb-parquet-record.store.js';
+import type { RecordStore } from '../../common/storage/ports/record-store.port.js';
 import { BlacklistController } from './blacklist.controller.js';
 import { BlacklistService } from './blacklist.service.js';
-import { BlacklistStore } from './blacklist.store.js';
-import { BLACKLIST_DATA_DIR, BLACKLIST_FLIGHT_CLIENT } from './blacklist.token.js';
+import {
+  BLACKLIST_TABLE_SPEC,
+  BlacklistStore,
+  type BlacklistRow,
+} from './blacklist.store.js';
+import {
+  BLACKLIST_DATA_DIR,
+  BLACKLIST_FLIGHT_CLIENT,
+  BLACKLIST_RECORD_STORE,
+} from './blacklist.token.js';
 import { UpdateInstructionHandler } from './instructions/update.handler.js';
 
 const DEFAULT_DATA_DIR = '../../data';
@@ -24,6 +34,15 @@ const DEFAULT_FLIGHT_TARGET = '127.0.0.1:8815';
         const target = process.env['QUANT_FLIGHT_TARGET'] ?? DEFAULT_FLIGHT_TARGET;
         return new FlightClient(target);
       },
+    },
+    {
+      provide: BLACKLIST_RECORD_STORE,
+      inject: [BLACKLIST_DATA_DIR],
+      useFactory: (dataRoot: string): RecordStore<BlacklistRow> =>
+        new DuckDBParquetRecordStore<BlacklistRow>({
+          dataRoot,
+          spec: BLACKLIST_TABLE_SPEC,
+        }),
     },
     SYSTEM_CLOCK_PROVIDER,
     BlacklistStore,

@@ -6,9 +6,18 @@ import {
   BlacklistService,
   decodeDateCell,
 } from '../../../src/modules/blacklist/blacklist.service.js';
-import { BlacklistStore } from '../../../src/modules/blacklist/blacklist.store.js';
+import {
+  BLACKLIST_TABLE_SPEC,
+  BlacklistStore,
+  type BlacklistRow,
+} from '../../../src/modules/blacklist/blacklist.store.js';
 import { FrozenClock } from '../../../src/common/clock.js';
 import type { FlightClient } from '../../../src/adapters/flight/flight-client.js';
+import { InMemoryRecordStore } from '../../fakes/in-memory-record.store.js';
+
+function makeBlacklistStore(dir: string): BlacklistStore {
+  return new BlacklistStore(new InMemoryRecordStore<BlacklistRow>(BLACKLIST_TABLE_SPEC), dir);
+}
 
 interface FakeProxy {
   toJSON(): Record<string, unknown>;
@@ -73,7 +82,7 @@ describe('decodeDateCell', () => {
 describe('BlacklistService.refresh', () => {
   it('writes EMPTY_BLACKLIST codes when the Flight table is empty', async () => {
     const dir = await tmpDir();
-    const store = new BlacklistStore(dir);
+    const store = makeBlacklistStore(dir);
     await store.load();
     const svc = new BlacklistService(store, fakeFlight([]), new FrozenClock(FROZEN));
 
@@ -86,7 +95,7 @@ describe('BlacklistService.refresh', () => {
 
   it('parses code/asof/universe_size from a populated table', async () => {
     const dir = await tmpDir();
-    const store = new BlacklistStore(dir);
+    const store = makeBlacklistStore(dir);
     await store.load();
     const rows = [
       { code: '000001', asof: '2026-05-04', universe_size: 5500 },
@@ -105,7 +114,7 @@ describe('BlacklistService.refresh', () => {
 
   it('skips rows whose code is not a string', async () => {
     const dir = await tmpDir();
-    const store = new BlacklistStore(dir);
+    const store = makeBlacklistStore(dir);
     await store.load();
     const rows = [
       { code: 12345, asof: '2026-05-04', universe_size: 1 },
@@ -120,7 +129,7 @@ describe('BlacklistService.refresh', () => {
 
   it('falls back to EMPTY_BLACKLIST.asof when the first row carries an unparseable asof', async () => {
     const dir = await tmpDir();
-    const store = new BlacklistStore(dir);
+    const store = makeBlacklistStore(dir);
     await store.load();
     const rows = [{ code: '000001', asof: { weird: 'object' }, universe_size: 1 }];
     const svc = new BlacklistService(store, fakeFlight(rows), new FrozenClock(FROZEN));
@@ -133,7 +142,7 @@ describe('BlacklistService.refresh', () => {
 
   it('uses the injected clock for computedAt — never `new Date()`', async () => {
     const dir = await tmpDir();
-    const store = new BlacklistStore(dir);
+    const store = makeBlacklistStore(dir);
     await store.load();
     const a = new Date('2026-01-01T00:00:00Z');
     const b = new Date('2026-12-31T23:59:59Z');
