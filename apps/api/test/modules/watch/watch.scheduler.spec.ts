@@ -7,9 +7,28 @@ import type { ChannelOutboundRequest, ChannelOutboundResponse } from '@quant/sha
 import type { AuthConfigShape } from '../../../src/modules/auth/config/auth.config.js';
 import type { ChannelService } from '../../../src/modules/channel/channel.service.js';
 import type { UserStore, UserRecord } from '../../../src/modules/auth/user.store.js';
-import { WatchGroupStore } from '../../../src/modules/watch/watch-group.store.js';
+import {
+  buildWatchGroupUserScopedStore,
+  WatchGroupStore,
+} from '../../../src/modules/watch/watch-group.store.js';
 import { WatchScheduler } from '../../../src/modules/watch/watch.scheduler.js';
-import { WatchTaskStore } from '../../../src/modules/watch/watch-task.store.js';
+import {
+  buildWatchTaskUserScopedStore,
+  WatchTaskStore,
+} from '../../../src/modules/watch/watch-task.store.js';
+
+function makeWatchStores(cfgVal: AuthConfigShape): {
+  store: WatchTaskStore;
+  groups: WatchGroupStore;
+} {
+  const noopLog = { warn: () => undefined, log: () => undefined };
+  const taskInner = buildWatchTaskUserScopedStore(cfgVal, noopLog);
+  const groupInner = buildWatchGroupUserScopedStore(cfgVal, noopLog);
+  return {
+    store: new WatchTaskStore(taskInner, cfgVal),
+    groups: new WatchGroupStore(groupInner, cfgVal),
+  };
+}
 import type { WatchQuotePort } from '../../../src/modules/watch/domain/watch-port.js';
 
 const USER = 'admin';
@@ -145,8 +164,7 @@ async function buildEnv(seed: WatchTask): Promise<{
   root: string;
 }> {
   const root = await tmpRoot();
-  const store = new WatchTaskStore(cfg(root));
-  const groups = new WatchGroupStore(cfg(root));
+  const { store, groups } = makeWatchStores(cfg(root));
   await store.upsert(USER, seed);
   const users = new FakeUserStore([USER]);
   return { store, groups, users, root };
@@ -326,8 +344,7 @@ describe('WatchScheduler.tick', () => {
 
   it('batches two hits from same tick into one broadcast', async () => {
     const root = await tmpRoot();
-    const store = new WatchTaskStore(cfg(root));
-    const groups = new WatchGroupStore(cfg(root));
+    const { store, groups } = makeWatchStores(cfg(root));
     await store.upsert(USER, task({ code: '600000', name: '浦发银行', idx: 1 }));
     await store.upsert(USER, task({ code: '600519', name: '贵州茅台', idx: 2 }));
     const users = new FakeUserStore([USER]);

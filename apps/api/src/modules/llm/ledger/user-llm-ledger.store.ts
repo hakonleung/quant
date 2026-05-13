@@ -2,19 +2,25 @@
  * Per-user LLM ledger — append-only history of every LLM call charged
  * to that user, plus simple aggregations exposed via `/usr`.
  *
- * Backed by `UserScopedJsonStore`, so the same atomic-write + write-
- * throttle + LRU eviction guarantees apply as ledger / watch / focus.
+ * Backed by `UserScopedRecordStore<UserLlmLedgerRow>` — singleton row
+ * per user, full `{ schemaVersion, entries[] }` JSON-encoded in
+ * `payload_json`. Reads stay O(N) over the entries array; that's fine
+ * because `/usr` is the only consumer.
  *
- * Reads are O(N) over the entries array; we accept that for v1 because
- * (a) `/usr` is the only reader, and (b) per-user entries are bounded
- * by usage rates rather than cardinality. Truncation / compaction is a
- * v2 concern.
+ * Self-migration: legacy `data/users/{userId}/llm-ledger.json` is
+ * adopted on first access and renamed `.bak`.
  */
 
+import path from 'node:path';
 import { Inject, Injectable, Logger } from '@nestjs/common';
+import { z } from 'zod';
 
-import { UserScopedJsonStore } from '../../../common/user-scoped-store.js';
-import { LLM_LEDGER_DATA_DIR } from '../llm.tokens.js';
+import { FileSystemUserScopedRecordStore } from '../../../common/storage/adapters/filesystem-user-scoped-record.store.js';
+import type {
+  RecordTableSpec,
+} from '../../../common/storage/ports/record-store.port.js';
+import type { UserScopedRecordStore } from '../../../common/storage/ports/user-scoped-record-store.port.js';
+import { USER_LLM_LEDGER_USER_RECORD_STORE } from '../llm.tokens.js';
 import {
   EMPTY_USER_LLM_LEDGER,
   UserLlmLedgerSchema,
@@ -22,14 +28,51 @@ import {
   type UserLlmLedgerEntry,
 } from './user-llm-ledger.types.js';
 
-const FILE_RELATIVE = (userId: string): string => `users/${userId}/llm-ledger.json`;
+const SINGLETON_KEY = 'singleton' as const;
+
+export interface UserLlmLedgerRow {
+  readonly id: typeof SINGLETON_KEY;
+  readonly payload_json: string;
+}
+
+export const UserLlmLedgerRowSchema = z.object({
+  id: z.literal(SINGLETON_KEY),
+  payload_json: z.string(),
+});
+
+export const USER_LLM_LEDGER_TABLE_SPEC: RecordTableSpec<UserLlmLedgerRow> = {
+  table: 'user_llm_ledger',
+  schema: UserLlmLedgerRowSchema,
+  pk: (row) => row.id,
+  columns: [
+    { name: 'id', type: 'VARCHAR', nullable: false, primaryKey: true },
+    { name: 'payload_json', type: 'VARCHAR', nullable: false },
+  ],
+};
+
+function decodeLegacy(raw: unknown): readonly UserLlmLedgerRow[] {
+  const result = UserLlmLedgerSchema.safeParse(raw);
+  if (!result.success) return [];
+  return [{ id: SINGLETON_KEY, payload_json: JSON.stringify(result.data) }];
+}
+
+export function buildUserLlmLedgerUserScopedStore(
+  dataRoot: string,
+  logger: { warn: (m: string) => void; log?: (m: string) => void },
+): UserScopedRecordStore<UserLlmLedgerRow> {
+  return new FileSystemUserScopedRecordStore<UserLlmLedgerRow>({
+    dataRoot,
+    spec: USER_LLM_LEDGER_TABLE_SPEC,
+    legacyJsonPath: (uid) => path.join(dataRoot, 'users', uid, 'llm-ledger.json'),
+    legacyDecode: decodeLegacy,
+    logger,
+  });
+}
 
 export interface UserLlmLedgerSummary {
-  /** Sum across all scopes. */
   readonly totalCnyCost: number;
   readonly totalUsage: { readonly input: number; readonly output: number; readonly total: number };
   readonly callCount: number;
-  /** Per-scope breakdown — same fields as the totals. */
   readonly byScope: ReadonlyMap<
     UserLlmLedgerEntry['scope'],
     {
@@ -43,30 +86,27 @@ export interface UserLlmLedgerSummary {
 @Injectable()
 export class UserLlmLedgerStore {
   private readonly logger = new Logger(UserLlmLedgerStore.name);
-  private readonly store: UserScopedJsonStore<UserLlmLedger>;
+  private readonly mutexByUser = new Map<string, Promise<unknown>>();
 
-  constructor(@Inject(LLM_LEDGER_DATA_DIR) dataRoot: string) {
-    this.store = new UserScopedJsonStore<UserLlmLedger>(dataRoot, {
-      relativePath: FILE_RELATIVE,
-      schema: UserLlmLedgerSchema,
-      fallback: () => structuredClone(EMPTY_USER_LLM_LEDGER),
-      logger: { warn: (m: string) => this.logger.warn(m) },
-    });
+  constructor(
+    @Inject(USER_LLM_LEDGER_USER_RECORD_STORE)
+    private readonly inner: UserScopedRecordStore<UserLlmLedgerRow>,
+  ) {
+    void this.logger;
   }
 
   async append(userId: string, entry: UserLlmLedgerEntry): Promise<void> {
-    await this.store.mutate(userId, (current) => ({
+    await this.mutate(userId, (current) => ({
       schemaVersion: current.schemaVersion,
       entries: [...current.entries, entry],
     }));
   }
 
   async list(userId: string): Promise<readonly UserLlmLedgerEntry[]> {
-    const snap = await this.store.snapshot(userId);
+    const snap = await this.loadSnap(userId);
     return snap.entries;
   }
 
-  /** Aggregate over all entries from `since` (inclusive) up to now. */
   async summarize(userId: string, since: Date | null = null): Promise<UserLlmLedgerSummary> {
     const sinceIso = since === null ? null : since.toISOString();
     const entries = (await this.list(userId)).filter((e) => sinceIso === null || e.ts >= sinceIso);
@@ -74,7 +114,44 @@ export class UserLlmLedgerStore {
   }
 
   async flushNow(userId: string): Promise<void> {
-    await this.store.flushNow(userId);
+    await this.inner.flush(userId);
+  }
+
+  private async loadSnap(userId: string): Promise<UserLlmLedger> {
+    const row = await this.inner.get(userId, SINGLETON_KEY);
+    if (row === null) return structuredClone(EMPTY_USER_LLM_LEDGER);
+    try {
+      const parsed = JSON.parse(row.payload_json) as UserLlmLedger;
+      if (parsed.schemaVersion === 1 && Array.isArray(parsed.entries)) return parsed;
+    } catch {
+      // fall through
+    }
+    return structuredClone(EMPTY_USER_LLM_LEDGER);
+  }
+
+  private async mutate(
+    userId: string,
+    apply: (current: UserLlmLedger) => UserLlmLedger,
+  ): Promise<void> {
+    await this.withUserLock(userId, async () => {
+      const current = await this.loadSnap(userId);
+      const next = apply(current);
+      await this.inner.upsert(userId, {
+        id: SINGLETON_KEY,
+        payload_json: JSON.stringify(next),
+      });
+      await this.inner.flush(userId);
+    });
+  }
+
+  private async withUserLock<T>(userId: string, fn: () => Promise<T>): Promise<T> {
+    const prev = this.mutexByUser.get(userId) ?? Promise.resolve();
+    const next = prev.then(fn, fn);
+    this.mutexByUser.set(
+      userId,
+      next.catch(() => undefined),
+    );
+    return next;
   }
 }
 

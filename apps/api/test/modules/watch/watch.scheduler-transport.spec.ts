@@ -17,9 +17,28 @@ import { QuantError, type ChannelOutboundRequest, type ChannelOutboundResponse }
 import type { AuthConfigShape } from '../../../src/modules/auth/config/auth.config.js';
 import type { ChannelService } from '../../../src/modules/channel/channel.service.js';
 import type { UserStore, UserRecord } from '../../../src/modules/auth/user.store.js';
-import { WatchGroupStore } from '../../../src/modules/watch/watch-group.store.js';
+import {
+  buildWatchGroupUserScopedStore,
+  WatchGroupStore,
+} from '../../../src/modules/watch/watch-group.store.js';
 import { WatchScheduler } from '../../../src/modules/watch/watch.scheduler.js';
-import { WatchTaskStore } from '../../../src/modules/watch/watch-task.store.js';
+import {
+  buildWatchTaskUserScopedStore,
+  WatchTaskStore,
+} from '../../../src/modules/watch/watch-task.store.js';
+
+function makeWatchStores(cfgVal: AuthConfigShape): {
+  store: WatchTaskStore;
+  groups: WatchGroupStore;
+} {
+  const noopLog = { warn: () => undefined, log: () => undefined };
+  const taskInner = buildWatchTaskUserScopedStore(cfgVal, noopLog);
+  const groupInner = buildWatchGroupUserScopedStore(cfgVal, noopLog);
+  return {
+    store: new WatchTaskStore(taskInner, cfgVal),
+    groups: new WatchGroupStore(groupInner, cfgVal),
+  };
+}
 import type { WatchQuotePort } from '../../../src/modules/watch/domain/watch-port.js';
 
 const USER = 'admin';
@@ -158,11 +177,19 @@ async function buildEnv(seed: WatchTask): Promise<{
   users: FakeUserStore;
   root: string;
 }> {
-  const root = await tmpRoot();
-  const store = new WatchTaskStore(cfg(root));
-  const groups = new WatchGroupStore(cfg(root));
-  await store.upsert(USER, seed);
-  return { store, groups, users: new FakeUserStore([USER]), root };
+  // duckdb-node init uses worker threads / native I/O; with jest fake
+  // timers held over from beforeEach, those completions can be delayed
+  // unpredictably. Drop into real timers for the seed phase only.
+  jest.useRealTimers();
+  try {
+    const root = await tmpRoot();
+    const { store, groups } = makeWatchStores(cfg(root));
+    await store.upsert(USER, seed);
+    await store.flushNow(USER);
+    return { store, groups, users: new FakeUserStore([USER]), root };
+  } finally {
+    jest.useFakeTimers();
+  }
 }
 
 function transportErr(): QuantError {
@@ -237,8 +264,7 @@ describe('WatchScheduler transport/cooldown/pool', () => {
   it('caps per-market in-flight fetches at the pool size (8)', async () => {
     jest.useRealTimers();
     const root = await tmpRoot();
-    const store = new WatchTaskStore(cfg(root));
-    const groups = new WatchGroupStore(cfg(root));
+    const { store, groups } = makeWatchStores(cfg(root));
     const port = new FakeQuotePort();
     for (let i = 0; i < 12; i++) {
       await store.upsert(USER, task({ code: `AAPL${String(i)}`, idx: i + 1 }));
@@ -250,9 +276,11 @@ describe('WatchScheduler transport/cooldown/pool', () => {
     });
     const sched = newScheduler(store, groups, port, new FakeNotifier(), new FakeUserStore([USER]));
     const tickPromise = sched.tick(TICK_AT);
-    // Poll until the pool fills — fs reads in `collectDue` take an
-    // unpredictable number of microtask hops under full-suite scheduling.
-    for (let i = 0; i < 200 && port.peakInFlight < 8; i++) {
+    // Poll until the pool fills — duckdb-backed reads in `collectDue`
+    // take an unpredictable number of microtask hops under full-suite
+    // scheduling; the larger budget here was sized empirically after
+    // the storage migration.
+    for (let i = 0; i < 1000 && port.peakInFlight < 8; i++) {
       await new Promise<void>((r) => setImmediate(r));
     }
     expect(port.peakInFlight).toBe(8);
