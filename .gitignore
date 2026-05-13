@@ -63,6 +63,9 @@ data/users/
 # Regenerated on demand; never source-tracked.
 data/blacklist.json
 data/blacklist.parquet
+# Verify-storage-migration writes this file. Always reproducible from the
+# script + data/, so don't carry it in git.
+data/migration-report.md
 # Legacy JSON snapshots renamed by self-migrating stores. Once the
 # storage-unify migration is complete and verified, these can be deleted
 # from disk; the .bak suffix is also kept out of git for that interim.
