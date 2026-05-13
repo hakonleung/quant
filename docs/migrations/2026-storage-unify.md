@@ -77,6 +77,48 @@ revert a single store:
 User-scoped stores additionally need the per-user `.bak` reversion
 under `data/users/{uid}/...`.
 
+## Kline layout migration (separate from JSON退役)
+
+The legacy kline layout (`data/kline/{code}.parquet`, ~5500 files,
+`Decimal(20,4)` columns) needs an explicit conversion to the new LSM
+shape (`data/kline/{prefix}/00000000000000-main.parquet`, ≤ 40 files,
+`DOUBLE`). The conversion is **not** self-healing — the layouts share
+a parent path, so the script stages into `data/kline.new/` and the
+caller swaps directories.
+
+Run:
+
+```
+pnpm --filter @quant/api tsx scripts/import-kline-legacy.ts \
+  [--data-root /path/to/data] [--limit N]
+```
+
+- Stages every legacy `{code}.parquet` into the prefix-keyed LSM
+  layout under `data/kline.new/`.
+- Casts `Decimal(20,4)` → `DOUBLE` in-engine (no row-by-row JS).
+- Drops legacy-only columns (`open/high/low/close` non-qfq,
+  `pct_chg_qfq`, `adj_factor`); keeps only the columns the new
+  `KlineRow` shape uses.
+- Built-in verify step: counts rows per code on both sides; non-zero
+  exit code on any mismatch.
+
+Reference performance on dev hardware (M1, NVMe, 5508 files → 13
+partitions, 2.1M rows):
+
+| Step                        | Time     |
+| --------------------------- | -------- |
+| 13-partition import + write | ~1.0 s   |
+| Per-code row count verify   | < 1 s    |
+
+After a successful run, the operator manually swaps:
+
+```
+mv data/kline data/kline.bak
+mv data/kline.new data/kline
+```
+
+Rollback is the inverse `mv`.
+
 ## Production status (2026-05-13)
 
 | Store              | Migration commit | Verified by script |
