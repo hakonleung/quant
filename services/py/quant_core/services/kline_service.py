@@ -118,7 +118,7 @@ class KlineService:
 
     def sync_code(
         self, code: str, *, list_date: date | None = None, trace_id: str | None = None
-    ) -> KlineSyncReport:
+    ) -> tuple[KlineSyncReport, list[DailyBar]]:
         """Pull and persist new bars for ``code``. Idempotent.
 
         Args:
@@ -127,7 +127,12 @@ class KlineService:
             trace_id: optional correlation id propagated into log records.
 
         Returns:
-            :class:`KlineSyncReport` describing the action taken.
+            Tuple of (:class:`KlineSyncReport`, assembled bars). The bars
+            list lets the caller (Flight op handler) forward the data to
+            NestJS without a second on-disk round-trip. The bars are also
+            persisted to the Python-local cache so in-process screen /
+            pattern / blacklist services that still read via
+            :class:`KlineRepo` keep working.
 
         Raises:
             QuantError: ``SOURCE_UNAVAILABLE`` when the source fails;
@@ -137,7 +142,7 @@ class KlineService:
         end = self._today()
         floor = self._effective_floor(list_date)
         if floor > end:
-            return KlineSyncReport(code, "skip", 0, 0, None)
+            return KlineSyncReport(code, "skip", 0, 0, None), []
         last_bar = self._repo.get_last_bar(code)
         if last_bar is None:
             return self._backfill(code, floor, end, trace_id=trace_id)
@@ -165,10 +170,10 @@ class KlineService:
 
     def _backfill(
         self, code: str, start: date, end: date, *, trace_id: str | None = None
-    ) -> KlineSyncReport:
+    ) -> tuple[KlineSyncReport, list[DailyBar]]:
         raw_bars, factors = self._fetch_pair(code, start, end)
         if not raw_bars:
-            return KlineSyncReport(code, "backfill", 0, 0, None)
+            return KlineSyncReport(code, "backfill", 0, 0, None), []
         bars = assemble_daily_bars(raw_bars, factors)
         self._repo.overwrite_bars(code, bars)
         last_date = bars[-1].trade_date
@@ -176,7 +181,10 @@ class KlineService:
             "kline_backfill_done",
             extra=_log_extra(code, len(bars), last_date, trace_id),
         )
-        return KlineSyncReport(code, "backfill", len(raw_bars), len(bars), last_date)
+        return (
+            KlineSyncReport(code, "backfill", len(raw_bars), len(bars), last_date),
+            bars,
+        )
 
     def _maybe_recompute_only(
         self,
@@ -186,18 +194,18 @@ class KlineService:
         last_bar: DailyBar,
         *,
         trace_id: str | None,
-    ) -> KlineSyncReport:
+    ) -> tuple[KlineSyncReport, list[DailyBar]]:
         factors = list(self._source.fetch_adj_factors(code, floor, end))
         if _factor_changed(factors, last_bar.adj_factor):
             return self._recompute(code, floor, end, trace_id=trace_id)
-        return KlineSyncReport(code, "skip", 0, 0, last_bar.trade_date)
+        return KlineSyncReport(code, "skip", 0, 0, last_bar.trade_date), []
 
     def _recompute(
         self, code: str, start: date, end: date, *, trace_id: str | None = None
-    ) -> KlineSyncReport:
+    ) -> tuple[KlineSyncReport, list[DailyBar]]:
         raw_bars, factors = self._fetch_pair(code, start, end)
         if not raw_bars:
-            return KlineSyncReport(code, "recompute", 0, 0, None)
+            return KlineSyncReport(code, "recompute", 0, 0, None), []
         bars = assemble_daily_bars(raw_bars, factors)
         self._repo.overwrite_bars(code, bars)
         last_date = bars[-1].trade_date
@@ -205,7 +213,10 @@ class KlineService:
             "kline_recompute_done",
             extra=_log_extra(code, len(bars), last_date, trace_id),
         )
-        return KlineSyncReport(code, "recompute", len(raw_bars), len(bars), last_date)
+        return (
+            KlineSyncReport(code, "recompute", len(raw_bars), len(bars), last_date),
+            bars,
+        )
 
     def _fetch_pair(
         self, code: str, start: date, end: date

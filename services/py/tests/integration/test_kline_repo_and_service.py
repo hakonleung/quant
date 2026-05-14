@@ -93,9 +93,10 @@ def test_backfill_then_query_round_trip(tmp_path: Path) -> None:
     clock = _FakeClock(datetime(2026, 5, 1, tzinfo=UTC))
     svc = KlineService(src, repo, clock)
 
-    rep = svc.sync_code("600000")
+    rep, bars = svc.sync_code("600000")
     assert rep.mode == "backfill"
     assert rep.written_bars == 65
+    assert len(bars) == 65
 
     last = repo.get_last_bar("600000")
     assert last is not None
@@ -163,9 +164,10 @@ def test_overwrite_then_upsert_keeps_sorted(tmp_path: Path) -> None:
 
     # Re-sync with extra bars — service routes to recompute, file stays sorted.
     src._bars = _make_bars("600000", 10)
-    rep = svc.sync_code("600000")
+    rep, bars = svc.sync_code("600000")
     assert rep.mode == "recompute"
     assert rep.written_bars == 10
+    assert len(bars) == 10
 
     table = repo.get_range("600000", KLINE_FLOOR_DATE, KLINE_FLOOR_DATE + timedelta(days=20))
     dates = [d for d in table.column("trade_date").to_pylist()]

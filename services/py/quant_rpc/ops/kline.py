@@ -2,8 +2,14 @@
 modules/09-update-orchestration.md §6.2).
 
 * ``sync_kline_for_code`` — args ``{"code": "600519"[, "list_date": "YYYY-MM-DD"]}``;
-  delegates to :class:`KlineService.sync_code` and returns a one-row
-  report describing the action taken.
+  delegates to :class:`KlineService.sync_code` and returns the assembled
+  bars as an Arrow table matching the NestJS-side ``KLINE_COLUMNS``
+  schema. Mode (``backfill`` / ``incremental`` / ``recompute`` / ``skip``)
+  and bar counts ride along in the schema metadata for orchestrator
+  logging. The handler keeps writing to the Python-local cache so the
+  in-process screen / pattern / blacklist services that still read via
+  :class:`KlineRepo` keep working; NestJS now owns the canonical store
+  via :class:`KlineWriterService` (plan §3.3 — Phase 2 write flip).
 * ``list_kline_watermarks`` — no args; returns one row per stock-meta
   code with its current K-line watermark (``last_date`` is null when no
   bars are stored yet). Powers the cron inspector that decides which
@@ -13,14 +19,16 @@ modules/09-update-orchestration.md §6.2).
 from __future__ import annotations
 
 from datetime import date
+from decimal import Decimal
 from typing import TYPE_CHECKING, Final
 
 import pyarrow as pa
 from quant_core.errors import QuantError
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping
+    from collections.abc import Mapping, Sequence
 
+    from quant_core.domain.types.kline import DailyBar
     from quant_core.ports.kline_repo import KlineRepo
     from quant_core.ports.stock_meta_repo import StockMetaRepo
     from quant_core.services.kline_service import KlineService
@@ -30,13 +38,25 @@ _SYNC_OP: Final[str] = "sync_kline_for_code"
 _WATERMARKS_OP: Final[str] = "list_kline_watermarks"
 
 
-SYNC_REPORT_SCHEMA: Final[pa.Schema] = pa.schema(
+# Matches NestJS apps/api/src/modules/kline/kline.row.ts:KLINE_COLUMNS so
+# the worker can convert rows 1:1 without an intermediate schema. Decimals
+# downcast to float64 — kline precision needs are well inside double range
+# (max ~5 significant digits for prices, exact integers for volume).
+SYNC_BARS_SCHEMA: Final[pa.Schema] = pa.schema(
     [
         ("code", pa.string()),
-        ("mode", pa.string()),
-        ("fetched_bars", pa.int64()),
-        ("written_bars", pa.int64()),
-        ("new_last_date", pa.date32()),
+        ("ts", pa.date32()),
+        ("open_qfq", pa.float64()),
+        ("high_qfq", pa.float64()),
+        ("low_qfq", pa.float64()),
+        ("close_qfq", pa.float64()),
+        ("volume", pa.int64()),
+        ("amount", pa.float64()),
+        ("turnover_rate", pa.float64()),
+        ("ma5", pa.float64()),
+        ("ma10", pa.float64()),
+        ("ma20", pa.float64()),
+        ("ma60", pa.float64()),
     ]
 )
 
@@ -81,10 +101,15 @@ def _optional_iso_date(args: Mapping[str, object], key: str) -> date | None:
 
 
 class SyncKlineForCodeHandler:
-    """``sync_kline_for_code`` — incremental or recompute sync for one code."""
+    """``sync_kline_for_code`` — incremental or recompute sync for one code.
+
+    Returns the assembled bars in :data:`SYNC_BARS_SCHEMA`, with the sync
+    report (mode / fetched_bars / written_bars / new_last_date) attached
+    as schema metadata. Empty table on a ``skip`` outcome.
+    """
 
     op = _SYNC_OP
-    schema = SYNC_REPORT_SCHEMA
+    schema = SYNC_BARS_SCHEMA
 
     __slots__ = ("_service",)
 
@@ -96,19 +121,47 @@ class SyncKlineForCodeHandler:
         list_date = _optional_iso_date(args, "list_date")
         trace_raw = args.get("trace_id")
         trace_id = trace_raw if isinstance(trace_raw, str) and trace_raw else None
-        report = self._service.sync_code(code, list_date=list_date, trace_id=trace_id)
-        return pa.Table.from_pylist(
-            [
-                {
-                    "code": report.code,
-                    "mode": report.mode,
-                    "fetched_bars": report.fetched_bars,
-                    "written_bars": report.written_bars,
-                    "new_last_date": report.new_last_date,
-                }
-            ],
-            schema=SYNC_REPORT_SCHEMA,
+        report, bars = self._service.sync_code(
+            code, list_date=list_date, trace_id=trace_id
         )
+        metadata = {
+            b"mode": report.mode.encode("ascii"),
+            b"fetched_bars": str(report.fetched_bars).encode("ascii"),
+            b"written_bars": str(report.written_bars).encode("ascii"),
+            b"new_last_date": (
+                report.new_last_date.isoformat() if report.new_last_date else ""
+            ).encode("ascii"),
+            b"code": report.code.encode("ascii"),
+        }
+        schema = SYNC_BARS_SCHEMA.with_metadata(metadata)
+        if not bars:
+            return schema.empty_table()
+        return pa.Table.from_pylist(
+            [_bar_to_row(bar) for bar in bars],
+            schema=schema,
+        )
+
+
+def _bar_to_row(bar: DailyBar) -> dict[str, object]:
+    return {
+        "code": bar.code,
+        "ts": bar.trade_date,
+        "open_qfq": float(bar.open_qfq),
+        "high_qfq": float(bar.high_qfq),
+        "low_qfq": float(bar.low_qfq),
+        "close_qfq": float(bar.close_qfq),
+        "volume": int(bar.volume),
+        "amount": float(bar.amount),
+        "turnover_rate": float(bar.turnover_rate),
+        "ma5": _opt_float(bar.ma5),
+        "ma10": _opt_float(bar.ma10),
+        "ma20": _opt_float(bar.ma20),
+        "ma60": _opt_float(bar.ma60),
+    }
+
+
+def _opt_float(v: Decimal | None) -> float | None:
+    return float(v) if v is not None else None
 
 
 class ListKlineWatermarksHandler:

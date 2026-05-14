@@ -12,6 +12,11 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { QuantError } from '@quant/shared';
 import { FlightClient } from '../../adapters/flight/flight-client.js';
+import {
+  arrowTableToKlineRows,
+  readSyncKlineReport,
+} from '../kline/domain/arrow-mapper.js';
+import { KlineWriterService } from '../kline/kline-writer.service.js';
 import { ORCH_FLIGHT_CLIENT, KLINE_QUEUE } from './flight.token.js';
 import { ExponentialBackoff } from './domain/backoff.js';
 import { TokenBucket } from './domain/rate-limiter.js';
@@ -44,15 +49,24 @@ export class KlineWorker implements JobProcessor<KlineJob> {
   constructor(
     @Inject(ORCH_FLIGHT_CLIENT) private readonly flight: FlightClient,
     @Inject(KLINE_QUEUE) private readonly queue: InMemoryQueue<KlineJob>,
+    private readonly writer: KlineWriterService,
   ) {}
 
   async process(job: JobEnvelope<KlineJob>, queue: ReQueue<KlineJob>): Promise<void> {
     await this.bucket.acquire();
     try {
-      await this.flight.doGet(
+      const result = await this.flight.doGet(
         'sync_kline_for_code',
         { code: job.data.code, trace_id: job.data.traceId },
         { traceId: job.data.traceId, deadlineMs: 30_000 },
+      );
+      const report = readSyncKlineReport(result.value);
+      const rows = arrowTableToKlineRows(result.value);
+      if (rows.length > 0) {
+        await this.writer.appendBars(rows);
+      }
+      this.logger.log(
+        `kline_job_done code=${job.data.code} mode=${report.mode} fetched=${String(report.fetchedBars)} written_to_local_store=${String(rows.length)} trace_id=${job.data.traceId ?? ''}`,
       );
       this.recordSample(false);
     } catch (err) {
