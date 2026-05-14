@@ -16,8 +16,9 @@ import type { UserScopedRecordStore } from '../../common/storage/ports/user-scop
 import { AUTH_CONFIG, type AuthConfigShape } from '../auth/config/auth.config.js';
 import { ChannelModule } from '../channel/channel.module.js';
 import { StockMetaModule } from '../stock-meta/stock-meta.module.js';
+import { KlineModule } from '../kline/kline.module.js';
 import { WATCH_KLINE_REF_PORT, WATCH_QUOTE_PORT } from './domain/watch-port.js';
-import { FlightKlineRefAdapter } from './flight-kline-ref.adapter.js';
+import { LocalKlineRefAdapter } from './local-kline-ref.adapter.js';
 import { FlightWatchAdapter, WATCH_FLIGHT_CLIENT } from './flight-watch.adapter.js';
 import {
   buildWatchGroupUserScopedStore,
@@ -46,7 +47,7 @@ import { WatchService } from './watch.service.js';
 const DEFAULT_FLIGHT_TARGET = '127.0.0.1:8815';
 
 @Module({
-  imports: [StockMetaModule, ChannelModule],
+  imports: [StockMetaModule, ChannelModule, KlineModule],
   controllers: [WatchController],
   providers: [
     {
@@ -57,7 +58,7 @@ const DEFAULT_FLIGHT_TARGET = '127.0.0.1:8815';
       },
     },
     { provide: WATCH_QUOTE_PORT, useClass: FlightWatchAdapter },
-    { provide: WATCH_KLINE_REF_PORT, useClass: FlightKlineRefAdapter },
+    { provide: WATCH_KLINE_REF_PORT, useClass: LocalKlineRefAdapter },
     {
       provide: WATCH_TASK_USER_RECORD_STORE,
       inject: [AUTH_CONFIG],

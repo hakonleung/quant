@@ -30,14 +30,21 @@ export class KlineReaderService {
     return rows.map(rowToBar);
   }
 
-  /** Last `n` bars for many codes; returns `Record<code, bar[]>` (codes
-   *  with no rows are absent from the map). */
+  /**
+   * Last `n` bars for many codes; returns `Record<code, bar[]>` (codes
+   * with no rows are absent from the map).
+   *
+   * Empty `codes` means "full universe": every code with at least one
+   * bar in the local store. The controller's `/api/kline/bulk` uses this
+   * to render the list panel without the caller having to enumerate the
+   * universe.
+   */
   async lastNBulk(
     codes: readonly string[],
     n: number,
   ): Promise<Record<string, readonly KlineBar[]>> {
-    if (codes.length === 0) return {};
-    const rows = await this.store.read({ entityKeys: codes, tail: n });
+    const query = codes.length === 0 ? { tail: n } : { entityKeys: codes, tail: n };
+    const rows = await this.store.read(query);
     const out: Record<string, KlineBar[]> = {};
     for (const row of rows) {
       const bar = rowToBar(row);
