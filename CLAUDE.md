@@ -499,7 +499,8 @@ Required fixes (if any):
 
 - 写代码前先估算主路径的复杂度与数据规模，挑选合适的数据结构与算法；不要先写再优化。
 - 主路径禁止：循环内 IO、N+1 查询、未必要的 JSON 反复 parse、跨进程多次小调用（参考 §8.4 批量化）、列表 / 表格 UI 不走虚拟化。
-- **Parquet 不要按业务主键分到 ≥ 1000 文件**：DuckDB `read_parquet(list-of-N-paths)` 在 N > 几百时调度开销显著；A 股 5500 个 per-code parquet 是反例。改为按 prefix 分到 ≤ 50 个分区文件 + LSM delta 写。基准：`docs/perf/kline-lsm-write.md`。
+- **Parquet 不要按业务主键分到 ≥ 1000 文件**：DuckDB `read_parquet(list-of-N-paths)` 在 N > 几百时调度开销显著；A 股 5500 个 per-code parquet 是反例。改为按 prefix 分到 ≤ 50 个 `<prefix>.parquet` 扁平文件 + 整 partition rewrite 写。基准：`docs/perf/kline-write.md`。
+- **每天跑一次的 batch 任务不要为"写延迟"加 LSM/delta**：实测 50 ms 整文件 rewrite 已经够快，delta+compaction 多出的运维（delta 失控告警、compaction cron、文件夹层级）不划算。除非写 QPS 高到单次 rewrite 撑不住，否则始终 rewrite。同上基准。
 - 大对象走列存（Arrow）；热点查询走索引 / 预计算（如日线前复权与 `ma*` 入库时即算好，详见 §2.8）；幂等结果走缓存。
 - 任何"看起来无所谓"的循环、map、filter 在 N ≥ 1e4 时都要重新评估；优先 streaming / 分块处理而非整表加载。
 - 性能相关代码必须有可复现的基准（micro-benchmark / load test），改动需对比前后数据，禁止凭感觉判断"更快了"。

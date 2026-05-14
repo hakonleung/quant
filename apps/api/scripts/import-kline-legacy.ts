@@ -1,8 +1,7 @@
 /**
  * One-shot import: legacy `data/kline/{code}.parquet` (one file per
- * stock, ~5500 files, `Decimal(20,4)` columns) → new LSM layout
- * `data/kline/{prefix}/00000000000000-main.parquet` (~40 files,
- * `DOUBLE`).
+ * stock, ~5500 files, `Decimal(20,4)` columns) → new flat layout
+ * `data/kline/{prefix}.parquet` (~13 files, `DOUBLE`).
  *
  * Strategy (mirrors the LSM compaction path, just sourced from legacy
  * files instead of deltas):
@@ -11,8 +10,7 @@
  *      files via DuckDB `read_parquet(['p1', 'p2', ...])`.
  *   2. `COPY ... TO 'tmp.parquet'` with the canonical column projection
  *      and `Decimal → DOUBLE` casts.
- *   3. `mkdir data/kline.new/{prefix}/` and rename the tmp file into
- *      `00000000000000-main.parquet`.
+ *   3. Rename the tmp file into `data/kline.new/{prefix}.parquet`.
  *   4. After all partitions land, surface a summary (rows per partition,
  *      bytes per partition).
  *
@@ -131,9 +129,8 @@ async function importPartition(opts: {
   const sourcePaths = opts.filenames.map((f) => join(opts.legacyDir, f));
   const sourceList = sourcePaths.map((p) => quoteLiteral(p)).join(', ');
 
-  const partitionDir = join(opts.newRoot, opts.prefix);
-  await mkdir(partitionDir, { recursive: true });
-  const target = join(partitionDir, '00000000000000-main.parquet');
+  await mkdir(opts.newRoot, { recursive: true });
+  const target = join(opts.newRoot, `${opts.prefix}.parquet`);
   const tmp = `${target}.tmp-${process.pid}-${Date.now()}`;
 
   try {
@@ -251,7 +248,7 @@ async function verifyRowCounts(
     const raw = row?.n ?? 0;
     legacyByCode.set(code, typeof raw === 'bigint' ? Number(raw) : Number(raw));
   }
-  const newGlob = join(newRoot, '**', '*.parquet');
+  const newGlob = join(newRoot, '*.parquet');
   const newAll = await conn.runAndReadAll(`
     SELECT code, count(*) AS n
     FROM read_parquet(${quoteLiteral(newGlob)})

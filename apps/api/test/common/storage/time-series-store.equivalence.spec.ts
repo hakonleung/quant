@@ -182,9 +182,9 @@ describe.each(backends)('TimeSeriesStore [$label]', (backend) => {
   });
 });
 
-describe('DuckDBParquetTimeSeriesStore LSM behaviour', () => {
-  it('routes rows to 3-digit prefix partitions', async () => {
-    const dir = await mkdtemp(join(tmpdir(), 'ts-store-lsm-'));
+describe('DuckDBParquetTimeSeriesStore flat layout', () => {
+  it('routes rows to a flat <prefix>.parquet file per partition', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'ts-store-flat-'));
     try {
       const store = new DuckDBParquetTimeSeriesStore<Bar>({
         dataRoot: dir,
@@ -197,15 +197,20 @@ describe('DuckDBParquetTimeSeriesStore LSM behaviour', () => {
         bar('600000', '2026-01-01', 60, 59),
         bar('688001', '2026-01-01', 68, 67),
       ]);
-      const prefixes = await readdir(join(dir, 'kline'));
-      expect(prefixes.sort()).toEqual(['000', '300', '600', '688']);
+      const files = (await readdir(join(dir, 'kline'))).sort();
+      expect(files).toEqual([
+        '000.parquet',
+        '300.parquet',
+        '600.parquet',
+        '688.parquet',
+      ]);
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
   });
 
-  it('each append produces a delta file, compaction merges them', async () => {
-    const dir = await mkdtemp(join(tmpdir(), 'ts-store-compact-'));
+  it('successive appends rewrite the same partition file', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'ts-store-rewrite-'));
     try {
       const store = new DuckDBParquetTimeSeriesStore<Bar>({
         dataRoot: dir,
@@ -216,19 +221,9 @@ describe('DuckDBParquetTimeSeriesStore LSM behaviour', () => {
       await store.appendBars([bar('000001', '2026-01-02', 11, 10)]);
       await store.appendBars([bar('000001', '2026-01-03', 12, 11)]);
 
-      const beforeFiles = (await readdir(join(dir, 'kline', '000'))).filter((f) =>
-        f.endsWith('.parquet'),
-      );
-      expect(beforeFiles).toHaveLength(3);
-      expect(beforeFiles.every((f) => f.includes('delta'))).toBe(true);
+      const files = (await readdir(join(dir, 'kline'))).filter((f) => f.endsWith('.parquet'));
+      expect(files).toEqual(['000.parquet']);
 
-      await store.compact('000');
-      const afterFiles = (await readdir(join(dir, 'kline', '000'))).filter((f) =>
-        f.endsWith('.parquet'),
-      );
-      expect(afterFiles).toEqual(['00000000000000-main.parquet']);
-
-      // Data still readable & identical after compaction
       const rows = await store.read({ entityKeys: ['000001'] });
       expect(rows.map((r) => r.close_qfq)).toEqual([10, 11, 12]);
     } finally {
@@ -236,7 +231,27 @@ describe('DuckDBParquetTimeSeriesStore LSM behaviour', () => {
     }
   });
 
-  it('reopen reads back compacted + delta data', async () => {
+  it('overwrites a (code, ts) when the same key is re-appended', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'ts-store-overwrite-'));
+    try {
+      const store = new DuckDBParquetTimeSeriesStore<Bar>({
+        dataRoot: dir,
+        table: 'kline',
+        columns: COLUMNS,
+      });
+      await store.appendBars([bar('000001', '2026-01-01', 10, 9)]);
+      await store.appendBars([bar('000001', '2026-01-01', 99, 88)]);
+      const rows = await store.read({ entityKeys: ['000001'] });
+      expect(rows).toHaveLength(1);
+      const first = rows[0];
+      if (first === undefined) throw new Error('expected one row');
+      expect(first.close_qfq).toBe(99);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('reopen reads back data written by a previous instance', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'ts-store-reopen-'));
     try {
       const a = new DuckDBParquetTimeSeriesStore<Bar>({
@@ -247,9 +262,8 @@ describe('DuckDBParquetTimeSeriesStore LSM behaviour', () => {
       await a.appendBars([
         bar('000001', '2026-01-01', 10, 9),
         bar('000001', '2026-01-02', 11, 10),
+        bar('000001', '2026-01-03', 12, 11),
       ]);
-      await a.compact('000');
-      await a.appendBars([bar('000001', '2026-01-03', 12, 11)]);
 
       const b = new DuckDBParquetTimeSeriesStore<Bar>({
         dataRoot: dir,
