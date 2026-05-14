@@ -75,6 +75,10 @@ data/*.json.bak
 # kline.zip is too large for GitHub (>100MB), so the whole dir stays untracked.
 data/kline.new/
 data/kline.bak/
+# Python-side per-code cache: read by screen/pattern/blacklist via
+# ParquetKlineRepo. Regenerated from akshare on demand. NestJS reads
+# the flat data/kline/<prefix>.parquet (which IS tracked).
+data/kline.py/
 
 # Test output
 coverage/

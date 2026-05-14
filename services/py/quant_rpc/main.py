@@ -101,7 +101,12 @@ def main() -> int:
 
     root = _data_root()
     meta_path = root / "meta" / "stocks.parquet"
-    kline_root = root / "kline"
+    # Python keeps its own per-code cache at `data/kline.py/` so its
+    # screen / pattern / blacklist services can keep reading via
+    # `ParquetKlineRepo` (Decimal128 schema). The canonical store for
+    # NestJS HTTP / watch reads is `data/kline/<prefix>.parquet`,
+    # populated by `KlineWriterService` after each Flight sync.
+    kline_root = root / "kline.py"
     kv_root = root / "_state"
     log.info("data_root=%s", root)
 
