@@ -156,9 +156,7 @@ export function verifySignature(
  * payloads that don't match either — typically other event types Feishu
  * also routes to the callback URL.
  */
-export function extractCardEvent(
-  body: Record<string, unknown>,
-): Lark.RawCardActionEvent | null {
+export function extractCardEvent(body: Record<string, unknown>): Lark.RawCardActionEvent | null {
   const v2 = schema2Envelope.safeParse(body);
   if (v2.success) {
     // The inner `event` is itself a flat schema-1-style payload — narrow
@@ -187,9 +185,7 @@ export function extractCardEvent(
  * already structurally compatible — this is purely a type-system gate
  * so we don't have to write `as unknown as Lark.RawCardActionEvent`.
  */
-function toRawCardActionEvent(
-  parsed: z.infer<typeof schema1CardEvent>,
-): Lark.RawCardActionEvent {
+function toRawCardActionEvent(parsed: z.infer<typeof schema1CardEvent>): Lark.RawCardActionEvent {
   const compact: Record<string, unknown> = { action: parsed.action };
   if (parsed.open_message_id !== undefined) compact['open_message_id'] = parsed.open_message_id;
   if (parsed.open_chat_id !== undefined) compact['open_chat_id'] = parsed.open_chat_id;

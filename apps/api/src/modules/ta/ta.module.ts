@@ -17,11 +17,7 @@ import { KlineModule } from '../kline/kline.module.js';
 import { LlmModule } from '../llm/llm.module.js';
 import { SectorsModule } from '../sectors/sectors.module.js';
 import { StockMetaModule } from '../stock-meta/stock-meta.module.js';
-import {
-  TA_CACHE_TABLE_SPEC,
-  TaCacheStore,
-  type TaCacheRow,
-} from './ta-cache.store.js';
+import { TA_CACHE_TABLE_SPEC, TaCacheStore, type TaCacheRow } from './ta-cache.store.js';
 import { TaController } from './ta.controller.js';
 import { TaInstructionHandler } from './instructions/ta.handler.js';
 import { TaSectorInstructionHandler } from './instructions/ta-sector.handler.js';

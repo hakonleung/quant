@@ -13,6 +13,9 @@
  * applies the `batchId` stamp and pushes via `addBulk`.
  */
 
+/* eslint-disable no-restricted-globals -- Date arithmetic on persisted watermarks (not "now"). */
+/* eslint-disable @typescript-eslint/consistent-type-assertions -- Arrow proxy.toJSON() is `any` from the library; narrow at the boundary. */
+
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { isAShareCode } from '@quant/shared';
 import { FlightClient } from '../../adapters/flight/flight-client.js';

@@ -21,10 +21,7 @@ import { Inject, Injectable, Logger, type OnModuleInit } from '@nestjs/common';
 import { QuantError, SectorsListSchema, type Sector } from '@quant/shared';
 import { z } from 'zod';
 
-import type {
-  RecordStore,
-  RecordTableSpec,
-} from '../../common/storage/ports/record-store.port.js';
+import type { RecordStore, RecordTableSpec } from '../../common/storage/ports/record-store.port.js';
 
 export const SECTORS_DATA_DIR = Symbol('SECTORS_DATA_DIR');
 export const SECTORS_RECORD_STORE = Symbol('SECTORS_RECORD_STORE');
@@ -59,9 +56,7 @@ export class SectorsStore implements OnModuleInit {
   private loaded = false;
   private nextSeq = 1;
 
-  constructor(
-    @Inject(SECTORS_RECORD_STORE) private readonly store: RecordStore<SectorRow>,
-  ) {}
+  constructor(@Inject(SECTORS_RECORD_STORE) private readonly store: RecordStore<SectorRow>) {}
 
   async onModuleInit(): Promise<void> {
     await this.load();
@@ -79,16 +74,16 @@ export class SectorsStore implements OnModuleInit {
       const { records, idMutated } = reseqIds(decoded);
       const parsed = SectorsListSchema.safeParse(records);
       if (!parsed.success) {
-        this.logger.warn(
-          `sectors rows failed validation, starting empty: ${parsed.error.message}`,
-        );
+        this.logger.warn(`sectors rows failed validation, starting empty: ${parsed.error.message}`);
         this.adoptSectors([]);
         return;
       }
       this.adoptSectors(parsed.data);
       if (idMutated) {
         await this.persistAll();
-        this.logger.log(`migrated sector ids to s{n}, rewrote ${String(this.sectors.length)} records`);
+        this.logger.log(
+          `migrated sector ids to s{n}, rewrote ${String(this.sectors.length)} records`,
+        );
       } else {
         this.logger.log(`loaded ${String(this.sectors.length)} sectors`);
       }

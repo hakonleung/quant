@@ -136,7 +136,10 @@ describe('pickCard — agent kinds', () => {
     expect(card?.header.template).toBe('purple');
     expect(card?.header.title.content).toContain('agent');
     // q appears in the div body text
-    const divElem = (card as unknown as { elements: unknown[] })?.elements[0] as { tag: string; text: { content: string } };
+    const divElem = (card as unknown as { elements: unknown[] })?.elements[0] as {
+      tag: string;
+      text: { content: string };
+    };
     expect(divElem.text.content).toContain('看茅台估值');
     // confirm button value carries action=confirm + agentQ as a plain object
     // (Feishu spec requires Object — strings are not reliably round-tripped).

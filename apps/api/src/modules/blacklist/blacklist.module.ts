@@ -6,11 +6,7 @@ import { DuckDBParquetRecordStore } from '../../common/storage/adapters/duckdb-p
 import type { RecordStore } from '../../common/storage/ports/record-store.port.js';
 import { BlacklistController } from './blacklist.controller.js';
 import { BlacklistService } from './blacklist.service.js';
-import {
-  BLACKLIST_TABLE_SPEC,
-  BlacklistStore,
-  type BlacklistRow,
-} from './blacklist.store.js';
+import { BLACKLIST_TABLE_SPEC, BlacklistStore, type BlacklistRow } from './blacklist.store.js';
 import {
   BLACKLIST_DATA_DIR,
   BLACKLIST_FLIGHT_CLIENT,

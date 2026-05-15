@@ -196,8 +196,7 @@ function arraySchema(def: ZodAnyDef): Record<string, unknown> {
 function simpleSchema(schema: z.ZodTypeAny): Record<string, unknown> {
   const def = schema._def as ZodAnyDef;
   const description = def.description;
-  const builder =
-    def.typeName !== undefined ? SIMPLE_SCHEMA_BUILDERS[def.typeName] : undefined;
+  const builder = def.typeName !== undefined ? SIMPLE_SCHEMA_BUILDERS[def.typeName] : undefined;
   const base: Record<string, unknown> = builder !== undefined ? builder(def) : { type: 'string' };
   if (description !== undefined) base['description'] = description;
   return base;

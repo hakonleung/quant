@@ -6,9 +6,10 @@ import type {
 import type { UserScopedRecordStore } from '../../src/common/storage/ports/user-scoped-record-store.port.js';
 import { InMemoryRecordStore } from './in-memory-record.store.js';
 
-export class InMemoryUserScopedRecordStore<V, K extends RecordKey = string>
-  implements UserScopedRecordStore<V, K>
-{
+export class InMemoryUserScopedRecordStore<
+  V,
+  K extends RecordKey = string,
+> implements UserScopedRecordStore<V, K> {
   private readonly perUser = new Map<string, InMemoryRecordStore<V, K>>();
 
   constructor(private readonly spec: Pick<RecordTableSpec<V, K>, 'pk'>) {}

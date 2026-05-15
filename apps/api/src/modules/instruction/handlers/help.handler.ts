@@ -200,9 +200,7 @@ function tagFields(spec: InstructionSpec<unknown>): readonly (readonly [string, 
 
 function detailFields(spec: InstructionSpec<unknown>): readonly (readonly [string, string])[] {
   const examples =
-    spec.examples !== undefined && spec.examples.length > 0
-      ? spec.examples
-      : [buildExample(spec)];
+    spec.examples !== undefined && spec.examples.length > 0 ? spec.examples : [buildExample(spec)];
   const fields: (readonly [string, string])[] = [
     ['中文', spec.summaryCn],
     ['English', spec.summary],

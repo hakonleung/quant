@@ -114,10 +114,7 @@ async function readTable(
       .map((r) => String((r as Record<string, unknown>)['column_name']));
     return { rows, columns };
   } catch (err) {
-    error(
-      'unreadable parquet',
-      `${path} :: ${err instanceof Error ? err.message : String(err)}`,
-    );
+    error('unreadable parquet', `${path} :: ${err instanceof Error ? err.message : String(err)}`);
     return null;
   }
 }
@@ -151,9 +148,7 @@ async function checkSharedTable(
     );
     return info.rows;
   }
-  const missingRecommended = (schema.recommended ?? []).filter(
-    (c) => !info.columns.includes(c),
-  );
+  const missingRecommended = (schema.recommended ?? []).filter((c) => !info.columns.includes(c));
   if (missingRecommended.length > 0) {
     warn(
       `${rel} stale`,
@@ -176,9 +171,7 @@ async function checkKlinePartitions(
     error('kline dir', 'missing data/kline/');
     return { codes: new Set(), totalRows: 0 };
   }
-  const files = (await readdir(klineDir))
-    .filter((n) => /^\d{3}\.parquet$/.test(n))
-    .sort();
+  const files = (await readdir(klineDir)).filter((n) => /^\d{3}\.parquet$/.test(n)).sort();
   if (files.length === 0) {
     error('kline', 'no <prefix>.parquet files under data/kline/');
     return { codes: new Set(), totalRows: 0 };
@@ -197,9 +190,7 @@ async function checkKlinePartitions(
     }
     totalRows += info.rows;
     // Pull codes into the set; also verify every code matches the partition prefix.
-    const result = await conn.runAndReadAll(
-      `SELECT DISTINCT code FROM read_parquet('${path}');`,
-    );
+    const result = await conn.runAndReadAll(`SELECT DISTINCT code FROM read_parquet('${path}');`);
     let outOfPrefix = 0;
     for (const row of result.getRowObjects()) {
       const code = String((row as Record<string, unknown>)['code']);
@@ -207,10 +198,7 @@ async function checkKlinePartitions(
       if (code.slice(0, 3) !== prefix) outOfPrefix += 1;
     }
     if (outOfPrefix > 0) {
-      error(
-        `kline/${filename}`,
-        `${outOfPrefix} code(s) don't match partition prefix '${prefix}'`,
-      );
+      error(`kline/${filename}`, `${outOfPrefix} code(s) don't match partition prefix '${prefix}'`);
     }
   }
   ok('kline', `partitions=${files.length} codes=${codes.size} rows=${totalRows}`);
@@ -225,9 +213,7 @@ async function checkMetaVsKline(
 ): Promise<void> {
   const path = join(dataRoot, 'stock_metas.parquet');
   if (!(await fileExists(path))) return;
-  const result = await conn.runAndReadAll(
-    `SELECT DISTINCT code FROM read_parquet('${path}');`,
-  );
+  const result = await conn.runAndReadAll(`SELECT DISTINCT code FROM read_parquet('${path}');`);
   const metaCodes = new Set<string>();
   for (const row of result.getRowObjects()) {
     metaCodes.add(String((row as Record<string, unknown>)['code']));
@@ -246,7 +232,7 @@ async function checkMetaVsKline(
     // Brand-new listings are expected to land in meta before the next
     // kline cron tick; treat as info rather than error.
     warn(
-      'meta has unsync\'d codes',
+      "meta has unsync'd codes",
       `${metaOnly.length} meta rows have no kline yet (e.g. ${metaOnly.slice(0, 5).join(', ')})`,
     );
   }
@@ -308,8 +294,7 @@ async function main(): Promise<void> {
   await checkSharedTable(conn, args.dataRoot, 'stock_metas.parquet', {
     required: ['code', 'name', 'industries', 'list_date'],
     recommended: ['metrics_asof', 'metrics_updated_at', 'ret_5d', 'mkt_cap'],
-    rebuildHint:
-      'run upsert_stock_metrics_for_codes once to populate the persisted metrics block',
+    rebuildHint: 'run upsert_stock_metrics_for_codes once to populate the persisted metrics block',
   });
   await checkSharedTable(conn, args.dataRoot, 'blacklist.parquet', {
     // Singleton-row payload: id + codes_json + computedAt

@@ -14,7 +14,10 @@ export interface RecordFilter<V> {
   /** Optional equality predicates: column → expected value. */
   readonly where?: Partial<Record<keyof V & string, V[keyof V & string] | null>>;
   /** Optional in-set predicate on a single column. */
-  readonly whereIn?: { readonly column: keyof V & string; readonly values: readonly (string | number)[] };
+  readonly whereIn?: {
+    readonly column: keyof V & string;
+    readonly values: readonly (string | number)[];
+  };
   /** Project a subset of columns; full row returned when omitted. */
   readonly columns?: readonly (keyof V & string)[];
   /** Sort spec: column + direction; applied in order. */
@@ -58,7 +61,15 @@ export interface RecordTableSpec<V, K extends RecordKey = string> {
 
 export interface RecordColumnSpec {
   readonly name: string;
-  readonly type: 'VARCHAR' | 'INTEGER' | 'BIGINT' | 'DOUBLE' | 'BOOLEAN' | 'TIMESTAMP' | 'DATE' | 'BLOB';
+  readonly type:
+    | 'VARCHAR'
+    | 'INTEGER'
+    | 'BIGINT'
+    | 'DOUBLE'
+    | 'BOOLEAN'
+    | 'TIMESTAMP'
+    | 'DATE'
+    | 'BLOB';
   readonly nullable?: boolean;
   readonly primaryKey?: boolean;
 }

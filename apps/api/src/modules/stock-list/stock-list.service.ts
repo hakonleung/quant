@@ -91,9 +91,7 @@ export class StockListService {
     const enumeratedCodes: readonly string[] =
       args.codes.length > 0
         ? args.codes
-        : Array.from(
-            new Set([...snapshotByCode.keys(), ...Object.keys(klineBulk)]),
-          ).sort();
+        : Array.from(new Set([...snapshotByCode.keys(), ...Object.keys(klineBulk)])).sort();
 
     const rows: StockListRow[] = enumeratedCodes.map((code) => {
       const snap = snapshotByCode.get(code);

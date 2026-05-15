@@ -21,6 +21,8 @@
  * is already done); the next 16:00 cron will retry.
  */
 
+/* eslint-disable no-restricted-globals -- batch elapsed timing is operational telemetry, not business logic. */
+
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { newTraceId } from '@quant/shared';
 

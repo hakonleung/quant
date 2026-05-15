@@ -32,9 +32,10 @@ export interface DuckDBParquetRecordStoreOptions<V, K extends RecordKey> {
 
 let tmpCounter = 0;
 
-export class DuckDBParquetRecordStore<V, K extends RecordKey = string>
-  implements RecordStore<V, K>
-{
+export class DuckDBParquetRecordStore<V, K extends RecordKey = string> implements RecordStore<
+  V,
+  K
+> {
   private connPromise: Promise<DuckDBConnection> | null = null;
   private loaded = false;
   private dirty = false;
@@ -106,7 +107,9 @@ export class DuckDBParquetRecordStore<V, K extends RecordKey = string>
     const conn = await this.ensureLoaded();
     const sql = this.buildSelectSql(filter);
     const result = await conn.runAndReadAll(sql);
-    return result.getRowObjects().map((r) => this.parseRow(r as Record<string, unknown>, filter?.columns));
+    return result
+      .getRowObjects()
+      .map((r) => this.parseRow(r as Record<string, unknown>, filter?.columns));
   }
 
   async upsert(value: V): Promise<void> {
@@ -168,7 +171,10 @@ export class DuckDBParquetRecordStore<V, K extends RecordKey = string>
   }
 
   async flush(): Promise<void> {
-    this.flushChain = this.flushChain.then(() => this.runFlush(), () => this.runFlush());
+    this.flushChain = this.flushChain.then(
+      () => this.runFlush(),
+      () => this.runFlush(),
+    );
     await this.flushChain;
   }
 

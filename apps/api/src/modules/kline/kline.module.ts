@@ -27,11 +27,7 @@ import { KlineController } from './kline.controller.js';
 import { KlineReaderService } from './kline-reader.service.js';
 import { KlineWriterService } from './kline-writer.service.js';
 import { KLINE_COLUMNS, KLINE_TABLE_NAME, type KlineRow } from './kline.row.js';
-import {
-  KLINE_DATA_DIR,
-  KLINE_FLIGHT_CLIENT,
-  KLINE_TIME_SERIES_STORE,
-} from './kline.token.js';
+import { KLINE_DATA_DIR, KLINE_FLIGHT_CLIENT, KLINE_TIME_SERIES_STORE } from './kline.token.js';
 
 const DEFAULT_FLIGHT_TARGET = '127.0.0.1:8815';
 const DEFAULT_DATA_DIR = '../../data';

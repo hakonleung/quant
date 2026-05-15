@@ -23,10 +23,11 @@ interface Job {
 class Processor implements JobProcessor<Job> {
   errors: Error[] = [];
   successes = 0;
-  async process(_job: JobEnvelope<Job>, _q: ReQueue<Job>): Promise<void> {
+  process(_job: JobEnvelope<Job>, _q: ReQueue<Job>): Promise<void> {
     const err = this.errors.shift();
-    if (err !== undefined) throw err;
+    if (err !== undefined) return Promise.reject(err);
     this.successes += 1;
+    return Promise.resolve();
   }
 }
 
@@ -67,9 +68,10 @@ describe('InMemoryQueue', () => {
   it('legacy reschedule() still works without terminal event', async () => {
     class Reschedulable implements JobProcessor<Job> {
       tries = 0;
-      async process(env: JobEnvelope<Job>, q: ReQueue<Job>): Promise<void> {
+      process(env: JobEnvelope<Job>, q: ReQueue<Job>): Promise<void> {
         this.tries += 1;
         if (this.tries < 2) q.reschedule(env, 50);
+        return Promise.resolve();
       }
     }
     const proc = new Reschedulable();

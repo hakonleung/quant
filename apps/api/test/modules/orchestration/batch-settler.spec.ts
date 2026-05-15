@@ -18,24 +18,29 @@ import type {
 
 class FakeBlacklist {
   calls = 0;
-  async refresh(_traceId: string): Promise<{
+  refresh(_traceId: string): Promise<{
     readonly codes: readonly string[];
     readonly asof: string;
     readonly universeSize: number;
     readonly computedAt: string;
   }> {
     this.calls += 1;
-    return { codes: [], asof: '2026-05-04', universeSize: 0, computedAt: '2026-05-04T00:00:00Z' };
+    return Promise.resolve({
+      codes: [],
+      asof: '2026-05-04',
+      universeSize: 0,
+      computedAt: '2026-05-04T00:00:00Z',
+    });
   }
 }
 
 class FakeSectorsService {
   refreshed: string[] = [];
-  shouldThrowFor: Set<string> = new Set();
-  async refreshDynamic(_userId: string, id: string, _trace: string): Promise<unknown> {
+  shouldThrowFor = new Set<string>();
+  refreshDynamic(_userId: string, id: string, _trace: string): Promise<unknown> {
     this.refreshed.push(id);
-    if (this.shouldThrowFor.has(id)) throw new Error('boom');
-    return {};
+    if (this.shouldThrowFor.has(id)) return Promise.reject(new Error('boom'));
+    return Promise.resolve({});
   }
 }
 
@@ -142,8 +147,8 @@ describe('BatchSettler', () => {
   it('failures still count as terminal — settler does not hang', async () => {
     const { metaQueue, klineQueue } = newQueues();
     metaQueue.setProcessor({
-      async process(_e: JobEnvelope<MetaJob>, _q: ReQueue<MetaJob>): Promise<void> {
-        throw new Error('forever');
+      process(_e: JobEnvelope<MetaJob>, _q: ReQueue<MetaJob>): Promise<void> {
+        return Promise.reject(new Error('forever'));
       },
     });
     // override with no retries → first failure is terminal.
@@ -153,8 +158,8 @@ describe('BatchSettler', () => {
       maxRetry: 0,
     });
     metaWithRetry.setProcessor({
-      async process(_e: JobEnvelope<MetaJob>, _q: ReQueue<MetaJob>): Promise<void> {
-        throw new Error('forever');
+      process(_e: JobEnvelope<MetaJob>, _q: ReQueue<MetaJob>): Promise<void> {
+        return Promise.reject(new Error('forever'));
       },
     });
     const blacklist = new FakeBlacklist();

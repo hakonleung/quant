@@ -10,11 +10,7 @@
  */
 
 import { Injectable, Logger, type OnApplicationBootstrap } from '@nestjs/common';
-import {
-  assertHandlerCoverage,
-  instructionId,
-  type InstructionId,
-} from '@quant/shared';
+import { assertHandlerCoverage, instructionId, type InstructionId } from '@quant/shared';
 
 import type { AnyInstructionHandler, InstructionHandler } from './instruction.port.js';
 import type { AnyInstructionSpec, InstructionSpec } from './instruction.types.js';
@@ -112,9 +108,7 @@ export class InstructionRegistry implements OnApplicationBootstrap {
   onApplicationBootstrap(): void {
     try {
       this.assertManifestCoverage();
-      this.logger.log(
-        `instruction_manifest_ok registered=${String(this.byId.size)}`,
-      );
+      this.logger.log(`instruction_manifest_ok registered=${String(this.byId.size)}`);
     } catch (err: unknown) {
       if (process.env['NODE_ENV'] === 'test') {
         this.logger.warn(`instruction_manifest_drift (test-mode warn): ${String(err)}`);

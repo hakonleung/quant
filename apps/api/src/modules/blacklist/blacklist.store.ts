@@ -53,9 +53,7 @@ export class BlacklistStore implements OnModuleInit {
   private mutexChain: Promise<unknown> = Promise.resolve();
   private loaded = false;
 
-  constructor(
-    @Inject(BLACKLIST_RECORD_STORE) private readonly store: RecordStore<BlacklistRow>,
-  ) {}
+  constructor(@Inject(BLACKLIST_RECORD_STORE) private readonly store: RecordStore<BlacklistRow>) {}
 
   async onModuleInit(): Promise<void> {
     await this.load();

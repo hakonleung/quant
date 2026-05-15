@@ -3,9 +3,9 @@ import type {
   TimeSeriesStore,
 } from '../../src/common/storage/ports/time-series-store.port.js';
 
-export class InMemoryTimeSeriesStore<Row extends { code: string; ts: Date }>
-  implements TimeSeriesStore<Row>
-{
+export class InMemoryTimeSeriesStore<
+  Row extends { code: string; ts: Date },
+> implements TimeSeriesStore<Row> {
   private readonly rows = new Map<string, Map<number, Row>>();
 
   async read(query: TimeSeriesReadQuery<Row>): Promise<readonly Row[]> {

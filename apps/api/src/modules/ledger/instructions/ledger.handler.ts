@@ -98,4 +98,3 @@ function formatPct(raw: string): string {
   const sign = n > 0 ? '+' : '';
   return `${sign}${n.toFixed(2)}%`;
 }
-

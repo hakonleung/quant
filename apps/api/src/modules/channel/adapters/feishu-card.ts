@@ -169,14 +169,18 @@ function readHits(text: string, meta: Readonly<Record<string, unknown>>): HitMet
     {
       market: metaString(meta, 'market') ?? 'a',
       code: metaString(meta, 'code') ?? '',
-      name: metaString(meta, 'name') ?? (metaString(meta, 'code') ?? ''),
+      name: metaString(meta, 'name') ?? metaString(meta, 'code') ?? '',
       last: metaString(meta, 'last'),
       text,
     },
   ];
 }
 
-function hitSummaryMd(hit: HitMeta): { summaryMd: string; condsLine: string; direction: Direction } {
+function hitSummaryMd(hit: HitMeta): {
+  summaryMd: string;
+  condsLine: string;
+  direction: Direction;
+} {
   const lines = hit.text.split('\n');
   const pctLine = lines[1] ?? '';
   const condsLine = lines[2] ?? '';
@@ -420,10 +424,7 @@ function pickInstructionTableCard(
   return maybeMetaTablesCard(meta, defaults) ?? maybeStockTableCard(text, meta, defaults);
 }
 
-function instructionReplyCard(
-  text: string,
-  meta: Readonly<Record<string, unknown>>,
-): FeishuCard {
+function instructionReplyCard(text: string, meta: Readonly<Record<string, unknown>>): FeishuCard {
   const { ok, title } = instructionCardTitle(meta, '', '');
   const defaults = { headerTitle: title, headerTemplate: ok ? 'green' : 'red' } as const;
   return pickInstructionTableCard(text, meta, defaults) ?? buildInstructionReplyCard(text, meta);
@@ -435,8 +436,9 @@ function instructionAsyncCompletedCard(
 ): FeishuCard {
   const { ok, title } = instructionCardTitle(meta, ' done', ' failed');
   const defaults = { headerTitle: title, headerTemplate: ok ? 'green' : 'red' } as const;
-  return pickInstructionTableCard(text, meta, defaults)
-    ?? buildInstructionAsyncCompletedCard(text, meta);
+  return (
+    pickInstructionTableCard(text, meta, defaults) ?? buildInstructionAsyncCompletedCard(text, meta)
+  );
 }
 
 export function pickCard(message: {

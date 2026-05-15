@@ -105,10 +105,10 @@ pnpm --filter @quant/api tsx scripts/import-kline-legacy.ts \
 Reference performance on dev hardware (M1, NVMe, 5508 files → 13
 partitions, 2.1M rows):
 
-| Step                        | Time     |
-| --------------------------- | -------- |
-| 13-partition import + write | ~1.0 s   |
-| Per-code row count verify   | < 1 s    |
+| Step                        | Time   |
+| --------------------------- | ------ |
+| 13-partition import + write | ~1.0 s |
+| Per-code row count verify   | < 1 s  |
 
 After a successful run, the operator manually swaps:
 
@@ -121,13 +121,13 @@ Rollback is the inverse `mv`.
 
 ## Production status (2026-05-13)
 
-| Store              | Migration commit | Verified by script |
-| ------------------ | ---------------- | ------------------ |
-| Blacklist          | a073d23          | ✓                  |
-| Sectors            | cf65d13          | ✓                  |
-| TaCache            | cf65d13          | (no live data yet) |
-| SentimentCache     | cf65d13          | (no live data yet) |
-| Ledger             | 15941aa          | (no live data yet) |
-| WatchTask[admin]   | 80942b1          | ✓                  |
-| WatchGroup[admin]  | 80942b1          | ✓                  |
-| UserLlmLedger      | 80942b1          | (no live data yet) |
+| Store             | Migration commit | Verified by script |
+| ----------------- | ---------------- | ------------------ |
+| Blacklist         | a073d23          | ✓                  |
+| Sectors           | cf65d13          | ✓                  |
+| TaCache           | cf65d13          | (no live data yet) |
+| SentimentCache    | cf65d13          | (no live data yet) |
+| Ledger            | 15941aa          | (no live data yet) |
+| WatchTask[admin]  | 80942b1          | ✓                  |
+| WatchGroup[admin] | 80942b1          | ✓                  |
+| UserLlmLedger     | 80942b1          | (no live data yet) |

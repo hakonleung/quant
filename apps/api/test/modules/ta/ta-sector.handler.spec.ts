@@ -1,6 +1,9 @@
 import { instructionId, QuantError, type TaSectorAnalysis, type Sector } from '@quant/shared';
 
-import { TaSectorInstructionHandler, formatSectorAnalysis } from '../../../src/modules/ta/instructions/ta-sector.handler.js';
+import {
+  TaSectorInstructionHandler,
+  formatSectorAnalysis,
+} from '../../../src/modules/ta/instructions/ta-sector.handler.js';
 import type { TaService } from '../../../src/modules/ta/ta.service.js';
 import type { SectorsService } from '../../../src/modules/sectors/sectors.service.js';
 import { InstructionRegistry } from '../../../src/modules/instruction/instruction.registry.js';

@@ -15,6 +15,7 @@
  * the affected market and drain.
  */
 
+/* eslint-disable no-restricted-globals -- real-time tick: Date is the input (market wall clock, quote ts, hit-batch debounce), not hidden state. */
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { WATCH_TREND_WINDOW_MAX_SEC, newTraceId, type WatchTask } from '@quant/shared';
 import { Decimal } from 'decimal.js';
@@ -76,16 +77,58 @@ export class WatchWorker implements JobProcessor<WatchJob> {
     const now = new Date();
     const nowMs = now.getTime();
     const task = (await this.store.get(userId, market, code)) ?? null;
-    if (task === null) return; // task removed between push and consume
+    if (task === null) return;
     const traceId = newTraceId();
 
-    let quoteDto: Awaited<ReturnType<WatchQuotePort['fetchOne']>>;
+    const quoteDto = await this.fetchQuoteOrFail(userId, market, code, traceId, now);
+    if (quoteDto === null) return;
+    const quoteTsMs = Date.parse(quoteDto.ts);
+    if (await this.skipIfStale(userId, market, code, traceId, now, nowMs, quoteDto.ts, quoteTsMs)) {
+      return;
+    }
+
+    const decimalQuote = decimalQuoteFromDto(quoteDto);
+    const intradaySamples = this.updateSamples(
+      userId,
+      task,
+      now,
+      new Date(quoteTsMs),
+      decimalQuote.last,
+    );
+    const klineMaRef = await this.loadMaRefIfNeeded(task, now, traceId);
+    const matched = task.conditions.filter((c) =>
+      evaluate({ quote: decimalQuote, intradaySamples, klineMaRef }, c),
+    );
+    const isHit =
+      matched.length > 0 &&
+      this.priceTriggersHit(task, now, decimalQuote.last) &&
+      this.timeTriggersHit(task, nowMs);
+
+    await this.commitTickResult(userId, market, code, now, decimalQuote.last.toString(), isHit);
+
+    if (isHit && task.notifySlack) {
+      this.enqueueHit(userId, {
+        code: task.code,
+        name: task.name,
+        market: task.market,
+        quote: decimalQuote,
+        matched,
+      });
+    }
+  }
+
+  private async fetchQuoteOrFail(
+    userId: string,
+    market: WatchTask['market'],
+    code: string,
+    traceId: string,
+    now: Date,
+  ): Promise<Awaited<ReturnType<WatchQuotePort['fetchOne']>> | null> {
     try {
-      quoteDto = await this.port.fetchOne(market, code, traceId);
+      return await this.port.fetchOne(market, code, traceId);
     } catch (err) {
-      // Bump lastTickAt so the next 5s tick doesn't re-enqueue
-      // immediately, then re-throw so the queue applies its pool /
-      // task backoff policy.
+      // Bump lastTickAt so the next 5s tick doesn't re-enqueue immediately,
+      // then re-throw so the queue applies its pool / task backoff policy.
       await this.store.patch(userId, market, code, (t) => ({
         ...t,
         lastTickAt: now.toISOString(),
@@ -95,41 +138,41 @@ export class WatchWorker implements JobProcessor<WatchJob> {
       );
       throw err;
     }
+  }
 
-    const quoteTsMs = Date.parse(quoteDto.ts);
+  private async skipIfStale(
+    userId: string,
+    market: WatchTask['market'],
+    code: string,
+    traceId: string,
+    now: Date,
+    nowMs: number,
+    ts: string,
+    quoteTsMs: number,
+  ): Promise<boolean> {
     const ageMs = Number.isNaN(quoteTsMs) ? Number.POSITIVE_INFINITY : Math.abs(nowMs - quoteTsMs);
-    if (ageMs > STALE_QUOTE_MAX_MS) {
-      this.logger.warn(
-        `watch_quote_stale user=${userId} market=${market} code=${code} ts=${quoteDto.ts} age_ms=${String(ageMs)} trace_id=${traceId}`,
-      );
-      await this.store.patch(userId, market, code, (t) => ({
-        ...t,
-        lastTickAt: now.toISOString(),
-      }));
-      return;
-    }
-
-    const decimalQuote = decimalQuoteFromDto(quoteDto);
-    const quoteTs = new Date(quoteTsMs);
-    const intradaySamples = this.updateSamples(userId, task, now, quoteTs, decimalQuote.last);
-    const klineMaRef = await this.loadMaRefIfNeeded(task, now, traceId);
-    const matched = task.conditions.filter((c) =>
-      evaluate({ quote: decimalQuote, intradaySamples, klineMaRef }, c),
+    if (ageMs <= STALE_QUOTE_MAX_MS) return false;
+    this.logger.warn(
+      `watch_quote_stale user=${userId} market=${market} code=${code} ts=${ts} age_ms=${String(ageMs)} trace_id=${traceId}`,
     );
+    await this.store.patch(userId, market, code, (t) => ({
+      ...t,
+      lastTickAt: now.toISOString(),
+    }));
+    return true;
+  }
 
-    const isHit =
-      matched.length > 0 &&
-      this.priceTriggersHit(task, now, decimalQuote.last) &&
-      this.timeTriggersHit(task, nowMs);
+  private async commitTickResult(
+    userId: string,
+    market: WatchTask['market'],
+    code: string,
+    now: Date,
+    nextHitPriceStr: string,
+    isHit: boolean,
+  ): Promise<void> {
     const nowIso = now.toISOString();
-    const nextHitPriceStr = decimalQuote.last.toString();
-
     await this.store.patch(userId, market, code, (t) => {
-      const baseUpdate: WatchTask = {
-        ...t,
-        lastTickAt: nowIso,
-        lastSampleAt: nowIso,
-      };
+      const baseUpdate: WatchTask = { ...t, lastTickAt: nowIso, lastSampleAt: nowIso };
       if (!isHit) return baseUpdate;
       const nextRemaining = t.remaining === null ? null : Math.max(0, t.remaining - 1);
       return {
@@ -141,16 +184,6 @@ export class WatchWorker implements JobProcessor<WatchJob> {
         enabled: nextRemaining === 0 ? false : t.enabled,
       };
     });
-
-    if (isHit && task.notifySlack) {
-      this.enqueueHit(userId, {
-        code: task.code,
-        name: task.name,
-        market: task.market,
-        quote: decimalQuote,
-        matched,
-      });
-    }
   }
 
   /** Flush any pending hit batches — called on module destroy. */
@@ -181,7 +214,7 @@ export class WatchWorker implements JobProcessor<WatchJob> {
     const key = `${userId}|${task.market}:${task.code}`;
     const day = marketTradingDayKey(task.market, now);
     let buf = this.samples.get(key);
-    if (buf === undefined || buf.day !== day) {
+    if (buf?.day !== day) {
       buf = { day, samples: [] };
       this.samples.set(key, buf);
     }
@@ -189,7 +222,9 @@ export class WatchWorker implements JobProcessor<WatchJob> {
     const maxWindowSec = this.maxWindowSecFor(task);
     if (maxWindowSec > 0) {
       const cutoffMs = quoteTs.getTime() - (maxWindowSec * 1000 + task.intervalSec * 1000);
-      while (buf.samples.length > 0 && buf.samples[0]!.ts.getTime() < cutoffMs) {
+      for (;;) {
+        const head = buf.samples[0];
+        if (head === undefined || head.ts.getTime() >= cutoffMs) break;
         buf.samples.shift();
       }
     }
@@ -205,7 +240,7 @@ export class WatchWorker implements JobProcessor<WatchJob> {
     if (!task.conditions.some((c) => c.kind === 'ma')) return null;
     const day = marketTradingDayKey(task.market, now);
     const cached = this.maRefs.get(task.code);
-    if (cached !== undefined && cached.day === day) return cached.ref;
+    if (cached?.day === day) return cached.ref;
     const pending = this.maRefInFlight.get(task.code);
     if (pending !== undefined) return pending;
     const load = (async (): Promise<KlineMaRef | null> => {

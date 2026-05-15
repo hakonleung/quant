@@ -22,6 +22,8 @@
  * double-fire.
  */
 
+/* eslint-disable no-restricted-globals -- scheduler races the wall clock; Date use is the unit of work, not a hidden side-effect. */
+
 import { Inject, Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { newTraceId, type ScanAccepted, type ScanKind, type ScanResult } from '@quant/shared';
 import { isPyFlightDown } from '../../adapters/flight/flight-errors.js';
@@ -54,7 +56,7 @@ export function msUntilNextBjt1600(now: number = Date.now()): number {
 export class CronOrchestrator implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(CronOrchestrator.name);
   private timer: NodeJS.Timeout | null = null;
-  private inFlight: Partial<Record<ScanKind, Promise<ScanResult>>> = {};
+  private readonly inFlight = new Map<ScanKind, Promise<ScanResult>>();
   private destroyed = false;
 
   constructor(
@@ -79,24 +81,24 @@ export class CronOrchestrator implements OnModuleInit, OnModuleDestroy {
    * the same kind. `'all'` runs both meta and kline in parallel.
    */
   triggerScan(kind: ScanKind, traceId?: string): Promise<ScanResult> {
-    const existing = this.inFlight[kind];
+    const existing = this.inFlight.get(kind);
     if (existing !== undefined) return existing;
     const p = this.scan(kind, traceId ?? newTraceId()).finally(() => {
-      delete this.inFlight[kind];
+      this.inFlight.delete(kind);
     });
-    this.inFlight[kind] = p;
+    this.inFlight.set(kind, p);
     return p;
   }
 
   /** Snapshot of currently in-flight scan kinds. */
   activeScans(): readonly ScanKind[] {
-    return Object.keys(this.inFlight) as ScanKind[];
+    return [...this.inFlight.keys()];
   }
 
   fireScan(kind: ScanKind): ScanAccepted {
     const startedAt = new Date().toISOString();
     const traceId = newTraceId();
-    const wasInflight = this.inFlight[kind] !== undefined;
+    const wasInflight = this.inFlight.has(kind);
     this.logger.log(
       `manual_scan_fired kind=${kind} traceId=${traceId} coalesced=${String(wasInflight)}`,
     );
@@ -130,25 +132,8 @@ export class CronOrchestrator implements OnModuleInit, OnModuleDestroy {
     // a `kind === 'blacklist'` request just runs the daily tail without
     // enqueueing anything.
     const batchId = traceId;
-    let metaEnqueued = 0;
-    let klineEnqueued = 0;
-    try {
-      if (wantMeta) {
-        await this.inspector.syncBulkFinancials(traceId);
-      }
-      const [meta, kline] = await Promise.all([
-        wantMeta ? this.scanMeta(traceId, batchId) : Promise.resolve(0),
-        wantKline ? this.scanKline(traceId, batchId) : Promise.resolve(0),
-      ]);
-      metaEnqueued = meta;
-      klineEnqueued = kline;
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      if (isPyFlightDown(err)) {
-        this.logger.warn(`inspector skipped — py flight unreachable. traceId=${traceId}`);
-      } else {
-        this.logger.error(`inspector failed traceId=${traceId} err=${msg}`);
-      }
+    const result = await this.enqueueBatch(traceId, batchId, wantMeta, wantKline);
+    if (result === null) {
       return {
         kind,
         traceId,
@@ -158,6 +143,7 @@ export class CronOrchestrator implements OnModuleInit, OnModuleDestroy {
         klineEnqueued: 0,
       };
     }
+    const [metaEnqueued, klineEnqueued] = result;
     if (wantMeta || wantKline) {
       this.settler.register({
         batchId,
@@ -170,14 +156,35 @@ export class CronOrchestrator implements OnModuleInit, OnModuleDestroy {
     this.logger.log(
       `cron_scan_done kind=${kind} traceId=${traceId} meta_enqueued=${String(metaEnqueued)} kline_enqueued=${String(klineEnqueued)} elapsedMs=${String(elapsedMs)}`,
     );
-    return {
-      kind,
-      traceId,
-      startedAt,
-      elapsedMs,
-      metaEnqueued,
-      klineEnqueued,
-    };
+    return { kind, traceId, startedAt, elapsedMs, metaEnqueued, klineEnqueued };
+  }
+
+  /** Returns `[metaEnqueued, klineEnqueued]` or `null` when the inspector
+   *  itself failed (caller emits an empty `ScanResult`). */
+  private async enqueueBatch(
+    traceId: string,
+    batchId: string,
+    wantMeta: boolean,
+    wantKline: boolean,
+  ): Promise<readonly [number, number] | null> {
+    try {
+      if (wantMeta) {
+        await this.inspector.syncBulkFinancials(traceId);
+      }
+      const [meta, kline] = await Promise.all([
+        wantMeta ? this.scanMeta(traceId, batchId) : Promise.resolve(0),
+        wantKline ? this.scanKline(traceId, batchId) : Promise.resolve(0),
+      ]);
+      return [meta, kline];
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (isPyFlightDown(err)) {
+        this.logger.warn(`inspector skipped — py flight unreachable. traceId=${traceId}`);
+      } else {
+        this.logger.error(`inspector failed traceId=${traceId} err=${msg}`);
+      }
+      return null;
+    }
   }
 
   private async scanMeta(traceId: string, batchId: string): Promise<number> {

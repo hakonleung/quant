@@ -117,10 +117,7 @@ export function FeatEqList({ bare }: FeatEqListProps = {}): React.ReactElement {
   }, [isDynamic, sector]);
 
   const baseRows: readonly ListRow[] = useMemo(
-    () =>
-      stockListRows.map((r) =>
-        listRowFromStockListRow(r, sector?.evidence?.[r.code]),
-      ),
+    () => stockListRows.map((r) => listRowFromStockListRow(r, sector?.evidence?.[r.code])),
     [stockListRows, sector?.evidence],
   );
 

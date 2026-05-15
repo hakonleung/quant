@@ -75,10 +75,7 @@ export class UserBlobStore {
     return this.loadOrEmpty(userId);
   }
 
-  async update(
-    userId: string,
-    patch: (current: UserBlob) => UserBlob,
-  ): Promise<UserBlob> {
+  async update(userId: string, patch: (current: UserBlob) => UserBlob): Promise<UserBlob> {
     return this.withUserLock(userId, async () => {
       const current = await this.loadOrEmpty(userId);
       const next = patch(current);
@@ -127,7 +124,10 @@ export class UserBlobStore {
     // schema tightening. Boundary validation owns correctness; the
     // store owns durability + structure only.
     const obj = raw as Record<string, unknown>;
-    if (typeof obj['schemaVersion'] !== 'number' || obj['schemaVersion'] !== USER_BLOB_SCHEMA_VERSION) {
+    if (
+      typeof obj['schemaVersion'] !== 'number' ||
+      obj['schemaVersion'] !== USER_BLOB_SCHEMA_VERSION
+    ) {
       // Try a strict parse anyway in case it actually conforms — falls
       // through to empty if it doesn't.
       const strict = UserBlobSchema.safeParse(raw);

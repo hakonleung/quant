@@ -22,11 +22,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 
 import { DuckDBParquetRecordStore } from './duckdb-parquet-record.store.js';
-import type {
-  RecordFilter,
-  RecordKey,
-  RecordTableSpec,
-} from '../ports/record-store.port.js';
+import type { RecordFilter, RecordKey, RecordTableSpec } from '../ports/record-store.port.js';
 import type { UserScopedRecordStore } from '../ports/user-scoped-record-store.port.js';
 
 export interface FileSystemUserScopedRecordStoreOptions<V, K extends RecordKey> {
@@ -51,9 +47,10 @@ interface UserSlot<V, K extends RecordKey> {
   lastTouchedAt: number;
 }
 
-export class FileSystemUserScopedRecordStore<V, K extends RecordKey = string>
-  implements UserScopedRecordStore<V, K>
-{
+export class FileSystemUserScopedRecordStore<
+  V,
+  K extends RecordKey = string,
+> implements UserScopedRecordStore<V, K> {
   private readonly slots = new Map<string, UserSlot<V, K>>();
   private readonly maxActiveUsers: number;
   private readonly idleTtlMs: number;

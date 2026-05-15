@@ -127,4 +127,3 @@ describe('SectorsStore migration & id allocation', () => {
     await expect(record.count()).resolves.toBe(1);
   });
 });
-

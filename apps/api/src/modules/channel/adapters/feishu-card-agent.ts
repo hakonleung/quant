@@ -16,12 +16,7 @@
  * cards that live in `feishu-card.ts`.
  */
 
-import {
-  metaString,
-  stripSlackMrkdwn,
-  truncateForCard,
-  type FeishuV1Card,
-} from './feishu-card.js';
+import { metaString, stripSlackMrkdwn, truncateForCard, type FeishuV1Card } from './feishu-card.js';
 
 export function buildAgentPaidConfirmCard(
   text: string,

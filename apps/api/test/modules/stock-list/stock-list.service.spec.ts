@@ -84,7 +84,10 @@ class FakeMeta {
     private readonly snaps: readonly StockSnapshotDto[],
     private readonly metas: readonly StockMetaDto[] = snaps.map((s) => s.meta),
   ) {}
-  async listSnapshots(_codes: readonly string[], _trace: string): Promise<readonly StockSnapshotDto[]> {
+  async listSnapshots(
+    _codes: readonly string[],
+    _trace: string,
+  ): Promise<readonly StockSnapshotDto[]> {
     this.snapshotCalls += 1;
     return this.snaps;
   }

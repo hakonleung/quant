@@ -37,7 +37,9 @@ export class InMemoryRecordStore<V, K extends RecordKey = string> implements Rec
     if (filter?.whereIn !== undefined) {
       const { column, values } = filter.whereIn;
       const set = new Set<string | number>(values);
-      result = result.filter((row) => set.has((row as Record<string, unknown>)[column] as string | number));
+      result = result.filter((row) =>
+        set.has((row as Record<string, unknown>)[column] as string | number),
+      );
     }
     if (filter?.orderBy !== undefined) {
       const orderBy = filter.orderBy;

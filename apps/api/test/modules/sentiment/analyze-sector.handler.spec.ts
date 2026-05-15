@@ -132,7 +132,9 @@ describe('AnalyzeSectorInstructionHandler', () => {
 
   it('rethrows non-QuantError from analyzeMany', async () => {
     const { handler } = build({ marketReject: new Error('rpc down') });
-    await expect(handler.execute({ id: 's2', fresh: false, confirm: false }, ctx)).rejects.toThrow('rpc down');
+    await expect(handler.execute({ id: 's2', fresh: false, confirm: false }, ctx)).rejects.toThrow(
+      'rpc down',
+    );
   });
 
   describe('formatMarketSentiment', () => {

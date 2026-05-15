@@ -8,6 +8,8 @@
  * scheduling.
  */
 
+/* eslint-disable no-restricted-globals -- test-only fixture construction. */
+
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -40,30 +42,30 @@ const USER = 'admin';
 class FakeQuotePort implements WatchQuotePort {
   responses: SpotQuote[] = [];
   failNext = false;
-  calls: Array<{ market: WatchMarket; code: string }> = [];
-  async fetchOne(market: WatchMarket, code: string): Promise<SpotQuote> {
+  calls: { market: WatchMarket; code: string }[] = [];
+  fetchOne(market: WatchMarket, code: string): Promise<SpotQuote> {
     this.calls.push({ market, code });
     if (this.failNext) {
       this.failNext = false;
-      throw new Error('upstream boom');
+      return Promise.reject(new Error('upstream boom'));
     }
     const next = this.responses.shift();
-    if (next === undefined) throw new Error('no canned response');
-    return next;
+    if (next === undefined) return Promise.reject(new Error('no canned response'));
+    return Promise.resolve(next);
   }
-  async refreshUniverse(): Promise<readonly StockBasic[]> {
-    return [];
+  refreshUniverse(): Promise<readonly StockBasic[]> {
+    return Promise.resolve([]);
   }
 }
 
 class FakeNotifier {
-  sent: Array<{ text: string; kind: string }> = [];
-  async broadcast(req: ChannelOutboundRequest): Promise<ChannelOutboundResponse> {
+  sent: { text: string; kind: string }[] = [];
+  broadcast(req: ChannelOutboundRequest): Promise<ChannelOutboundResponse> {
     this.sent.push({ text: req.text, kind: req.kind });
-    return { accepted: [], activityIds: [] };
+    return Promise.resolve({ accepted: [], activityIds: [] });
   }
-  async send(): Promise<ChannelOutboundResponse> {
-    return { accepted: [], activityIds: [] };
+  send(): Promise<ChannelOutboundResponse> {
+    return Promise.resolve({ accepted: [], activityIds: [] });
   }
 }
 
@@ -134,7 +136,7 @@ function newWorker(
 ): WatchWorker {
   return new WatchWorker(
     port,
-    { loadMaRef: async () => null },
+    { loadMaRef: () => Promise.resolve(null) },
     notifier as unknown as ChannelService,
     store,
   );
@@ -169,7 +171,9 @@ describe('WatchWorker.process', () => {
     jest.useRealTimers();
     void realNow;
   });
-  beforeEach(() => jest.setSystemTime(FROZEN_NOW));
+  beforeEach(() => {
+    jest.setSystemTime(FROZEN_NOW);
+  });
 
   it('fetches quote and pushes when condition hits (no prior hit)', async () => {
     const { store } = await buildEnv(task());

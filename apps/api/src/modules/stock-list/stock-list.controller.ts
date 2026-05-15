@@ -24,7 +24,8 @@ export class StockListController {
     @Body(new ZodValidationPipe(StockListRowsRequestSchema)) body: StockListRowsRequest,
     @Req() req: { traceId?: string },
   ): Promise<StockListRowsResponse> {
-    const traceId = typeof req.traceId === 'string' && req.traceId.length > 0 ? req.traceId : 'no-trace';
+    const traceId =
+      typeof req.traceId === 'string' && req.traceId.length > 0 ? req.traceId : 'no-trace';
     return this.svc.assembleRows({
       kind: body.kind,
       codes: body.codes,

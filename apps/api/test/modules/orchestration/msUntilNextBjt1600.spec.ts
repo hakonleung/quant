@@ -1,3 +1,5 @@
+/* eslint-disable no-restricted-globals -- test-only fixture construction. */
+
 import { msUntilNextBjt1600 } from '../../../src/modules/orchestration/cron.orchestrator.js';
 
 describe('msUntilNextBjt1600', () => {

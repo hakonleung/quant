@@ -76,9 +76,7 @@ describe('KlineReaderService', () => {
     ]);
     const reader = new KlineReaderService(store);
 
-    await expect(reader.lastTradeDate('000001')).resolves.toEqual(
-      new Date('2026-05-03T00:00:00Z'),
-    );
+    await expect(reader.lastTradeDate('000001')).resolves.toEqual(new Date('2026-05-03T00:00:00Z'));
     await expect(reader.lastTradeDate('missing')).resolves.toBeNull();
 
     const map = await reader.lastTradeDates(['000001', '600000', 'missing']);

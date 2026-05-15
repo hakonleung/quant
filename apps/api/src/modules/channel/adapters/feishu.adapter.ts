@@ -54,7 +54,10 @@ interface LarkMessageEvent {
  * valid "do nothing" ack. Same shape on WS and HTTP paths.
  */
 interface CardActionResponse {
-  readonly toast?: { readonly type: 'info' | 'success' | 'warning' | 'error'; readonly content: string };
+  readonly toast?: {
+    readonly type: 'info' | 'success' | 'warning' | 'error';
+    readonly content: string;
+  };
   readonly card?: { readonly type: 'raw'; readonly data: FeishuV1Card };
 }
 
@@ -215,7 +218,8 @@ export class FeishuChannelAdapter implements ChannelAdapter {
       // (with a small preview of the card we sent) before rethrowing so
       // card-shape regressions are debuggable from the API logs alone.
       const body = extractFeishuErrorBody(err);
-      const preview = card !== null ? JSON.stringify(card).slice(0, 600) : data.content.slice(0, 200);
+      const preview =
+        card !== null ? JSON.stringify(card).slice(0, 600) : data.content.slice(0, 200);
       this.logger.error(
         `feishu_send_failed trace_id=${traceId} target=${target} body=${body} card_preview=${preview}`,
       );

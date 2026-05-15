@@ -238,10 +238,7 @@ export function sortValue(r: ListRow, key: string): number | string | null {
   return null;
 }
 
-export function compareValues(
-  va: number | string | null,
-  vb: number | string | null,
-): number {
+export function compareValues(va: number | string | null, vb: number | string | null): number {
   if (va === null && vb === null) return 0;
   if (va === null) return -1;
   if (vb === null) return 1;

@@ -47,7 +47,10 @@ class RedisInvalidationBus implements InvalidationBus, OnModuleDestroy {
   private readonly subscribers = new Map<string, Set<(keys: readonly string[]) => void>>();
   private subClient: Redis | null = null;
 
-  constructor(private readonly pubClient: Redis, private readonly url: string) {}
+  constructor(
+    private readonly pubClient: Redis,
+    private readonly url: string,
+  ) {}
 
   async publish(topic: string, keys: readonly string[]): Promise<void> {
     const payload = JSON.stringify({ topic, keys, ts: Date.now() });
@@ -117,7 +120,10 @@ class RedisInvalidationBus implements InvalidationBus, OnModuleDestroy {
 }
 
 class RedisLifecycle implements OnModuleDestroy {
-  constructor(private readonly client: Redis, private readonly bus: RedisInvalidationBus) {}
+  constructor(
+    private readonly client: Redis,
+    private readonly bus: RedisInvalidationBus,
+  ) {}
   async onModuleDestroy(): Promise<void> {
     await this.bus.onModuleDestroy();
     try {

@@ -4,9 +4,7 @@ import { join } from 'node:path';
 import { z } from 'zod';
 
 import { FileSystemUserScopedRecordStore } from '../../../src/common/storage/adapters/filesystem-user-scoped-record.store.js';
-import type {
-  RecordTableSpec,
-} from '../../../src/common/storage/ports/record-store.port.js';
+import type { RecordTableSpec } from '../../../src/common/storage/ports/record-store.port.js';
 import type { UserScopedRecordStore } from '../../../src/common/storage/ports/user-scoped-record-store.port.js';
 import { InMemoryUserScopedRecordStore } from '../../fakes/in-memory-user-scoped-record.store.js';
 

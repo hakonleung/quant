@@ -114,14 +114,7 @@ function spendRow(
   label: string,
   s: UserLlmLedgerSummary,
 ): readonly (readonly [string, string, string, string])[] {
-  return [
-    [
-      label,
-      String(s.callCount),
-      String(s.totalUsage.input),
-      String(s.totalUsage.output),
-    ],
-  ];
+  return [[label, String(s.callCount), String(s.totalUsage.input), String(s.totalUsage.output)]];
 }
 
 function spendCells(s: UserLlmLedgerSummary): Record<string, string> {
@@ -232,7 +225,6 @@ function ledgerTableSections(data: LedgerSnapshot | null): Record<string, unknow
   return sections;
 }
 
-
 // ── pure render helpers ──────────────────────────────────────────────────
 //
 // Code-fenced fixed-width tables — same approach as `format-stock-table.ts`
@@ -246,9 +238,7 @@ function renderKvTable(rows: readonly (readonly [string, string])[]): string {
   return ['```', ...lines, '```'].join('\n');
 }
 
-function render4ColTable(
-  rows: readonly (readonly [string, string, string, string])[],
-): string {
+function render4ColTable(rows: readonly (readonly [string, string, string, string])[]): string {
   const widths: [number, number, number, number] = [
     maxWidth(rows.map((r) => r[0])),
     maxWidth(rows.map((r) => r[1])),

@@ -315,9 +315,7 @@ function readSection(obj: Readonly<Record<string, unknown>>): MetaTableSection |
       ? Math.floor(rawRowMaxHeight)
       : undefined;
   const base: MetaTableSection =
-    typeof title === 'string' && title.length > 0
-      ? { title, columns, rows }
-      : { columns, rows };
+    typeof title === 'string' && title.length > 0 ? { title, columns, rows } : { columns, rows };
   return {
     ...base,
     ...(pageSize !== undefined ? { pageSize } : {}),

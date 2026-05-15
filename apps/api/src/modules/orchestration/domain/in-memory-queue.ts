@@ -87,9 +87,13 @@ export class InMemoryQueue<T> implements ReQueue<T> {
     this.maxRetry = options.maxRetry ?? Number.POSITIVE_INFINITY;
     this.poolBackoff = options.poolBackoff
       ? new PoolBackoff(options.poolBackoff, {
-          pause: () => this.pause(),
+          pause: () => {
+            this.pause();
+          },
           inFlight: () => this.active,
-          resume: () => this.resume(),
+          resume: () => {
+            this.resume();
+          },
         })
       : null;
   }
@@ -140,7 +144,7 @@ export class InMemoryQueue<T> implements ReQueue<T> {
     return true;
   }
 
-  addBulk(items: ReadonlyArray<{ readonly data: T; readonly options?: AddOptions }>): number {
+  addBulk(items: readonly { readonly data: T; readonly options?: AddOptions }[]): number {
     let added = 0;
     for (const item of items) {
       if (this.add(item.data, item.options)) added += 1;
@@ -235,15 +239,14 @@ export class InMemoryQueue<T> implements ReQueue<T> {
     // of the per-job retry decision — we still apply the task policy
     // to this envelope so it eventually retries (after pool resumes)
     // or terminates by attempt count.
-    const poolTripped =
-      this.poolBackoff !== null && this.poolBackoff.classify(err) && !this.poolBackoff.isLocked;
-    if (poolTripped && this.poolBackoff !== null) {
-      this.poolBackoff.trip();
-    } else if (this.poolBackoff !== null && !this.poolBackoff.classify(err)) {
-      // First task-level success-or-non-pool-failure after a streak resets
-      // the trip counter only when the pool is not currently locked
-      // (PoolBackoff.reset() is a no-op while locked).
-      this.poolBackoff.reset();
+    if (this.poolBackoff !== null) {
+      if (this.poolBackoff.classify(err)) {
+        if (!this.poolBackoff.isLocked) this.poolBackoff.trip();
+      } else {
+        // Non-pool failure: reset the streak counter so the next genuine
+        // trip starts from baseMs (no-op while locked).
+        this.poolBackoff.reset();
+      }
     }
 
     if (envelope.attemptsMade < this.maxRetry) {

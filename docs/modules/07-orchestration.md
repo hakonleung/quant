@@ -9,32 +9,32 @@
 
 ## 实现
 
-| 组件         | 位置                                                              | 说明                                                                                                                                            |
-| ------------ | ----------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| Cron         | `apps/api/src/modules/orchestration/cron.orchestrator.ts`         | 自实现 setTimeout 调度（无 `@nestjs/schedule`）；BJT 16:00 触发，冷启动不自动扫描                                                               |
-| Queue engine | `apps/api/src/modules/orchestration/domain/in-memory-queue.ts`    | 进程内 FIFO + 并发 + 去重 + `maxRetry` + `taskBackoff` + `poolBackoff` + terminal-event 订阅                                                    |
-| Pool backoff | `apps/api/src/modules/orchestration/domain/pool-backoff.ts`       | 池级状态机：trip → pause → drain in-flight → cooldown → resume；连续失败指数退避，单次成功重置                                                  |
-| Workers      | `kline-worker.ts`、`meta-worker.ts`                               | 单 job = 一个 code 的合并任务（见下表）                                                                                                         |
-| Settler      | `apps/api/src/modules/orchestration/batch-settler.ts`             | 监听 meta + kline 队列的终止事件（含失败到上限），按 `batchId` 收尾 → blacklist refresh → dynamic sectors 全量重算                              |
-| Inspector    | `cache-inspector.ts`                                              | 巡检 stock_meta + kline 水位，输出每 code 是否需 `needBasic` / `needFinancials` / kline sync                                                    |
-| Trigger API  | `queue-status.controller.ts`                                      | `GET /api/orchestration/queue` 快照（feat-sys-stat 用，实时走 Socket.IO `queue.snapshot`）+ `POST .../scan?kind=meta\|kline\|blacklist\|all` 手动触发 |
+| 组件         | 位置                                                           | 说明                                                                                                                                                  |
+| ------------ | -------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Cron         | `apps/api/src/modules/orchestration/cron.orchestrator.ts`      | 自实现 setTimeout 调度（无 `@nestjs/schedule`）；BJT 16:00 触发，冷启动不自动扫描                                                                     |
+| Queue engine | `apps/api/src/modules/orchestration/domain/in-memory-queue.ts` | 进程内 FIFO + 并发 + 去重 + `maxRetry` + `taskBackoff` + `poolBackoff` + terminal-event 订阅                                                          |
+| Pool backoff | `apps/api/src/modules/orchestration/domain/pool-backoff.ts`    | 池级状态机：trip → pause → drain in-flight → cooldown → resume；连续失败指数退避，单次成功重置                                                        |
+| Workers      | `kline-worker.ts`、`meta-worker.ts`                            | 单 job = 一个 code 的合并任务（见下表）                                                                                                               |
+| Settler      | `apps/api/src/modules/orchestration/batch-settler.ts`          | 监听 meta + kline 队列的终止事件（含失败到上限），按 `batchId` 收尾 → blacklist refresh → dynamic sectors 全量重算                                    |
+| Inspector    | `cache-inspector.ts`                                           | 巡检 stock_meta + kline 水位，输出每 code 是否需 `needBasic` / `needFinancials` / kline sync                                                          |
+| Trigger API  | `queue-status.controller.ts`                                   | `GET /api/orchestration/queue` 快照（feat-sys-stat 用，实时走 Socket.IO `queue.snapshot`）+ `POST .../scan?kind=meta\|kline\|blacklist\|all` 手动触发 |
 
 ## Job 包
 
 每 code 一个合并任务，对应队列各一种 kind。任务 `batchId` 由 16:00 cron / 手动 scan 注入；ad-hoc push 不带 `batchId`，不进收尾计数。
 
-| Job          | 子步骤（按序）                                                                | 备注                                                       |
-| ------------ | ----------------------------------------------------------------------------- | ---------------------------------------------------------- |
-| `meta_pkg`   | `enrich_stock_meta_for_code` ↑ `needBasic` / `enrich_financials_for_code` ↑ `needFinancials` | 旗标由 inspector 计算；黑名单 A 股 worker 内直接 return    |
-| `kline_pkg`  | `sync_kline_for_code` → `upsert_stock_metrics_for_code`（best-effort）         | metrics 落 `ret_*` / `ma*` 投影，失败仅 warn               |
+| Job         | 子步骤（按序）                                                                               | 备注                                                    |
+| ----------- | -------------------------------------------------------------------------------------------- | ------------------------------------------------------- |
+| `meta_pkg`  | `enrich_stock_meta_for_code` ↑ `needBasic` / `enrich_financials_for_code` ↑ `needFinancials` | 旗标由 inspector 计算；黑名单 A 股 worker 内直接 return |
+| `kline_pkg` | `sync_kline_for_code` → `upsert_stock_metrics_for_code`（best-effort）                       | metrics 落 `ret_*` / `ma*` 投影，失败仅 warn            |
 
 ## 队列参数（默认）
 
-| 队列         | 并发 | maxRetry | taskBackoff           | poolBackoff（connect abort / proxy）   |
-| ------------ | ---- | -------- | --------------------- | --------------------------------------- |
-| meta         | 8    | 3        | 1s → 5min, ×2, j0.2   | 5s → 5min, ×2, j0.2                     |
-| kline        | 8    | 3        | 5s → 15min, ×2, j0.2  | 5s → 5min, ×2, j0.2                     |
-| watch (a/hk/us) | 8 | 3        | 1s → 30s, ×2, j0.2    | 3s → 30s, ×2, j0.2                      |
+| 队列            | 并发 | maxRetry | taskBackoff          | poolBackoff（connect abort / proxy） |
+| --------------- | ---- | -------- | -------------------- | ------------------------------------ |
+| meta            | 8    | 3        | 1s → 5min, ×2, j0.2  | 5s → 5min, ×2, j0.2                  |
+| kline           | 8    | 3        | 5s → 15min, ×2, j0.2 | 5s → 5min, ×2, j0.2                  |
+| watch (a/hk/us) | 8    | 3        | 1s → 30s, ×2, j0.2   | 3s → 30s, ×2, j0.2                   |
 
 Pool 错误分类器统一在 `apps/api/src/adapters/flight/flight-errors.ts`（`isPyFlightDown` ∪ `isTransportError`）。
 

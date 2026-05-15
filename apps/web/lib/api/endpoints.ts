@@ -115,9 +115,7 @@ export async function listStockSnapshots(
 export async function postStockListRows(
   body: StockListRowsRequest,
 ): Promise<StockListRowsResponse> {
-  return apiPost(`/api/stock-list/rows`, body, (raw) =>
-    StockListRowsResponseSchema.parse(raw),
-  );
+  return apiPost(`/api/stock-list/rows`, body, (raw) => StockListRowsResponseSchema.parse(raw));
 }
 
 /**

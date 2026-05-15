@@ -26,10 +26,7 @@ import type { DuckDBConnection } from '@duckdb/node-api';
 import { DuckDBInstance } from '@duckdb/node-api';
 
 import type { RecordColumnSpec } from '../ports/record-store.port.js';
-import type {
-  TimeSeriesReadQuery,
-  TimeSeriesStore,
-} from '../ports/time-series-store.port.js';
+import type { TimeSeriesReadQuery, TimeSeriesStore } from '../ports/time-series-store.port.js';
 
 export interface DuckDBParquetTimeSeriesStoreOptions {
   readonly dataRoot: string;
@@ -45,9 +42,9 @@ export interface DuckDBParquetTimeSeriesStoreOptions {
 
 const DEFAULT_PARTITION_KEY = (code: string): string => code.slice(0, 3);
 
-export class DuckDBParquetTimeSeriesStore<Row extends { code: string; ts: Date }>
-  implements TimeSeriesStore<Row>
-{
+export class DuckDBParquetTimeSeriesStore<
+  Row extends { code: string; ts: Date },
+> implements TimeSeriesStore<Row> {
   private connPromise: Promise<DuckDBConnection> | null = null;
   private readonly partitionMutex = new Map<string, Promise<unknown>>();
   private readonly partitionKey: (code: string) => string;

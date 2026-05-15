@@ -64,17 +64,15 @@ const COLUMN_DEFAULTS: Readonly<
 
 /** The default column set rendered by IM tables — drops the 6 derived/snapshot
  * fundamentals to keep the row width manageable inside Feishu/xterm. */
-const DEFAULT_IM_COLUMNS: readonly StockListColumnKey[] = STOCK_LIST_COLUMN_CATALOG
-  .filter((c) => c.group === 'core' || ['ret5d', 'ret20d', 'ret90d', 'ret250d'].includes(c.key))
-  .map((c) => c.key);
+const DEFAULT_IM_COLUMNS: readonly StockListColumnKey[] = STOCK_LIST_COLUMN_CATALOG.filter(
+  (c) => c.group === 'core' || ['ret5d', 'ret20d', 'ret90d', 'ret250d'].includes(c.key),
+).map((c) => c.key);
 
 function buildRenderColumns(columns: readonly StockListColumnKey[]): readonly RenderColumn[] {
   // The leading separate `code` column comes from `StockListRow.code`;
   // `name` from the shared catalog renders the human-readable name.
   // Always show code first so users can map back to a ticker.
-  const out: RenderColumn[] = [
-    { key: 'code', header: 'code', align: 'left', width: 90, min: 6 },
-  ];
+  const out: RenderColumn[] = [{ key: 'code', header: 'code', align: 'left', width: 90, min: 6 }];
   for (const key of columns) {
     const defaults = COLUMN_DEFAULTS[key];
     const header = HEADER_OVERRIDES[key] ?? key;
@@ -169,7 +167,9 @@ export function formatStockTable(
     .join('  ');
   const separator = render.map((c) => '─'.repeat(widths.get(c.key) ?? c.min)).join('  ');
   const bodyLines = cells.map((c) =>
-    render.map((col) => pad(c[col.key] ?? '', widths.get(col.key) ?? col.min, col.align)).join('  '),
+    render
+      .map((col) => pad(c[col.key] ?? '', widths.get(col.key) ?? col.min, col.align))
+      .join('  '),
   );
   return ['```', headerLine, separator, ...bodyLines, '```'].join('\n');
 }

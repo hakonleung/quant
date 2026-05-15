@@ -24,14 +24,8 @@ import {
 import { z } from 'zod';
 
 import { CLOCK, type Clock } from '../../common/clock.js';
-import type {
-  RecordStore,
-  RecordTableSpec,
-} from '../../common/storage/ports/record-store.port.js';
-import {
-  SENTIMENT_MARKET_RECORD_STORE,
-  SENTIMENT_STOCK_RECORD_STORE,
-} from './sentiment.token.js';
+import type { RecordStore, RecordTableSpec } from '../../common/storage/ports/record-store.port.js';
+import { SENTIMENT_MARKET_RECORD_STORE, SENTIMENT_STOCK_RECORD_STORE } from './sentiment.token.js';
 
 const TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
@@ -180,4 +174,3 @@ export class SentimentCacheStore {
     return next;
   }
 }
-

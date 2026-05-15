@@ -19,11 +19,7 @@
  */
 
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import type {
-  ChatMessage,
-  ChatTokenUsage,
-  InstructionAgentDeltaPayload,
-} from '@quant/shared';
+import type { ChatMessage, ChatTokenUsage, InstructionAgentDeltaPayload } from '@quant/shared';
 
 import { CLOCK, type Clock } from '../../common/clock.js';
 import type { InstructionCtx } from '../instruction/instruction.port.js';
@@ -141,7 +137,11 @@ export class AgentStreamFinalizer {
   }
 
   async emitFailure(
-    state: { readonly delivery: AgentDeliveryTarget; readonly jobId: string; readonly ctx: InstructionCtx },
+    state: {
+      readonly delivery: AgentDeliveryTarget;
+      readonly jobId: string;
+      readonly ctx: InstructionCtx;
+    },
     err: unknown,
     emit: FrameEmitter,
   ): Promise<void> {

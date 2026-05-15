@@ -7,11 +7,11 @@
 
 ### Ports & adapters (`apps/api/src/common/storage/`)
 
-| Port | Production adapter | In-memory fake |
-| --- | --- | --- |
-| `RecordStore<V, K>` | `DuckDBParquetRecordStore` | `InMemoryRecordStore` |
-| `TimeSeriesStore<Row>` | `DuckDBParquetTimeSeriesStore` (flat `<prefix>.parquet`) | `InMemoryTimeSeriesStore` |
-| `KeyValueStore` | (Redis adapter deferred) | `InMemoryKeyValueStore` |
+| Port                          | Production adapter                                                             | In-memory fake                  |
+| ----------------------------- | ------------------------------------------------------------------------------ | ------------------------------- |
+| `RecordStore<V, K>`           | `DuckDBParquetRecordStore`                                                     | `InMemoryRecordStore`           |
+| `TimeSeriesStore<Row>`        | `DuckDBParquetTimeSeriesStore` (flat `<prefix>.parquet`)                       | `InMemoryTimeSeriesStore`       |
+| `KeyValueStore`               | (Redis adapter deferred)                                                       | `InMemoryKeyValueStore`         |
 | `UserScopedRecordStore<V, K>` | `FileSystemUserScopedRecordStore` (per-user dir + LRU + legacy-JSON migration) | `InMemoryUserScopedRecordStore` |
 
 Equivalence specs (`apps/api/test/common/storage/*.spec.ts`) keep prod
@@ -19,17 +19,17 @@ adapters and fakes in lock-step — 81 storage tests.
 
 ### Migrated stores
 
-| Module | Backing store | Legacy source migrated automatically |
-| --- | --- | --- |
-| `BlacklistStore` | `RecordStore<BlacklistRow>` | `data/blacklist.json` |
-| `SectorsStore` | `RecordStore<SectorRow>` (JSON-in-VARCHAR payload) | `data/sectors/sectors.json` |
-| `TaCacheStore` | `RecordStore<TaCacheRow>` per code | `data/ta/{code}.json` |
-| `SentimentCacheStore` | `RecordStore<...>` (stock + market shapes) | `data/sentiment/**/*.json` |
-| `LedgerStore` | `UserScopedRecordStore<LedgerRow>` | `data/users/{uid}/_ledger/entries.json` |
-| `WatchTaskStore` | `UserScopedRecordStore<WatchTaskRow>` (singleton blob) | `data/users/{uid}/watch/tasks.json` |
-| `WatchGroupStore` | `UserScopedRecordStore<WatchGroupRow>` (singleton blob) | `data/users/{uid}/watch/groups.json` |
-| `UserLlmLedgerStore` | `UserScopedRecordStore<...>` | `data/users/{uid}/llm-ledger.json` |
-| `AgentHistoryStore`, `AgentPendingStore` | (intentionally in-memory only — v1 contract) | — |
+| Module                                   | Backing store                                           | Legacy source migrated automatically    |
+| ---------------------------------------- | ------------------------------------------------------- | --------------------------------------- |
+| `BlacklistStore`                         | `RecordStore<BlacklistRow>`                             | `data/blacklist.json`                   |
+| `SectorsStore`                           | `RecordStore<SectorRow>` (JSON-in-VARCHAR payload)      | `data/sectors/sectors.json`             |
+| `TaCacheStore`                           | `RecordStore<TaCacheRow>` per code                      | `data/ta/{code}.json`                   |
+| `SentimentCacheStore`                    | `RecordStore<...>` (stock + market shapes)              | `data/sentiment/**/*.json`              |
+| `LedgerStore`                            | `UserScopedRecordStore<LedgerRow>`                      | `data/users/{uid}/_ledger/entries.json` |
+| `WatchTaskStore`                         | `UserScopedRecordStore<WatchTaskRow>` (singleton blob)  | `data/users/{uid}/watch/tasks.json`     |
+| `WatchGroupStore`                        | `UserScopedRecordStore<WatchGroupRow>` (singleton blob) | `data/users/{uid}/watch/groups.json`    |
+| `UserLlmLedgerStore`                     | `UserScopedRecordStore<...>`                            | `data/users/{uid}/llm-ledger.json`      |
+| `AgentHistoryStore`, `AgentPendingStore` | (intentionally in-memory only — v1 contract)            | —                                       |
 
 All migrations are self-healing: on first access a per-user / per-store
 adapter looks for the legacy JSON, imports it once, and renames it

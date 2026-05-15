@@ -2,8 +2,11 @@
  * Token-bucket rate limiter (modules/09-update-orchestration.md §5.1).
  *
  * Pure data + a clock function. `now` is injected to keep the class
- * deterministic in tests (CLAUDE.md §2.6 — no implicit time).
+ * deterministic in tests (CLAUDE.md §2.6 — no implicit time). The
+ * `Date.now` default is only used when no clock is supplied.
  */
+
+/* eslint-disable no-restricted-globals -- Date.now is the default clock; callers may inject a deterministic source. */
 
 export interface TokenBucketOptions {
   readonly ratePerSec: number;

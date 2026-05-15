@@ -8,9 +8,7 @@ import { mkdtemp, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import type {
-  TimeSeriesStore,
-} from '../../../src/common/storage/ports/time-series-store.port.js';
+import type { TimeSeriesStore } from '../../../src/common/storage/ports/time-series-store.port.js';
 import { DuckDBParquetTimeSeriesStore } from '../../../src/common/storage/adapters/duckdb-parquet-time-series.store.js';
 import { InMemoryTimeSeriesStore } from '../../fakes/in-memory-time-series.store.js';
 
@@ -198,12 +196,7 @@ describe('DuckDBParquetTimeSeriesStore flat layout', () => {
         bar('688001', '2026-01-01', 68, 67),
       ]);
       const files = (await readdir(join(dir, 'kline'))).sort();
-      expect(files).toEqual([
-        '000.parquet',
-        '300.parquet',
-        '600.parquet',
-        '688.parquet',
-      ]);
+      expect(files).toEqual(['000.parquet', '300.parquet', '600.parquet', '688.parquet']);
     } finally {
       await rm(dir, { recursive: true, force: true });
     }

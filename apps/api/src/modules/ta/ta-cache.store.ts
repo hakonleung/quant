@@ -15,10 +15,7 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import { TaAnalysisSchema, type TaAnalysis } from '@quant/shared';
 import { z } from 'zod';
 
-import type {
-  RecordStore,
-  RecordTableSpec,
-} from '../../common/storage/ports/record-store.port.js';
+import type { RecordStore, RecordTableSpec } from '../../common/storage/ports/record-store.port.js';
 import { TA_CACHE_RECORD_STORE } from './ta.token.js';
 
 export interface TaCacheRow {
@@ -49,9 +46,7 @@ export class TaCacheStore {
   private readonly logger = new Logger(TaCacheStore.name);
   private readonly mutexByCode = new Map<string, Promise<unknown>>();
 
-  constructor(
-    @Inject(TA_CACHE_RECORD_STORE) private readonly store: RecordStore<TaCacheRow>,
-  ) {}
+  constructor(@Inject(TA_CACHE_RECORD_STORE) private readonly store: RecordStore<TaCacheRow>) {}
 
   async get(code: string, asof: string): Promise<TaAnalysis | null> {
     const row = await this.store.get(code);

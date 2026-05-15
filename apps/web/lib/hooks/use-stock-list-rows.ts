@@ -36,11 +36,12 @@ export interface UseStockListRowsArgs {
  * path (which sends `[]` to mean "full universe" on other endpoints)
  * is opt-in for now — flip it explicitly once §1d-2 lands.
  */
-export function useStockListRows(args: UseStockListRowsArgs): UseQueryResult<StockListRowsResponse> {
+export function useStockListRows(
+  args: UseStockListRowsArgs,
+): UseQueryResult<StockListRowsResponse> {
   const enabled = args.enabled ?? args.codes.length > 0;
   const codeKey = [...args.codes].sort().join(',');
-  const columnKey =
-    args.columns === undefined ? '' : [...args.columns].join(',');
+  const columnKey = args.columns === undefined ? '' : [...args.columns].join(',');
   const sortKey = args.sort === undefined ? '' : `${args.sort.key}:${args.sort.dir}`;
   return useQuery({
     queryKey: ['stock-list-rows', args.kind, codeKey, columnKey, sortKey],

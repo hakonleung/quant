@@ -4,6 +4,8 @@
  * `GET /api/orchestration/queue/stream` SSE endpoint at 1Hz.
  */
 
+/* eslint-disable no-restricted-globals -- snapshot timestamp is the wire format; Date here is output, not hidden time. */
+
 import {
   Inject,
   Injectable,

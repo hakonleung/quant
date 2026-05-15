@@ -17,9 +17,7 @@ function makeStore(): {
   store: UserLlmLedgerStore;
   inner: InMemoryUserScopedRecordStore<UserLlmLedgerRow>;
 } {
-  const inner = new InMemoryUserScopedRecordStore<UserLlmLedgerRow>(
-    USER_LLM_LEDGER_TABLE_SPEC,
-  );
+  const inner = new InMemoryUserScopedRecordStore<UserLlmLedgerRow>(USER_LLM_LEDGER_TABLE_SPEC);
   const store = new UserLlmLedgerStore(inner);
   return { store, inner };
 }
@@ -123,7 +121,17 @@ describe('UserLlmLedgerStore (v2)', () => {
     const v1Payload = {
       schemaVersion: 1,
       entries: [
-        { ts: 'bad', provider: 'm', model: 'kimi', scope: 'agent', usage: {}, cnyCost: 0, durationMs: 1, ok: true, traceId: 't' },
+        {
+          ts: 'bad',
+          provider: 'm',
+          model: 'kimi',
+          scope: 'agent',
+          usage: {},
+          cnyCost: 0,
+          durationMs: 1,
+          ok: true,
+          traceId: 't',
+        },
         {
           ts: '2026-05-15T12:00:00.000Z',
           provider: 'm',

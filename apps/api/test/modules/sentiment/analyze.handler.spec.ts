@@ -34,10 +34,7 @@ function build(opts: { resolve?: Sentiment; reject?: Error }): {
     }),
   };
   return {
-    handler: new AnalyzeInstructionHandler(
-      reg,
-      sentiment as unknown as NewsSentimentService,
-    ),
+    handler: new AnalyzeInstructionHandler(reg, sentiment as unknown as NewsSentimentService),
   };
 }
 
@@ -102,9 +99,9 @@ describe('AnalyzeInstructionHandler', () => {
 
   it('rethrows non-QuantError', async () => {
     const { handler } = build({ reject: new Error('net error') });
-    await expect(handler.execute({ code: '600519', fresh: false, confirm: false }, ctx)).rejects.toThrow(
-      'net error',
-    );
+    await expect(
+      handler.execute({ code: '600519', fresh: false, confirm: false }, ctx),
+    ).rejects.toThrow('net error');
   });
 
   describe('formatSentiment', () => {

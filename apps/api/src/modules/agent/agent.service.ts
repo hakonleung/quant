@@ -48,7 +48,6 @@ import { AgentToolBridge } from './agent-tool-bridge.js';
 import { buildAgentSystemPrompt } from './prompts/system-prompt.js';
 import type { AgentDeliveryTarget } from './agent.types.js';
 
-
 export interface AgentRunOptions {
   readonly q: string;
   readonly history: readonly ChatMessage[];

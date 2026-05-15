@@ -15,9 +15,7 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import { z } from 'zod';
 
 import { FileSystemUserScopedRecordStore } from '../../../common/storage/adapters/filesystem-user-scoped-record.store.js';
-import type {
-  RecordTableSpec,
-} from '../../../common/storage/ports/record-store.port.js';
+import type { RecordTableSpec } from '../../../common/storage/ports/record-store.port.js';
 import type { UserScopedRecordStore } from '../../../common/storage/ports/user-scoped-record-store.port.js';
 import { USER_LLM_LEDGER_USER_RECORD_STORE } from '../llm.tokens.js';
 import {

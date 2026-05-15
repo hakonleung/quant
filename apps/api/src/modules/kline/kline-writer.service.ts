@@ -22,9 +22,7 @@ import { KLINE_TIME_SERIES_STORE } from './kline.token.js';
 export class KlineWriterService {
   private readonly logger = new Logger(KlineWriterService.name);
 
-  constructor(
-    @Inject(KLINE_TIME_SERIES_STORE) private readonly store: TimeSeriesStore<KlineRow>,
-  ) {}
+  constructor(@Inject(KLINE_TIME_SERIES_STORE) private readonly store: TimeSeriesStore<KlineRow>) {}
 
   /**
    * Append a batch of bars. Empty batches are a no-op (avoids

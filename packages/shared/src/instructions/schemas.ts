@@ -25,14 +25,12 @@ const FALSY = new Set(['', '0', 'false', 'FALSE', 'no', 'off']);
  * `confirm=1`, `notify=no`). Strict zod boolean union doesn't accept
  * the string forms IM users actually type.
  */
-export const InstructionBoolFlagSchema = z
-  .union([z.boolean(), z.string()])
-  .transform((v) => {
-    if (typeof v === 'boolean') return v;
-    if (TRUTHY.has(v)) return true;
-    if (FALSY.has(v)) return false;
-    throw new Error(`invalid boolean: ${v}`);
-  });
+export const InstructionBoolFlagSchema = z.union([z.boolean(), z.string()]).transform((v) => {
+  if (typeof v === 'boolean') return v;
+  if (TRUTHY.has(v)) return true;
+  if (FALSY.has(v)) return false;
+  throw new Error(`invalid boolean: ${v}`);
+});
 
 /** Same shape as `InstructionBoolFlagSchema` but accepts `undefined` → `false`. */
 export const InstructionOptionalBoolFlagSchema = z
@@ -53,9 +51,7 @@ export const PingArgsSchema = z.record(z.string()).default({});
 export const UsrArgsSchema = z.object({}).strict();
 export const ClearArgsSchema = z.object({}).strict();
 export const CacheArgsSchema = z.object({}).strict();
-export const FocusArgsSchema = z
-  .object({ id: z.string().min(1).optional() })
-  .strict();
+export const FocusArgsSchema = z.object({ id: z.string().min(1).optional() }).strict();
 export const UpdateArgsSchema = z
   .object({ target: z.enum(['blacklist']).default('blacklist') })
   .strict();
@@ -83,9 +79,7 @@ export const SectorRmArgsSchema = sectorIdShape.strict();
 
 // ── watch ───────────────────────────────────────────────────────────────
 
-export const WatchArgsSchema = z
-  .object({ sub: z.enum(['list']).default('list') })
-  .strict();
+export const WatchArgsSchema = z.object({ sub: z.enum(['list']).default('list') }).strict();
 
 export const WatchAddArgsSchema = z
   .object({

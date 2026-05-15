@@ -9,9 +9,7 @@
  * stay well inside JS-number territory.
  */
 
-import type {
-  RecordColumnSpec,
-} from '../../common/storage/ports/record-store.port.js';
+import type { RecordColumnSpec } from '../../common/storage/ports/record-store.port.js';
 
 export interface KlineRow {
   readonly code: string;

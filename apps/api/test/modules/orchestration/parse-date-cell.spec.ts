@@ -7,6 +7,8 @@
  * sort *before* `latest_trade_day` and re-enqueue every cron tick.
  */
 
+/* eslint-disable no-restricted-globals -- test-only fixture construction. */
+
 import { parseDateCell } from '../../../src/modules/orchestration/cache-inspector.js';
 
 describe('parseDateCell', () => {

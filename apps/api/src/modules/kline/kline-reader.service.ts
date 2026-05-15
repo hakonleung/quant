@@ -20,9 +20,7 @@ import { KLINE_TIME_SERIES_STORE } from './kline.token.js';
 
 @Injectable()
 export class KlineReaderService {
-  constructor(
-    @Inject(KLINE_TIME_SERIES_STORE) private readonly store: TimeSeriesStore<KlineRow>,
-  ) {}
+  constructor(@Inject(KLINE_TIME_SERIES_STORE) private readonly store: TimeSeriesStore<KlineRow>) {}
 
   /** Last `n` bars for a single code, oldest first. Empty array when absent. */
   async lastNForCode(code: string, n: number): Promise<readonly KlineBar[]> {

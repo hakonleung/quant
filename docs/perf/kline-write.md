@@ -49,13 +49,13 @@ parquet。问题：
 
 数据集：dev 真实 A 股 kline，2.1M rows / 117 MB on disk。
 
-| Op | Latency | Note |
-| --- | --- | --- |
-| 冷迁移（5508 legacy files → 13 flat parquets） | **1.0 s** | 一次性 import |
-| 单 partition rewrite (existing + few new rows) | **~50 ms** | per file |
-| 整 partition 全量 rewrite (13 files 并行) | < 200 ms wallclock | 日更预估上限 |
-| 单 code 30-bar tail | 5-10 ms | direct partition 命中 |
-| 100-code latest (跨多个 partition) | ~100 ms | 主要是 partition file open |
+| Op                                             | Latency            | Note                       |
+| ---------------------------------------------- | ------------------ | -------------------------- |
+| 冷迁移（5508 legacy files → 13 flat parquets） | **1.0 s**          | 一次性 import              |
+| 单 partition rewrite (existing + few new rows) | **~50 ms**         | per file                   |
+| 整 partition 全量 rewrite (13 files 并行)      | < 200 ms wallclock | 日更预估上限               |
+| 单 code 30-bar tail                            | 5-10 ms            | direct partition 命中      |
+| 100-code latest (跨多个 partition)             | ~100 ms            | 主要是 partition file open |
 
 后续可优化点（先记着，做完 v2 watch 再回来）：
 

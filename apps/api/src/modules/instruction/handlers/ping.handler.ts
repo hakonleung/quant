@@ -1,10 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import {
-  PingArgsSchema,
-  instructionId,
-  okResult,
-  type InstructionResult,
-} from '@quant/shared';
+import { PingArgsSchema, instructionId, okResult, type InstructionResult } from '@quant/shared';
 import type { z } from 'zod';
 
 import { INSTRUCTION_CONFIG, type InstructionConfig } from '../instruction.config.js';

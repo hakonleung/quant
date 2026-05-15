@@ -71,7 +71,9 @@ describe('assertHandlerCoverage', () => {
   });
 
   it('throws when an expected handler is missing', () => {
-    const ids = commandsSupportedOn('be').map((e) => e.id).filter((id) => id !== 'sector.show');
+    const ids = commandsSupportedOn('be')
+      .map((e) => e.id)
+      .filter((id) => id !== 'sector.show');
     expect(() => assertHandlerCoverage({ side: 'be', registeredIds: ids })).toThrow(
       /missing on be: sector\.show/,
     );
@@ -108,6 +110,8 @@ describe('assertHandlerCoverage', () => {
       .map((e) => e.id)
       .filter((id) => id !== 'sector.show')
       .concat(['ghost']);
-    expect(() => assertHandlerCoverage({ side: 'be', registeredIds: ids })).toThrow(/missing.*unexpected/);
+    expect(() => assertHandlerCoverage({ side: 'be', registeredIds: ids })).toThrow(
+      /missing.*unexpected/,
+    );
   });
 });

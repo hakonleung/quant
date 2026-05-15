@@ -66,12 +66,30 @@ export const STOCK_LIST_COLUMN_CATALOG: readonly StockListColumnSpec[] = [
   { key: 'ret90d', label: '90D%', group: 'derived', defaultApplied: false, source: 'snapshot' },
   { key: 'ret250d', label: '250D%', group: 'derived', defaultApplied: false, source: 'snapshot' },
   { key: 'mktCap', label: '总市值', group: 'derived', defaultApplied: false, source: 'snapshot' },
-  { key: 'floatMktCap', label: '流通市值', group: 'derived', defaultApplied: false, source: 'snapshot' },
+  {
+    key: 'floatMktCap',
+    label: '流通市值',
+    group: 'derived',
+    defaultApplied: false,
+    source: 'snapshot',
+  },
   { key: 'peTtm', label: 'PE-TTM', group: 'derived', defaultApplied: false, source: 'snapshot' },
-  { key: 'peDynamic', label: 'PE动态', group: 'derived', defaultApplied: false, source: 'snapshot' },
+  {
+    key: 'peDynamic',
+    label: 'PE动态',
+    group: 'derived',
+    defaultApplied: false,
+    source: 'snapshot',
+  },
   { key: 'pb', label: 'PB', group: 'derived', defaultApplied: false, source: 'snapshot' },
   { key: 'peg', label: 'PEG', group: 'derived', defaultApplied: false, source: 'snapshot' },
-  { key: 'grossMargin', label: '毛利率', group: 'derived', defaultApplied: false, source: 'snapshot' },
+  {
+    key: 'grossMargin',
+    label: '毛利率',
+    group: 'derived',
+    defaultApplied: false,
+    source: 'snapshot',
+  },
 ];
 
 const SPEC_BY_KEY: ReadonlyMap<StockListColumnKey, StockListColumnSpec> = new Map(
@@ -96,12 +114,7 @@ export function appliedNeedsSnapshot(applied: readonly StockListColumnKey[]): bo
 
 // ── list kinds + default sort ────────────────────────────────────────────
 
-export const STOCK_LIST_KINDS = [
-  'user-sector',
-  'dynamic-sector',
-  'watch',
-  'screen',
-] as const;
+export const STOCK_LIST_KINDS = ['user-sector', 'dynamic-sector', 'watch', 'screen'] as const;
 export type StockListKind = (typeof STOCK_LIST_KINDS)[number];
 
 export const StockListKindSchema = z.enum(STOCK_LIST_KINDS);

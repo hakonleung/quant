@@ -55,8 +55,7 @@ function wrapper(): React.FC<{ children: React.ReactNode }> {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false, gcTime: 0 } },
   });
-  return ({ children }) =>
-    React.createElement(QueryClientProvider, { client }, children);
+  return ({ children }) => React.createElement(QueryClientProvider, { client }, children);
 }
 
 describe('useStockListRows', () => {

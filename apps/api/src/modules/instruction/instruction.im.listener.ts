@@ -352,15 +352,8 @@ export class InstructionImListener implements OnModuleInit {
    * Pulled out of `runEntry` so the orchestrator stays under the
    * 50-line / complexity-10 ceiling.
    */
-  private envelopeFromDispatch(
-    instructionId: string,
-    result: InstructionResult,
-  ): ReplyEnvelope {
-    if (
-      !result.ok &&
-      result.error.code === 'confirm-required' &&
-      instructionId === 'agent'
-    ) {
+  private envelopeFromDispatch(instructionId: string, result: InstructionResult): ReplyEnvelope {
+    if (!result.ok && result.error.code === 'confirm-required' && instructionId === 'agent') {
       const envelope = decodeAgentPaidConfirm(result.error.message);
       return {
         result,

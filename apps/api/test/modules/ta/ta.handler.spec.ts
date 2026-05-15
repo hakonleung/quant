@@ -1,6 +1,9 @@
 import { instructionId, QuantError, type TaAnalysis } from '@quant/shared';
 
-import { TaInstructionHandler, formatTaAnalysis } from '../../../src/modules/ta/instructions/ta.handler.js';
+import {
+  TaInstructionHandler,
+  formatTaAnalysis,
+} from '../../../src/modules/ta/instructions/ta.handler.js';
 import type { TaService } from '../../../src/modules/ta/ta.service.js';
 import { InstructionRegistry } from '../../../src/modules/instruction/instruction.registry.js';
 import type { InstructionCtx } from '../../../src/modules/instruction/instruction.port.js';
@@ -92,13 +95,21 @@ describe('TaInstructionHandler', () => {
 
   describe('formatTaAnalysis', () => {
     it('renders down emoji for bearish trend', () => {
-      const a: TaAnalysis = { ...baseAnalysis, trend: { ...baseAnalysis.trend, direction: 'down', confidence: 0.5 } };
+      const a: TaAnalysis = {
+        ...baseAnalysis,
+        trend: { ...baseAnalysis.trend, direction: 'down', confidence: 0.5 },
+      };
       expect(formatTaAnalysis(a)).toContain('↓');
       expect(formatTaAnalysis(a)).toContain('50%');
     });
 
     it('renders sideways emoji for sideways trend', () => {
-      const a: TaAnalysis = { ...baseAnalysis, trend: { ...baseAnalysis.trend, direction: 'sideways' }, supportLevels: [], resistanceLevels: [] };
+      const a: TaAnalysis = {
+        ...baseAnalysis,
+        trend: { ...baseAnalysis.trend, direction: 'sideways' },
+        supportLevels: [],
+        resistanceLevels: [],
+      };
       const out = formatTaAnalysis(a);
       expect(out).toContain('→');
       expect(out).not.toContain('支撑:');

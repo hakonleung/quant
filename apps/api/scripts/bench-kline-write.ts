@@ -50,12 +50,33 @@ const COLUMNS = [
 ];
 
 const A_SHARE_PREFIXES = [
-  '000', '001', '002', '003',
-  '300', '301',
-  '600', '601', '602', '603', '605',
-  '688', '689',
-  '830', '831', '832', '833', '834', '835', '836', '837', '838',
-  '870', '871', '872', '873', '874',
+  '000',
+  '001',
+  '002',
+  '003',
+  '300',
+  '301',
+  '600',
+  '601',
+  '602',
+  '603',
+  '605',
+  '688',
+  '689',
+  '830',
+  '831',
+  '832',
+  '833',
+  '834',
+  '835',
+  '836',
+  '837',
+  '838',
+  '870',
+  '871',
+  '872',
+  '873',
+  '874',
 ];
 
 function makeCodes(total: number): string[] {
@@ -63,7 +84,9 @@ function makeCodes(total: number): string[] {
   let i = 0;
   while (codes.length < total) {
     const prefix = A_SHARE_PREFIXES[i % A_SHARE_PREFIXES.length] ?? '000';
-    const suffix = Math.floor(i / A_SHARE_PREFIXES.length).toString().padStart(3, '0');
+    const suffix = Math.floor(i / A_SHARE_PREFIXES.length)
+      .toString()
+      .padStart(3, '0');
     codes.push(`${prefix}${suffix}`);
     i += 1;
   }
@@ -193,19 +216,22 @@ async function main(): Promise<void> {
       columns: COLUMNS,
     });
     const updateDate = new Date(Date.UTC(2026, 0, 1));
-    const dailyBars: Bar[] = codes.map((code) => ({
-      code,
-      ts: updateDate,
-      open_qfq: 11,
-      high_qfq: 11.2,
-      low_qfq: 10.8,
-      close_qfq: 11.1,
-      volume: 123456 as unknown as number,
-      ma5: 11,
-      ma10: 11,
-      ma20: 11,
-      ma60: 11,
-    } as unknown as Bar));
+    const dailyBars: Bar[] = codes.map(
+      (code) =>
+        ({
+          code,
+          ts: updateDate,
+          open_qfq: 11,
+          high_qfq: 11.2,
+          low_qfq: 10.8,
+          close_qfq: 11.1,
+          volume: 123456 as unknown as number,
+          ma5: 11,
+          ma10: 11,
+          ma20: 11,
+          ma60: 11,
+        }) as unknown as Bar,
+    );
 
     const tDaily0 = performance.now();
     await store.appendBars(dailyBars);
@@ -222,9 +248,7 @@ async function main(): Promise<void> {
     const tIntraStart = performance.now();
     for (let i = 0; i < 10; i += 1) {
       const slice = dailyBars.slice(i * 550, (i + 1) * 550);
-      await store.appendBars(
-        slice.map((b) => ({ ...b, close_qfq: 11.1 + i * 0.01 })),
-      );
+      await store.appendBars(slice.map((b) => ({ ...b, close_qfq: 11.1 + i * 0.01 })));
     }
     const tIntraDone = performance.now();
     const afterIntra = await partitionStats(klineRoot);
@@ -251,7 +275,9 @@ async function main(): Promise<void> {
     const t3 = performance.now();
     const map = await store.lastTimestamps(codes);
     const t3d = performance.now();
-    console.log(`universe lastTimestamps (${CODES} codes): ${Math.round(t3d - t3)}ms, mapped=${map.size}`);
+    console.log(
+      `universe lastTimestamps (${CODES} codes): ${Math.round(t3d - t3)}ms, mapped=${map.size}`,
+    );
 
     // Step 4: compaction
     const tC0 = performance.now();
@@ -268,7 +294,9 @@ async function main(): Promise<void> {
     const t4 = performance.now();
     const r4 = await store.read({ entityKeys: [sampleCode], tail: 30 });
     const t4d = performance.now();
-    console.log(`post-compact single-code 30-bar tail: ${Math.round(t4d - t4)}ms, rows=${r4.length}`);
+    console.log(
+      `post-compact single-code 30-bar tail: ${Math.round(t4d - t4)}ms, rows=${r4.length}`,
+    );
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

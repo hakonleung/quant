@@ -9,12 +9,7 @@
  */
 
 import { Inject, Injectable } from '@nestjs/common';
-import {
-  QuantError,
-  validateLedger,
-  type LedgerEntry,
-  type LedgerSnapshot,
-} from '@quant/shared';
+import { QuantError, validateLedger, type LedgerEntry, type LedgerSnapshot } from '@quant/shared';
 
 import { UserBlobStore } from '../../common/storage/user-blob.store.js';
 

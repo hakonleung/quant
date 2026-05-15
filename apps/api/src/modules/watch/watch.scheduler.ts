@@ -23,6 +23,8 @@
  * the task. (Owned by `WatchWorker`.)
  */
 
+/* eslint-disable no-restricted-globals -- producer tick races the market wall clock. */
+
 import {
   Inject,
   Injectable,
@@ -112,25 +114,33 @@ export class WatchScheduler implements OnModuleInit, OnModuleDestroy {
 
     let pushed = 0;
     for (const user of this.users.list()) {
-      const tasks = await this.store.snapshot(user.id);
-      const groups = await this.groups.list(user.id);
-      const disabledGroups = new Set<string>();
-      for (const g of groups) if (!g.enabled) disabledGroups.add(g.name);
-      for (const t of tasks) {
-        if (disabledGroups.has(t.groupName)) continue;
-        if (!this.isDue(t, marketsOpen, nowMs)) continue;
-        const queue = this.queueFor(t.market);
-        const id = `watch:${user.id}:${t.market}:${t.code}`;
-        if (
-          queue.add({ kind: 'watch_eval', userId: user.id, market: t.market, code: t.code }, { id })
-        ) {
-          pushed += 1;
-        }
-      }
+      pushed += await this.pushUserTasks(user.id, marketsOpen, nowMs);
     }
     if (pushed > 0) {
       this.logger.debug(`watch_tick_pushed jobs=${String(pushed)}`);
     }
+  }
+
+  private async pushUserTasks(
+    userId: string,
+    marketsOpen: Readonly<Record<WatchMarket, boolean>>,
+    nowMs: number,
+  ): Promise<number> {
+    const tasks = await this.store.snapshot(userId);
+    const groups = await this.groups.list(userId);
+    const disabledGroups = new Set<string>();
+    for (const g of groups) if (!g.enabled) disabledGroups.add(g.name);
+    let pushed = 0;
+    for (const t of tasks) {
+      if (disabledGroups.has(t.groupName)) continue;
+      if (!this.isDue(t, marketsOpen, nowMs)) continue;
+      const queue = this.queueFor(t.market);
+      const id = `watch:${userId}:${t.market}:${t.code}`;
+      if (queue.add({ kind: 'watch_eval', userId, market: t.market, code: t.code }, { id })) {
+        pushed += 1;
+      }
+    }
+    return pushed;
   }
 
   private isDue(
