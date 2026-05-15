@@ -71,10 +71,22 @@ describe('assertHandlerCoverage', () => {
   });
 
   it('throws when an expected handler is missing', () => {
-    const ids = commandsSupportedOn('be').map((e) => e.id).filter((id) => id !== 'ping');
+    const ids = commandsSupportedOn('be').map((e) => e.id).filter((id) => id !== 'sector.show');
     expect(() => assertHandlerCoverage({ side: 'be', registeredIds: ids })).toThrow(
-      /missing on be: ping/,
+      /missing on be: sector\.show/,
     );
+  });
+
+  it('treats conditionallyRegistered manifest entries as optional', () => {
+    // ping is conditionallyRegistered (debug-gated). Coverage must
+    // pass whether or not it's registered.
+    const without = commandsSupportedOn('be')
+      .filter((e) => e.conditionallyRegistered !== true)
+      .map((e) => e.id);
+    expect(() => assertHandlerCoverage({ side: 'be', registeredIds: without })).not.toThrow();
+    expect(() =>
+      assertHandlerCoverage({ side: 'be', registeredIds: [...without, 'ping'] }),
+    ).not.toThrow();
   });
 
   it('throws when a registered id is not in the manifest', () => {
@@ -94,7 +106,7 @@ describe('assertHandlerCoverage', () => {
   it('reports both missing and stray ids together', () => {
     const ids = commandsSupportedOn('be')
       .map((e) => e.id)
-      .filter((id) => id !== 'ping')
+      .filter((id) => id !== 'sector.show')
       .concat(['ghost']);
     expect(() => assertHandlerCoverage({ side: 'be', registeredIds: ids })).toThrow(/missing.*unexpected/);
   });

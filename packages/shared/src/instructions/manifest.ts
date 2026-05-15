@@ -58,12 +58,19 @@ export interface CommandManifestEntry {
   readonly costsCredits?: boolean;
   /** True when an irreversible side effect needs explicit IM confirmation. */
   readonly destructive?: boolean;
+  /**
+   * True for handlers that are conditionally registered (e.g. gated on
+   * `INSTRUCTION_DEBUG_ENABLED`). The coverage assertion treats them as
+   * optional — present-or-absent is fine, but if registered the
+   * `supportedOn` declaration must include the side they appear on.
+   */
+  readonly conditionallyRegistered?: boolean;
 }
 
 const ENTRIES = [
   // ── system ──────────────────────────────────────────────────────────
   { id: 'help', group: 'system', mode: 'sync', supportedOn: ['fe', 'be'], summary: 'Show available instructions and per-id usage' },
-  { id: 'ping', group: 'system', mode: 'sync', supportedOn: ['be'], summary: 'Round-trip health check' },
+  { id: 'ping', group: 'system', mode: 'sync', supportedOn: ['be'], summary: 'Round-trip health check', conditionallyRegistered: true },
   { id: 'usr', group: 'system', mode: 'sync', supportedOn: ['fe', 'be'], summary: "Show the caller's resolved userId + LLM token usage", imAliases: ['我的', '账号', '我'] },
   { id: 'clear', group: 'ui', mode: 'sync', supportedOn: ['fe'], summary: 'Clear the terminal scrollback' },
   { id: 'cache', group: 'ui', mode: 'sync', supportedOn: ['fe'], summary: 'Inspect / clear local FE caches' },
@@ -106,8 +113,8 @@ const ENTRIES = [
   { id: 'web.search', group: 'agent', mode: 'async', supportedOn: ['be'], summary: 'Hosted-tool web search invoked by the agent', costsCredits: true },
 
   // ── channel ─────────────────────────────────────────────────────────
-  { id: 'channel.echo', group: 'channel', mode: 'sync', supportedOn: ['be'], summary: 'Echo a message back through the inbound channel' },
-  { id: 'channel.send', group: 'channel', mode: 'sync', supportedOn: ['be'], summary: 'Send a message to a configured channel' },
+  { id: 'channel.echo', group: 'channel', mode: 'sync', supportedOn: ['be'], summary: 'Echo a message back through the inbound channel', conditionallyRegistered: true },
+  { id: 'channel.send', group: 'channel', mode: 'sync', supportedOn: ['be'], summary: 'Send a message to a configured channel', conditionallyRegistered: true },
 ] as const satisfies readonly CommandManifestEntry[];
 
 export const COMMAND_MANIFEST: readonly CommandManifestEntry[] = ENTRIES;
@@ -131,7 +138,11 @@ export function assertHandlerCoverage(args: {
   readonly side: CommandSide;
   readonly registeredIds: readonly string[];
 }): void {
-  const expected = new Set(commandsSupportedOn(args.side).map((e) => e.id));
+  const expected = new Set(
+    commandsSupportedOn(args.side)
+      .filter((e) => e.conditionallyRegistered !== true)
+      .map((e) => e.id),
+  );
   const got = new Set(args.registeredIds);
   const missing: string[] = [];
   for (const id of expected) if (!got.has(id)) missing.push(id);
