@@ -1,7 +1,3 @@
-import { promises as fs } from 'node:fs';
-import path from 'node:path';
-import os from 'node:os';
-
 import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import type { Sector } from '@quant/shared';
 
@@ -42,10 +38,6 @@ function fakeFlight(payload: unknown | null): FlightClient {
       value: table,
     }),
   } as unknown as FlightClient;
-}
-
-async function tmpDir(): Promise<string> {
-  return fs.mkdtemp(path.join(os.tmpdir(), 'sectors-ctrl-'));
 }
 
 const FROZEN = new Date('2026-05-04T07:15:00.000Z');
@@ -101,12 +93,11 @@ async function freshController(
   initial: readonly Sector[],
   flight: FlightClient,
 ): Promise<{ store: SectorsStore; service: SectorsService; ctrl: SectorsController }> {
-  const dir = await tmpDir();
   const record = new InMemoryRecordStore<SectorRow>(SECTORS_TABLE_SPEC);
   for (const s of initial) {
     await record.upsert({ id: s.id, payload_json: JSON.stringify(s) });
   }
-  const store = new SectorsStore(record, dir);
+  const store = new SectorsStore(record);
   await store.load();
   const service = new SectorsService(store, flight, new FrozenClock(FROZEN));
   const ctrl = new SectorsController(service);

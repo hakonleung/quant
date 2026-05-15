@@ -9,13 +9,8 @@
  * Why JSON-in-VARCHAR? `TaAnalysis` is deeply nested (signals,
  * indicators, narrative blocks) with no columnar query path today.
  * Same shortcut as `BlacklistStore`/`SectorsStore`.
- *
- * Self-migration: legacy `data/ta/{code}.json` files are imported on
- * first `get` for that code, then renamed `.bak`.
  */
 
-import { promises as fs } from 'node:fs';
-import path from 'node:path';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { TaAnalysisSchema, type TaAnalysis } from '@quant/shared';
 import { z } from 'zod';
@@ -24,7 +19,7 @@ import type {
   RecordStore,
   RecordTableSpec,
 } from '../../common/storage/ports/record-store.port.js';
-import { TA_CACHE_RECORD_STORE, TA_DATA_DIR } from './ta.token.js';
+import { TA_CACHE_RECORD_STORE } from './ta.token.js';
 
 export interface TaCacheRow {
   readonly code: string;
@@ -56,19 +51,13 @@ export class TaCacheStore {
 
   constructor(
     @Inject(TA_CACHE_RECORD_STORE) private readonly store: RecordStore<TaCacheRow>,
-    @Inject(TA_DATA_DIR) private readonly legacyRoot: string,
   ) {}
 
   async get(code: string, asof: string): Promise<TaAnalysis | null> {
     const row = await this.store.get(code);
-    if (row !== null) {
-      if (row.asof !== asof) return null;
-      return this.decodeRow(row);
-    }
-    const legacy = await this.tryAdoptLegacy(code);
-    if (legacy === null) return null;
-    if (legacy.asof !== asof) return null;
-    return legacy;
+    if (row === null) return null;
+    if (row.asof !== asof) return null;
+    return this.decodeRow(row);
   }
 
   async put(value: TaAnalysis): Promise<void> {
@@ -80,11 +69,6 @@ export class TaCacheStore {
       });
       await this.store.flush();
     });
-  }
-
-  /** Visible for tests / migration scripts. */
-  legacyFilePath(code: string): string {
-    return path.join(this.legacyRoot, 'ta', `${code}.json`);
   }
 
   private decodeRow(row: TaCacheRow): TaAnalysis | null {
@@ -102,42 +86,6 @@ export class TaCacheStore {
       );
       return null;
     }
-    return result.data;
-  }
-
-  private async tryAdoptLegacy(code: string): Promise<TaAnalysis | null> {
-    const legacy = this.legacyFilePath(code);
-    let raw: string;
-    try {
-      raw = await fs.readFile(legacy, 'utf8');
-    } catch {
-      return null;
-    }
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(raw);
-    } catch (err) {
-      this.logger.warn(`legacy ta ${legacy} malformed JSON, ignoring: ${String(err)}`);
-      return null;
-    }
-    const result = TaAnalysisSchema.safeParse(parsed);
-    if (!result.success) {
-      this.logger.warn(`legacy ta ${legacy} failed validation: ${result.error.message}`);
-      return null;
-    }
-    await this.runLocked(code, async () => {
-      await this.store.upsert({
-        code: result.data.code,
-        asof: result.data.asof,
-        payload_json: JSON.stringify(result.data),
-      });
-      await this.store.flush();
-      try {
-        await fs.rename(legacy, `${legacy}.bak`);
-      } catch (err) {
-        this.logger.warn(`could not rename legacy ta ${legacy} to .bak: ${String(err)}`);
-      }
-    });
     return result.data;
   }
 

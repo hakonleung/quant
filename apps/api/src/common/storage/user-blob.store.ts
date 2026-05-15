@@ -4,21 +4,10 @@
  * watch / ledger / sysCfg state for one user.
  *
  * All read-modify-write goes through `update(userId, patch)` which
- * holds a per-user mutex while it loads, applies, validates, and
- * upserts. Mirrors the `WatchGroupStore` / `WatchTaskStore` singleton
- * pattern but consolidates into one file so we mutate one mutex per
- * user, not three.
- *
- * Self-migration: on first read for a user with no `user.parquet`, we
- * adopt any of the four legacy files that exist
- * (`watch_groups.parquet`, `watch_tasks.parquet`, `ledger.parquet`,
- * `sys-cfg/sys-cfg.json`), assemble a combined blob, write it, and
- * leave the originals in place — the standalone migrator script (run
- * once before this module ships in prod) renames them `.legacy/`.
+ * holds a per-user mutex while it loads, applies, and upserts.
+ * Mirrors the prior per-store singleton pattern but consolidates
+ * into one file so we mutate one mutex per user, not three.
  */
-
-import { promises as fs } from 'node:fs';
-import path from 'node:path';
 
 import { z } from 'zod';
 
@@ -26,19 +15,17 @@ import { FileSystemUserScopedRecordStore } from './adapters/filesystem-user-scop
 import type { RecordTableSpec } from './ports/record-store.port.js';
 import type { UserScopedRecordStore } from './ports/user-scoped-record-store.port.js';
 import {
-  EMPTY_LEDGER_SLICE,
   EMPTY_USER_BLOB,
-  EMPTY_WATCH_SLICE,
-  EMPTY_WATCH_TASK_FILE,
   LedgerSliceSchema,
   UserBlobSchema,
   USER_BLOB_SCHEMA_VERSION,
   WatchSliceSchema,
+  EMPTY_WATCH_TASK_FILE,
   type LedgerSlice,
   type UserBlob,
   type WatchSlice,
 } from './user-blob.types.js';
-import { DEFAULT_SYS_CFG, SysCfgSchema, WatchGroupSchema, type SysCfg } from '@quant/shared';
+import { WatchGroupSchema } from '@quant/shared';
 
 const SINGLETON_KEY = 'singleton' as const;
 
@@ -62,40 +49,15 @@ export const USER_BLOB_TABLE_SPEC: RecordTableSpec<UserBlobRow> = {
   ],
 };
 
-/**
- * Source of truth for a user's legacy files. The `dataRoot` argument is
- * the same root every other store sees (`AuthConfigShape.dataRoot`).
- */
-export interface LegacyUserPaths {
-  readonly watchGroupsParquet: string;
-  readonly watchTasksParquet: string;
-  readonly ledgerParquet: string;
-  readonly sysCfgJson: string;
-}
-
-export function legacyUserPaths(dataRoot: string, userId: string): LegacyUserPaths {
-  const userDir = path.join(dataRoot, 'users', userId);
-  return {
-    watchGroupsParquet: path.join(userDir, 'watch_groups.parquet'),
-    watchTasksParquet: path.join(userDir, 'watch_tasks.parquet'),
-    ledgerParquet: path.join(userDir, 'ledger.parquet'),
-    sysCfgJson: path.join(userDir, 'sys-cfg', 'sys-cfg.json'),
-  };
-}
-
 export interface UserBlobStoreOptions {
   readonly dataRoot: string;
   readonly inner?: UserScopedRecordStore<UserBlobRow>;
-  /** Override for tests. Defaults to reading the on-disk legacy layout. */
-  readonly readLegacy?: (userId: string) => Promise<Partial<UserBlob>>;
   readonly logger?: { warn: (msg: string) => void; log?: (msg: string) => void };
 }
 
 export class UserBlobStore {
   private readonly inner: UserScopedRecordStore<UserBlobRow>;
   private readonly mutexByUser = new Map<string, Promise<unknown>>();
-  private readonly migratedUsers = new Set<string>();
-  private readonly readLegacyImpl: (userId: string) => Promise<Partial<UserBlob>>;
   private readonly logger: { warn: (m: string) => void; log?: (m: string) => void };
 
   constructor(opts: UserBlobStoreOptions) {
@@ -107,11 +69,9 @@ export class UserBlobStore {
         spec: USER_BLOB_TABLE_SPEC,
         logger: this.logger,
       });
-    this.readLegacyImpl = opts.readLegacy ?? defaultReadLegacy(opts.dataRoot);
   }
 
   async read(userId: string): Promise<UserBlob> {
-    await this.ensureMigrated(userId);
     return this.loadOrEmpty(userId);
   }
 
@@ -120,7 +80,6 @@ export class UserBlobStore {
     patch: (current: UserBlob) => UserBlob,
   ): Promise<UserBlob> {
     return this.withUserLock(userId, async () => {
-      await this.ensureMigrated(userId);
       const current = await this.loadOrEmpty(userId);
       const next = patch(current);
       // No strict re-validation here. Boundary validation runs at the
@@ -146,13 +105,6 @@ export class UserBlobStore {
 
   async flush(userId?: string): Promise<void> {
     await this.inner.flush(userId);
-  }
-
-  /**
-   * Force the lazy-migration path on next access. Visible for tests.
-   */
-  resetMigrationCache(): void {
-    this.migratedUsers.clear();
   }
 
   private async loadOrEmpty(userId: string): Promise<UserBlob> {
@@ -186,38 +138,6 @@ export class UserBlobStore {
     return raw as UserBlob;
   }
 
-  private async ensureMigrated(userId: string): Promise<void> {
-    if (this.migratedUsers.has(userId)) return;
-    const existing = await this.inner.get(userId, SINGLETON_KEY);
-    if (existing !== null) {
-      this.migratedUsers.add(userId);
-      return;
-    }
-    const slices = await this.readLegacyImpl(userId);
-    if (
-      slices.watch === undefined &&
-      slices.ledger === undefined &&
-      slices.sysCfg === undefined
-    ) {
-      this.migratedUsers.add(userId);
-      return;
-    }
-    const blob: UserBlob = {
-      schemaVersion: USER_BLOB_SCHEMA_VERSION,
-      watch: slices.watch ?? structuredClone(EMPTY_WATCH_SLICE),
-      ledger: slices.ledger ?? structuredClone(EMPTY_LEDGER_SLICE),
-      sysCfg: slices.sysCfg ?? structuredClone(DEFAULT_SYS_CFG),
-    };
-    const validated = UserBlobSchema.parse(blob);
-    await this.inner.upsert(userId, {
-      id: SINGLETON_KEY,
-      payload_json: JSON.stringify(validated),
-    });
-    await this.inner.flush(userId);
-    this.migratedUsers.add(userId);
-    this.logger.log?.(`user_blob_migrated_from_legacy userId=${userId}`);
-  }
-
   private async withUserLock<T>(userId: string, fn: () => Promise<T>): Promise<T> {
     const prev = this.mutexByUser.get(userId) ?? Promise.resolve();
     const next = prev.then(fn, fn);
@@ -229,33 +149,7 @@ export class UserBlobStore {
   }
 }
 
-// ── default legacy reader ────────────────────────────────────────────────
-
-function defaultReadLegacy(dataRoot: string): (userId: string) => Promise<Partial<UserBlob>> {
-  return async (userId) => {
-    const paths = legacyUserPaths(dataRoot, userId);
-    const sysCfg = await readSysCfgJson(paths.sysCfgJson);
-    // The legacy parquet readers are intentionally NOT wired into the
-    // default reader: lazy migration from a still-live parquet file
-    // would race with the per-store mutex of the old WatchGroupStore /
-    // WatchTaskStore / LedgerStore until those facades are flipped to
-    // delegate here. The standalone `migrate-user-stores.ts` script
-    // (run once with the API stopped) handles the parquet sweep.
-    return sysCfg === undefined ? {} : { sysCfg };
-  };
-}
-
-async function readSysCfgJson(file: string): Promise<SysCfg | undefined> {
-  try {
-    const raw = await fs.readFile(file, 'utf8');
-    const parsed = SysCfgSchema.safeParse(JSON.parse(raw) as unknown);
-    return parsed.success ? parsed.data : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
-// ── slice helpers — re-used by facades and the migrator ──────────────────
+// ── slice helpers — kept for the migrator script (one-shot legacy adoption) ──
 
 export function parseWatchSlice(raw: unknown): WatchSlice | undefined {
   const parsed = WatchSliceSchema.safeParse(raw);

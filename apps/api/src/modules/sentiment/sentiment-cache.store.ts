@@ -12,14 +12,8 @@
  * TTL is 30 calendar days from the original analysis timestamp
  * (`Sentiment.cachedAt` / `MarketSentiment.fetchedAt`). Expired rows
  * are returned as `null`; the next write replaces them.
- *
- * Self-migration: legacy files under
- * `sentiment/stock/{code}.json` / `sentiment/market/{codeHash}.json`
- * are imported on the first matching `get` and renamed `.bak`.
  */
 
-import { promises as fs } from 'node:fs';
-import path from 'node:path';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import {
   MarketSentimentSchema,
@@ -35,7 +29,6 @@ import type {
   RecordTableSpec,
 } from '../../common/storage/ports/record-store.port.js';
 import {
-  SENTIMENT_DATA_DIR,
   SENTIMENT_MARKET_RECORD_STORE,
   SENTIMENT_STOCK_RECORD_STORE,
 } from './sentiment.token.js';
@@ -98,17 +91,14 @@ export class SentimentCacheStore {
     private readonly stockStore: RecordStore<SentimentStockRow>,
     @Inject(SENTIMENT_MARKET_RECORD_STORE)
     private readonly marketStore: RecordStore<SentimentMarketRow>,
-    @Inject(SENTIMENT_DATA_DIR) private readonly legacyRoot: string,
     @Inject(CLOCK) private readonly clock: Clock,
   ) {}
 
   async getStock(code: string, windowDays: number): Promise<Sentiment | null> {
     const row = await this.stockStore.get(code);
-    if (row !== null) {
-      if (row.windowDays !== windowDays) return null;
-      return this.decodeStock(row);
-    }
-    return this.tryAdoptLegacyStock(code, windowDays);
+    if (row === null) return null;
+    if (row.windowDays !== windowDays) return null;
+    return this.decodeStock(row);
   }
 
   async putStock(value: Sentiment, windowDays: number): Promise<void> {
@@ -124,11 +114,9 @@ export class SentimentCacheStore {
 
   async getMarket(codeHash: string, windowDays: number): Promise<MarketSentiment | null> {
     const row = await this.marketStore.get(codeHash);
-    if (row !== null) {
-      if (row.windowDays !== windowDays) return null;
-      return this.decodeMarket(row);
-    }
-    return this.tryAdoptLegacyMarket(codeHash, windowDays);
+    if (row === null) return null;
+    if (row.windowDays !== windowDays) return null;
+    return this.decodeMarket(row);
   }
 
   async putMarket(value: MarketSentiment, windowDays: number): Promise<void> {
@@ -176,60 +164,6 @@ export class SentimentCacheStore {
     return result.data;
   }
 
-  private async tryAdoptLegacyStock(
-    code: string,
-    windowDays: number,
-  ): Promise<Sentiment | null> {
-    const legacy = path.join(this.legacyRoot, 'sentiment', 'stock', `${code}.json`);
-    const raw = await readJsonOrNull(legacy);
-    if (raw === null) return null;
-    const entry = raw as { windowDays?: unknown; value?: unknown };
-    if (entry.windowDays !== windowDays) return null;
-    const parsed = SentimentSchema.safeParse(entry.value);
-    if (!parsed.success) {
-      this.logger.warn(`legacy sentiment stock ${legacy} failed validation`);
-      return null;
-    }
-    await this.runLocked(`stock:${code}`, async () => {
-      await this.stockStore.upsert({
-        code,
-        windowDays,
-        payload_json: JSON.stringify(parsed.data),
-      });
-      await this.stockStore.flush();
-      await renameToBak(legacy, this.logger);
-    });
-    if (this.isStale(parsed.data.cachedAt)) return null;
-    return parsed.data;
-  }
-
-  private async tryAdoptLegacyMarket(
-    codeHash: string,
-    windowDays: number,
-  ): Promise<MarketSentiment | null> {
-    const legacy = path.join(this.legacyRoot, 'sentiment', 'market', `${codeHash}.json`);
-    const raw = await readJsonOrNull(legacy);
-    if (raw === null) return null;
-    const entry = raw as { windowDays?: unknown; value?: unknown };
-    if (entry.windowDays !== windowDays) return null;
-    const parsed = MarketSentimentSchema.safeParse(entry.value);
-    if (!parsed.success) {
-      this.logger.warn(`legacy sentiment market ${legacy} failed validation`);
-      return null;
-    }
-    await this.runLocked(`market:${codeHash}`, async () => {
-      await this.marketStore.upsert({
-        codeHash,
-        windowDays,
-        payload_json: JSON.stringify(parsed.data),
-      });
-      await this.marketStore.flush();
-      await renameToBak(legacy, this.logger);
-    });
-    if (this.isStale(parsed.data.fetchedAt)) return null;
-    return parsed.data;
-  }
-
   private isStale(timestampIso: string): boolean {
     const t = Date.parse(timestampIso);
     if (!Number.isFinite(t)) return true;
@@ -247,24 +181,3 @@ export class SentimentCacheStore {
   }
 }
 
-async function readJsonOrNull(file: string): Promise<unknown> {
-  let raw: string;
-  try {
-    raw = await fs.readFile(file, 'utf8');
-  } catch {
-    return null;
-  }
-  try {
-    return JSON.parse(raw);
-  } catch {
-    return null;
-  }
-}
-
-async function renameToBak(file: string, logger: { warn: (m: string) => void }): Promise<void> {
-  try {
-    await fs.rename(file, `${file}.bak`);
-  } catch (err) {
-    logger.warn(`could not rename legacy ${file} to .bak: ${String(err)}`);
-  }
-}

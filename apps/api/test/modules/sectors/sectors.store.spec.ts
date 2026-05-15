@@ -1,7 +1,3 @@
-import { promises as fs } from 'node:fs';
-import os from 'node:os';
-import path from 'node:path';
-
 import type { Sector } from '@quant/shared';
 
 import {
@@ -11,16 +7,12 @@ import {
 } from '../../../src/modules/sectors/sectors.store.js';
 import { InMemoryRecordStore } from '../../fakes/in-memory-record.store.js';
 
-async function tmpDir(): Promise<string> {
-  return fs.mkdtemp(path.join(os.tmpdir(), 'sectors-store-'));
-}
-
-function makeStore(dir = '/unused'): {
+function makeStore(): {
   store: SectorsStore;
   record: InMemoryRecordStore<SectorRow>;
 } {
   const record = new InMemoryRecordStore<SectorRow>(SECTORS_TABLE_SPEC);
-  const store = new SectorsStore(record, dir);
+  const store = new SectorsStore(record);
   return { store, record };
 }
 
@@ -136,23 +128,3 @@ describe('SectorsStore migration & id allocation', () => {
   });
 });
 
-describe('SectorsStore legacy filesystem migration', () => {
-  it('imports legacy sectors.json into record store and renames to .bak', async () => {
-    const dir = await tmpDir();
-    const file = path.join(dir, 'sectors', 'sectors.json');
-    const legacy = [
-      { ...userBase('legacy-foo'), id: 'legacy-foo' },
-      { ...userBase('s2'), id: 's2' },
-    ];
-    await fs.mkdir(path.dirname(file), { recursive: true });
-    await fs.writeFile(file, JSON.stringify(legacy));
-
-    const { store, record } = makeStore(dir);
-    await store.load();
-
-    expect(store.list().map((s) => s.id).sort()).toEqual(['s1', 's2']);
-    await expect(record.count()).resolves.toBe(2);
-    await expect(fs.access(file)).rejects.toBeDefined();
-    await expect(fs.access(`${file}.bak`)).resolves.toBeUndefined();
-  });
-});

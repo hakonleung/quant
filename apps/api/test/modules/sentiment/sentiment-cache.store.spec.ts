@@ -1,7 +1,3 @@
-import { promises as fs } from 'node:fs';
-import os from 'node:os';
-import path from 'node:path';
-
 import type { MarketSentiment, Sentiment } from '@quant/shared';
 
 import { FrozenClock } from '../../../src/common/clock.js';
@@ -39,18 +35,14 @@ const MARKET: MarketSentiment = {
   caveats: [],
 };
 
-async function tmpDir(): Promise<string> {
-  return fs.mkdtemp(path.join(os.tmpdir(), 'sentiment-cache-'));
-}
-
-function makeStore(legacyRoot = '/unused'): {
+function makeStore(): {
   store: SentimentCacheStore;
   stock: InMemoryRecordStore<SentimentStockRow>;
   market: InMemoryRecordStore<SentimentMarketRow>;
 } {
   const stock = new InMemoryRecordStore<SentimentStockRow>(SENTIMENT_STOCK_TABLE_SPEC);
   const market = new InMemoryRecordStore<SentimentMarketRow>(SENTIMENT_MARKET_TABLE_SPEC);
-  const store = new SentimentCacheStore(stock, market, legacyRoot, new FrozenClock(NOW));
+  const store = new SentimentCacheStore(stock, market, new FrozenClock(NOW));
   return { store, stock, market };
 }
 
@@ -89,32 +81,5 @@ describe('SentimentCacheStore', () => {
     const { store } = makeStore();
     await store.putMarket(MARKET, 30);
     await expect(store.getMarket('abc', 7)).resolves.toBeNull();
-  });
-
-  it('migrates legacy stock json on first matching get + renames to .bak', async () => {
-    const dir = await tmpDir();
-    const legacy = path.join(dir, 'sentiment', 'stock', '000001.json');
-    await fs.mkdir(path.dirname(legacy), { recursive: true });
-    await fs.writeFile(legacy, JSON.stringify({ windowDays: 30, value: STOCK }));
-
-    const { store, stock } = makeStore(dir);
-    const got = await store.getStock('000001', 30);
-    expect(got?.code).toBe('000001');
-    await expect(stock.count()).resolves.toBe(1);
-    await expect(fs.access(legacy)).rejects.toBeDefined();
-    await expect(fs.access(`${legacy}.bak`)).resolves.toBeUndefined();
-  });
-
-  it('legacy stock json with mismatched windowDays is a miss without import', async () => {
-    const dir = await tmpDir();
-    const legacy = path.join(dir, 'sentiment', 'stock', '000001.json');
-    await fs.mkdir(path.dirname(legacy), { recursive: true });
-    await fs.writeFile(legacy, JSON.stringify({ windowDays: 7, value: STOCK }));
-
-    const { store, stock } = makeStore(dir);
-    await expect(store.getStock('000001', 30)).resolves.toBeNull();
-    await expect(stock.count()).resolves.toBe(0);
-    // Legacy file should still be present — not imported.
-    await expect(fs.access(legacy)).resolves.toBeUndefined();
   });
 });

@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { mkdtemp, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { z } from 'zod';
@@ -163,47 +163,6 @@ describe('FileSystemUserScopedRecordStore extras', () => {
       const bobRows = await b.list('bob');
       expect(aliceRows.map((n) => n.body)).toEqual(['one']);
       expect(bobRows.map((n) => n.body)).toEqual(['two']);
-    } finally {
-      await rm(dir, { recursive: true, force: true });
-    }
-  });
-
-  it('legacy-json migration imports rows + renames source to .bak', async () => {
-    const dir = await mkdtemp(join(tmpdir(), 'fs-user-store-'));
-    try {
-      const legacyPath = join(dir, 'users', 'alice', '_notes', 'notes.json');
-      await writeFile(
-        legacyPath.replace('notes.json', ''),
-        '', // create intermediate dir via the next mkdir
-      ).catch(() => undefined);
-      // mkdir manually since writeFile to a file is what creates parent
-      await (await import('node:fs/promises')).mkdir(
-        legacyPath.split('/').slice(0, -1).join('/'),
-        { recursive: true },
-      );
-      await writeFile(
-        legacyPath,
-        JSON.stringify({
-          entries: [
-            { id: 'n1', body: 'legacy-one', weight: 1 },
-            { id: 'n2', body: 'legacy-two', weight: 2 },
-          ],
-        }),
-      );
-      const store = new FileSystemUserScopedRecordStore<Note>({
-        dataRoot: dir,
-        spec,
-        legacyJsonPath: (uid) => join(dir, 'users', uid, '_notes', 'notes.json'),
-        legacyDecode: (raw) => {
-          const snap = raw as { entries: Note[] };
-          return snap.entries;
-        },
-      });
-      const rows = await store.list('alice');
-      expect(rows.map((n) => n.body).sort()).toEqual(['legacy-one', 'legacy-two']);
-
-      const bakRaw = await readFile(`${legacyPath}.bak`, 'utf8');
-      expect(JSON.parse(bakRaw)).toMatchObject({ entries: expect.any(Array) });
     } finally {
       await rm(dir, { recursive: true, force: true });
     }

@@ -6,13 +6,9 @@
  * Backed by `UserScopedRecordStore<LedgerCacheRow>` — one parquet per
  * user at `data/users/{userId}/ledger_cache.parquet`; each cache entry
  * is one row keyed by hash, value JSON-encoded in `payload_json`.
- *
- * Self-migration: legacy `data/users/{userId}/_ledger/ai-cache.json` is
- * adopted on first access and renamed `.bak` (the adapter handles it).
  */
 
 import { createHash } from 'node:crypto';
-import path from 'node:path';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { LedgerAnalysisSchema, type EnrichedLedgerEntry, type LedgerAnalysis } from '@quant/shared';
 import { z } from 'zod';
@@ -44,17 +40,6 @@ export const LEDGER_CACHE_TABLE_SPEC: RecordTableSpec<LedgerCacheRow> = {
   ],
 };
 
-const CacheFileSchema = z.record(z.string(), LedgerAnalysisSchema);
-
-function decodeLegacy(raw: unknown): readonly LedgerCacheRow[] {
-  const parsed = CacheFileSchema.safeParse(raw);
-  if (!parsed.success) return [];
-  return Object.entries(parsed.data).map(([hash, value]) => ({
-    hash,
-    payload_json: JSON.stringify(value),
-  }));
-}
-
 export function buildLedgerCacheUserScopedStore(
   cfg: AuthConfigShape,
   logger: { warn: (m: string) => void; log?: (m: string) => void },
@@ -62,9 +47,6 @@ export function buildLedgerCacheUserScopedStore(
   return new FileSystemUserScopedRecordStore<LedgerCacheRow>({
     dataRoot: cfg.dataRoot,
     spec: LEDGER_CACHE_TABLE_SPEC,
-    legacyJsonPath: (uid) =>
-      path.join(cfg.dataRoot, 'users', uid, '_ledger', 'ai-cache.json'),
-    legacyDecode: decodeLegacy,
     logger,
   });
 }

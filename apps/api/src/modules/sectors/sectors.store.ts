@@ -15,16 +15,8 @@
  * mutation we `flush()` the record store so the on-disk parquet
  * matches the in-memory state — sectors are tiny (10s of rows) so the
  * full rewrite is cheap.
- *
- * Self-migration: on first load, if the record store is empty AND a
- * legacy `data/sectors/sectors.json` exists, the JSON is imported and
- * the parquet now lives flat at `data/public_sectors.parquet`. The
- * renamed `.bak`. The legacy `s{n}` id reseq + `createdBy/published`
- * backfill from the JSON version are preserved.
  */
 
-import { promises as fs } from 'node:fs';
-import path from 'node:path';
 import { Inject, Injectable, Logger, type OnModuleInit } from '@nestjs/common';
 import { QuantError, SectorsListSchema, type Sector } from '@quant/shared';
 import { z } from 'zod';
@@ -37,7 +29,6 @@ import type {
 export const SECTORS_DATA_DIR = Symbol('SECTORS_DATA_DIR');
 export const SECTORS_RECORD_STORE = Symbol('SECTORS_RECORD_STORE');
 
-const LEGACY_OWNER_ID = 'admin';
 const SEQ_ID_RE = /^s(\d+)$/u;
 
 export interface SectorRow {
@@ -70,7 +61,6 @@ export class SectorsStore implements OnModuleInit {
 
   constructor(
     @Inject(SECTORS_RECORD_STORE) private readonly store: RecordStore<SectorRow>,
-    @Inject(SECTORS_DATA_DIR) private readonly legacyDir: string,
   ) {}
 
   async onModuleInit(): Promise<void> {
@@ -82,15 +72,6 @@ export class SectorsStore implements OnModuleInit {
       if (this.loaded) return;
       const rows = await this.store.list({ orderBy: [{ column: 'id', dir: 'asc' }] });
       if (rows.length === 0) {
-        const migrated = await this.migrateLegacyIfPresent();
-        if (migrated !== null) {
-          this.adoptSectors(migrated);
-          await this.persistAll();
-          this.logger.log(
-            `migrated legacy sectors.json (${String(migrated.length)} records) → record store`,
-          );
-          return;
-        }
         this.adoptSectors([]);
         return;
       }
@@ -204,40 +185,6 @@ export class SectorsStore implements OnModuleInit {
     return id;
   }
 
-  private async migrateLegacyIfPresent(): Promise<readonly Sector[] | null> {
-    // Pre-storage-unify layout: `data/sectors/sectors.json`. The
-    // parquet file moved up to `data/public_sectors.parquet`, but the
-    // legacy JSON lookup keeps its historical path so existing data
-    // dirs still migrate.
-    const legacyPath = path.join(this.legacyDir, 'sectors', 'sectors.json');
-    let raw: string;
-    try {
-      raw = await fs.readFile(legacyPath, 'utf8');
-    } catch {
-      return null;
-    }
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(raw);
-    } catch (err) {
-      this.logger.warn(`legacy sectors.json malformed JSON, ignoring: ${String(err)}`);
-      return null;
-    }
-    const migrated = migrateLegacy(parsed);
-    const { records } = reseqIds(migrated);
-    const result = SectorsListSchema.safeParse(records);
-    if (!result.success) {
-      this.logger.warn(`legacy sectors.json failed validation: ${result.error.message}`);
-      return null;
-    }
-    try {
-      await fs.rename(legacyPath, `${legacyPath}.bak`);
-    } catch (err) {
-      this.logger.warn(`could not rename ${legacyPath} to .bak: ${String(err)}`);
-    }
-    return result.data;
-  }
-
   private async withLock<T>(fn: () => Promise<T>): Promise<T> {
     const next = this.mutexChain.then(fn, fn);
     this.mutexChain = next.catch(() => undefined);
@@ -259,21 +206,6 @@ function decodeRows(rows: readonly SectorRow[], logger: { warn: (m: string) => v
     }
   }
   return out;
-}
-
-function migrateLegacy(raw: unknown): unknown {
-  if (!Array.isArray(raw)) return raw;
-  return raw.map((item) => {
-    if (typeof item !== 'object' || item === null) return item;
-    const next: Record<string, unknown> = { ...(item as Record<string, unknown>) };
-    if (typeof next['createdBy'] !== 'string' || next['createdBy'].length === 0) {
-      next['createdBy'] = LEGACY_OWNER_ID;
-    }
-    if (typeof next['published'] !== 'boolean') {
-      next['published'] = false;
-    }
-    return next;
-  });
 }
 
 function isRecord(x: unknown): x is Record<string, unknown> {

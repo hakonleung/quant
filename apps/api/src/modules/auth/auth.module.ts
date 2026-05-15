@@ -3,7 +3,6 @@ import { APP_GUARD } from '@nestjs/core';
 
 import { FeishuOAuthProvider } from './adapters/feishu.provider.js';
 import { NextauthJwtVerifier } from './adapters/nextauth-jwt.verifier.js';
-import { AuthBootstrap } from './auth.bootstrap.js';
 import { AuthController } from './auth.controller.js';
 import { AuthGuard } from './auth.guard.js';
 import { AuthService } from './auth.service.js';
@@ -26,7 +25,6 @@ const FEISHU_APP_SECRET_ENV = 'CHANNEL_FEISHU_APP_SECRET';
   providers: [
     { provide: AUTH_CONFIG, useFactory: (): AuthConfigShape => loadAuthConfig() },
     AuthConfig,
-    AuthBootstrap,
     UserStore,
     {
       provide: SESSION_VERIFIER,

@@ -40,15 +40,6 @@ export interface FileSystemUserScopedRecordStoreOptions<V, K extends RecordKey> 
   readonly userDir?: (userId: string) => string;
   readonly maxActiveUsers?: number;
   readonly idleTtlMs?: number;
-  /**
-   * Optional legacy-JSON migration hook. When provided AND the user's
-   * record-store parquet is absent on first access, the file at
-   * `legacyJsonPath(userId)` is read, fed through `legacyDecode`, then
-   * upserted into the new store. The legacy file is renamed `.bak`
-   * after a successful migration.
-   */
-  readonly legacyJsonPath?: (userId: string) => string;
-  readonly legacyDecode?: (raw: unknown) => readonly V[];
   readonly logger?: { warn: (msg: string) => void; log?: (msg: string) => void };
 }
 
@@ -58,7 +49,6 @@ const DEFAULT_IDLE_TTL_MS = 30 * 60 * 1000;
 interface UserSlot<V, K extends RecordKey> {
   store: DuckDBParquetRecordStore<V, K>;
   lastTouchedAt: number;
-  migrated: boolean;
 }
 
 export class FileSystemUserScopedRecordStore<V, K extends RecordKey = string>
@@ -156,63 +146,10 @@ export class FileSystemUserScopedRecordStore<V, K extends RecordKey = string>
       dataRoot: userRoot,
       spec: this.opts.spec,
     });
-    slot = { store, lastTouchedAt: this.now(), migrated: false };
+    slot = { store, lastTouchedAt: this.now() };
     this.slots.set(userId, slot);
-    await this.migrateLegacyIfNeeded(userId, slot, userRoot);
     await this.evictIdleAndOverflow(userId);
     return slot;
-  }
-
-  private async migrateLegacyIfNeeded(
-    userId: string,
-    slot: UserSlot<V, K>,
-    userRoot: string,
-  ): Promise<void> {
-    if (slot.migrated) return;
-    slot.migrated = true;
-    const parquetPath = path.join(userRoot, `${this.opts.spec.table}.parquet`);
-    const parquetExists = await fileExists(parquetPath);
-    if (parquetExists) return;
-    if (this.opts.legacyJsonPath === undefined || this.opts.legacyDecode === undefined) return;
-    const legacyPath = this.opts.legacyJsonPath(userId);
-    let raw: string;
-    try {
-      raw = await fs.readFile(legacyPath, 'utf8');
-    } catch {
-      return; // no legacy file
-    }
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(raw);
-    } catch (err) {
-      this.logger.warn(
-        `legacy json at ${legacyPath} malformed, ignoring: ${String(err)}`,
-      );
-      return;
-    }
-    let decoded: readonly V[];
-    try {
-      decoded = this.opts.legacyDecode(parsed);
-    } catch (err) {
-      this.logger.warn(
-        `legacy json at ${legacyPath} failed decode, ignoring: ${String(err)}`,
-      );
-      return;
-    }
-    if (decoded.length > 0) {
-      await slot.store.upsertMany(decoded);
-      await slot.store.flush();
-    }
-    try {
-      await fs.rename(legacyPath, `${legacyPath}.bak`);
-    } catch (err) {
-      this.logger.warn(
-        `could not rename legacy ${legacyPath} to .bak: ${String(err)}`,
-      );
-    }
-    this.logger.log?.(
-      `migrated legacy json ${legacyPath} → record store user=${userId} rows=${String(decoded.length)}`,
-    );
   }
 
   private async evictIdleAndOverflow(keepUserId: string): Promise<void> {
@@ -244,14 +181,5 @@ export class FileSystemUserScopedRecordStore<V, K extends RecordKey = string>
       return; // keep the slot — would lose data otherwise
     }
     this.slots.delete(userId);
-  }
-}
-
-async function fileExists(p: string): Promise<boolean> {
-  try {
-    await fs.stat(p);
-    return true;
-  } catch {
-    return false;
   }
 }

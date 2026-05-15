@@ -11,7 +11,6 @@ import {
   EMPTY_USER_BLOB,
   EMPTY_WATCH_TASK_FILE,
   USER_BLOB_SCHEMA_VERSION,
-  type UserBlob,
 } from '../../../src/common/storage/user-blob.types.js';
 import {
   DEFAULT_SYS_CFG,
@@ -31,9 +30,7 @@ const sampleCondition: WatchCondition = {
   thresholdPct: '5.0',
 };
 
-function makeStore(opts: {
-  legacy?: () => Promise<Partial<UserBlob>>;
-} = {}): {
+function makeStore(): {
   store: UserBlobStore;
   inner: InMemoryUserScopedRecordStore<UserBlobRow>;
 } {
@@ -41,7 +38,6 @@ function makeStore(opts: {
   const store = new UserBlobStore({
     dataRoot: '/unused',
     inner,
-    ...(opts.legacy !== undefined ? { readLegacy: opts.legacy } : {}),
   });
   return { store, inner };
 }
@@ -166,7 +162,6 @@ describe('UserBlobStore — update', () => {
     const store = new UserBlobStore({
       dataRoot: '/unused',
       inner,
-      readLegacy: async () => ({}),
       logger: { warn: (m) => warnings.push(m) },
     });
     await store.update(USER, () => ({
@@ -213,75 +208,6 @@ describe('UserBlobStore — update', () => {
     const blob = await store.read(USER);
     expect(blob.watch.tasks.nextIdx).toBe(7);
     expect(blob.watch.tasks.tasks).toHaveLength(1);
-  });
-});
-
-describe('UserBlobStore — lazy migration from legacy', () => {
-  it('seeds from legacy slices on first read', async () => {
-    let calls = 0;
-    const { store } = makeStore({
-      legacy: async () => {
-        calls += 1;
-        return {
-          watch: { groups: [sampleGroup], tasks: EMPTY_WATCH_TASK_FILE },
-          ledger: { entries: [sampleEntry] },
-        };
-      },
-    });
-    const blob = await store.read(USER);
-    expect(blob.watch.groups).toEqual([sampleGroup]);
-    expect(blob.ledger.entries).toEqual([sampleEntry]);
-    expect(blob.sysCfg).toEqual(DEFAULT_SYS_CFG);
-    expect(calls).toBe(1);
-  });
-
-  it('does not invoke the legacy reader after the user is migrated', async () => {
-    let calls = 0;
-    const { store } = makeStore({
-      legacy: async () => {
-        calls += 1;
-        return { ledger: { entries: [sampleEntry] } };
-      },
-    });
-    await store.read(USER);
-    await store.read(USER);
-    await store.update(USER, (b) => b);
-    expect(calls).toBe(1);
-  });
-
-  it('does not invoke the legacy reader when user.parquet already exists', async () => {
-    let calls = 0;
-    const { store, inner } = makeStore({
-      legacy: async () => {
-        calls += 1;
-        return { ledger: { entries: [sampleEntry] } };
-      },
-    });
-    await inner.upsert(USER, {
-      id: 'singleton',
-      payload_json: JSON.stringify(EMPTY_USER_BLOB),
-    });
-    await store.read(USER);
-    expect(calls).toBe(0);
-  });
-
-  it('treats an empty legacy result as a no-op (still reports empty blob)', async () => {
-    const { store } = makeStore({ legacy: async () => ({}) });
-    const blob = await store.read(USER);
-    expect(blob).toEqual(EMPTY_USER_BLOB);
-  });
-
-  it('isolates users — migration state is per-userId', async () => {
-    let calls = 0;
-    const { store } = makeStore({
-      legacy: async () => {
-        calls += 1;
-        return { ledger: { entries: [sampleEntry] } };
-      },
-    });
-    await store.read('a');
-    await store.read('b');
-    expect(calls).toBe(2);
   });
 });
 

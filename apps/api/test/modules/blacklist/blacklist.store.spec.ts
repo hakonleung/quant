@@ -1,7 +1,3 @@
-import { promises as fs } from 'node:fs';
-import path from 'node:path';
-import os from 'node:os';
-
 import { EMPTY_BLACKLIST, type BlacklistSnapshot } from '@quant/shared';
 
 import {
@@ -11,16 +7,12 @@ import {
 } from '../../../src/modules/blacklist/blacklist.store.js';
 import { InMemoryRecordStore } from '../../fakes/in-memory-record.store.js';
 
-async function tmpDir(): Promise<string> {
-  return fs.mkdtemp(path.join(os.tmpdir(), 'blacklist-store-'));
-}
-
-function makeStore(dir: string): {
+function makeStore(): {
   store: BlacklistStore;
   record: InMemoryRecordStore<BlacklistRow>;
 } {
   const record = new InMemoryRecordStore<BlacklistRow>(BLACKLIST_TABLE_SPEC);
-  const store = new BlacklistStore(record, dir);
+  const store = new BlacklistStore(record);
   return { store, record };
 }
 
@@ -32,9 +24,8 @@ const fixture: BlacklistSnapshot = {
 };
 
 describe('BlacklistStore', () => {
-  it('loads an empty snapshot when neither record store nor legacy file exists', async () => {
-    const dir = await tmpDir();
-    const { store } = makeStore(dir);
+  it('loads an empty snapshot when the record store is empty', async () => {
+    const { store } = makeStore();
 
     await store.load();
 
@@ -43,8 +34,7 @@ describe('BlacklistStore', () => {
   });
 
   it('loads + parses a valid snapshot from the record store', async () => {
-    const dir = await tmpDir();
-    const { store, record } = makeStore(dir);
+    const { store, record } = makeStore();
     await record.upsert({
       id: 'singleton',
       codes_json: JSON.stringify(fixture.codes),
@@ -61,36 +51,8 @@ describe('BlacklistStore', () => {
     expect(store.has('999999')).toBe(false);
   });
 
-  it('migrates a legacy blacklist.json into the record store and renames it to .bak', async () => {
-    const dir = await tmpDir();
-    await fs.writeFile(path.join(dir, 'blacklist.json'), JSON.stringify(fixture));
-    const { store, record } = makeStore(dir);
-
-    await store.load();
-
-    expect(store.snapshot()).toEqual(fixture);
-    await expect(record.count()).resolves.toBe(1);
-    await expect(fs.access(path.join(dir, 'blacklist.json'))).rejects.toBeDefined();
-    await expect(fs.access(path.join(dir, 'blacklist.json.bak'))).resolves.toBeUndefined();
-  });
-
-  it('ignores a legacy blacklist.json that fails zod validation', async () => {
-    const dir = await tmpDir();
-    await fs.writeFile(
-      path.join(dir, 'blacklist.json'),
-      JSON.stringify({ codes: ['000001'], asof: 'not-a-date', universeSize: -1 }),
-    );
-    const { store } = makeStore(dir);
-
-    await store.load();
-
-    expect(store.snapshot()).toEqual(EMPTY_BLACKLIST);
-    expect(store.has('000001')).toBe(false);
-  });
-
   it('replace writes to the record store and updates the in-memory codeSet', async () => {
-    const dir = await tmpDir();
-    const { store, record } = makeStore(dir);
+    const { store, record } = makeStore();
     await store.load();
 
     const out = await store.replace(fixture);
@@ -105,8 +67,7 @@ describe('BlacklistStore', () => {
   });
 
   it('load is idempotent — second call is a no-op', async () => {
-    const dir = await tmpDir();
-    const { store, record } = makeStore(dir);
+    const { store, record } = makeStore();
     await record.upsert({
       id: 'singleton',
       codes_json: JSON.stringify(fixture.codes),
@@ -130,8 +91,7 @@ describe('BlacklistStore', () => {
   });
 
   it('snapshot is a stable reference between load and replace', async () => {
-    const dir = await tmpDir();
-    const { store } = makeStore(dir);
+    const { store } = makeStore();
     await store.load();
 
     const a = store.snapshot();
@@ -140,8 +100,7 @@ describe('BlacklistStore', () => {
   });
 
   it('replace surfaces malformed codes_json on subsequent load as empty codes', async () => {
-    const dir = await tmpDir();
-    const { store, record } = makeStore(dir);
+    const { store, record } = makeStore();
     await record.upsert({
       id: 'singleton',
       codes_json: 'not-json',

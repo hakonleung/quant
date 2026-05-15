@@ -21,7 +21,6 @@ export function makeUserBlobStore(): TestUserBlobStore {
   const store = new UserBlobStore({
     dataRoot: '/unused',
     inner,
-    readLegacy: async () => ({}),
   });
   return { store, inner };
 }

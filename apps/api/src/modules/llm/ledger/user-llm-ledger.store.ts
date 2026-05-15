@@ -7,13 +7,10 @@
  * `payload_json`. Reads stay O(N) over the entries array; that's fine
  * because `/usr` is the only consumer.
  *
- * Self-migration: legacy `data/users/{userId}/llm-ledger.json` is
- * adopted on first access and renamed `.bak`. v1 payloads are
- * down-converted to v2 (drop `provider`, `cnyCost`) on read; the next
- * mutate rewrites the parquet in v2 form.
+ * v1 payloads are down-converted to v2 (drop `provider`, `cnyCost`) on
+ * read; the next mutate rewrites the parquet in v2 form.
  */
 
-import path from 'node:path';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { z } from 'zod';
 
@@ -52,12 +49,6 @@ export const USER_LLM_LEDGER_TABLE_SPEC: RecordTableSpec<UserLlmLedgerRow> = {
   ],
 };
 
-function decodeLegacy(raw: unknown): readonly UserLlmLedgerRow[] {
-  const migrated = migrateLedgerPayload(raw);
-  if (migrated === null) return [];
-  return [{ id: SINGLETON_KEY, payload_json: JSON.stringify(migrated) }];
-}
-
 export function buildUserLlmLedgerUserScopedStore(
   dataRoot: string,
   logger: { warn: (m: string) => void; log?: (m: string) => void },
@@ -65,8 +56,6 @@ export function buildUserLlmLedgerUserScopedStore(
   return new FileSystemUserScopedRecordStore<UserLlmLedgerRow>({
     dataRoot,
     spec: USER_LLM_LEDGER_TABLE_SPEC,
-    legacyJsonPath: (uid) => path.join(dataRoot, 'users', uid, 'llm-ledger.json'),
-    legacyDecode: decodeLegacy,
     logger,
   });
 }
