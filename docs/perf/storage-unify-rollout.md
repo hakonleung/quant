@@ -43,8 +43,9 @@ adapter looks for the legacy JSON, imports it once, and renames it
 - **Writer**: `KlineWriterService.appendBars` — used by the cron worker
   after every Python sync.
 - **Reader**: `KlineReaderService` — backs `/api/kline/:code`,
-  `/api/kline/bulk`, and `LocalKlineRefAdapter` (watch scheduler MA
-  refs). No more Flight reads on the hot path.
+  `/api/kline/bulk`, `TaService.fetchBars`, `CacheInspector.findStaleKline`,
+  and `LocalKlineRefAdapter` (watch scheduler MA refs). **No Flight
+  kline reads anywhere on the NestJS side.**
 - **Cron worker**: `KlineWorker.process` consumes the Arrow bars table
   returned by Python's `sync_kline_for_code` and pushes it through
   `KlineWriterService`. Mode / counts / `new_last_date` ride in schema
@@ -52,6 +53,20 @@ adapter looks for the legacy JSON, imports it once, and renames it
 - **One-shot importer**: `apps/api/scripts/import-kline-legacy.ts`
   rewrites `data/kline/<code>.parquet` → `data/kline/<prefix>.parquet`
   with per-code row-count verification.
+
+### Retired Python Flight ops
+
+After NestJS's kline reads went fully local, three read-side ops were
+deleted from `quant_rpc/ops/`:
+
+- `list_kline_for_code` — was the per-code last-N reader.
+- `list_kline_bulk_last_n` — was the bulk-codes last-N reader.
+- `list_kline_watermarks` — was the universe-watermark scan used by
+  `CacheInspector.findStaleKline`; replaced by
+  `KlineReaderService.lastTradeDates` over the local parquet.
+
+The Python service now exposes exactly one kline op:
+`sync_kline_for_code` — the bars-pushing one.
 
 ### CLAUDE.md updates
 
@@ -97,17 +112,20 @@ metrics on stock_meta after each kline sync`. Design:
 
 **Open follow-up**:
 
-- **Snapshot handler reads from the persisted block**. Today
-  `ListStockSnapshotsHandler._latest_close_and_returns` still computes
-  on every call. Flipping it to "use persisted when `metrics_asof`
-  matches the latest kline watermark, else recompute" is a clean
-  one-file change — and removes the 5-min `FULL_CACHE_TTL_SEC` cache
-  layer once persisted hits land.
 - **Batched op for one-shot universe backfill**. The current per-code
   op rewrites the whole `stocks.parquet` (~5 MB) per call; a 5500-code
   initial backfill = 5500 rewrites. Add a batched
   `upsert_stock_metrics_for_codes` op when this proves to be a hot
   path. Per-code is fine at normal cron tick rates.
+
+### Snapshot handler reads persisted block — DONE
+
+Shipped 2026-05-15 in commit `feat(snapshot): serve list_stock_snapshots
+from persisted meta.metrics`. `ListStockSnapshotsHandler` prefers
+`meta.metrics` when populated (zero kline reads), falls back to the v1
+on-demand recompute via `KlineService.get_last_n` for legacy / never-
+projected codes. `price` was added to `PersistedMetrics` so the row can
+be served without any kline read at all.
 
 ### Redis L1 cache (item 5)
 
