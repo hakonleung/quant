@@ -9,8 +9,13 @@
  */
 
 import { Inject, Injectable } from '@nestjs/common';
-import { instructionId, okResultWithMeta, type InstructionResult } from '@quant/shared';
-import { z } from 'zod';
+import {
+  UsrArgsSchema,
+  instructionId,
+  okResultWithMeta,
+  type InstructionResult,
+} from '@quant/shared';
+import type { z } from 'zod';
 
 import { AuthConfig } from '../../auth/config/auth.config.js';
 import { CLOCK, type Clock } from '../../../common/clock.js';
@@ -23,7 +28,7 @@ import { InstructionRegistrarBase } from '../instruction.provider.js';
 import { InstructionRegistry } from '../instruction.registry.js';
 import type { InstructionSpec } from '../instruction.types.js';
 
-const argsSchema = z.object({}).strict();
+const argsSchema = UsrArgsSchema;
 type Args = z.infer<typeof argsSchema>;
 
 @Injectable()

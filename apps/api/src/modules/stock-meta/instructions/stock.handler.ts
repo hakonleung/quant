@@ -1,5 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 import {
+  StockArgsSchema,
   instructionId,
   okResult,
   okResultWithMeta,
@@ -7,7 +8,7 @@ import {
   type StockListRow,
   type StockSnapshotDto,
 } from '@quant/shared';
-import { z } from 'zod';
+import type { z } from 'zod';
 
 import type { InstructionCtx } from '../../instruction/instruction.port.js';
 import { InstructionRegistrarBase } from '../../instruction/instruction.provider.js';
@@ -20,13 +21,7 @@ import {
 } from '../domain/format-stock-table.js';
 import { StockMetaService } from '../stock-meta.service.js';
 
-const argsSchema = z
-  .object({
-    q: z.string().min(1, 'query required').max(64).optional(),
-    limit: z.coerce.number().int().min(1).max(50).default(10),
-  })
-  .strict();
-
+const argsSchema = StockArgsSchema;
 type Args = z.infer<typeof argsSchema>;
 
 @Injectable()

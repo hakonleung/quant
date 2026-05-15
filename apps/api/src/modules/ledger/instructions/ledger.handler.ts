@@ -17,12 +17,13 @@
 
 import { Inject, Injectable } from '@nestjs/common';
 import {
+  LedgerArgsSchema,
   instructionId,
   okResult,
   okResultWithMeta,
   type InstructionResult,
 } from '@quant/shared';
-import { z } from 'zod';
+import type { z } from 'zod';
 
 import type { InstructionCtx } from '../../instruction/instruction.port.js';
 import { InstructionRegistrarBase } from '../../instruction/instruction.provider.js';
@@ -30,13 +31,7 @@ import { InstructionRegistry } from '../../instruction/instruction.registry.js';
 import type { InstructionSpec } from '../../instruction/instruction.types.js';
 import { LedgerService } from '../ledger.service.js';
 
-const argsSchema = z
-  .object({
-    sub: z.literal('list').default('list'),
-    limit: z.coerce.number().int().min(1).max(50).default(5),
-  })
-  .strict();
-
+const argsSchema = LedgerArgsSchema;
 type Args = z.infer<typeof argsSchema>;
 
 @Injectable()

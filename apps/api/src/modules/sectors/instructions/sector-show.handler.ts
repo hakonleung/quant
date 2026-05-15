@@ -9,6 +9,7 @@
 
 import { Inject, Injectable } from '@nestjs/common';
 import {
+  SectorShowArgsSchema,
   errResult,
   instructionId,
   okResult,
@@ -17,7 +18,7 @@ import {
   type InstructionResult,
   type Sector,
 } from '@quant/shared';
-import { z } from 'zod';
+import type { z } from 'zod';
 
 import type { InstructionCtx } from '../../instruction/instruction.port.js';
 import { InstructionRegistrarBase } from '../../instruction/instruction.provider.js';
@@ -33,9 +34,7 @@ import { SectorsService } from '../sectors.service.js';
 
 const MAX_TABLE_ROWS = 30;
 
-const argsSchema = z
-  .object({ id: z.string().min(1).describe('Sector id (e.g. s1) or sector name') })
-  .strict();
+const argsSchema = SectorShowArgsSchema;
 type Args = z.infer<typeof argsSchema>;
 
 @Injectable()

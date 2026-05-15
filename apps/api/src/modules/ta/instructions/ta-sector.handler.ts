@@ -19,6 +19,7 @@
 
 import { Inject, Injectable } from '@nestjs/common';
 import {
+  TaSectorArgsSchema,
   errResult,
   instructionId,
   okResult,
@@ -26,7 +27,7 @@ import {
   type InstructionResult,
   type TaSectorAnalysis,
 } from '@quant/shared';
-import { z } from 'zod';
+import type { z } from 'zod';
 
 import type { InstructionCtx } from '../../instruction/instruction.port.js';
 import { InstructionRegistrarBase } from '../../instruction/instruction.provider.js';
@@ -37,18 +38,7 @@ import { TaService } from '../ta.service.js';
 
 const MAX_SECTOR_CODES = 50;
 
-const boolFlag = z
-  .enum(['0', '1', 'true', 'false'])
-  .default('0')
-  .transform((v) => v === '1' || v === 'true');
-
-const argsSchema = z
-  .object({
-    id: z.string().min(1).describe('Sector id (e.g. s1) or sector name'),
-    fresh: boolFlag.describe('Bypass per-stock TA cache and re-run every member'),
-    confirm: boolFlag.optional().describe('IM paid-confirm token, set by the card button'),
-  })
-  .strict();
+const argsSchema = TaSectorArgsSchema;
 type Args = z.infer<typeof argsSchema>;
 
 @Injectable()

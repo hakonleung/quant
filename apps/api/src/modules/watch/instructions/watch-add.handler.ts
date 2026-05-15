@@ -8,6 +8,7 @@
 
 import { Inject, Injectable } from '@nestjs/common';
 import {
+  WatchAddArgsSchema,
   errResult,
   instructionId,
   isValidWatchCode,
@@ -15,7 +16,7 @@ import {
   QuantError,
   type InstructionResult,
 } from '@quant/shared';
-import { z } from 'zod';
+import type { z } from 'zod';
 
 import type { InstructionCtx } from '../../instruction/instruction.port.js';
 import { InstructionRegistrarBase } from '../../instruction/instruction.provider.js';
@@ -24,14 +25,7 @@ import type { InstructionSpec } from '../../instruction/instruction.types.js';
 import type { WatchTaskCreate } from '../dto/watch.dto.js';
 import { WatchService } from '../watch.service.js';
 
-const argsSchema = z
-  .object({
-    code: z.string().min(1).describe('Stock code, e.g. 600519 for A-shares'),
-    market: z.enum(['a', 'hk', 'us']).default('a').describe('Market: a | hk | us'),
-    group: z.string().min(1).describe('Watch group name (must already exist)'),
-    name: z.string().optional().describe('Human-readable label (defaults to stock name)'),
-  })
-  .strict();
+const argsSchema = WatchAddArgsSchema;
 type Args = z.infer<typeof argsSchema>;
 
 @Injectable()

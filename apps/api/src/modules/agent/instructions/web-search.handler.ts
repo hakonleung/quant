@@ -11,8 +11,13 @@
  */
 
 import { Inject, Injectable } from '@nestjs/common';
-import { instructionId, okResult, type InstructionResult } from '@quant/shared';
-import { z } from 'zod';
+import {
+  WebSearchArgsSchema,
+  instructionId,
+  okResult,
+  type InstructionResult,
+} from '@quant/shared';
+import type { z } from 'zod';
 
 import type { InstructionCtx } from '../../instruction/instruction.port.js';
 import { InstructionRegistrarBase } from '../../instruction/instruction.provider.js';
@@ -20,18 +25,7 @@ import { InstructionRegistry } from '../../instruction/instruction.registry.js';
 import type { InstructionSpec } from '../../instruction/instruction.types.js';
 import { LlmService } from '../../llm/llm.service.js';
 
-const argsSchema = z
-  .object({
-    q: z.string().min(1).max(500).describe('Search query — what to look up on the web'),
-    n: z.coerce
-      .number()
-      .int()
-      .min(1)
-      .max(10)
-      .default(5)
-      .describe('Max result summaries to return (default 5)'),
-  })
-  .strict();
+const argsSchema = WebSearchArgsSchema;
 type Args = z.infer<typeof argsSchema>;
 
 @Injectable()

@@ -21,6 +21,7 @@
 
 import { Inject, Injectable } from '@nestjs/common';
 import {
+  LedgerAnalyzeArgsSchema,
   errResult,
   instructionId,
   okResult,
@@ -28,7 +29,7 @@ import {
   type InstructionResult,
   type LedgerAnalysis,
 } from '@quant/shared';
-import { z } from 'zod';
+import type { z } from 'zod';
 
 import type { InstructionCtx } from '../../instruction/instruction.port.js';
 import { InstructionRegistrarBase } from '../../instruction/instruction.provider.js';
@@ -36,21 +37,7 @@ import { InstructionRegistry } from '../../instruction/instruction.registry.js';
 import type { InstructionSpec } from '../../instruction/instruction.types.js';
 import { LedgerService } from '../ledger.service.js';
 
-const truthy = new Set(['1', 'true', 'yes']);
-
-const argsSchema = z
-  .object({
-    fresh: z
-      .union([z.string(), z.boolean()])
-      .optional()
-      .transform((v) => {
-        if (v === undefined) return false;
-        if (typeof v === 'boolean') return v;
-        return truthy.has(v.toLowerCase());
-      }),
-  })
-  .strict();
-
+const argsSchema = LedgerAnalyzeArgsSchema;
 type Args = z.infer<typeof argsSchema>;
 
 const MAX_RECS = 5;

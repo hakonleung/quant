@@ -5,8 +5,14 @@
  */
 
 import { Inject, Injectable } from '@nestjs/common';
-import { errResult, instructionId, okResult, type InstructionResult } from '@quant/shared';
-import { z } from 'zod';
+import {
+  WatchGroupArgsSchema,
+  errResult,
+  instructionId,
+  okResult,
+  type InstructionResult,
+} from '@quant/shared';
+import type { z } from 'zod';
 
 import type { InstructionCtx } from '../../instruction/instruction.port.js';
 import { InstructionRegistrarBase } from '../../instruction/instruction.provider.js';
@@ -14,14 +20,7 @@ import { InstructionRegistry } from '../../instruction/instruction.registry.js';
 import type { InstructionSpec } from '../../instruction/instruction.types.js';
 import { WatchService } from '../watch.service.js';
 
-const argsSchema = z
-  .object({
-    name: z.string().min(1).describe('Watch group name'),
-    state: z
-      .enum(['on', 'off', 'pause', 'resume'])
-      .describe('on|resume to enable, off|pause to disable'),
-  })
-  .strict();
+const argsSchema = WatchGroupArgsSchema;
 type Args = z.infer<typeof argsSchema>;
 
 @Injectable()

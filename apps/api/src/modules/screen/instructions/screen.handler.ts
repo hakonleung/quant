@@ -14,6 +14,7 @@
 
 import { Inject, Injectable } from '@nestjs/common';
 import {
+  ScreenArgsSchema,
   errResult,
   instructionId,
   okResult,
@@ -22,7 +23,7 @@ import {
   type InstructionResult,
   type NlScreenResult,
 } from '@quant/shared';
-import { z } from 'zod';
+import type { z } from 'zod';
 
 import type { InstructionCtx } from '../../instruction/instruction.port.js';
 import { InstructionRegistrarBase } from '../../instruction/instruction.provider.js';
@@ -35,31 +36,7 @@ import {
 import { StockListService } from '../../stock-list/stock-list.service.js';
 import { ScreenService } from '../screen.service.js';
 
-const boolFlag = z
-  .union([z.string(), z.boolean()])
-  .optional()
-  .transform((v) => {
-    if (v === undefined) return false;
-    if (typeof v === 'boolean') return v;
-    const lower = v.toLowerCase();
-    return lower === '1' || lower === 'true' || lower === 'yes';
-  });
-
-const argsSchema = z
-  .object({
-    q: z
-      .string()
-      .min(1)
-      .max(500)
-      .describe('Natural-language screening query in Chinese, e.g. "找昨日涨停今天回踩ma5"'),
-    asof: z
-      .string()
-      .regex(/^\d{4}-\d{2}-\d{2}$/u, 'asof must be YYYY-MM-DD')
-      .optional(),
-    confirm: boolFlag.describe('IM paid-confirm token, set by the card button'),
-  })
-  .strict();
-
+const argsSchema = ScreenArgsSchema;
 type Args = z.infer<typeof argsSchema>;
 
 const MAX_MATCHES_DISPLAY = 30;

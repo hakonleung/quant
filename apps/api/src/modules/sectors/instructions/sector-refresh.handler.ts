@@ -6,13 +6,14 @@
 
 import { Inject, Injectable } from '@nestjs/common';
 import {
+  SectorRefreshArgsSchema,
   errResult,
   instructionId,
   okResult,
   QuantError,
   type InstructionResult,
 } from '@quant/shared';
-import { z } from 'zod';
+import type { z } from 'zod';
 
 import type { InstructionCtx } from '../../instruction/instruction.port.js';
 import { InstructionRegistrarBase } from '../../instruction/instruction.provider.js';
@@ -20,7 +21,7 @@ import { InstructionRegistry } from '../../instruction/instruction.registry.js';
 import type { InstructionSpec } from '../../instruction/instruction.types.js';
 import { SectorsService } from '../sectors.service.js';
 
-const argsSchema = z.object({ id: z.string().min(1) }).strict();
+const argsSchema = SectorRefreshArgsSchema;
 type Args = z.infer<typeof argsSchema>;
 
 @Injectable()

@@ -1,6 +1,11 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { instructionId, okResult, type InstructionResult } from '@quant/shared';
-import { z } from 'zod';
+import {
+  PingArgsSchema,
+  instructionId,
+  okResult,
+  type InstructionResult,
+} from '@quant/shared';
+import type { z } from 'zod';
 
 import { INSTRUCTION_CONFIG, type InstructionConfig } from '../instruction.config.js';
 import type { InstructionCtx } from '../instruction.port.js';
@@ -8,7 +13,7 @@ import { InstructionRegistrarBase } from '../instruction.provider.js';
 import { InstructionRegistry } from '../instruction.registry.js';
 import type { InstructionSpec } from '../instruction.types.js';
 
-const argsSchema = z.record(z.string()).default({});
+const argsSchema = PingArgsSchema;
 type Args = z.infer<typeof argsSchema>;
 
 @Injectable()

@@ -9,12 +9,13 @@
 
 import { Inject, Injectable } from '@nestjs/common';
 import {
+  WatchArgsSchema,
   instructionId,
   okResult,
   okResultWithMeta,
   type InstructionResult,
 } from '@quant/shared';
-import { z } from 'zod';
+import type { z } from 'zod';
 
 import type { InstructionCtx } from '../../instruction/instruction.port.js';
 import { InstructionRegistrarBase } from '../../instruction/instruction.provider.js';
@@ -27,11 +28,7 @@ import {
 import { StockListService } from '../../stock-list/stock-list.service.js';
 import { WatchService } from '../watch.service.js';
 
-const argsSchema = z
-  .object({
-    sub: z.enum(['list']).default('list'),
-  })
-  .strict();
+const argsSchema = WatchArgsSchema;
 type Args = z.infer<typeof argsSchema>;
 
 @Injectable()

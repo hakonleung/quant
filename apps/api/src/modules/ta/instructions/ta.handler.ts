@@ -8,6 +8,7 @@
 
 import { Inject, Injectable } from '@nestjs/common';
 import {
+  TaArgsSchema,
   errResult,
   instructionId,
   okResult,
@@ -15,7 +16,7 @@ import {
   type InstructionResult,
   type TaAnalysis,
 } from '@quant/shared';
-import { z } from 'zod';
+import type { z } from 'zod';
 
 import type { InstructionCtx } from '../../instruction/instruction.port.js';
 import { InstructionRegistrarBase } from '../../instruction/instruction.provider.js';
@@ -23,21 +24,7 @@ import { InstructionRegistry } from '../../instruction/instruction.registry.js';
 import type { InstructionSpec } from '../../instruction/instruction.types.js';
 import { TaService } from '../ta.service.js';
 
-const boolFlag = z
-  .enum(['0', '1', 'true', 'false'])
-  .default('0')
-  .transform((v) => v === '1' || v === 'true');
-
-const argsSchema = z
-  .object({
-    code: z.string().min(1).describe('A-share 6-digit stock code, e.g. 600519'),
-    fresh: boolFlag.describe('Bypass cache and run fresh LLM analysis'),
-    // `confirm` is consumed by the IM listener's paid-confirm gate
-    // before this handler runs; accept it in-schema so strict zod
-    // doesn't reject the round-tripped command line.
-    confirm: boolFlag.optional().describe('IM paid-confirm token, set by the card button'),
-  })
-  .strict();
+const argsSchema = TaArgsSchema;
 type Args = z.infer<typeof argsSchema>;
 
 @Injectable()

@@ -1,11 +1,12 @@
 import { Inject, Injectable } from '@nestjs/common';
 import {
+  HelpArgsSchema,
   instructionId,
   okResult,
   okResultWithMeta,
   type InstructionResult,
 } from '@quant/shared';
-import { z } from 'zod';
+import type { z } from 'zod';
 
 import type { InstructionCtx } from '../instruction.port.js';
 import { InstructionRegistrarBase } from '../instruction.provider.js';
@@ -13,12 +14,7 @@ import { InstructionRegistry } from '../instruction.registry.js';
 import type { InstructionEntry } from '../instruction.registry.js';
 import type { InstructionGroup, InstructionSpec } from '../instruction.types.js';
 
-const argsSchema = z
-  .object({
-    id: z.string().optional(),
-  })
-  .strict();
-
+const argsSchema = HelpArgsSchema;
 type Args = z.infer<typeof argsSchema>;
 
 /** Display order and bilingual labels for each group. */

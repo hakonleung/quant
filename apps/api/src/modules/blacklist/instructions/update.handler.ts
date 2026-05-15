@@ -10,13 +10,14 @@
 
 import { Inject, Injectable } from '@nestjs/common';
 import {
+  UpdateArgsSchema,
   errResult,
   instructionId,
   okResult,
   QuantError,
   type InstructionResult,
 } from '@quant/shared';
-import { z } from 'zod';
+import type { z } from 'zod';
 
 import type { InstructionCtx } from '../../instruction/instruction.port.js';
 import { InstructionRegistrarBase } from '../../instruction/instruction.provider.js';
@@ -24,12 +25,7 @@ import { InstructionRegistry } from '../../instruction/instruction.registry.js';
 import type { InstructionSpec } from '../../instruction/instruction.types.js';
 import { BlacklistService } from '../blacklist.service.js';
 
-const argsSchema = z
-  .object({
-    target: z.enum(['blacklist']).default('blacklist'),
-  })
-  .strict();
-
+const argsSchema = UpdateArgsSchema;
 type Args = z.infer<typeof argsSchema>;
 
 @Injectable()

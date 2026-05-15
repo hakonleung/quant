@@ -15,6 +15,7 @@
 
 import { Inject, Injectable } from '@nestjs/common';
 import {
+  AnalyzeArgsSchema,
   errResult,
   instructionId,
   okResult,
@@ -22,7 +23,7 @@ import {
   type InstructionResult,
   type Sentiment,
 } from '@quant/shared';
-import { z } from 'zod';
+import type { z } from 'zod';
 
 import type { InstructionCtx } from '../../instruction/instruction.port.js';
 import { InstructionRegistrarBase } from '../../instruction/instruction.provider.js';
@@ -30,32 +31,7 @@ import { InstructionRegistry } from '../../instruction/instruction.registry.js';
 import type { InstructionSpec } from '../../instruction/instruction.types.js';
 import { NewsSentimentService } from '../news-sentiment.service.js';
 
-const truthy = new Set(['1', 'true', 'yes']);
-
-const argsSchema = z
-  .object({
-    code: z.string().regex(/^\d{6}$/u, 'expected 6-digit code'),
-    fresh: z
-      .union([z.string(), z.boolean()])
-      .optional()
-      .transform((v) => {
-        if (v === undefined) return false;
-        if (typeof v === 'boolean') return v;
-        return truthy.has(v.toLowerCase());
-      }),
-    windowDays: z.coerce.number().int().min(1).max(30).optional(),
-    confirm: z
-      .union([z.string(), z.boolean()])
-      .optional()
-      .transform((v) => {
-        if (v === undefined) return false;
-        if (typeof v === 'boolean') return v;
-        return truthy.has(v.toLowerCase());
-      })
-      .describe('IM paid-confirm token, set by the card button'),
-  })
-  .strict();
-
+const argsSchema = AnalyzeArgsSchema;
 type Args = z.infer<typeof argsSchema>;
 
 @Injectable()

@@ -6,13 +6,13 @@
 
 import { Inject, Injectable } from '@nestjs/common';
 import {
-  ChannelIdSchema,
+  ChannelSendArgsSchema,
   errResult,
   instructionId,
   okResult,
   type InstructionResult,
 } from '@quant/shared';
-import { z } from 'zod';
+import type { z } from 'zod';
 
 import {
   INSTRUCTION_CONFIG,
@@ -24,15 +24,7 @@ import { InstructionRegistry } from '../../instruction/instruction.registry.js';
 import type { InstructionSpec } from '../../instruction/instruction.types.js';
 import { ChannelService } from '../channel.service.js';
 
-const argsSchema = z
-  .object({
-    channel: ChannelIdSchema,
-    text: z.string().min(1).max(16000),
-    target: z.string().min(1).max(256).optional(),
-    title: z.string().max(280).optional(),
-  })
-  .strict();
-
+const argsSchema = ChannelSendArgsSchema;
 type Args = z.infer<typeof argsSchema>;
 
 @Injectable()

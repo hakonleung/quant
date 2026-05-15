@@ -15,20 +15,53 @@
  *     "explicit declaration of unsupported commands" requirement)
  *   - summary / summaryCn for tab completion + IM help
  *
+ * Arg zod schemas live in the sibling `schemas.ts` file. Each
+ * manifest entry references the named schema by import; handlers
+ * derive their `Args` type via `z.infer<typeof XxxArgsSchema>` from
+ * the same source. The split keeps schema definitions next to each
+ * other (easier to review for shape drift) without bloating this
+ * manifest file with zod type expressions.
+ *
  * What does NOT live here:
- *   - Arg zod schemas. Each handler declares its own `argsSchema` and
- *     the BE executor zod-parses on dispatch. Lifting schemas into
- *     this manifest would either: (a) duplicate every schema, since
- *     each handler still needs a typed `Args = z.infer<...>` to call
- *     itself with; or (b) require threading typed results through a
- *     `Record<id, ZodTypeAny>` lookup and losing the per-handler
- *     `Args` narrowing at use sites. Neither pulls its weight today;
- *     manifest covers the wiring contract, handlers keep validation.
  *   - Per-side handlers (FE handlers touch xterm/store, BE handlers
  *     are NestJS-injected — they live in their own modules).
  */
 
+import type { z } from 'zod';
+
 import type { InstructionId } from './id.js';
+import {
+  AgentArgsSchema,
+  AgentConfirmArgsSchema,
+  AnalyzeArgsSchema,
+  AnalyzeSectorArgsSchema,
+  CacheArgsSchema,
+  ChannelEchoArgsSchema,
+  ChannelSendArgsSchema,
+  ClearArgsSchema,
+  FocusArgsSchema,
+  HelpArgsSchema,
+  LedgerAnalyzeArgsSchema,
+  LedgerArgsSchema,
+  PingArgsSchema,
+  ScreenArgsSchema,
+  SectorArgsSchema,
+  SectorPublishArgsSchema,
+  SectorRefreshArgsSchema,
+  SectorRmArgsSchema,
+  SectorShowArgsSchema,
+  SectorUnpublishArgsSchema,
+  StockArgsSchema,
+  TaArgsSchema,
+  TaSectorArgsSchema,
+  UpdateArgsSchema,
+  UsrArgsSchema,
+  WatchAddArgsSchema,
+  WatchArgsSchema,
+  WatchGroupArgsSchema,
+  WatchRemoveArgsSchema,
+  WebSearchArgsSchema,
+} from './schemas.js';
 
 export type CommandSide = 'fe' | 'be';
 
@@ -70,56 +103,63 @@ export interface CommandManifestEntry {
    * `supportedOn` declaration must include the side they appear on.
    */
   readonly conditionallyRegistered?: boolean;
+  /**
+   * Single source of truth for the BE handler's argument shape.
+   * Handlers `import { XxxArgsSchema } from '@quant/shared'` and
+   * derive `type Args = z.infer<typeof XxxArgsSchema>` from the same
+   * binding the manifest references — guaranteed in lockstep.
+   */
+  readonly argsSchema?: z.ZodTypeAny;
 }
 
 const ENTRIES = [
   // ── system ──────────────────────────────────────────────────────────
-  { id: 'help', group: 'system', mode: 'sync', supportedOn: ['fe', 'be'], summary: 'Show available instructions and per-id usage' },
-  { id: 'ping', group: 'system', mode: 'sync', supportedOn: ['be'], summary: 'Round-trip health check', conditionallyRegistered: true },
-  { id: 'usr', group: 'system', mode: 'sync', supportedOn: ['fe', 'be'], summary: "Show the caller's resolved userId + LLM token usage", imAliases: ['我的', '账号', '我'] },
-  { id: 'clear', group: 'ui', mode: 'sync', supportedOn: ['fe'], summary: 'Clear the terminal scrollback' },
-  { id: 'cache', group: 'ui', mode: 'sync', supportedOn: ['fe'], summary: 'Inspect / clear local FE caches' },
-  { id: 'focus', group: 'ui', mode: 'sync', supportedOn: ['fe'], summary: 'Focus a stock or sector in the workbench' },
-  { id: 'update', group: 'system', mode: 'sync', supportedOn: ['fe', 'be'], summary: 'Trigger a data refresh job' },
+  { id: 'help', group: 'system', mode: 'sync', supportedOn: ['fe', 'be'], summary: 'Show available instructions and per-id usage', argsSchema: HelpArgsSchema },
+  { id: 'ping', group: 'system', mode: 'sync', supportedOn: ['be'], summary: 'Round-trip health check', conditionallyRegistered: true, argsSchema: PingArgsSchema },
+  { id: 'usr', group: 'system', mode: 'sync', supportedOn: ['fe', 'be'], summary: "Show the caller's resolved userId + LLM token usage", imAliases: ['我的', '账号', '我'], argsSchema: UsrArgsSchema },
+  { id: 'clear', group: 'ui', mode: 'sync', supportedOn: ['fe'], summary: 'Clear the terminal scrollback', argsSchema: ClearArgsSchema },
+  { id: 'cache', group: 'ui', mode: 'sync', supportedOn: ['fe'], summary: 'Inspect / clear local FE caches', argsSchema: CacheArgsSchema },
+  { id: 'focus', group: 'ui', mode: 'sync', supportedOn: ['fe'], summary: 'Focus a stock or sector in the workbench', argsSchema: FocusArgsSchema },
+  { id: 'update', group: 'system', mode: 'sync', supportedOn: ['fe', 'be'], summary: 'Trigger a data refresh job', argsSchema: UpdateArgsSchema },
 
   // ── market data ─────────────────────────────────────────────────────
-  { id: 'stock', group: 'market', mode: 'sync', supportedOn: ['fe', 'be'], summary: 'Search A-share metadata by code, name, or pinyin', imAliases: ['股票'] },
+  { id: 'stock', group: 'market', mode: 'sync', supportedOn: ['fe', 'be'], summary: 'Search A-share metadata by code, name, or pinyin', imAliases: ['股票'], argsSchema: StockArgsSchema },
 
   // ── sectors ─────────────────────────────────────────────────────────
-  { id: 'sector', group: 'sector', mode: 'sync', supportedOn: ['fe', 'be'], summary: 'List sectors visible to the caller', imAliases: ['板块'] },
-  { id: 'sector.show', group: 'sector', mode: 'sync', supportedOn: ['be'], summary: 'Show one sector with its stock table', imAliases: ['查看板块', '板块详情'] },
-  { id: 'sector.publish', group: 'sector', mode: 'sync', supportedOn: ['be'], summary: 'Mark a sector as published' },
-  { id: 'sector.unpublish', group: 'sector', mode: 'sync', supportedOn: ['be'], summary: 'Mark a sector as unpublished' },
-  { id: 'sector.refresh', group: 'sector', mode: 'async', supportedOn: ['be'], summary: 'Recompute a dynamic sector', costsCredits: true },
-  { id: 'sector.rm', group: 'sector', mode: 'sync', supportedOn: ['be'], summary: 'Delete a sector', destructive: true },
+  { id: 'sector', group: 'sector', mode: 'sync', supportedOn: ['fe', 'be'], summary: 'List sectors visible to the caller', imAliases: ['板块'], argsSchema: SectorArgsSchema },
+  { id: 'sector.show', group: 'sector', mode: 'sync', supportedOn: ['be'], summary: 'Show one sector with its stock table', imAliases: ['查看板块', '板块详情'], argsSchema: SectorShowArgsSchema },
+  { id: 'sector.publish', group: 'sector', mode: 'sync', supportedOn: ['be'], summary: 'Mark a sector as published', argsSchema: SectorPublishArgsSchema },
+  { id: 'sector.unpublish', group: 'sector', mode: 'sync', supportedOn: ['be'], summary: 'Mark a sector as unpublished', argsSchema: SectorUnpublishArgsSchema },
+  { id: 'sector.refresh', group: 'sector', mode: 'async', supportedOn: ['be'], summary: 'Recompute a dynamic sector', costsCredits: true, argsSchema: SectorRefreshArgsSchema },
+  { id: 'sector.rm', group: 'sector', mode: 'sync', supportedOn: ['be'], summary: 'Delete a sector', destructive: true, argsSchema: SectorRmArgsSchema },
 
   // ── watch ───────────────────────────────────────────────────────────
-  { id: 'watch', group: 'watch', mode: 'sync', supportedOn: ['fe', 'be'], summary: 'List watch tasks', aliases: ['watch.list'], imAliases: ['自选'] },
-  { id: 'watch.add', group: 'watch', mode: 'sync', supportedOn: ['be'], summary: 'Add a watch task' },
-  { id: 'watch.remove', group: 'watch', mode: 'sync', supportedOn: ['be'], summary: 'Remove a watch task', destructive: true },
-  { id: 'watch.group', group: 'watch', mode: 'sync', supportedOn: ['be'], summary: 'Manage watch groups' },
+  { id: 'watch', group: 'watch', mode: 'sync', supportedOn: ['fe', 'be'], summary: 'List watch tasks', aliases: ['watch.list'], imAliases: ['自选'], argsSchema: WatchArgsSchema },
+  { id: 'watch.add', group: 'watch', mode: 'sync', supportedOn: ['be'], summary: 'Add a watch task', argsSchema: WatchAddArgsSchema },
+  { id: 'watch.remove', group: 'watch', mode: 'sync', supportedOn: ['be'], summary: 'Remove a watch task', destructive: true, argsSchema: WatchRemoveArgsSchema },
+  { id: 'watch.group', group: 'watch', mode: 'sync', supportedOn: ['be'], summary: 'Manage watch groups', argsSchema: WatchGroupArgsSchema },
 
   // ── analysis ────────────────────────────────────────────────────────
-  { id: 'analyze', group: 'agent', mode: 'async', supportedOn: ['fe', 'be'], summary: 'Sentiment analysis for one stock', costsCredits: true, imAliases: ['情绪分析'] },
-  { id: 'analyze.sector', group: 'agent', mode: 'async', supportedOn: ['be'], summary: 'Sentiment analysis aggregated across a sector', costsCredits: true },
-  { id: 'ta', group: 'market', mode: 'async', supportedOn: ['fe', 'be'], summary: 'Technical analysis for one stock', costsCredits: true },
-  { id: 'ta.sector', group: 'market', mode: 'async', supportedOn: ['be'], summary: 'TA aggregated across a sector', costsCredits: true },
+  { id: 'analyze', group: 'agent', mode: 'async', supportedOn: ['fe', 'be'], summary: 'Sentiment analysis for one stock', costsCredits: true, imAliases: ['情绪分析'], argsSchema: AnalyzeArgsSchema },
+  { id: 'analyze.sector', group: 'agent', mode: 'async', supportedOn: ['be'], summary: 'Sentiment analysis aggregated across a sector', costsCredits: true, argsSchema: AnalyzeSectorArgsSchema },
+  { id: 'ta', group: 'market', mode: 'async', supportedOn: ['fe', 'be'], summary: 'Technical analysis for one stock', costsCredits: true, argsSchema: TaArgsSchema },
+  { id: 'ta.sector', group: 'market', mode: 'async', supportedOn: ['be'], summary: 'TA aggregated across a sector', costsCredits: true, argsSchema: TaSectorArgsSchema },
 
   // ── screening ───────────────────────────────────────────────────────
-  { id: 'screen', group: 'market', mode: 'async', supportedOn: ['fe', 'be'], summary: 'Natural-language stock screen', costsCredits: true, imAliases: ['筛选', '选股'] },
+  { id: 'screen', group: 'market', mode: 'async', supportedOn: ['fe', 'be'], summary: 'Natural-language stock screen', costsCredits: true, imAliases: ['筛选', '选股'], argsSchema: ScreenArgsSchema },
 
   // ── ledger ──────────────────────────────────────────────────────────
-  { id: 'ledger', group: 'ledger', mode: 'sync', supportedOn: ['fe', 'be'], summary: 'Show the user trade ledger', imAliases: ['账本'] },
-  { id: 'ledger.analyze', group: 'ledger', mode: 'async', supportedOn: ['be'], summary: 'LLM-assisted ledger analysis', costsCredits: true },
+  { id: 'ledger', group: 'ledger', mode: 'sync', supportedOn: ['fe', 'be'], summary: 'Show the user trade ledger', imAliases: ['账本'], argsSchema: LedgerArgsSchema },
+  { id: 'ledger.analyze', group: 'ledger', mode: 'async', supportedOn: ['be'], summary: 'LLM-assisted ledger analysis', costsCredits: true, argsSchema: LedgerAnalyzeArgsSchema },
 
   // ── agent ───────────────────────────────────────────────────────────
-  { id: 'agent', group: 'agent', mode: 'async', supportedOn: ['fe', 'be'], summary: 'Open-ended agent conversation', costsCredits: true },
-  { id: 'agent.confirm', group: 'agent', mode: 'sync', supportedOn: ['be'], summary: 'Confirm a queued agent action card' },
-  { id: 'web.search', group: 'agent', mode: 'async', supportedOn: ['be'], summary: 'Hosted-tool web search invoked by the agent', costsCredits: true },
+  { id: 'agent', group: 'agent', mode: 'async', supportedOn: ['fe', 'be'], summary: 'Open-ended agent conversation', costsCredits: true, argsSchema: AgentArgsSchema },
+  { id: 'agent.confirm', group: 'agent', mode: 'sync', supportedOn: ['be'], summary: 'Confirm a queued agent action card', argsSchema: AgentConfirmArgsSchema },
+  { id: 'web.search', group: 'agent', mode: 'async', supportedOn: ['be'], summary: 'Hosted-tool web search invoked by the agent', costsCredits: true, argsSchema: WebSearchArgsSchema },
 
   // ── channel ─────────────────────────────────────────────────────────
-  { id: 'channel.echo', group: 'channel', mode: 'sync', supportedOn: ['be'], summary: 'Echo a message back through the inbound channel', conditionallyRegistered: true },
-  { id: 'channel.send', group: 'channel', mode: 'sync', supportedOn: ['be'], summary: 'Send a message to a configured channel', conditionallyRegistered: true },
+  { id: 'channel.echo', group: 'channel', mode: 'sync', supportedOn: ['be'], summary: 'Echo a message back through the inbound channel', conditionallyRegistered: true, argsSchema: ChannelEchoArgsSchema },
+  { id: 'channel.send', group: 'channel', mode: 'sync', supportedOn: ['be'], summary: 'Send a message to a configured channel', conditionallyRegistered: true, argsSchema: ChannelSendArgsSchema },
 ] as const satisfies readonly CommandManifestEntry[];
 
 export const COMMAND_MANIFEST: readonly CommandManifestEntry[] = ENTRIES;
