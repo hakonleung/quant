@@ -2,7 +2,8 @@
  * Composition root for module W-0 watch.
  *
  * Owns:
- *   - the per-user task / group stores (via `UserScopedJsonStore`)
+ *   - the per-user task / group facades (delegating to the global
+ *     `UserBlobStore` for `data/users/{uid}/user.parquet`)
  *   - the shared HK/US universe store
  *   - a Flight client (own channel — separate from stock-meta's so the
  *     two surfaces can be load-balanced independently in v2)
@@ -10,30 +11,16 @@
  *   - the socket broadcaster that fans out per-user `watch.snapshot`
  */
 
-import { Logger, Module } from '@nestjs/common';
+import { Module } from '@nestjs/common';
 import { FlightClient } from '../../adapters/flight/flight-client.js';
-import type { UserScopedRecordStore } from '../../common/storage/ports/user-scoped-record-store.port.js';
-import { AUTH_CONFIG, type AuthConfigShape } from '../auth/config/auth.config.js';
 import { ChannelModule } from '../channel/channel.module.js';
 import { StockMetaModule } from '../stock-meta/stock-meta.module.js';
 import { KlineModule } from '../kline/kline.module.js';
 import { WATCH_KLINE_REF_PORT, WATCH_QUOTE_PORT } from './domain/watch-port.js';
 import { LocalKlineRefAdapter } from './local-kline-ref.adapter.js';
 import { FlightWatchAdapter, WATCH_FLIGHT_CLIENT } from './flight-watch.adapter.js';
-import {
-  buildWatchGroupUserScopedStore,
-  WatchGroupStore,
-  type WatchGroupRow,
-} from './watch-group.store.js';
-import {
-  buildWatchTaskUserScopedStore,
-  WatchTaskStore,
-  type WatchTaskRow,
-} from './watch-task.store.js';
-import {
-  WATCH_GROUP_USER_RECORD_STORE,
-  WATCH_TASK_USER_RECORD_STORE,
-} from './watch.tokens.js';
+import { WatchGroupStore } from './watch-group.store.js';
+import { WatchTaskStore } from './watch-task.store.js';
 import { WatchUniverseStore } from './watch-universe.store.js';
 import { WatchAddInstructionHandler } from './instructions/watch-add.handler.js';
 import { WatchGroupInstructionHandler } from './instructions/watch-group.handler.js';
@@ -59,18 +46,6 @@ const DEFAULT_FLIGHT_TARGET = '127.0.0.1:8815';
     },
     { provide: WATCH_QUOTE_PORT, useClass: FlightWatchAdapter },
     { provide: WATCH_KLINE_REF_PORT, useClass: LocalKlineRefAdapter },
-    {
-      provide: WATCH_TASK_USER_RECORD_STORE,
-      inject: [AUTH_CONFIG],
-      useFactory: (cfg: AuthConfigShape): UserScopedRecordStore<WatchTaskRow> =>
-        buildWatchTaskUserScopedStore(cfg, new Logger(WatchTaskStore.name)),
-    },
-    {
-      provide: WATCH_GROUP_USER_RECORD_STORE,
-      inject: [AUTH_CONFIG],
-      useFactory: (cfg: AuthConfigShape): UserScopedRecordStore<WatchGroupRow> =>
-        buildWatchGroupUserScopedStore(cfg, new Logger(WatchGroupStore.name)),
-    },
     WatchTaskStore,
     WatchGroupStore,
     WatchUniverseStore,

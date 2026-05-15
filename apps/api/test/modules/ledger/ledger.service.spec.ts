@@ -8,11 +8,9 @@ import { FrozenClock } from '../../../src/common/clock.js';
 import type { AuthConfigShape } from '../../../src/modules/auth/config/auth.config.js';
 import { LedgerCacheStore } from '../../../src/modules/ledger/ledger-cache.store.js';
 import { LedgerService } from '../../../src/modules/ledger/ledger.service.js';
-import {
-  LedgerStore,
-  buildLedgerUserScopedStore,
-} from '../../../src/modules/ledger/ledger.store.js';
+import { LedgerStore } from '../../../src/modules/ledger/ledger.store.js';
 import type { LlmService } from '../../../src/modules/llm/llm.service.js';
+import { makeUserBlobStore } from '../../fakes/in-memory-user-blob.store.js';
 
 const FROZEN = new Date('2026-05-08T00:00:00.000Z');
 const USER = 'admin';
@@ -84,14 +82,12 @@ async function setup(seed: readonly LedgerEntry[] = []): Promise<{
   root: string;
 }> {
   const root = await tmpRoot();
-  if (seed.length > 0) {
-    const dir = path.join(root, 'users', USER, '_ledger');
-    await fs.mkdir(dir, { recursive: true });
-    await fs.writeFile(path.join(dir, 'entries.json'), JSON.stringify({ entries: seed }));
-  }
   const cfgVal = cfg(root);
-  const inner = buildLedgerUserScopedStore(cfgVal, { warn: () => undefined, log: () => undefined });
-  const store = new LedgerStore(inner, cfgVal);
+  const blob = makeUserBlobStore();
+  const store = new LedgerStore(blob.store);
+  if (seed.length > 0) {
+    await store.replace(USER, seed);
+  }
   const cache = new LedgerCacheStore(cfgVal);
   return { store, cache, root };
 }

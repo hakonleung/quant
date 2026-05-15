@@ -17,26 +17,19 @@ import { QuantError, type ChannelOutboundRequest, type ChannelOutboundResponse }
 import type { AuthConfigShape } from '../../../src/modules/auth/config/auth.config.js';
 import type { ChannelService } from '../../../src/modules/channel/channel.service.js';
 import type { UserStore, UserRecord } from '../../../src/modules/auth/user.store.js';
-import {
-  buildWatchGroupUserScopedStore,
-  WatchGroupStore,
-} from '../../../src/modules/watch/watch-group.store.js';
+import { WatchGroupStore } from '../../../src/modules/watch/watch-group.store.js';
 import { WatchScheduler } from '../../../src/modules/watch/watch.scheduler.js';
-import {
-  buildWatchTaskUserScopedStore,
-  WatchTaskStore,
-} from '../../../src/modules/watch/watch-task.store.js';
+import { WatchTaskStore } from '../../../src/modules/watch/watch-task.store.js';
+import { makeUserBlobStore } from '../../fakes/in-memory-user-blob.store.js';
 
-function makeWatchStores(cfgVal: AuthConfigShape): {
+function makeWatchStores(_cfgVal: AuthConfigShape): {
   store: WatchTaskStore;
   groups: WatchGroupStore;
 } {
-  const noopLog = { warn: () => undefined, log: () => undefined };
-  const taskInner = buildWatchTaskUserScopedStore(cfgVal, noopLog);
-  const groupInner = buildWatchGroupUserScopedStore(cfgVal, noopLog);
+  const blob = makeUserBlobStore();
   return {
-    store: new WatchTaskStore(taskInner, cfgVal),
-    groups: new WatchGroupStore(groupInner, cfgVal),
+    store: new WatchTaskStore(blob.store),
+    groups: new WatchGroupStore(blob.store),
   };
 }
 import type { WatchQuotePort } from '../../../src/modules/watch/domain/watch-port.js';

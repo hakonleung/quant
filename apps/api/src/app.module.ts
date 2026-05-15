@@ -1,5 +1,6 @@
 import { Module, type MiddlewareConsumer, type NestModule } from '@nestjs/common';
 import { HealthController } from './common/health.controller.js';
+import { UserBlobModule } from './common/storage/user-blob.module.js';
 import { TraceMiddleware } from './common/trace.middleware.js';
 import { AuthModule } from './modules/auth/auth.module.js';
 import { BlacklistModule } from './modules/blacklist/blacklist.module.js';
@@ -26,6 +27,11 @@ import { WatchModule } from './modules/watch/watch.module.js';
     // AuthModule is global; must come first so the legacy → users/admin
     // boot-time migration runs before any per-user store loads.
     AuthModule,
+    // UserBlobModule is @Global — exposes the singleton UserBlobStore
+    // (data/users/{uid}/user.parquet) consumed by watch / ledger /
+    // sys-cfg facades. Must come after AuthModule because it injects
+    // AUTH_CONFIG for the dataRoot.
+    UserBlobModule,
     // LlmModule is @Global — every feature that calls an LLM imports
     // LlmService transparently. Place near the top so feature modules
     // resolved later don't race with provider construction.

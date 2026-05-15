@@ -1,39 +1,11 @@
-import { promises as fs } from 'node:fs';
-import os from 'node:os';
-import path from 'node:path';
-
 import type { LedgerEntry } from '@quant/shared';
 
-import type { AuthConfigShape } from '../../../src/modules/auth/config/auth.config.js';
-import {
-  LedgerStore,
-  buildLedgerUserScopedStore,
-  type LedgerRow,
-  LEDGER_TABLE_SPEC,
-} from '../../../src/modules/ledger/ledger.store.js';
-import { InMemoryUserScopedRecordStore } from '../../fakes/in-memory-user-scoped-record.store.js';
+import { LedgerStore } from '../../../src/modules/ledger/ledger.store.js';
+import { makeUserBlobStore } from '../../fakes/in-memory-user-blob.store.js';
 
-async function tmpRoot(): Promise<string> {
-  return fs.mkdtemp(path.join(os.tmpdir(), 'ledger-store-'));
-}
-
-function cfg(dataRoot: string): AuthConfigShape {
-  return {
-    mode: 'disabled',
-    nextauthSecret: null,
-    dataRoot,
-    adminUserId: 'admin',
-    adminUserIds: new Set<string>(),
-  };
-}
-
-function makeStore(): {
-  store: LedgerStore;
-  inner: InMemoryUserScopedRecordStore<LedgerRow>;
-} {
-  const inner = new InMemoryUserScopedRecordStore<LedgerRow>(LEDGER_TABLE_SPEC);
-  const store = new LedgerStore(inner, cfg('/unused'));
-  return { store, inner };
+function makeStore(): { store: LedgerStore; blob: ReturnType<typeof makeUserBlobStore> } {
+  const blob = makeUserBlobStore();
+  return { store: new LedgerStore(blob.store), blob };
 }
 
 const USER = 'admin';
@@ -48,23 +20,20 @@ describe('LedgerStore', () => {
     expect(await store.list(USER)).toEqual([]);
   });
 
-  it('round-trips a fixture through the record store', async () => {
+  it('round-trips a fixture through the user blob', async () => {
     const { store } = makeStore();
     await store.replace(USER, fixture);
     expect(await store.list(USER)).toEqual(fixture);
   });
 
-  it('replace persists rows in the record store', async () => {
-    const { store, inner } = makeStore();
+  it('replace persists entries inside the user blob', async () => {
+    const { store, blob } = makeStore();
     await store.replace(USER, fixture);
-    const rows = await inner.list(USER, { orderBy: [{ column: 'date', dir: 'asc' }] });
-    expect(rows).toEqual([
-      { date: '2026-05-01', pnlAmount: '0', closingPosition: '100000' },
-      { date: '2026-05-02', pnlAmount: '500', closingPosition: null },
-    ]);
+    const onDisk = await blob.store.read(USER);
+    expect(onDisk.ledger.entries).toEqual(fixture);
   });
 
-  it('replace wipes prior rows that drop out of the new list', async () => {
+  it('replace wipes prior entries that drop out of the new list', async () => {
     const { store } = makeStore();
     await store.replace(USER, fixture);
     const slimmed: readonly LedgerEntry[] = [
@@ -105,27 +74,14 @@ describe('LedgerStore', () => {
     await store.replace(USER, fixture);
     expect(await store.snapshot(USER)).toEqual({ entries: fixture });
   });
-});
 
-describe('LedgerStore filesystem migration (self-healing)', () => {
-  it('imports a legacy entries.json on first access and renames it .bak', async () => {
-    const root = await tmpRoot();
-    const userDir = path.join(root, 'users', USER, '_ledger');
-    await fs.mkdir(userDir, { recursive: true });
-    await fs.writeFile(
-      path.join(userDir, 'entries.json'),
-      JSON.stringify({ entries: fixture }),
-    );
-
-    const inner = buildLedgerUserScopedStore(cfg(root), {
-      warn: () => undefined,
-      log: () => undefined,
-    });
-    const store = new LedgerStore(inner, cfg(root));
-
-    expect(await store.list(USER)).toEqual(fixture);
-    await expect(fs.access(path.join(userDir, 'entries.json'))).rejects.toBeDefined();
-    await expect(fs.access(path.join(userDir, 'entries.json.bak'))).resolves.toBeUndefined();
-    await expect(fs.stat(path.join(root, 'users', USER, 'ledger.parquet'))).resolves.toBeDefined();
+  it('list returns entries sorted ascending by date', async () => {
+    const { store } = makeStore();
+    await store.replace(USER, [
+      { date: '2026-05-02', pnlAmount: '500' },
+      { date: '2026-05-01', pnlAmount: '0', closingPosition: '100000' },
+    ]);
+    const out = await store.list(USER);
+    expect(out.map((e) => e.date)).toEqual(['2026-05-01', '2026-05-02']);
   });
 });
