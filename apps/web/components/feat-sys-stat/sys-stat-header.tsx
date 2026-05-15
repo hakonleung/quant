@@ -16,7 +16,6 @@ import {
   formatQueueCounter,
   fpsColor,
   memColor,
-  queueCapsuleTitle,
   queueCounterColor,
   scanLabelColor,
   triggerCapsuleTitle,
@@ -36,12 +35,10 @@ interface SysStatHeaderProps {
   readonly wsStatus: 'connecting' | 'open' | 'error';
   readonly meta: QueueSnapshotEntry | null;
   readonly kline: QueueSnapshotEntry | null;
-  readonly metaScan: ManualScan;
-  readonly klineScan: ManualScan;
-  readonly blacklistScan: ManualScan;
-  readonly metaScanning: boolean;
-  readonly klineScanning: boolean;
-  readonly blacklistScanning: boolean;
+  /** Unified manual scan — covers meta + kline + settlement tail. */
+  readonly scan: ManualScan;
+  /** True while a scan is in flight (bulk RPC, enqueue, or settlement). */
+  readonly scanning: boolean;
   readonly fps: number;
   readonly memMb: number | null;
   readonly vitals: WebVitals;
@@ -75,19 +72,9 @@ export function SysStatHeaderPrimary(props: SysStatHeaderProps): React.ReactElem
           ●
         </Text>
       </Capsule>
-      <QueueCapsule
-        code="meta"
-        queue={props.meta}
-        scan={props.metaScan}
-        scanning={props.metaScanning}
-      />
-      <QueueCapsule
-        code="kline"
-        queue={props.kline}
-        scan={props.klineScan}
-        scanning={props.klineScanning}
-      />
-      <TriggerCapsule code="BL" scan={props.blacklistScan} scanning={props.blacklistScanning} />
+      <QueueCapsule code="meta" queue={props.meta} scanning={props.scanning} />
+      <QueueCapsule code="kline" queue={props.kline} scanning={props.scanning} />
+      <TriggerCapsule code="SCAN" scan={props.scan} scanning={props.scanning} />
       <Capsule code="MEM">
         <Text as="span" color={memColor(props.memMb)} fontWeight="700">
           {formatMemMb(props.memMb)}
@@ -138,27 +125,14 @@ function Capsule({ code, children }: CapsuleProps): React.ReactElement {
 interface QueueCapsuleProps {
   readonly code: string;
   readonly queue: QueueSnapshotEntry | null;
-  readonly scan: ManualScan;
   readonly scanning: boolean;
 }
 
-function QueueCapsule({ code, queue, scan, scanning }: QueueCapsuleProps): React.ReactElement {
+function QueueCapsule({ code, queue, scanning }: QueueCapsuleProps): React.ReactElement {
   const counterColor = queueCounterColor(queue);
-  const labelColor = scanLabelColor(scanning, scan.flashing);
+  const labelColor = scanLabelColor(scanning, false);
   return (
-    <Flex
-      as="button"
-      onClick={(): void => {
-        scan.run();
-      }}
-      align="center"
-      gap="5px"
-      whiteSpace="nowrap"
-      bg="transparent"
-      cursor="pointer"
-      _hover={{ color: 'term.green' }}
-      title={queueCapsuleTitle(code, scanning)}
-    >
+    <Flex align="center" gap="5px" whiteSpace="nowrap" title={`${code} queue`}>
       <Text color={labelColor} fontWeight="700" letterSpacing="0.18em">
         {code}
       </Text>

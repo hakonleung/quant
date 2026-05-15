@@ -21,7 +21,7 @@ describe('SocketBus', () => {
     bus.emit('queue.snapshot', {
       ts: '2026-05-04T01:00:00Z',
       queues: [{ name: 'meta', pending: 1, inFlight: 0, paused: false }],
-      activeScans: [],
+      scanning: false,
     });
 
     expect(sink.published).toHaveLength(1);
@@ -35,7 +35,7 @@ describe('SocketBus', () => {
     const sink = new FakeSink();
     bus.setSink(sink);
 
-    bus.emit('queue.snapshot', { ts: 'not-iso', queues: [], activeScans: [] } as never);
+    bus.emit('queue.snapshot', { ts: 'not-iso', queues: [], scanning: false } as never);
     expect(sink.published).toHaveLength(0);
   });
 
@@ -45,7 +45,7 @@ describe('SocketBus', () => {
       bus.emit('queue.snapshot', {
         ts: '2026-05-04T01:00:00Z',
         queues: [],
-        activeScans: [],
+        scanning: false,
       }),
     ).not.toThrow();
   });

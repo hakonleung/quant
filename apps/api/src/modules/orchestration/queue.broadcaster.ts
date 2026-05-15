@@ -57,7 +57,7 @@ export class QueueBroadcaster implements OnModuleInit, OnModuleDestroy {
     return {
       ts: new Date().toISOString(),
       queues: [entry(this.meta), entry(this.kline)],
-      activeScans: [...this.cron.activeScans()],
+      scanning: this.cron.isScanning(),
     };
   }
 }

@@ -169,7 +169,7 @@ const ENTRIES = [
     group: 'system',
     mode: 'sync',
     supportedOn: ['fe', 'be'],
-    summary: 'Trigger a data refresh job',
+    summary: 'Trigger the unified daily scan (meta + kline + blacklist + sectors)',
     argsSchema: UpdateArgsSchema,
   },
 

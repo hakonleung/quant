@@ -15,8 +15,8 @@
  * is single-purpose.
  *
  * Term mode is intentionally keyboard-only — these capsules are
- * informational; trigger scans via `update meta` / `update kline`
- * commands at the prompt instead.
+ * informational; trigger a scan via the `update` command at the
+ * prompt instead.
  */
 
 import { Flex, Text } from '@chakra-ui/react';

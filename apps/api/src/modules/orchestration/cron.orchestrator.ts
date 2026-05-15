@@ -11,9 +11,10 @@
  * same `batchId`; {@link BatchSettler} listens for terminal events with
  * that id to fire blacklist + dynamic-sectors recompute as the tail-off.
  *
- * Blacklist is **no longer** refreshed up-front by the cron — it runs
- * during settlement so each batch's sync work uses yesterday's
- * blacklist and the freshly computed one flows into the *next* batch.
+ * The scan is monolithic: meta + kline always run together and blacklist
+ * + dynamic sectors run in settlement. There is no per-kind selector
+ * anymore — the cost split that used to motivate it disappeared once
+ * settlement absorbed the blacklist refresh.
  *
  * No `@nestjs/schedule` dep on purpose — daily firing is computed
  * against the China-market wall clock with a single `setTimeout`, and
@@ -25,7 +26,7 @@
 /* eslint-disable no-restricted-globals -- scheduler races the wall clock; Date use is the unit of work, not a hidden side-effect. */
 
 import { Inject, Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
-import { newTraceId, type ScanAccepted, type ScanKind, type ScanResult } from '@quant/shared';
+import { newTraceId, type ScanAccepted, type ScanResult } from '@quant/shared';
 import { isPyFlightDown } from '../../adapters/flight/flight-errors.js';
 import { BatchSettler } from './batch-settler.js';
 import { CacheInspector } from './cache-inspector.js';
@@ -56,7 +57,7 @@ export function msUntilNextBjt1600(now: number = Date.now()): number {
 export class CronOrchestrator implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(CronOrchestrator.name);
   private timer: NodeJS.Timeout | null = null;
-  private readonly inFlight = new Map<ScanKind, Promise<ScanResult>>();
+  private inFlight: Promise<ScanResult> | null = null;
   private destroyed = false;
 
   constructor(
@@ -77,35 +78,34 @@ export class CronOrchestrator implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * Run a scan of the given kind, coalescing with any in-flight one of
-   * the same kind. `'all'` runs both meta and kline in parallel.
+   * Run a scan, coalescing with any in-flight one. Both queues + the
+   * settlement tail are part of every scan.
    */
-  triggerScan(kind: ScanKind, traceId?: string): Promise<ScanResult> {
-    const existing = this.inFlight.get(kind);
-    if (existing !== undefined) return existing;
-    const p = this.scan(kind, traceId ?? newTraceId()).finally(() => {
-      this.inFlight.delete(kind);
+  triggerScan(traceId?: string): Promise<ScanResult> {
+    if (this.inFlight !== null) return this.inFlight;
+    const p = this.scan(traceId ?? newTraceId()).finally(() => {
+      this.inFlight = null;
     });
-    this.inFlight.set(kind, p);
+    this.inFlight = p;
     return p;
   }
 
-  /** Snapshot of currently in-flight scan kinds. */
-  activeScans(): readonly ScanKind[] {
-    return [...this.inFlight.keys()];
+  /** True while a scan is in flight (covers bulk RPC, enqueue, and settlement). */
+  isScanning(): boolean {
+    return this.inFlight !== null;
   }
 
-  fireScan(kind: ScanKind): ScanAccepted {
+  fireScan(): ScanAccepted {
     const startedAt = new Date().toISOString();
     const traceId = newTraceId();
-    const wasInflight = this.inFlight.has(kind);
+    const wasInflight = this.inFlight !== null;
     this.logger.log(
-      `manual_scan_fired kind=${kind} traceId=${traceId} coalesced=${String(wasInflight)}`,
+      `manual_scan_fired traceId=${traceId} coalesced=${String(wasInflight)}`,
     );
-    void this.triggerScan(kind, traceId).catch((err: unknown) => {
+    void this.triggerScan(traceId).catch((err: unknown) => {
       this.logScanFailure('manual', err);
     });
-    return { kind, traceId, startedAt, started: !wasInflight };
+    return { traceId, startedAt, started: !wasInflight };
   }
 
   private scheduleNextDaily(): void {
@@ -113,7 +113,7 @@ export class CronOrchestrator implements OnModuleInit, OnModuleDestroy {
     const delay = msUntilNextBjt1600();
     this.logger.log(`next_daily_scan_in_ms=${String(delay)}`);
     this.timer = setTimeout(() => {
-      void this.triggerScan('all')
+      void this.triggerScan()
         .catch((err: unknown) => {
           this.logScanFailure('daily', err);
         })
@@ -123,19 +123,13 @@ export class CronOrchestrator implements OnModuleInit, OnModuleDestroy {
     }, delay);
   }
 
-  private async scan(kind: ScanKind, traceId: string): Promise<ScanResult> {
+  private async scan(traceId: string): Promise<ScanResult> {
     const startedAt = new Date().toISOString();
     const t0 = Date.now();
-    const wantMeta = kind === 'meta' || kind === 'all';
-    const wantKline = kind === 'kline' || kind === 'all';
-    // `blacklist` kind kept in the contract but is now a settlement step;
-    // a `kind === 'blacklist'` request just runs the daily tail without
-    // enqueueing anything.
     const batchId = traceId;
-    const result = await this.enqueueBatch(traceId, batchId, wantMeta, wantKline);
+    const result = await this.enqueueBatch(traceId, batchId);
     if (result === null) {
       return {
-        kind,
         traceId,
         startedAt,
         elapsedMs: Date.now() - t0,
@@ -144,19 +138,17 @@ export class CronOrchestrator implements OnModuleInit, OnModuleDestroy {
       };
     }
     const [metaEnqueued, klineEnqueued] = result;
-    if (wantMeta || wantKline) {
-      this.settler.register({
-        batchId,
-        metaCount: metaEnqueued,
-        klineCount: klineEnqueued,
-        traceId,
-      });
-    }
+    this.settler.register({
+      batchId,
+      metaCount: metaEnqueued,
+      klineCount: klineEnqueued,
+      traceId,
+    });
     const elapsedMs = Date.now() - t0;
     this.logger.log(
-      `cron_scan_done kind=${kind} traceId=${traceId} meta_enqueued=${String(metaEnqueued)} kline_enqueued=${String(klineEnqueued)} elapsedMs=${String(elapsedMs)}`,
+      `cron_scan_done traceId=${traceId} meta_enqueued=${String(metaEnqueued)} kline_enqueued=${String(klineEnqueued)} elapsedMs=${String(elapsedMs)}`,
     );
-    return { kind, traceId, startedAt, elapsedMs, metaEnqueued, klineEnqueued };
+    return { traceId, startedAt, elapsedMs, metaEnqueued, klineEnqueued };
   }
 
   /** Returns `[metaEnqueued, klineEnqueued]` or `null` when the inspector
@@ -164,16 +156,12 @@ export class CronOrchestrator implements OnModuleInit, OnModuleDestroy {
   private async enqueueBatch(
     traceId: string,
     batchId: string,
-    wantMeta: boolean,
-    wantKline: boolean,
   ): Promise<readonly [number, number] | null> {
     try {
-      if (wantMeta) {
-        await this.inspector.syncBulkFinancials(traceId);
-      }
+      await this.inspector.syncBulkFinancials(traceId);
       const [meta, kline] = await Promise.all([
-        wantMeta ? this.scanMeta(traceId, batchId) : Promise.resolve(0),
-        wantKline ? this.scanKline(traceId, batchId) : Promise.resolve(0),
+        this.scanMeta(traceId, batchId),
+        this.scanKline(traceId, batchId),
       ]);
       return [meta, kline];
     } catch (err) {

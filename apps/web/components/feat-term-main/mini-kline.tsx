@@ -42,7 +42,7 @@ export function MiniKline({ bars, cols = 36, rows = 6 }: Props): React.ReactElem
   if (bars.length === 0) {
     return (
       <Text color="term.ink3" fontSize="11px">
-        no kline cached — run `update kline`
+        no kline cached — run `update`
       </Text>
     );
   }

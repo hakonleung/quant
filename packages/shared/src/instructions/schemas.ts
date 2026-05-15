@@ -52,9 +52,7 @@ export const UsrArgsSchema = z.object({}).strict();
 export const ClearArgsSchema = z.object({}).strict();
 export const CacheArgsSchema = z.object({}).strict();
 export const FocusArgsSchema = z.object({ id: z.string().min(1).optional() }).strict();
-export const UpdateArgsSchema = z
-  .object({ target: z.enum(['blacklist']).default('blacklist') })
-  .strict();
+export const UpdateArgsSchema = z.object({}).strict();
 
 // ── market ──────────────────────────────────────────────────────────────
 

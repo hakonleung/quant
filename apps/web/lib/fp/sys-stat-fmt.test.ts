@@ -10,9 +10,7 @@ import {
   formatClock,
   formatMemMb,
   formatQueueCounter,
-  isScanCovering,
   memColor,
-  queueCapsuleTitle,
   queueCounterColor,
   scanLabelColor,
   triggerCapsuleTitle,
@@ -53,23 +51,6 @@ describe('findQueue', () => {
   });
 });
 
-describe('isScanCovering', () => {
-  it('false when undefined', () => {
-    expect(isScanCovering(undefined, 'meta')).toBe(false);
-  });
-  it('false when needle absent', () => {
-    expect(isScanCovering(['kline'], 'meta')).toBe(false);
-  });
-  it('true on direct hit', () => {
-    expect(isScanCovering(['meta'], 'meta')).toBe(true);
-  });
-  it("'all' fans out to any kind", () => {
-    expect(isScanCovering(['all'], 'meta')).toBe(true);
-    expect(isScanCovering(['all'], 'kline')).toBe(true);
-    expect(isScanCovering(['all'], 'blacklist')).toBe(true);
-  });
-});
-
 describe('queueCounterColor', () => {
   it('null queue → ink3', () => {
     expect(queueCounterColor(null)).toBe('term.ink3');
@@ -98,13 +79,9 @@ describe('scanLabelColor', () => {
 });
 
 describe('capsule titles', () => {
-  it('queueCapsuleTitle scanning vs idle', () => {
-    expect(queueCapsuleTitle('meta', true)).toContain('in progress');
-    expect(queueCapsuleTitle('meta', false)).toBe('trigger meta scan now');
-  });
   it('triggerCapsuleTitle scanning vs idle', () => {
-    expect(triggerCapsuleTitle('BL', true)).toBe('BL scan in progress');
-    expect(triggerCapsuleTitle('BL', false)).toBe('trigger BL scan now');
+    expect(triggerCapsuleTitle('SCAN', true)).toBe('SCAN scan in progress');
+    expect(triggerCapsuleTitle('SCAN', false)).toBe('trigger SCAN scan now');
   });
 });
 

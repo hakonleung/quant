@@ -6,7 +6,7 @@
  * and so the side-effecting layer is grouped together.
  */
 
-import { ScanAcceptedSchema, type ScanAccepted, type ScanKind } from '@quant/shared';
+import { ScanAcceptedSchema, type ScanAccepted } from '@quant/shared';
 import { useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 
@@ -22,7 +22,7 @@ export interface ManualScan {
 
 const FLASH_MS = 1000;
 
-export function useManualScan(kind: ScanKind): ManualScan {
+export function useManualScan(): ManualScan {
   const [last, setLast] = useState<ScanAccepted | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [flashing, setFlashing] = useState(false);
@@ -39,7 +39,7 @@ export function useManualScan(kind: ScanKind): ManualScan {
 
   const run = (): void => {
     setError(null);
-    fetch(`/api/orchestration/scan?kind=${kind}`, { method: 'POST' })
+    fetch(`/api/orchestration/scan`, { method: 'POST' })
       .then(async (r) => {
         const raw: unknown = await r.json();
         if (!r.ok) throw new Error(`HTTP ${String(r.status)}`);
@@ -163,11 +163,11 @@ export function useMemoryMb(): number | null {
 }
 
 /**
- * Edge-trigger: when the socket-reported active-scan list transitions
- * away from including 'blacklist' / 'all', the cron has just finished
- * refreshing data/blacklist.json — invalidate the client-side query so
- * the synthetic "全 A" sector picks up the new filter immediately
- * instead of waiting out the 5-minute stale window.
+ * Edge-trigger: when the socket-reported scan transitions from in-flight
+ * to idle, the cron has just finished the settlement tail (blacklist +
+ * dynamic sectors). Invalidate the client-side blacklist query so the
+ * synthetic "全 A" sector picks up the new filter immediately instead
+ * of waiting out the 5-minute stale window.
  */
 export function useBlacklistInvalidate(isNowScanning: boolean): void {
   const qc: QueryClient = useQueryClient();

@@ -12,8 +12,6 @@ import {
   BLACKLIST_FLIGHT_CLIENT,
   BLACKLIST_RECORD_STORE,
 } from './blacklist.token.js';
-import { UpdateInstructionHandler } from './instructions/update.handler.js';
-
 const DEFAULT_DATA_DIR = '../../data';
 const DEFAULT_FLIGHT_TARGET = '127.0.0.1:8815';
 
@@ -43,7 +41,6 @@ const DEFAULT_FLIGHT_TARGET = '127.0.0.1:8815';
     SYSTEM_CLOCK_PROVIDER,
     BlacklistStore,
     BlacklistService,
-    UpdateInstructionHandler,
   ],
   exports: [BlacklistStore, BlacklistService],
 })

@@ -5,7 +5,7 @@
  * without a DOM (CLAUDE.md §2.5.1 — pure-function core asset).
  */
 
-import type { QueueSnapshotEntry, ScanKind } from '@quant/shared';
+import type { QueueSnapshotEntry } from '@quant/shared';
 
 export type WsStatus = 'connecting' | 'open' | 'error';
 
@@ -29,18 +29,6 @@ export function findQueue(
   return queues.find((q) => q.name === name) ?? null;
 }
 
-/**
- * Whether the socket-reported active-scan list covers `needle`.
- * `'all'` fans out to every concrete kind (meta / kline / blacklist).
- */
-export function isScanCovering(
-  activeScans: readonly ScanKind[] | undefined,
-  needle: ScanKind,
-): boolean {
-  if (activeScans === undefined) return false;
-  return activeScans.includes(needle) || activeScans.includes('all');
-}
-
 export function queueCounterColor(queue: QueueSnapshotEntry | null): string {
   if (queue === null) return 'term.ink3';
   return queue.paused ? 'term.amber' : 'term.red';
@@ -49,12 +37,6 @@ export function queueCounterColor(queue: QueueSnapshotEntry | null): string {
 /** Server-confirmed scanning > local 1 s submit flash > idle. */
 export function scanLabelColor(scanning: boolean, flashing: boolean): string {
   return scanning || flashing ? 'term.amber' : 'term.green';
-}
-
-export function queueCapsuleTitle(code: string, scanning: boolean): string {
-  return scanning
-    ? `${code} scan in progress (queue may not show jobs until bulk RPC finishes)`
-    : `trigger ${code} scan now`;
 }
 
 export function triggerCapsuleTitle(code: string, scanning: boolean): string {

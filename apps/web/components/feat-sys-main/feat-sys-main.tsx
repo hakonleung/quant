@@ -19,7 +19,7 @@ import { Box, Flex } from '@chakra-ui/react';
 import type { QueueSnapshotEntry } from '@quant/shared';
 
 import { Feat } from '../../lib/eqty/feat.js';
-import { findQueue, isScanCovering } from '../../lib/fp/sys-stat-fmt.js';
+import { findQueue } from '../../lib/fp/sys-stat-fmt.js';
 import { useQueueStream } from '../../lib/hooks/use-queue-stream.js';
 import { useWebVitals } from '../../lib/hooks/use-web-vitals.js';
 import { ChannelLiveBody } from '../feat-channel/feat-channel-body.js';
@@ -44,16 +44,13 @@ interface FeatSysMainProps {
 
 export function FeatSysMain({ embedded }: FeatSysMainProps = {}): React.ReactElement {
   const stream = useQueueStream();
-  const metaScan = useManualScan('meta');
-  const klineScan = useManualScan('kline');
-  const blacklistScan = useManualScan('blacklist');
+  const scan = useManualScan();
   const fps = useFps();
   const memMb = useMemoryMb();
   const vitals = useWebVitals();
 
-  const activeScans = stream.snapshot?.activeScans;
-  const isBlacklistScanning = isScanCovering(activeScans, 'blacklist');
-  useBlacklistInvalidate(isBlacklistScanning);
+  const scanning = stream.snapshot?.scanning ?? false;
+  useBlacklistInvalidate(scanning);
 
   const queues: readonly QueueSnapshotEntry[] = stream.snapshot?.queues ?? [];
 
@@ -61,12 +58,8 @@ export function FeatSysMain({ embedded }: FeatSysMainProps = {}): React.ReactEle
     wsStatus: stream.status,
     meta: findQueue(queues, 'meta'),
     kline: findQueue(queues, 'kline'),
-    metaScan,
-    klineScan,
-    blacklistScan,
-    metaScanning: isScanCovering(activeScans, 'meta'),
-    klineScanning: isScanCovering(activeScans, 'kline'),
-    blacklistScanning: isBlacklistScanning,
+    scan,
+    scanning,
     fps,
     memMb,
     vitals,

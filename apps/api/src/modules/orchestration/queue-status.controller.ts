@@ -10,15 +10,8 @@
  * the one-shot snapshot used for initial render and degraded fallback.
  */
 
-import { Controller, Get, HttpCode, HttpStatus, Inject, Post, Query } from '@nestjs/common';
-import {
-  ScanKindSchema,
-  type QueueSnapshot,
-  type ScanAccepted,
-  type ScanKind,
-} from '@quant/shared';
-
-import { ZodValidationPipe } from '../../common/zod-pipe.js';
+import { Controller, Get, HttpCode, HttpStatus, Inject, Post } from '@nestjs/common';
+import { type QueueSnapshot, type ScanAccepted } from '@quant/shared';
 
 import { CronOrchestrator } from './cron.orchestrator.js';
 import { QueueBroadcaster } from './queue.broadcaster.js';
@@ -36,17 +29,15 @@ export class QueueStatusController {
   }
 
   /**
-   * Fire-and-forget manual trigger for the meta / kline / all scan.
-   * Returns 202 Accepted with a {@link ScanAccepted} envelope as soon
-   * as the scan is kicked off — the client tracks progress via the
-   * socket `queue.snapshot` topic instead of holding the request open.
+   * Fire-and-forget manual trigger for the unified scan (meta + kline
+   * + settlement tail). Returns 202 Accepted with a {@link ScanAccepted}
+   * envelope as soon as the scan is kicked off — the client tracks
+   * progress via the socket `queue.snapshot` topic instead of holding
+   * the request open.
    */
   @Post('scan')
   @HttpCode(HttpStatus.ACCEPTED)
-  manualScan(
-    @Query('kind', new ZodValidationPipe(ScanKindSchema.default('all')))
-    kind: ScanKind,
-  ): ScanAccepted {
-    return this.cron.fireScan(kind);
+  manualScan(): ScanAccepted {
+    return this.cron.fireScan();
   }
 }
