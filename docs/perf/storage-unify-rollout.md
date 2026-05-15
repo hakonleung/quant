@@ -75,24 +75,29 @@ The Python service now exposes exactly one kline op:
 
 ## What didn't ship (and why)
 
-### Python persistence teardown (read side)
+### Python persistence teardown (read side) — DONE
 
-Python still owns a per-code cache at `data/kline.py/<code>.parquet`
-(was `data/kline.bak/` — renamed and `.gitignore`'d). Reason:
-`screen_service`, `pattern_service`, `blacklist_service`,
-`dtw_engine` all call `KlineRepo.get_range` / `get_universe_slice` /
-`get_last_bar`. Migrating those reads requires one of:
+Shipped 2026-05-15 (commit `refactor(kline): retire data/kline.py/ —
+Python reads NestJS-canonical store`). One canonical kline store at
+`data/kline/<prefix>.parquet`. Approach:
 
-- **(A)** Re-point `ParquetKlineRepo` at `data/kline/<prefix>.parquet`
-  (flat layout, DOUBLE schema). Needs a new repo implementation, a
-  `Decimal128 → float64` adaptation in every consumer, and 5 service
-  test suites updated.
-- **(B)** Replace those Python services with reverse-RPC calls to
-  NestJS for kline reads. Removes Python's local cache entirely but
-  adds round-trip latency to each screen/pattern run.
+- New `FlatPrefixKlineRepo` reads the float64 layout via DuckDB and
+  casts back to `decimal128` at the boundary so screen / pattern /
+  blacklist keep getting exact Decimal precision.
+- `pct_chg_qfq` synthesised via a `LAG()` window so the screen DSL
+  still has a per-bar return field; raw OHLC / `adj_factor` dropped
+  from the on-disk layout.
+- `_maybe_recompute_only` removed — the factor-change short-circuit
+  needed `adj_factor`. The orchestrator catches recomputes via the
+  watermark on the next business day; ex-div code pays at most one
+  extra akshare fetch per event.
+- `KlineService.sync_code` returns `(report, bars)` but no longer
+  writes (NestJS's `KlineWriterService` is the sole writer).
+- Tests: new `tests/_util/kline_seeder.py` seeds canonical-layout
+  parquets from DailyBar lists; 5 integration tests rewired.
 
-(A) is the right end state but is its own ~day-of-work change. Tracked
-as the "Python persistence teardown" follow-up.
+The legacy `data/kline.py/` directory is now safe to delete — none of
+the Python services reference it.
 
 ### `StockSnapshotDto` range pct_chg projector (item 9) — DONE
 
@@ -110,13 +115,9 @@ metrics on stock_meta after each kline sync`. Design:
   succeeds. The snapshot handler's on-demand fallback still works when
   the persisted block is missing or stale.
 
-**Open follow-up**:
-
-- **Batched op for one-shot universe backfill**. The current per-code
-  op rewrites the whole `stocks.parquet` (~5 MB) per call; a 5500-code
-  initial backfill = 5500 rewrites. Add a batched
-  `upsert_stock_metrics_for_codes` op when this proves to be a hot
-  path. Per-code is fine at normal cron tick rates.
+**Open follow-up**: none — the batched
+`upsert_stock_metrics_for_codes` op shipped 2026-05-15 and rewrites
+`stocks.parquet` once per batch instead of N times.
 
 ### Snapshot handler reads persisted block — DONE
 
@@ -135,9 +136,27 @@ quotes, meta) behind Redis. Reasonable to defer until we see real
 read-pressure that the in-process / parquet path can't absorb — the
 storage layer's port surface already supports plugging it in.
 
+### Generic `data/` verify script — DONE
+
+Shipped 2026-05-15 as `apps/api/scripts/verify-data.ts`. Walks every
+parquet under `data/`, confirms readability + required columns,
+verifies kline-code → meta-row cross-store consistency, enumerates
+per-user stores, and flags rollback anchors / un-migrated JSON. Exits
+non-zero only on real errors (missing required columns, unreadable
+parquet, cross-store orphans). Run:
+
+```
+pnpm --filter @quant/api tsx scripts/verify-data.ts
+```
+
+Sample output on current dev data: `ok=10 warnings=70 errors=0`
+(warnings are intentional — sentiment cache is lazy-migrated and
+`.bak` files are deliberate rollback anchors).
+
 ### Migration verify script for the whole `data/` dir (item 11)
 
-`import-kline-legacy.ts` has per-code row-count verification baked in.
+`import-kline-legacy.ts` has per-code row-count verification baked in
+for the one-shot kline import; `verify-data.ts` covers the rest.
 A generic "compare legacy JSON to new parquet" verify across every
 migrated store does not exist; each `*.bak` file is the rollback
 anchor and per-store tests cover the migration path.
