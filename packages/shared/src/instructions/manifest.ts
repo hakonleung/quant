@@ -16,11 +16,16 @@
  *   - summary / summaryCn for tab completion + IM help
  *
  * What does NOT live here:
- *   - Arg zod schemas (per-handler — moving them would require a
- *     larger refactor than this commit's scope; they're handler-local
- *     and validate at the dispatch layer on each side)
+ *   - Arg zod schemas. Each handler declares its own `argsSchema` and
+ *     the BE executor zod-parses on dispatch. Lifting schemas into
+ *     this manifest would either: (a) duplicate every schema, since
+ *     each handler still needs a typed `Args = z.infer<...>` to call
+ *     itself with; or (b) require threading typed results through a
+ *     `Record<id, ZodTypeAny>` lookup and losing the per-handler
+ *     `Args` narrowing at use sites. Neither pulls its weight today;
+ *     manifest covers the wiring contract, handlers keep validation.
  *   - Per-side handlers (FE handlers touch xterm/store, BE handlers
- *     are NestJS-injected — they live in their own modules)
+ *     are NestJS-injected — they live in their own modules).
  */
 
 import type { InstructionId } from './id.js';
