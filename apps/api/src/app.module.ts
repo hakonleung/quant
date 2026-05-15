@@ -17,6 +17,7 @@ import { ScreenModule } from './modules/screen/screen.module.js';
 import { SectorsModule } from './modules/sectors/sectors.module.js';
 import { SentimentModule } from './modules/sentiment/sentiment.module.js';
 import { SocketModule } from './modules/socket/socket.module.js';
+import { StockListModule } from './modules/stock-list/stock-list.module.js';
 import { StockMetaModule } from './modules/stock-meta/stock-meta.module.js';
 import { SysCfgModule } from './modules/sys-cfg/sys-cfg.module.js';
 import { TaModule } from './modules/ta/ta.module.js';
@@ -49,6 +50,7 @@ import { WatchModule } from './modules/watch/watch.module.js';
     }),
     BlacklistModule,
     StockMetaModule,
+    StockListModule,
     OrchestrationModule,
     KlineModule,
     LedgerModule,
