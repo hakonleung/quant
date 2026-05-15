@@ -9,7 +9,7 @@
  * identical so the scheduler's behaviour does not change.
  */
 
-import { Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { Decimal } from 'decimal.js';
 
 import { KlineReaderService } from '../kline/kline-reader.service.js';
@@ -22,7 +22,7 @@ const MA_LOOKBACK = 21;
 export class LocalKlineRefAdapter implements WatchKlineRefPort {
   private readonly logger = new Logger(LocalKlineRefAdapter.name);
 
-  constructor(private readonly reader: KlineReaderService) {}
+  constructor(@Inject(KlineReaderService) private readonly reader: KlineReaderService) {}
 
   async loadMaRef(code: string, traceId: string): Promise<KlineMaRef | null> {
     let bars;

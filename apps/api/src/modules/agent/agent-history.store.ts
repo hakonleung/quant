@@ -15,7 +15,7 @@
  * concern; restart loses recent context, which is acceptable for v1.
  */
 
-import { Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import type { AgentHistoryEntry, ChannelId } from '@quant/shared';
 
@@ -36,7 +36,7 @@ export class AgentHistoryStore {
   private readonly logger = new Logger(AgentHistoryStore.name);
   private readonly slots = new Map<string, Slot>();
 
-  constructor(private readonly auth: AuthService) {}
+  constructor(@Inject(AuthService) private readonly auth: AuthService) {}
 
   @OnEvent(CHANNEL_INBOUND_EVENT)
   async onInbound(msg: InboundMessage): Promise<void> {

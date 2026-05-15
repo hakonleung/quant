@@ -49,7 +49,7 @@ export class KlineWorker implements JobProcessor<KlineJob> {
   constructor(
     @Inject(ORCH_FLIGHT_CLIENT) private readonly flight: FlightClient,
     @Inject(KLINE_QUEUE) private readonly queue: InMemoryQueue<KlineJob>,
-    private readonly writer: KlineWriterService,
+    @Inject(KlineWriterService) private readonly writer: KlineWriterService,
   ) {}
 
   async process(job: JobEnvelope<KlineJob>, queue: ReQueue<KlineJob>): Promise<void> {
