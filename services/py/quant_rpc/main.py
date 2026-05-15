@@ -74,7 +74,66 @@ from quant_rpc.server import QuantFlightServer
 
 
 def _data_root() -> Path:
+    """Resolve the canonical ``data/`` directory.
+
+    Defaults to ``./data`` relative to the **process CWD**. That's brittle
+    — running ``uv run --directory services/py python -m quant_rpc.main``
+    silently resolves to ``services/py/data`` (which doesn't exist) and
+    every repo loads as empty. The fail-fast assertion in
+    :func:`_assert_data_root_ok` catches that on startup.
+
+    Override via ``QUANT_DATA_ROOT`` env var to be explicit.
+    """
     return Path(os.environ.get("QUANT_DATA_ROOT", "./data")).resolve()
+
+
+def _assert_data_root_ok(root: Path, log: logging.Logger) -> None:
+    """Refuse to start when ``data_root`` clearly isn't the canonical one.
+
+    Three checks, in order of cheapness:
+
+    1. The directory must exist.
+    2. ``meta/stocks.parquet`` must exist (every deployment has one).
+    3. ``meta/stocks.parquet`` must have at least one row — if it's
+       empty, the service can boot but every meta-driven response (`/api/
+       stocks`, `/api/stocks/snapshots`, blacklist refresh, screen
+       universe) silently returns empty, which is the exact regression
+       this guard was added to prevent.
+    """
+    if not root.is_dir():
+        msg = (
+            f"data_root {root} does not exist or is not a directory. "
+            "Set QUANT_DATA_ROOT to the canonical data/ path, or launch "
+            "the service from the repo root."
+        )
+        log.error(msg)
+        raise SystemExit(msg)
+    meta_path = root / "meta" / "stocks.parquet"
+    if not meta_path.is_file():
+        msg = (
+            f"meta parquet missing at {meta_path}. Either data_root is "
+            "wrong or the meta cron has never run; either way the service "
+            "would serve empty meta to every caller."
+        )
+        log.error(msg)
+        raise SystemExit(msg)
+    # Cheap row-count probe — avoids loading the whole parquet, but
+    # confirms there's at least one row so we don't boot into the
+    # "5512 rows on disk somewhere else, but this file is empty" state.
+    import pyarrow.parquet as pq
+
+    metadata = pq.read_metadata(str(meta_path))
+    if metadata.num_rows == 0:
+        msg = (
+            f"meta parquet {meta_path} has zero rows — refusing to boot. "
+            "Run the meta sync cron, or point QUANT_DATA_ROOT at the "
+            "canonical data/ directory."
+        )
+        log.error(msg)
+        raise SystemExit(msg)
+    log.info(
+        "data_root_ok root=%s meta_rows=%d", root, metadata.num_rows
+    )
 
 
 def main() -> int:
@@ -103,6 +162,7 @@ def main() -> int:
     py_mini_racer.MiniRacer().eval("1+1")
 
     root = _data_root()
+    _assert_data_root_ok(root, log)
     meta_path = root / "meta" / "stocks.parquet"
     # One canonical kline store, owned by NestJS's KlineWriterService at
     # `data/kline/<prefix>.parquet`. The Python in-process readers
