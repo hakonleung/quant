@@ -1,140 +1,29 @@
 /**
- * Static catalog of E-1 list columns (`docs/modules/07-frontend.md` §4.1.1).
+ * FE-side passthrough to the canonical catalog at
+ * `packages/shared/src/types/stock-list.ts`.
  *
- * The list panel renders columns in two passes:
- *   1. user-applied columns from this catalog, in user-chosen order
- *   2. dynamic-sector evidence columns, always last
- *
- * Adding a metric:
- *   - append a {@link ColumnSpec} below
- *   - hand the rendering branch to `buildColumns()` in
- *     `components/eqty/list-panel.tsx`
- *   - if the metric needs server-side derivation, set `source: 'snapshot'`
- *     so `useStockSnapshots` is wired up only when at least one such
- *     column is applied (avoids a 5500-code request when the user has
- *     no derived columns turned on)
+ * Names are kept (`COLUMN_KEYS`, `COLUMN_CATALOG`, `ColumnKey`,
+ * `ColumnSpec`, `DEFAULT_APPLIED_COLUMNS`, `getColumnSpec`,
+ * `isColumnKey`, `appliedNeedsSnapshot`) so existing callers don't
+ * change. New code should import from `@quant/shared` directly.
  */
 
-export const COLUMN_KEYS = [
-  'name',
-  'price',
-  'chgPct',
-  'turnoverRate',
-  'turnover',
-  'consecUp',
-  'ret5d',
-  'ret10d',
-  'ret20d',
-  'ret90d',
-  'ret250d',
-  'mktCap',
-  'floatMktCap',
-  'peTtm',
-  'peDynamic',
-  'pb',
-  'peg',
-  'grossMargin',
-] as const;
+import {
+  STOCK_LIST_COLUMN_CATALOG,
+  STOCK_LIST_COLUMN_KEYS,
+  DEFAULT_APPLIED_STOCK_LIST_COLUMNS,
+  appliedNeedsSnapshot as appliedNeedsSnapshotShared,
+  getStockListColumnSpec,
+  isStockListColumnKey,
+  type StockListColumnKey,
+  type StockListColumnSpec,
+} from '@quant/shared';
 
-export type ColumnKey = (typeof COLUMN_KEYS)[number];
-
-const COLUMN_KEY_SET: ReadonlySet<string> = new Set(COLUMN_KEYS);
-
-/** Type guard — narrows arbitrary user input from settings store / URL. */
-export function isColumnKey(value: string): value is ColumnKey {
-  return COLUMN_KEY_SET.has(value);
-}
-
-export interface ColumnSpec {
-  readonly key: ColumnKey;
-  readonly label: string;
-  readonly group: 'core' | 'derived';
-  readonly defaultApplied: boolean;
-  /**
-   * Where the value comes from — gates the snapshot fetch:
-   *   - `meta`     : already in the meta DTO (industries, name)
-   *   - `kline`    : computed in the bulk-kline branch (chg%, turnover…)
-   *   - `snapshot` : needs `useStockSnapshots(codes)` (mkt cap / PE / PB / PEG / margin)
-   */
-  readonly source: 'meta' | 'kline' | 'snapshot';
-}
-
-export const COLUMN_CATALOG: readonly ColumnSpec[] = [
-  { key: 'name', label: 'CODE', group: 'core', defaultApplied: true, source: 'meta' },
-  { key: 'price', label: 'PRICE', group: 'core', defaultApplied: true, source: 'kline' },
-  { key: 'chgPct', label: 'CHG%', group: 'core', defaultApplied: true, source: 'kline' },
-  {
-    key: 'turnoverRate',
-    label: '换手',
-    group: 'core',
-    defaultApplied: true,
-    source: 'kline',
-  },
-  {
-    key: 'turnover',
-    label: '成交额',
-    group: 'core',
-    defaultApplied: true,
-    source: 'kline',
-  },
-  {
-    key: 'consecUp',
-    label: '连涨',
-    group: 'core',
-    defaultApplied: true,
-    source: 'kline',
-  },
-  { key: 'ret5d', label: '5D%', group: 'derived', defaultApplied: false, source: 'snapshot' },
-  { key: 'ret10d', label: '10D%', group: 'derived', defaultApplied: false, source: 'snapshot' },
-  { key: 'ret20d', label: '20D%', group: 'derived', defaultApplied: false, source: 'snapshot' },
-  { key: 'ret90d', label: '90D%', group: 'derived', defaultApplied: false, source: 'snapshot' },
-  { key: 'ret250d', label: '250D%', group: 'derived', defaultApplied: false, source: 'snapshot' },
-  { key: 'mktCap', label: '总市值', group: 'derived', defaultApplied: false, source: 'snapshot' },
-  {
-    key: 'floatMktCap',
-    label: '流通市值',
-    group: 'derived',
-    defaultApplied: false,
-    source: 'snapshot',
-  },
-  { key: 'peTtm', label: 'PE-TTM', group: 'derived', defaultApplied: false, source: 'snapshot' },
-  {
-    key: 'peDynamic',
-    label: 'PE动态',
-    group: 'derived',
-    defaultApplied: false,
-    source: 'snapshot',
-  },
-  { key: 'pb', label: 'PB', group: 'derived', defaultApplied: false, source: 'snapshot' },
-  { key: 'peg', label: 'PEG', group: 'derived', defaultApplied: false, source: 'snapshot' },
-  {
-    key: 'grossMargin',
-    label: '毛利率',
-    group: 'derived',
-    defaultApplied: false,
-    source: 'snapshot',
-  },
-];
-
-const SPEC_BY_KEY: ReadonlyMap<ColumnKey, ColumnSpec> = new Map(
-  COLUMN_CATALOG.map((s) => [s.key, s]),
-);
-
-export function getColumnSpec(key: ColumnKey): ColumnSpec {
-  const spec = SPEC_BY_KEY.get(key);
-  if (spec === undefined) throw new Error(`unknown column key: ${key}`);
-  return spec;
-}
-
-/** Catalog-default applied list, used by settings store v1→v2 migration. */
-export const DEFAULT_APPLIED_COLUMNS: readonly ColumnKey[] = COLUMN_CATALOG.filter(
-  (s) => s.defaultApplied,
-).map((s) => s.key);
-
-/** Whether the applied list includes any column that needs the snapshot fetch. */
-export function appliedNeedsSnapshot(applied: readonly ColumnKey[]): boolean {
-  for (const key of applied) {
-    if (getColumnSpec(key).source === 'snapshot') return true;
-  }
-  return false;
-}
+export const COLUMN_KEYS = STOCK_LIST_COLUMN_KEYS;
+export type ColumnKey = StockListColumnKey;
+export type ColumnSpec = StockListColumnSpec;
+export const COLUMN_CATALOG = STOCK_LIST_COLUMN_CATALOG;
+export const DEFAULT_APPLIED_COLUMNS = DEFAULT_APPLIED_STOCK_LIST_COLUMNS;
+export const isColumnKey = isStockListColumnKey;
+export const getColumnSpec = getStockListColumnSpec;
+export const appliedNeedsSnapshot = appliedNeedsSnapshotShared;
