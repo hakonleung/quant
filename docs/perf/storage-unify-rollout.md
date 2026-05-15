@@ -79,37 +79,35 @@ Python still owns a per-code cache at `data/kline.py/<code>.parquet`
 (A) is the right end state but is its own ~day-of-work change. Tracked
 as the "Python persistence teardown" follow-up.
 
-### `StockSnapshotDto` range pct_chg projector (item 9)
+### `StockSnapshotDto` range pct_chg projector (item 9) — DONE
 
-`ret_1d / ret_5d / ret_10d / ret_20d / ret_90d / ret_250d` are still
-computed on-demand inside Python's `ListStockSnapshotsHandler` with a
-5-min cache. User requested persistence into meta itself + auto-recompute
-on kline update.
+Shipped 2026-05-15 in commit `feat(meta): persist returns + derived
+metrics on stock_meta after each kline sync`. Design:
 
-**Design questions still open**:
+- **Storage**: 15 nullable columns added to `data/meta/stocks.parquet`
+  (`metrics_asof`, `metrics_updated_at`, six `ret_*`, seven derived).
+- **Compute**: Python `compute_metrics(meta, bars)` — wraps existing
+  `derive_metrics` with the new return-window math. No TS port needed.
+- **Trigger**: NestJS `KlineWorker.process` calls
+  `upsert_stock_metrics_for_code` per code as a best-effort post-hook
+  after `KlineWriterService.appendBars`.
+- **Failure mode**: a projector error is logged at WARN; the kline sync
+  succeeds. The snapshot handler's on-demand fallback still works when
+  the persisted block is missing or stale.
 
-1. **Where do the columns live?**
-   - In `data/meta/stocks.parquet` (touches Python schema + serialization)
-   - Or in a new NestJS-owned `data/stock_metrics.parquet` (cleaner but
-     forks the snapshot API path)
+**Open follow-up**:
 
-2. **Who computes?**
-   - NestJS service (reads kline locally — has data) — needs to also
-     compute the `derived` fields (mkt_cap / pe / pb / peg /
-     gross_margin_ttm) currently in `quant_core/domain/pure/derive_metrics.py`
-   - Python (already does compute) — but the requirement is "persist" not
-     "recompute on each query"
-
-3. **Recompute trigger**:
-   - Hook into `KlineWorker.process` post-`appendBars`?
-   - Standalone cron after the daily kline sweep?
-   - Per-code event vs. universe-wide batch?
-
-Recommendation: NestJS-owned `stock_metrics` parquet, populated by a
-`MetricsProjector` service that runs once the daily kline sweep
-completes. Cleanly avoids re-doing `derive_metrics` in TS — only the
-returns get computed locally; the derived block can still flow from
-Python's snapshot handler until that path is also flipped.
+- **Snapshot handler reads from the persisted block**. Today
+  `ListStockSnapshotsHandler._latest_close_and_returns` still computes
+  on every call. Flipping it to "use persisted when `metrics_asof`
+  matches the latest kline watermark, else recompute" is a clean
+  one-file change — and removes the 5-min `FULL_CACHE_TTL_SEC` cache
+  layer once persisted hits land.
+- **Batched op for one-shot universe backfill**. The current per-code
+  op rewrites the whole `stocks.parquet` (~5 MB) per call; a 5500-code
+  initial backfill = 5500 rewrites. Add a batched
+  `upsert_stock_metrics_for_codes` op when this proves to be a hot
+  path. Per-code is fine at normal cron tick rates.
 
 ### Redis L1 cache (item 5)
 
@@ -152,8 +150,10 @@ const { DuckDBInstance } = require('@duckdb/node-api');
 
 ## Suggested next moves, in priority order
 
-1. **Wire `MetricsProjector`** — finish item 9 with the recommendation
-   above. ~1-2 hours of NestJS work, no Python touch.
+1. **Snapshot handler reads persisted metrics** — flip
+   `ListStockSnapshotsHandler` to prefer the now-populated meta block
+   over the 5-min on-demand recompute (~30 min, Python-only). Then
+   delete the `FULL_CACHE_TTL_SEC` layer.
 2. **Python read-side flip** — pick A or B above; A is cleaner long
    term. Once done, delete `quant_cache/parquet_kline_repo.py` and the
    `overwrite_bars` call in `KlineService.sync_code`.
