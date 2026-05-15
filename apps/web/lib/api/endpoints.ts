@@ -18,6 +18,7 @@ import {
   PatternFindSimilarResponseSchema,
   ScreenRunResultSchema,
   SentimentSchema,
+  StockListRowsResponseSchema,
   StockMetaDtoSchema,
   StockSnapshotDtoSchema,
   TaAnalysisSchema,
@@ -35,6 +36,8 @@ import {
   type ScreenPlanAst,
   type ScreenRunResult,
   type Sentiment,
+  type StockListRowsRequest,
+  type StockListRowsResponse,
   type StockMetaDto,
   type StockSnapshotDto,
   type TaAnalysis,
@@ -100,6 +103,21 @@ export async function listStockSnapshots(
 ): Promise<readonly StockSnapshotDto[]> {
   const q = codes.length === 0 ? '' : codes.map(encodeURIComponent).join(',');
   return safeList(`/api/stocks/snapshots?codes=${q}`, StockSnapshotDtoSchema);
+}
+
+/**
+ * Single-call stock-list row assembly. Replaces the FE 3-fetch stitch
+ * (`getStockMeta` × N + `listKlineBulk` + `listStockSnapshots`) — the
+ * BE composition reads from the shared catalog, applies the canonical
+ * default sort per `kind`, and returns rows already validated against
+ * `StockListRowsResponseSchema`.
+ */
+export async function postStockListRows(
+  body: StockListRowsRequest,
+): Promise<StockListRowsResponse> {
+  return apiPost(`/api/stock-list/rows`, body, (raw) =>
+    StockListRowsResponseSchema.parse(raw),
+  );
 }
 
 /**
