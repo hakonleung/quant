@@ -80,29 +80,45 @@ def daily_bar_to_row(bar: DailyBar) -> Mapping[str, object]:
 
 
 def daily_bar_from_row(row: Mapping[str, object]) -> DailyBar:
+    """Reconstruct a :class:`DailyBar` from a parquet row.
+
+    The canonical NestJS-owned layout drops raw OHLC, ``adj_factor`` and
+    ``pct_chg_qfq`` to keep the on-disk schema lean (those fields are
+    either derivable or no longer consumed). When this helper is fed a
+    row from that layout we fill the missing fields with sensible
+    defaults: raw OHLC mirrors the qfq prices (i.e. "the stored data is
+    already qfq"), ``adj_factor`` defaults to ``Decimal(1)``, and
+    ``pct_chg_qfq`` defaults to ``None``. Rows from the older Decimal128
+    layout that still carry the full set pass through unchanged.
+    """
+
     trade_date = row["trade_date"]
     if not isinstance(trade_date, date):
         raise ValueError(f"trade_date must be a date, got {type(trade_date).__name__}")
+    open_qfq = _dec(row["open_qfq"])
+    high_qfq = _dec(row["high_qfq"])
+    low_qfq = _dec(row["low_qfq"])
+    close_qfq = _dec(row["close_qfq"])
     return DailyBar(
         code=str(row["code"]),
         trade_date=trade_date,
-        open=_dec(row["open"]),
-        high=_dec(row["high"]),
-        low=_dec(row["low"]),
-        close=_dec(row["close"]),
+        open=_dec(row["open"]) if "open" in row and row["open"] is not None else open_qfq,
+        high=_dec(row["high"]) if "high" in row and row["high"] is not None else high_qfq,
+        low=_dec(row["low"]) if "low" in row and row["low"] is not None else low_qfq,
+        close=_dec(row["close"]) if "close" in row and row["close"] is not None else close_qfq,
         volume=_int(row["volume"]),
         amount=_dec(row["amount"]),
         turnover_rate=_dec(row["turnover_rate"]),
-        open_qfq=_dec(row["open_qfq"]),
-        high_qfq=_dec(row["high_qfq"]),
-        low_qfq=_dec(row["low_qfq"]),
-        close_qfq=_dec(row["close_qfq"]),
-        ma5=_dec_or_none(row["ma5"]),
-        ma10=_dec_or_none(row["ma10"]),
-        ma20=_dec_or_none(row["ma20"]),
-        ma60=_dec_or_none(row["ma60"]),
-        pct_chg_qfq=_dec_or_none(row["pct_chg_qfq"]),
-        adj_factor=_dec(row["adj_factor"]),
+        open_qfq=open_qfq,
+        high_qfq=high_qfq,
+        low_qfq=low_qfq,
+        close_qfq=close_qfq,
+        ma5=_dec_or_none(row.get("ma5")),
+        ma10=_dec_or_none(row.get("ma10")),
+        ma20=_dec_or_none(row.get("ma20")),
+        ma60=_dec_or_none(row.get("ma60")),
+        pct_chg_qfq=_dec_or_none(row.get("pct_chg_qfq")),
+        adj_factor=_dec(row["adj_factor"]) if "adj_factor" in row and row["adj_factor"] is not None else Decimal(1),
     )
 
 

@@ -20,7 +20,7 @@ import sys
 from pathlib import Path
 
 from quant_cache.file_kv_store import FileKeyValueStore
-from quant_cache.parquet_kline_repo import ParquetKlineRepo
+from quant_cache.flat_prefix_kline_repo import FlatPrefixKlineRepo
 from quant_cache.parquet_stock_meta_repo import ParquetStockMetaRepo
 from quant_core.adapters.clock import SystemClock
 from quant_core.adapters.pattern.dtw_engine import DTWPatternEngine
@@ -101,18 +101,18 @@ def main() -> int:
 
     root = _data_root()
     meta_path = root / "meta" / "stocks.parquet"
-    # Python keeps its own per-code cache at `data/kline.py/` so its
-    # screen / pattern / blacklist services can keep reading via
-    # `ParquetKlineRepo` (Decimal128 schema). The canonical store for
-    # NestJS HTTP / watch reads is `data/kline/<prefix>.parquet`,
-    # populated by `KlineWriterService` after each Flight sync.
-    kline_root = root / "kline.py"
+    # One canonical kline store, owned by NestJS's KlineWriterService at
+    # `data/kline/<prefix>.parquet`. The Python in-process readers
+    # (screen / pattern / blacklist) hit the same files through
+    # FlatPrefixKlineRepo; the float64 → decimal128 cast happens at the
+    # repo boundary so business code keeps working in Decimal.
+    kline_root = root / "kline"
     kv_root = root / "_state"
     log.info("data_root=%s", root)
 
     clock = SystemClock()
     meta_repo = ParquetStockMetaRepo(meta_path)
-    kline_repo = ParquetKlineRepo(kline_root)
+    kline_repo = FlatPrefixKlineRepo(kline_root)
     kv = FileKeyValueStore(kv_root, clock)
 
     meta_chain: SourceChain[StockMetaSource] = SourceChain([AKShareStockMetaSource()])

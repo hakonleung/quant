@@ -3,11 +3,18 @@
 Glues the K-line source + repo + pure rules:
 
 * :meth:`get_range` / :meth:`get_universe_slice` / :meth:`get_last_n` —
-  read-only query API matching the doc.
-* :meth:`sync_code` — one-shot per-code sync. Decides between
-  full backfill and incremental append based on the watermark and the
-  adj_factor delta (§6.1 / §6.2). Triggers an overwrite-style recompute
-  when the latest stored adj_factor differs from the source's latest.
+  read-only query API over the canonical store.
+* :meth:`sync_code` — one-shot per-code sync. Fetches from akshare,
+  assembles, and **returns** the bars to the caller (the Flight op
+  handler). Persistence is owned by NestJS's ``KlineWriterService``
+  (Phase 2 write flip); this service no longer touches disk on the
+  write path.
+
+The decision between backfill and recompute is purely watermark-based:
+no factor-change short circuit, because ``adj_factor`` is not part of
+the canonical schema after the storage-unify rollout. The cost of
+re-fetching on a stale-watermark tick is one akshare call per code,
+which the orchestrator already rate-limits.
 
 Long-running orchestration across many codes lives in NestJS
 (`docs/modules/09-update-orchestration.md`); this service handles the
@@ -55,7 +62,7 @@ class KlineSyncReport:
 
 
 class KlineService:
-    """High-level operations on the local K-line cache."""
+    """High-level operations on the canonical K-line store."""
 
     __slots__ = ("_clock", "_repo", "_source")
 
@@ -119,7 +126,7 @@ class KlineService:
     def sync_code(
         self, code: str, *, list_date: date | None = None, trace_id: str | None = None
     ) -> tuple[KlineSyncReport, list[DailyBar]]:
-        """Pull and persist new bars for ``code``. Idempotent.
+        """Pull bars for ``code`` and return them. Idempotent.
 
         Args:
             code: bare 6-digit A-share code.
@@ -127,12 +134,10 @@ class KlineService:
             trace_id: optional correlation id propagated into log records.
 
         Returns:
-            Tuple of (:class:`KlineSyncReport`, assembled bars). The bars
-            list lets the caller (Flight op handler) forward the data to
-            NestJS without a second on-disk round-trip. The bars are also
-            persisted to the Python-local cache so in-process screen /
-            pattern / blacklist services that still read via
-            :class:`KlineRepo` keep working.
+            Tuple of (:class:`KlineSyncReport`, assembled bars). Persistence
+            is the caller's responsibility — the Flight op handler streams
+            ``bars`` back to NestJS and ``KlineWriterService.appendBars``
+            writes them.
 
         Raises:
             QuantError: ``SOURCE_UNAVAILABLE`` when the source fails;
@@ -143,20 +148,21 @@ class KlineService:
         floor = self._effective_floor(list_date)
         if floor > end:
             return KlineSyncReport(code, "skip", 0, 0, None), []
-        last_bar = self._repo.get_last_bar(code)
-        if last_bar is None:
-            return self._backfill(code, floor, end, trace_id=trace_id)
+        last = self._repo.last_trade_date(code)
+        if last is None:
+            return self._fetch_and_assemble(code, floor, end, "backfill", trace_id=trace_id)
         # Incremental window: (last_stored, end].
-        next_start = last_bar.trade_date + timedelta(days=_DEFAULT_END_GAP_DAYS)
+        next_start = last + timedelta(days=_DEFAULT_END_GAP_DAYS)
         if next_start > end:
-            # Watermark already at "today" — still verify factor freshness
-            # so we recompute on a same-day ex-div.
-            return self._maybe_recompute_only(code, floor, end, last_bar, trace_id=trace_id)
+            # Watermark already at "today"; skip without an akshare round-trip.
+            # On ex-div days the orchestrator catches the recompute the next
+            # business day when `end` advances past `last`.
+            return KlineSyncReport(code, "skip", 0, 0, last), []
         # v1 takes the conservative path: any real append re-assembles the
         # union range so the rolling-MA window stays correct without a
         # second source round-trip. The faster "tail-only" §6.2 incremental
         # is tracked as a future optimisation.
-        return self._recompute(code, floor, end, trace_id=trace_id)
+        return self._fetch_and_assemble(code, floor, end, "recompute", trace_id=trace_id)
 
     # -- internals ------------------------------------------------------
 
@@ -168,53 +174,26 @@ class KlineService:
             return KLINE_FLOOR_DATE
         return max(KLINE_FLOOR_DATE, list_date)
 
-    def _backfill(
-        self, code: str, start: date, end: date, *, trace_id: str | None = None
-    ) -> tuple[KlineSyncReport, list[DailyBar]]:
-        raw_bars, factors = self._fetch_pair(code, start, end)
-        if not raw_bars:
-            return KlineSyncReport(code, "backfill", 0, 0, None), []
-        bars = assemble_daily_bars(raw_bars, factors)
-        self._repo.overwrite_bars(code, bars)
-        last_date = bars[-1].trade_date
-        logger.info(
-            "kline_backfill_done",
-            extra=_log_extra(code, len(bars), last_date, trace_id),
-        )
-        return (
-            KlineSyncReport(code, "backfill", len(raw_bars), len(bars), last_date),
-            bars,
-        )
-
-    def _maybe_recompute_only(
+    def _fetch_and_assemble(
         self,
         code: str,
-        floor: date,
+        start: date,
         end: date,
-        last_bar: DailyBar,
+        mode: Literal["backfill", "recompute"],
         *,
-        trace_id: str | None,
-    ) -> tuple[KlineSyncReport, list[DailyBar]]:
-        factors = list(self._source.fetch_adj_factors(code, floor, end))
-        if _factor_changed(factors, last_bar.adj_factor):
-            return self._recompute(code, floor, end, trace_id=trace_id)
-        return KlineSyncReport(code, "skip", 0, 0, last_bar.trade_date), []
-
-    def _recompute(
-        self, code: str, start: date, end: date, *, trace_id: str | None = None
+        trace_id: str | None = None,
     ) -> tuple[KlineSyncReport, list[DailyBar]]:
         raw_bars, factors = self._fetch_pair(code, start, end)
         if not raw_bars:
-            return KlineSyncReport(code, "recompute", 0, 0, None), []
+            return KlineSyncReport(code, mode, 0, 0, None), []
         bars = assemble_daily_bars(raw_bars, factors)
-        self._repo.overwrite_bars(code, bars)
         last_date = bars[-1].trade_date
         logger.info(
-            "kline_recompute_done",
+            f"kline_{mode}_done",
             extra=_log_extra(code, len(bars), last_date, trace_id),
         )
         return (
-            KlineSyncReport(code, "recompute", len(raw_bars), len(bars), last_date),
+            KlineSyncReport(code, mode, len(raw_bars), len(bars), last_date),
             bars,
         )
 
@@ -241,10 +220,3 @@ def _log_extra(code: str, rows: int, last_date: date, trace_id: str | None) -> d
     if trace_id is not None:
         extra["trace_id"] = trace_id
     return extra
-
-
-def _factor_changed(factors: Sequence[AdjFactor], stored: object) -> bool:
-    if not factors:
-        return False
-    latest = max(factors, key=lambda f: f.trade_date).factor
-    return latest != stored

@@ -28,13 +28,14 @@ if TYPE_CHECKING:
     from decimal import Decimal
 
 
-# Closed set of column names callers may reference. Mirrors KLINE_SCHEMA.
+# Closed set of column names callers may reference. Mirrors the
+# canonical kline schema (NestJS-owned ``data/kline/<prefix>.parquet``)
+# — qfq prices only, no raw OHLC, no adj_factor. ``pct_chg_qfq`` is
+# **synthesised** at the repo boundary via a window function
+# (``(close_qfq - prev close_qfq) / prev close_qfq``) so the screen DSL
+# still has a one-token per-bar return field.
 FIELD_NAMES: Final[frozenset[str]] = frozenset(
     {
-        "open",
-        "high",
-        "low",
-        "close",
         "open_qfq",
         "high_qfq",
         "low_qfq",

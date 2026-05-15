@@ -7,7 +7,8 @@ from decimal import Decimal
 from typing import TYPE_CHECKING
 
 import pytest
-from quant_cache.parquet_kline_repo import ParquetKlineRepo
+from quant_cache.flat_prefix_kline_repo import FlatPrefixKlineRepo
+from tests._util.kline_seeder import seed_kline_parquet
 from quant_cache.parquet_stock_meta_repo import ParquetStockMetaRepo
 from quant_core.domain.rules.screen_parse import parse_plan
 from quant_core.domain.rules.universe_parse import parse_universe_plan
@@ -93,7 +94,7 @@ def test_pipeline_filters_universe_then_screens_then_ranks(tmp_path: Path) -> No
         ]
     )
     # K-line: only the surviving codes have data; the others should match by accident if not filtered.
-    kline_repo = ParquetKlineRepo(root=tmp_path / "kline")
+    kline_repo = FlatPrefixKlineRepo(root=tmp_path / "kline")
     bars = [
         _bar(code, KLINE_FLOOR_DATE + timedelta(days=i), str(10 + i))
         for code in ("600000", "000333")
@@ -105,8 +106,9 @@ def test_pipeline_filters_universe_then_screens_then_ranks(tmp_path: Path) -> No
         kline_repo,
         _Clock(datetime.combine(last_day, datetime.min.time(), tzinfo=UTC)),
     )
-    kline_svc.sync_code("600000")
-    kline_svc.sync_code("000333")
+    for code in ("600000", "000333"):
+        _, code_bars = kline_svc.sync_code(code)
+        seed_kline_parquet(tmp_path / "kline", code_bars)
 
     pipeline = ScreeningPipeline(
         universe_service=UniverseScreenService(meta_repo=meta_repo),

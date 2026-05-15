@@ -7,7 +7,8 @@ from decimal import Decimal
 from typing import TYPE_CHECKING
 
 import pytest
-from quant_cache.parquet_kline_repo import ParquetKlineRepo
+from quant_cache.flat_prefix_kline_repo import FlatPrefixKlineRepo
+from tests._util.kline_seeder import seed_kline_parquet
 from quant_core.domain.rules.screen_parse import parse_plan
 from quant_core.domain.types.kline import KLINE_FLOOR_DATE, AdjFactor, RawDailyBar
 from quant_core.domain.types.screen import PeriodReturn, RankSpec
@@ -67,12 +68,13 @@ def _seed(tmp_path: Path, codes_closes: dict[str, list[str]]) -> ScreenService:
         for code, closes in codes_closes.items()
         for i, c in enumerate(closes)
     ]
-    repo = ParquetKlineRepo(root=tmp_path)
+    repo = FlatPrefixKlineRepo(root=tmp_path)
     last_day = base + timedelta(days=max(len(v) for v in codes_closes.values()))
     clock = _Clock(datetime.combine(last_day, datetime.min.time(), tzinfo=UTC))
     svc = KlineService(_Source(bars), repo, clock)
     for code in codes_closes:
-        svc.sync_code(code)
+        _, bars = svc.sync_code(code)
+        seed_kline_parquet(tmp_path, bars)
     return ScreenService(kline_repo=repo)
 
 

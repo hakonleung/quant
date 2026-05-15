@@ -1,13 +1,13 @@
 """``KlineRepo`` domain port (modules/02-stock-kline.md §3).
 
-Business interface for K-line persistence. Returns / accepts
-:class:`pyarrow.Table` for read paths so the result stays zero-copy on
-the way to Polars / Arrow Flight; write paths take :class:`DailyBar`
-sequences (the canonical domain type).
+Read-only port over the canonical K-line store. Persistence belongs to
+NestJS's ``KlineWriterService`` since the Phase 2 write flip; this
+service-layer port only describes the read surface the in-process
+screen / pattern / blacklist consumers depend on.
 
-The default Parquet implementation lives in
-:mod:`quant_cache.parquet_kline_repo` and delegates row storage to the
-generic :class:`TimeSeriesStore` port.
+The production adapter is :class:`quant_cache.flat_prefix_kline_repo.FlatPrefixKlineRepo`,
+which reads ``<data_root>/kline/<prefix>.parquet`` (the same parquet
+files NestJS writes via ``KlineWriterService``).
 """
 
 from __future__ import annotations
@@ -15,7 +15,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable, Sequence
+    from collections.abc import Sequence
     from datetime import date
 
     import pyarrow as pa
@@ -25,19 +25,7 @@ if TYPE_CHECKING:
 
 @runtime_checkable
 class KlineRepo(Protocol):
-    """Persistence port for :class:`DailyBar` rows."""
-
-    def upsert_bars(self, code: str, bars: Iterable[DailyBar]) -> None:
-        """Append (or replace overlapping rows) for one code.
-
-        Caller guarantees ``bars`` are sorted ascending by trade_date and
-        all share the same ``code``.
-        """
-        ...
-
-    def overwrite_bars(self, code: str, bars: Iterable[DailyBar]) -> None:
-        """Replace the entire history of ``code`` (used after ex-div recompute)."""
-        ...
+    """Read-only persistence port for :class:`DailyBar` rows."""
 
     def get_range(
         self,

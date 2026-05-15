@@ -13,7 +13,8 @@ from decimal import Decimal
 from typing import TYPE_CHECKING
 
 import pytest
-from quant_cache.parquet_kline_repo import ParquetKlineRepo
+from quant_cache.flat_prefix_kline_repo import FlatPrefixKlineRepo
+from tests._util.kline_seeder import seed_kline_parquet
 from quant_cache.parquet_stock_meta_repo import ParquetStockMetaRepo
 from quant_core.domain.types.kline import DailyBar
 from quant_core.domain.types.stock import StockMeta
@@ -76,11 +77,11 @@ def _seed_meta(repo: ParquetStockMetaRepo) -> None:
 @pytest.mark.integration
 def test_upserts_persisted_metrics_for_known_code(tmp_path: Path) -> None:
     meta_repo = ParquetStockMetaRepo(tmp_path / "stocks.parquet")
-    kline_repo = ParquetKlineRepo(root=tmp_path / "kline.py")
+    kline_repo = FlatPrefixKlineRepo(root=tmp_path / "kline")
     clock = FrozenClock(_FROZEN)
     _seed_meta(meta_repo)
-    kline_repo.overwrite_bars(
-        "000001",
+    seed_kline_parquet(
+        tmp_path / "kline",
         [_bar("000001", i, Decimal("10") + Decimal(i) * Decimal("0.1")) for i in range(21)],
     )
 
@@ -109,7 +110,7 @@ def test_upserts_persisted_metrics_for_known_code(tmp_path: Path) -> None:
 @pytest.mark.integration
 def test_returns_empty_table_when_code_not_in_meta(tmp_path: Path) -> None:
     meta_repo = ParquetStockMetaRepo(tmp_path / "stocks.parquet")
-    kline_repo = ParquetKlineRepo(root=tmp_path / "kline.py")
+    kline_repo = FlatPrefixKlineRepo(root=tmp_path / "kline")
     clock = FrozenClock(_FROZEN)
 
     handler = UpsertStockMetricsForCodeHandler(meta_repo, kline_repo, clock)
@@ -122,7 +123,7 @@ def test_returns_empty_table_when_code_not_in_meta(tmp_path: Path) -> None:
 @pytest.mark.integration
 def test_handles_meta_with_no_kline_bars(tmp_path: Path) -> None:
     meta_repo = ParquetStockMetaRepo(tmp_path / "stocks.parquet")
-    kline_repo = ParquetKlineRepo(root=tmp_path / "kline.py")
+    kline_repo = FlatPrefixKlineRepo(root=tmp_path / "kline")
     clock = FrozenClock(_FROZEN)
     _seed_meta(meta_repo)
 

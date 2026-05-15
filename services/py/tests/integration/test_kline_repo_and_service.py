@@ -1,7 +1,9 @@
-"""Integration tests for ParquetKlineRepo + KlineService.
+"""Integration tests for FlatPrefixKlineRepo + KlineService.
 
 Uses a fake :class:`KlineSource` so we never hit the network. Real
-parquet IO + DuckDB go through the actual disk.
+parquet IO + DuckDB go through the actual disk. Since the service no
+longer writes (NestJS owns persistence), tests that need data in the
+repo seed via :func:`seed_kline_parquet` after a `sync_code` call.
 """
 
 from __future__ import annotations
@@ -11,10 +13,12 @@ from decimal import Decimal
 from typing import TYPE_CHECKING
 
 import pytest
-from quant_cache.parquet_kline_repo import ParquetKlineRepo
+from quant_cache.flat_prefix_kline_repo import FlatPrefixKlineRepo
 from quant_core.domain.types.kline import KLINE_FLOOR_DATE, AdjFactor, RawDailyBar
 from quant_core.errors import QuantError
 from quant_core.services.kline_service import KlineService
+
+from tests._util.kline_seeder import seed_kline_parquet
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -53,7 +57,6 @@ class _FakeSource:
     def fetch_adj_factors(self, code: str, start: date, end: date) -> Iterable[AdjFactor]:
         relevant = [f for f in self._factors if f.code == code and start <= f.trade_date <= end]
         if not relevant:
-            # Anchor the earliest factor at start so qfq has a baseline.
             same_code = [f for f in self._factors if f.code == code]
             if same_code:
                 first = min(same_code, key=lambda f: f.trade_date)
@@ -85,31 +88,30 @@ def _make_bars(code: str, days: int) -> list[RawDailyBar]:
 
 
 @pytest.mark.integration
-def test_backfill_then_query_round_trip(tmp_path: Path) -> None:
+def test_backfill_returns_bars_for_writer(tmp_path: Path) -> None:
+    """``sync_code`` returns the assembled bars; persistence is the
+    caller's job (NestJS-side ``KlineWriterService``)."""
     bars = _make_bars("600000", 65)
     factors = [_factor("600000", KLINE_FLOOR_DATE)]
     src = _FakeSource(bars, factors)
-    repo = ParquetKlineRepo(root=tmp_path)
+    repo = FlatPrefixKlineRepo(root=tmp_path)
     clock = _FakeClock(datetime(2026, 5, 1, tzinfo=UTC))
     svc = KlineService(src, repo, clock)
 
-    rep, bars = svc.sync_code("600000")
+    rep, assembled = svc.sync_code("600000")
     assert rep.mode == "backfill"
     assert rep.written_bars == 65
-    assert len(bars) == 65
-
-    last = repo.get_last_bar("600000")
-    assert last is not None
-    assert last.ma60 is not None  # 60-day MA fully populated by row 60+
-    assert last.adj_factor == Decimal("1.0000")
+    assert len(assembled) == 65
+    assert assembled[-1].ma60 is not None  # 60-day MA fully populated by row 60+
 
 
 @pytest.mark.integration
-def test_get_range_drops_trade_date_when_not_requested(tmp_path: Path) -> None:
+def test_get_range_projects_close_qfq_only(tmp_path: Path) -> None:
     src = _FakeSource(_make_bars("600000", 5), [_factor("600000", KLINE_FLOOR_DATE)])
-    repo = ParquetKlineRepo(root=tmp_path)
+    repo = FlatPrefixKlineRepo(root=tmp_path)
     svc = KlineService(src, repo, _FakeClock(datetime(2026, 5, 1, tzinfo=UTC)))
-    svc.sync_code("600000")
+    _, bars = svc.sync_code("600000")
+    seed_kline_parquet(tmp_path, bars)
 
     table = repo.get_range(
         "600000", KLINE_FLOOR_DATE, KLINE_FLOOR_DATE + timedelta(days=10), columns=["close_qfq"]
@@ -120,13 +122,14 @@ def test_get_range_drops_trade_date_when_not_requested(tmp_path: Path) -> None:
 
 @pytest.mark.integration
 def test_get_universe_slice_across_two_codes(tmp_path: Path) -> None:
-    bars = _make_bars("600000", 3) + _make_bars("000001", 3)
+    bars_all = _make_bars("600000", 3) + _make_bars("000001", 3)
     factors = [_factor("600000", KLINE_FLOOR_DATE), _factor("000001", KLINE_FLOOR_DATE)]
-    src = _FakeSource(bars, factors)
-    repo = ParquetKlineRepo(root=tmp_path)
+    src = _FakeSource(bars_all, factors)
+    repo = FlatPrefixKlineRepo(root=tmp_path)
     svc = KlineService(src, repo, _FakeClock(datetime(2026, 5, 1, tzinfo=UTC)))
-    svc.sync_code("600000")
-    svc.sync_code("000001")
+    for code in ("600000", "000001"):
+        _, bars = svc.sync_code(code)
+        seed_kline_parquet(tmp_path, bars)
 
     table = repo.get_universe_slice(
         ["600000", "000001"],
@@ -140,10 +143,11 @@ def test_get_universe_slice_across_two_codes(tmp_path: Path) -> None:
 
 @pytest.mark.integration
 def test_universe_slice_unknown_column_rejected(tmp_path: Path) -> None:
-    repo = ParquetKlineRepo(root=tmp_path)
+    repo = FlatPrefixKlineRepo(root=tmp_path)
     src = _FakeSource(_make_bars("600000", 1), [_factor("600000", KLINE_FLOOR_DATE)])
     svc = KlineService(src, repo, _FakeClock(datetime(2026, 5, 1, tzinfo=UTC)))
-    svc.sync_code("600000")
+    _, bars = svc.sync_code("600000")
+    seed_kline_parquet(tmp_path, bars)
 
     with pytest.raises(Exception, match="unknown kline column"):
         repo.get_universe_slice(
@@ -152,32 +156,31 @@ def test_universe_slice_unknown_column_rejected(tmp_path: Path) -> None:
 
 
 @pytest.mark.integration
-def test_overwrite_then_upsert_keeps_sorted(tmp_path: Path) -> None:
+def test_recompute_returns_full_history(tmp_path: Path) -> None:
+    """When ``sync_code`` runs against an existing watermark, the
+    incremental path re-fetches the whole window and returns it."""
     bars = _make_bars("600000", 5)
     factors = [_factor("600000", KLINE_FLOOR_DATE)]
     src = _FakeSource(bars, factors)
-    repo = ParquetKlineRepo(root=tmp_path)
+    repo = FlatPrefixKlineRepo(root=tmp_path)
     svc = KlineService(src, repo, _FakeClock(datetime(2026, 5, 1, tzinfo=UTC)))
-    svc.sync_code("600000")
-    last_first = repo.get_last_bar("600000")
-    assert last_first is not None
+    _, first = svc.sync_code("600000")
+    seed_kline_parquet(tmp_path, first)
+    assert repo.last_trade_date("600000") == first[-1].trade_date
 
-    # Re-sync with extra bars — service routes to recompute, file stays sorted.
+    # Re-sync with extra bars — service routes to recompute path.
     src._bars = _make_bars("600000", 10)
-    rep, bars = svc.sync_code("600000")
+    rep, second = svc.sync_code("600000")
     assert rep.mode == "recompute"
     assert rep.written_bars == 10
-    assert len(bars) == 10
-
-    table = repo.get_range("600000", KLINE_FLOOR_DATE, KLINE_FLOOR_DATE + timedelta(days=20))
-    dates = [d for d in table.column("trade_date").to_pylist()]
-    assert dates == sorted(dates)
+    assert len(second) == 10
+    assert [b.trade_date for b in second] == sorted(b.trade_date for b in second)
 
 
 @pytest.mark.integration
 def test_sync_invalid_range_raises(tmp_path: Path) -> None:
     src = _FakeSource([], [])
-    repo = ParquetKlineRepo(root=tmp_path)
+    repo = FlatPrefixKlineRepo(root=tmp_path)
     svc = KlineService(src, repo, _FakeClock(datetime(2026, 5, 1, tzinfo=UTC)))
     with pytest.raises(QuantError, match="start"):
         svc.get_range("600000", date(2026, 5, 5), date(2026, 5, 1))
@@ -186,9 +189,10 @@ def test_sync_invalid_range_raises(tmp_path: Path) -> None:
 @pytest.mark.integration
 def test_get_last_n_returns_tail(tmp_path: Path) -> None:
     src = _FakeSource(_make_bars("600000", 30), [_factor("600000", KLINE_FLOOR_DATE)])
-    repo = ParquetKlineRepo(root=tmp_path)
+    repo = FlatPrefixKlineRepo(root=tmp_path)
     svc = KlineService(src, repo, _FakeClock(datetime(2026, 5, 1, tzinfo=UTC)))
-    svc.sync_code("600000")
+    _, bars = svc.sync_code("600000")
+    seed_kline_parquet(tmp_path, bars)
 
     table = svc.get_last_n("600000", 5)
     assert table.num_rows == 5
