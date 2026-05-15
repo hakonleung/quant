@@ -49,20 +49,13 @@ data/sentiment/
 # under data/watch IS source-tracked — fresh clones get the lookup tables
 # without an akshare round-trip.
 apps/api/data/
-data/watch/tasks.json
-data/watch/groups.json
 # Sectors + Sys.Cfg are user state, never source-tracked.
 data/sectors/
-data/sys-cfg/
 data/ta/
 # Per-user data dirs (post auth multi-user split). data/users/{uid}/...
 # holds personal ledger / watch / sys-cfg / AI cache; data/users/_meta/users.json
 # is the user registry. All user state, never source-tracked.
 data/users/
-# Cron-managed A-share noise filter (BL trigger / 15:15 BJT cron).
-# Regenerated on demand; never source-tracked.
-data/blacklist.json
-data/blacklist.parquet
 # Verify-storage-migration writes this file. Always reproducible from the
 # script + data/, so don't carry it in git.
 data/migration-report.md
@@ -70,15 +63,8 @@ data/migration-report.md
 # storage-unify migration is complete and verified, these can be deleted
 # from disk; the .bak suffix is also kept out of git for that interim.
 data/*.json.bak
-# Kline parquet cache: per-code parquet files + the bundled kline.zip
-# archive are regenerated locally by ParquetKlineRepo / scripts/pack_kline.py.
-# kline.zip is too large for GitHub (>100MB), so the whole dir stays untracked.
-data/kline.new/
-data/kline.bak/
-# Python-side per-code cache: read by screen/pattern/blacklist via
-# ParquetKlineRepo. Regenerated from akshare on demand. NestJS reads
-# the flat data/kline/<prefix>.parquet (which IS tracked).
-data/kline.py/
+data/all_users.parquet
+data/public_sectors.parquet
 
 # Test output
 coverage/
