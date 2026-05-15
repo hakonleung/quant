@@ -105,11 +105,18 @@ export class SectorsService {
     if (current.screenPlan === undefined) {
       throw new QuantError('INVALID_ARGUMENT', `sector ${id} has no screenPlan to re-run`, { id });
     }
+    // Override asof to today so refresh always evaluates against the
+    // freshest kline data. The asof saved on the plan reflects the
+    // creation point; without this override every refresh would re-pin
+    // to that snapshot and ignore subsequent updates.
+    const todayIso = this.clock.now().toISOString().slice(0, 10);
+    const screenPlan = { ...current.screenPlan, asof: todayIso };
     const args: Record<string, unknown> = {
-      screen_plan: JSON.stringify(current.screenPlan),
+      screen_plan: JSON.stringify(screenPlan),
     };
     if (current.universePlan !== undefined && current.universePlan !== null) {
-      args['universe_plan'] = JSON.stringify(current.universePlan);
+      const universePlan = { ...current.universePlan, asof: todayIso };
+      args['universe_plan'] = JSON.stringify(universePlan);
     }
     if (current.rank !== undefined && current.rank !== null) {
       args['rank'] = JSON.stringify(current.rank);

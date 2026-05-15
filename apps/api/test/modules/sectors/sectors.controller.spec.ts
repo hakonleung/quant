@@ -40,6 +40,28 @@ function fakeFlight(payload: unknown | null): FlightClient {
   } as unknown as FlightClient;
 }
 
+interface RecordingFlight {
+  client: FlightClient;
+  calls: Array<{ op: string; args: Record<string, unknown> }>;
+}
+
+function recordingFlight(payload: unknown | null): RecordingFlight {
+  const rows = payload === null ? [] : [{ payload_json: JSON.stringify(payload) }];
+  const table = new FakeTable(rows);
+  const calls: Array<{ op: string; args: Record<string, unknown> }> = [];
+  const client = {
+    doGet: async (
+      op: string,
+      args: Record<string, unknown>,
+      _opts: unknown,
+    ): Promise<{ value: FakeTable }> => {
+      calls.push({ op, args });
+      return { value: table };
+    },
+  } as unknown as FlightClient;
+  return { client, calls };
+}
+
 const FROZEN = new Date('2026-05-04T07:15:00.000Z');
 
 const baseDynamic: Sector = {
@@ -124,6 +146,28 @@ describe('SectorsController.refresh', () => {
     const out = await ctrl.refresh(traceReq, aliceUser, published.id);
     expect(out.sector.codes).toEqual(['688008']);
     expect(store.list()[0]?.codes).toEqual(['688008']);
+  });
+
+  it('overrides asof on both screenPlan and universePlan to clock.today', async () => {
+    // Plan stored with a stale asof; clock today is 2026-05-04. Refresh
+    // must rewrite asof on the way to screen_run so the evaluation hits
+    // the freshest kline data, not the snapshot date frozen at creation.
+    const staleDynamic: Sector = {
+      ...baseDynamic,
+      screenPlan: { asof: '2026-05-01', expr: { kind: 'logical', op: 'and', args: [] } },
+      universePlan: { asof: '2026-04-20', expr: { kind: 'logical', op: 'and', args: [] } },
+    };
+    const flight = recordingFlight({ planSignature: 'sig', matches: [] });
+    const { ctrl } = await freshController([staleDynamic], flight.client);
+
+    await ctrl.refresh(traceReq, adminUser, staleDynamic.id);
+
+    expect(flight.calls).toHaveLength(1);
+    const args = flight.calls[0]?.args ?? {};
+    const sent = JSON.parse(String(args['screen_plan'])) as { asof: string };
+    expect(sent.asof).toBe('2026-05-04');
+    const sentUniverse = JSON.parse(String(args['universe_plan'])) as { asof: string };
+    expect(sentUniverse.asof).toBe('2026-05-04');
   });
 
   it('replaces codes / evidence and stamps lastScreenedAt from the injected clock', async () => {
