@@ -9,7 +9,7 @@
  * and pushes back through the writer service (plan §3.3 — Phase 2).
  */
 
-import { Controller, Get, Logger, Param, Query, Req } from '@nestjs/common';
+import { Controller, Get, Inject, Logger, Param, Query, Req } from '@nestjs/common';
 import type { KlineBar } from '@quant/shared';
 import type { Request } from 'express';
 import { z } from 'zod';
@@ -34,7 +34,7 @@ const bulkPipe = new ZodValidationPipe(BulkQuerySchema);
 export class KlineController {
   private readonly logger = new Logger(KlineController.name);
 
-  constructor(private readonly reader: KlineReaderService) {}
+  constructor(@Inject(KlineReaderService) private readonly reader: KlineReaderService) {}
 
   /**
    * Bulk last-N kline. Resolves with `Record<code, KlineBar[]>`.
