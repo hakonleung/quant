@@ -4,7 +4,11 @@
  *
  * - One Flight client (separate channel from stock-meta's, same target)
  *   used by inspector + workers.
- * - Two `InMemoryQueue` instances (meta: concurrency 1; kline: 4).
+ * - Two `InMemoryQueue` instances:
+ *   - meta:  concurrency 8, maxRetry 3, taskBackoff 1s→5min, poolBackoff 5s→5min
+ *   - kline: concurrency 8, maxRetry 3, taskBackoff 5s→15min, poolBackoff 5s→5min
+ * - `BatchSettler` subscribes to both queues' terminal events to run
+ *   blacklist + dynamic-sectors recompute as the 16:00 tail-off.
  * - Workers attach to their queue via `OnModuleInit` — wiring after DI
  *   resolves so the queue does not start pulling before the processor
  *   exists.
@@ -12,9 +16,12 @@
 
 import { Inject, Module, type OnModuleInit } from '@nestjs/common';
 import { FlightClient } from '../../adapters/flight/flight-client.js';
+import { isPoolLevelError } from '../../adapters/flight/flight-errors.js';
 import { BlacklistModule } from '../blacklist/blacklist.module.js';
 import { KlineModule } from '../kline/kline.module.js';
+import { SectorsModule } from '../sectors/sectors.module.js';
 import { StockMetaModule } from '../stock-meta/stock-meta.module.js';
+import { BatchSettler } from './batch-settler.js';
 import { CacheInspector } from './cache-inspector.js';
 import { CronOrchestrator } from './cron.orchestrator.js';
 import { InMemoryQueue } from './domain/in-memory-queue.js';
@@ -28,7 +35,7 @@ import type { KlineJob, MetaJob } from './domain/types.js';
 const DEFAULT_FLIGHT_TARGET = '127.0.0.1:8815';
 
 @Module({
-  imports: [BlacklistModule, KlineModule, StockMetaModule],
+  imports: [BlacklistModule, KlineModule, SectorsModule, StockMetaModule],
   controllers: [QueueStatusController],
   providers: [
     {
@@ -41,16 +48,51 @@ const DEFAULT_FLIGHT_TARGET = '127.0.0.1:8815';
     {
       provide: META_QUEUE,
       useFactory: (): InMemoryQueue<MetaJob> =>
-        new InMemoryQueue<MetaJob>({ name: 'meta', concurrency: 1 }),
+        new InMemoryQueue<MetaJob>({
+          name: 'meta',
+          concurrency: 8,
+          maxRetry: 3,
+          taskBackoff: {
+            baseMs: 1_000,
+            factor: 2,
+            maxMs: 5 * 60_000,
+            jitterRatio: 0.2,
+          },
+          poolBackoff: {
+            baseMs: 5_000,
+            factor: 2,
+            maxMs: 5 * 60_000,
+            jitterRatio: 0.2,
+            isPoolError: isPoolLevelError,
+          },
+        }),
     },
     {
       provide: KLINE_QUEUE,
       useFactory: (): InMemoryQueue<KlineJob> =>
-        new InMemoryQueue<KlineJob>({ name: 'kline', concurrency: 4 }),
+        new InMemoryQueue<KlineJob>({
+          name: 'kline',
+          concurrency: 8,
+          maxRetry: 3,
+          taskBackoff: {
+            baseMs: 5_000,
+            factor: 2,
+            maxMs: 15 * 60_000,
+            jitterRatio: 0.2,
+          },
+          poolBackoff: {
+            baseMs: 5_000,
+            factor: 2,
+            maxMs: 5 * 60_000,
+            jitterRatio: 0.2,
+            isPoolError: isPoolLevelError,
+          },
+        }),
     },
     CacheInspector,
     MetaWorker,
     KlineWorker,
+    BatchSettler,
     CronOrchestrator,
     QueueBroadcaster,
   ],
@@ -62,10 +104,14 @@ export class OrchestrationModule implements OnModuleInit {
     @Inject(KLINE_QUEUE) private readonly klineQueue: InMemoryQueue<KlineJob>,
     @Inject(MetaWorker) private readonly metaWorker: MetaWorker,
     @Inject(KlineWorker) private readonly klineWorker: KlineWorker,
+    @Inject(BatchSettler) private readonly _settler: BatchSettler,
   ) {}
 
   onModuleInit(): void {
     this.metaQueue.setProcessor(this.metaWorker);
     this.klineQueue.setProcessor(this.klineWorker);
+    // Touch the settler so Nest instantiates it eagerly — its
+    // constructor wires terminal listeners onto both queues.
+    void this._settler;
   }
 }

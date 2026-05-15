@@ -91,11 +91,7 @@ export class WatchService implements OnModuleInit {
     return group;
   }
 
-  async patchGroup(
-    userId: string,
-    name: string,
-    payload: WatchGroupPatch,
-  ): Promise<WatchGroup> {
+  async patchGroup(userId: string, name: string, payload: WatchGroupPatch): Promise<WatchGroup> {
     const next = await this.groups.patch(userId, name, (g) => ({
       ...g,
       ...(payload.enabled !== undefined ? { enabled: payload.enabled } : {}),

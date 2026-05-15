@@ -32,6 +32,6 @@
 ## 缓存策略
 
 - **存储**：`data/meta/stocks.parquet`（约 5500 行）。
-- **更新**：手动触发或 BJT 15:15 cron；写入走 `tempfile + os.replace` 原子替换 + `FileLock`。
+- **更新**：手动触发或 BJT 16:00 cron；写入走 `tempfile + os.replace` 原子替换 + `FileLock`。
 - **读取**：内存缓存（首次加载 polars DataFrame，后续命中复用）；外部触发 sync 后失效重载。
 - **校验**：schema 版本写入 Parquet metadata，启动时不匹配则报 `META_STALE`。

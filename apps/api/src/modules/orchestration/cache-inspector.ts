@@ -2,14 +2,15 @@
  * Cache inspector — finds work for the cron orchestrator
  * (`docs/modules/09-update-orchestration.md` §3).
  *
- * Two queries, one Flight call each:
+ * One scan loop emits two lists of *package-shaped* jobs:
+ *   - `MetaJob` per code that needs basic-info enrichment OR financials
+ *     refresh (or both — flags coalesce into a single envelope so the
+ *     same code is only queued once).
+ *   - `KlineJob` per code whose kline cache is missing or older than
+ *     the latest tradable date.
  *
- * - `findIncompleteMeta` — scans `list_stock_meta_all`, returns codes
- *   whose `industries` is empty (i.e. only the bulk endpoint has touched
- *   them so XQ enrichment is still owed).
- * - `findStaleKline` — walks the local meta universe + local kline
- *   watermarks (`KlineReaderService.lastTradeDates`) and returns codes
- *   whose K-line cache is empty or older than today's Beijing-time date.
+ * The "find" verbs are inputs to `CronOrchestrator.scan`; the cron
+ * applies the `batchId` stamp and pushes via `addBulk`.
  */
 
 import { Inject, Injectable, Logger } from '@nestjs/common';
@@ -25,6 +26,12 @@ import { StockMetaService } from '../stock-meta/stock-meta.service.js';
 const BLACKLIST_KLINE_REFRESH_DAYS = 10;
 const DAY_MS = 86_400_000;
 
+export interface MetaScanItem {
+  readonly code: string;
+  readonly needBasic: boolean;
+  readonly needFinancials: boolean;
+}
+
 @Injectable()
 export class CacheInspector {
   private readonly logger = new Logger(CacheInspector.name);
@@ -36,28 +43,43 @@ export class CacheInspector {
     @Inject(KlineReaderService) private readonly klineReader: KlineReaderService,
   ) {}
 
-  async findIncompleteMeta(traceId: string): Promise<readonly string[]> {
-    const result = await this.flight.doGet('list_stock_meta_all', {}, { traceId });
-    const rows = arrowTableToStockMetaDtos(result.value);
-    return (
-      rows
-        .filter((r) => r.industries === '')
-        // Blacklisted A-share codes never get re-enriched — meta is
-        // already deemed not worth chasing for these names (the cron
-        // will re-evaluate the blacklist daily, so a code that's no
-        // longer stagnant rejoins the work set automatically).
-        .filter((r) => !(isAShareCode(r.code) && this.blacklist.has(r.code)))
-        .map((r) => r.code)
-    );
+  /**
+   * Find every code that needs meta work and pack each into a single
+   * envelope keyed on `code`. `needBasic` and `needFinancials` flag the
+   * sub-steps so the worker can short-circuit either half. Blacklisted
+   * A-share codes are filtered out — they're skipped at the worker too,
+   * but emitting fewer envelopes keeps the queue lean.
+   */
+  async findMetaWork(traceId: string): Promise<readonly MetaScanItem[]> {
+    const [incompleteCodes, staleFinancialCodes] = await Promise.all([
+      this.findIncompleteMetaCodes(traceId),
+      this.findStaleFinancialCodes(traceId),
+    ]);
+    const merged = new Map<string, MetaScanItem>();
+    for (const code of incompleteCodes) {
+      merged.set(code, { code, needBasic: true, needFinancials: false });
+    }
+    for (const code of staleFinancialCodes) {
+      const prev = merged.get(code);
+      merged.set(code, {
+        code,
+        needBasic: prev?.needBasic ?? false,
+        needFinancials: true,
+      });
+    }
+    return Array.from(merged.values());
   }
 
-  /**
-   * Codes whose financials track is missing or stale (>7 days).
-   * Authoritative answer comes from the python service so the watermark
-   * (`financials_updated_at` etc.) stays single-sourced; the inspector
-   * just relays.
-   */
-  async findStaleFinancials(traceId: string): Promise<readonly string[]> {
+  private async findIncompleteMetaCodes(traceId: string): Promise<readonly string[]> {
+    const result = await this.flight.doGet('list_stock_meta_all', {}, { traceId });
+    const rows = arrowTableToStockMetaDtos(result.value);
+    return rows
+      .filter((r) => r.industries === '')
+      .filter((r) => !(isAShareCode(r.code) && this.blacklist.has(r.code)))
+      .map((r) => r.code);
+  }
+
+  private async findStaleFinancialCodes(traceId: string): Promise<readonly string[]> {
     try {
       const result = await this.flight.doGet(
         'find_stale_financials',
@@ -70,7 +92,10 @@ export class CacheInspector {
         const proxy = table.get(i);
         if (proxy === null) continue;
         const raw = proxy.toJSON() as { code: unknown };
-        if (typeof raw.code === 'string') out.push(raw.code);
+        if (typeof raw.code === 'string') {
+          if (isAShareCode(raw.code) && this.blacklist.has(raw.code)) continue;
+          out.push(raw.code);
+        }
       }
       return out;
     } catch (err) {
@@ -83,10 +108,8 @@ export class CacheInspector {
 
   /**
    * Synchronous bulk financials sync (8 quarters of `stock_yjbb_em` ⇒
-   * one Flight call). Returns the python service's report so the cron
-   * can include the counts in its scan summary; never throws — a
-   * py-flight failure is logged and surfaced as `(0, 0)` so the rest
-   * of the scan can still progress.
+   * one Flight call). Cheap full-market prepass — the per-code
+   * `find_stale_financials` watermark is computed *after* this lands.
    */
   async syncBulkFinancials(traceId: string): Promise<{
     readonly fetched: number;
@@ -112,11 +135,6 @@ export class CacheInspector {
   }
 
   async findStaleKline(traceId: string): Promise<readonly string[]> {
-    // Universe + watermarks both come from local stores now — no more
-    // Flight round-trip per orchestrator tick. `listAll` is in-process
-    // cached (5-min TTL with background revalidation, see
-    // StockMetaService); `lastTimestamps` is a single DuckDB query
-    // over the per-prefix kline parquet so it's O(partitions).
     const [metas, latestTradeDay] = await Promise.all([
       this.stockMeta.listAll(traceId),
       this.fetchLatestTradeDay(traceId),
@@ -134,10 +152,6 @@ export class CacheInspector {
         lastDate: ts === undefined ? null : ts.toISOString().slice(0, 10),
       };
     });
-    // Authoritative threshold = the latest trading day whose bar is
-    // expected to be available right now (akshare calendar +
-    // post-close gating, owned by Python). On weekends, holidays, or
-    // mid-session the threshold is the previous trade day.
     if (latestTradeDay === null) {
       this.logger.warn(`latest_trade_day_unavailable — skipping stale-kline scan`);
       return [];
@@ -153,11 +167,6 @@ export class CacheInspector {
     return stale;
   }
 
-  /**
-   * For blacklisted A-share codes the kline is only refreshed when the
-   * cache is missing or its watermark is ≥ 10 calendar days behind
-   * today. Non-blacklisted codes always pass.
-   */
   private shouldSyncBlacklisted(code: string, lastDate: string | null, todayMs: number): boolean {
     if (!isAShareCode(code) || !this.blacklist.has(code)) return true;
     if (lastDate === null) return true;
@@ -186,19 +195,8 @@ export class CacheInspector {
 }
 
 /**
- * Decode an Arrow `date32` cell into ISO `YYYY-MM-DD`.
- *
- * `apache-arrow` is inconsistent about what `proxy.toJSON()` emits for
- * date32 columns: some bindings hand back a `Date`, some a string,
- * some the raw `days since epoch`, and some the `ms since epoch`. The
- * old "always treat number as days" branch silently turned today's
- * watermarks (emitted as ms by the binding we're on) into year-56000
- * dates, which then sorted *before* `latest_trade_day` and re-flagged
- * every code as stale every cron tick — the symptom the user reported
- * as "kline keeps re-syncing".
- *
- * Heuristic mirrors `kline/domain/arrow-mapper.ts`: anything bigger
- * than 1e8 is already milliseconds, smaller is days.
+ * Decode an Arrow `date32` cell into ISO `YYYY-MM-DD`. See the doc on
+ * `apache-arrow` inconsistency notes in the historical commit log.
  */
 export function parseDateCell(value: unknown): string | null {
   if (value === null || value === undefined) return null;

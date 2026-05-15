@@ -132,7 +132,7 @@ docs/              工程文档
 | `docs/modules/04-pattern.md`          | 形态匹配（DTW，全宇宙 + similarity rank） |
 | `docs/modules/05-sentiment.md`        | 新闻舆情（LLM web_search，paid vs cache） |
 | `docs/modules/06-watch.md`            | 自选盯盘（pct/abs 条件 + 边沿触发）       |
-| `docs/modules/07-orchestration.md`    | BJT 15:15 cron + 内存队列                 |
+| `docs/modules/07-orchestration.md`    | BJT 16:00 cron + 内存队列（池级 backoff） |
 | `docs/modules/08-frontend.md`         | 前端 Feat 框架 + Feat 列表                |
 | `docs/modules/09-notifications.md`    | 通知（Slack 纯文本 mrkdwn）               |
 | `docs/modules/10-terminal.md`         | `@quant/terminal` + `TERM.MAIN`           |

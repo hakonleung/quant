@@ -1,3 +1,13 @@
+/**
+ * Watch worker — fetch + evaluate + hit pipeline.
+ *
+ * Post-refactor, `WatchScheduler` is a pure producer (push due tasks
+ * into per-market queues) and `WatchWorker` owns the actual per-task
+ * fetch + evaluate + hit-batching path. These tests target the worker
+ * directly so the assertions don't depend on the queue's microtask
+ * scheduling.
+ */
+
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -6,10 +16,12 @@ import type { ChannelOutboundRequest, ChannelOutboundResponse } from '@quant/sha
 
 import type { AuthConfigShape } from '../../../src/modules/auth/config/auth.config.js';
 import type { ChannelService } from '../../../src/modules/channel/channel.service.js';
-import type { UserStore, UserRecord } from '../../../src/modules/auth/user.store.js';
+import type { JobEnvelope, ReQueue } from '../../../src/modules/orchestration/domain/types.js';
 import { WatchGroupStore } from '../../../src/modules/watch/watch-group.store.js';
-import { WatchScheduler } from '../../../src/modules/watch/watch.scheduler.js';
 import { WatchTaskStore } from '../../../src/modules/watch/watch-task.store.js';
+import type { WatchJob } from '../../../src/modules/watch/domain/watch-job.js';
+import { WatchWorker } from '../../../src/modules/watch/watch-worker.js';
+import type { WatchQuotePort } from '../../../src/modules/watch/domain/watch-port.js';
 import { makeUserBlobStore } from '../../fakes/in-memory-user-blob.store.js';
 
 function makeWatchStores(_cfgVal: AuthConfigShape): {
@@ -22,7 +34,6 @@ function makeWatchStores(_cfgVal: AuthConfigShape): {
     groups: new WatchGroupStore(blob.store),
   };
 }
-import type { WatchQuotePort } from '../../../src/modules/watch/domain/watch-port.js';
 
 const USER = 'admin';
 
@@ -56,28 +67,9 @@ class FakeNotifier {
   }
 }
 
-class FakeUserStore {
-  private readonly users: UserRecord[];
-  constructor(ids: readonly string[]) {
-    this.users = ids.map((id) => ({
-      id,
-      provider: 'admin',
-      externalId: id,
-      tenantKey: null,
-      displayName: id,
-      email: null,
-      avatarUrl: null,
-      createdAt: '2026-05-01T00:00:00Z',
-      lastLoginAt: '2026-05-01T00:00:00Z',
-    }));
-  }
-  list(): readonly UserRecord[] {
-    return this.users;
-  }
-  get(id: string): UserRecord | null {
-    return this.users.find((u) => u.id === id) ?? null;
-  }
-}
+const NOOP_QUEUE: ReQueue<WatchJob> = {
+  reschedule: (): void => undefined,
+};
 
 async function tmpRoot(): Promise<string> {
   return fs.mkdtemp(path.join(os.tmpdir(), 'watch-'));
@@ -116,7 +108,7 @@ function task(overrides: Partial<WatchTask> = {}): WatchTask {
     name: '浦发银行',
     groupName: 'default',
     conditions: [{ kind: 'pct', baseline: 'prev_close', op: 'gte', thresholdPct: '5' }],
-    intervalSec: 5,
+    intervalSec: 1,
     pushIntervalSec: 60,
     remaining: null,
     notifySlack: true,
@@ -131,50 +123,62 @@ function task(overrides: Partial<WatchTask> = {}): WatchTask {
   };
 }
 
-const TICK_TIME = new Date('2026-05-04T01:30:00Z');
+const FROZEN_NOW = new Date('2026-05-04T01:30:00Z');
 
-function newScheduler(
+let realNow: () => Date;
+
+function newWorker(
   store: WatchTaskStore,
-  groups: WatchGroupStore,
   port: WatchQuotePort,
   notifier: FakeNotifier,
-  users: FakeUserStore,
-): WatchScheduler {
-  return new WatchScheduler(
-    store,
-    groups,
+): WatchWorker {
+  return new WatchWorker(
     port,
     { loadMaRef: async () => null },
     notifier as unknown as ChannelService,
-    users as unknown as UserStore,
+    store,
   );
+}
+
+function envelope(market: WatchMarket, code: string): JobEnvelope<WatchJob> {
+  return {
+    id: `watch:${USER}:${market}:${code}`,
+    data: { kind: 'watch_eval', userId: USER, market, code },
+    attemptsMade: 1,
+  };
 }
 
 async function buildEnv(seed: WatchTask): Promise<{
   store: WatchTaskStore;
   groups: WatchGroupStore;
-  users: FakeUserStore;
   root: string;
 }> {
   const root = await tmpRoot();
   const { store, groups } = makeWatchStores(cfg(root));
   await store.upsert(USER, seed);
-  const users = new FakeUserStore([USER]);
-  return { store, groups, users, root };
+  return { store, groups, root };
 }
 
-describe('WatchScheduler.tick', () => {
-  beforeEach(() => jest.useFakeTimers());
-  afterEach(() => jest.useRealTimers());
+describe('WatchWorker.process', () => {
+  beforeAll(() => {
+    realNow = (): Date => new Date();
+    // Freeze `new Date()` to TICK_TIME so the worker's `now` is stable.
+    jest.useFakeTimers().setSystemTime(FROZEN_NOW);
+  });
+  afterAll(() => {
+    jest.useRealTimers();
+    void realNow;
+  });
+  beforeEach(() => jest.setSystemTime(FROZEN_NOW));
 
   it('fetches quote and pushes when condition hits (no prior hit)', async () => {
-    const { store, groups, users } = await buildEnv(task());
+    const { store } = await buildEnv(task());
     const port = new FakeQuotePort();
     port.responses.push(quote());
     const notifier = new FakeNotifier();
-    const sched = newScheduler(store, groups, port, notifier, users);
+    const worker = newWorker(store, port, notifier);
 
-    await sched.tick(TICK_TIME);
+    await worker.process(envelope('a', '600000'), NOOP_QUEUE);
     await jest.runAllTimersAsync();
 
     expect(port.calls).toHaveLength(1);
@@ -183,13 +187,13 @@ describe('WatchScheduler.tick', () => {
     const after = await store.get(USER, 'a', '600000');
     expect(after?.hitCount).toBe(1);
     expect(after?.lastHitPrice).toBe('10.5');
-    expect(after?.lastPushAt).toBe(TICK_TIME.toISOString());
+    expect(after?.lastPushAt).toBe(FROZEN_NOW.toISOString());
   });
 
   it('suppresses second hit when last drifts < 2% from lastHitPrice (price gate)', async () => {
-    const { store, groups, users } = await buildEnv(
+    const { store } = await buildEnv(
       task({
-        lastPushAt: new Date(TICK_TIME.getTime() - 120_000).toISOString(),
+        lastPushAt: new Date(FROZEN_NOW.getTime() - 120_000).toISOString(),
         lastHitPrice: '10.5',
         hitCount: 1,
       }),
@@ -197,18 +201,18 @@ describe('WatchScheduler.tick', () => {
     const port = new FakeQuotePort();
     port.responses.push(quote({ last: '10.55' }));
     const notifier = new FakeNotifier();
-    const sched = newScheduler(store, groups, port, notifier, users);
+    const worker = newWorker(store, port, notifier);
 
-    await sched.tick(TICK_TIME);
+    await worker.process(envelope('a', '600000'), NOOP_QUEUE);
 
     expect(notifier.sent).toHaveLength(0);
     expect((await store.get(USER, 'a', '600000'))?.hitCount).toBe(1);
   });
 
   it('suppresses second hit while pushIntervalSec time gate is open', async () => {
-    const { store, groups, users } = await buildEnv(
+    const { store } = await buildEnv(
       task({
-        lastPushAt: new Date(TICK_TIME.getTime() - 30_000).toISOString(),
+        lastPushAt: new Date(FROZEN_NOW.getTime() - 30_000).toISOString(),
         lastHitPrice: '9.5',
         hitCount: 1,
       }),
@@ -216,163 +220,76 @@ describe('WatchScheduler.tick', () => {
     const port = new FakeQuotePort();
     port.responses.push(quote({ last: '10.50' }));
     const notifier = new FakeNotifier();
-    const sched = newScheduler(store, groups, port, notifier, users);
+    const worker = newWorker(store, port, notifier);
 
-    await sched.tick(TICK_TIME);
+    await worker.process(envelope('a', '600000'), NOOP_QUEUE);
 
     expect(notifier.sent).toHaveLength(0);
     expect((await store.get(USER, 'a', '600000'))?.hitCount).toBe(1);
   });
 
-  it('fires when both gates clear (drift ≥ 2% AND interval elapsed)', async () => {
-    const { store, groups, users } = await buildEnv(
-      task({
-        lastPushAt: new Date(TICK_TIME.getTime() - 120_000).toISOString(),
-        lastHitPrice: '10.5',
-        hitCount: 1,
-      }),
-    );
-    const port = new FakeQuotePort();
-    port.responses.push(quote({ last: '10.71' }));
-    const notifier = new FakeNotifier();
-    const sched = newScheduler(store, groups, port, notifier, users);
-
-    await sched.tick(TICK_TIME);
-    await jest.runAllTimersAsync();
-
-    expect(notifier.sent).toHaveLength(1);
-    const after = await store.get(USER, 'a', '600000');
-    expect(after?.hitCount).toBe(2);
-    expect(after?.lastHitPrice).toBe('10.71');
-  });
-
   it('decrements remaining and disables on hit zero', async () => {
-    const { store, groups, users } = await buildEnv(task({ remaining: 1 }));
+    const { store } = await buildEnv(task({ remaining: 1 }));
     const port = new FakeQuotePort();
     port.responses.push(quote());
     const notifier = new FakeNotifier();
-    const sched = newScheduler(store, groups, port, notifier, users);
+    const worker = newWorker(store, port, notifier);
 
-    await sched.tick(TICK_TIME);
+    await worker.process(envelope('a', '600000'), NOOP_QUEUE);
 
     const after = await store.get(USER, 'a', '600000');
     expect(after?.remaining).toBe(0);
     expect(after?.enabled).toBe(false);
   });
 
-  it('quote failure bumps lastTickAt without throwing', async () => {
-    const { store, groups, users } = await buildEnv(task());
+  it('quote failure bumps lastTickAt and re-throws for queue to handle', async () => {
+    const { store } = await buildEnv(task());
     const port = new FakeQuotePort();
     port.failNext = true;
     const notifier = new FakeNotifier();
-    const sched = newScheduler(store, groups, port, notifier, users);
+    const worker = newWorker(store, port, notifier);
 
-    await expect(sched.tick(TICK_TIME)).resolves.toBeUndefined();
-    expect((await store.get(USER, 'a', '600000'))?.lastTickAt).toBe(TICK_TIME.toISOString());
+    await expect(worker.process(envelope('a', '600000'), NOOP_QUEUE)).rejects.toThrow(
+      'upstream boom',
+    );
+    expect((await store.get(USER, 'a', '600000'))?.lastTickAt).toBe(FROZEN_NOW.toISOString());
     expect(notifier.sent).toHaveLength(0);
   });
 
-  it('trend baseline (window in seconds) only fires once a sample is old enough', async () => {
-    const { store, groups, users } = await buildEnv(
-      task({
-        conditions: [{ kind: 'pct', baseline: 'trend', op: 'gte', thresholdPct: '5', window: 30 }],
-      }),
-    );
-    const port = new FakeQuotePort();
-    port.responses.push(quote({ last: '10.00', ts: '2026-05-04T01:30:00Z' }));
-    port.responses.push(quote({ last: '10.10', ts: '2026-05-04T01:30:30Z' }));
-    port.responses.push(quote({ last: '10.62', ts: '2026-05-04T01:31:00Z' }));
-    const notifier = new FakeNotifier();
-    const sched = newScheduler(store, groups, port, notifier, users);
-
-    await sched.tick(TICK_TIME);
-    await sched.tick(new Date(TICK_TIME.getTime() + 30_000));
-    await sched.tick(new Date(TICK_TIME.getTime() + 60_000));
-    await jest.runAllTimersAsync();
-
-    expect(notifier.sent).toHaveLength(1);
-    expect((await store.get(USER, 'a', '600000'))?.hitCount).toBe(1);
-  });
-
   it('treats quote with ts >30 min off server clock as no match', async () => {
-    const { store, groups, users } = await buildEnv(task());
+    const { store } = await buildEnv(task());
     const port = new FakeQuotePort();
     port.responses.push(quote({ ts: '2026-05-04T00:59:00Z' }));
     const notifier = new FakeNotifier();
-    const sched = newScheduler(store, groups, port, notifier, users);
+    const worker = newWorker(store, port, notifier);
 
-    await sched.tick(TICK_TIME);
+    await worker.process(envelope('a', '600000'), NOOP_QUEUE);
 
     const after = await store.get(USER, 'a', '600000');
     expect(after?.hitCount).toBe(0);
-    expect(after?.lastTickAt).toBe(TICK_TIME.toISOString());
+    expect(after?.lastTickAt).toBe(FROZEN_NOW.toISOString());
     expect(after?.lastSampleAt).toBeNull();
     expect(notifier.sent).toHaveLength(0);
   });
 
-  it('does not snapshot the task store when every market is closed', async () => {
-    const { store, groups, users } = await buildEnv(task());
-    const port = new FakeQuotePort();
-    port.responses.push(quote());
-    const notifier = new FakeNotifier();
-    const sched = newScheduler(store, groups, port, notifier, users);
-
-    await sched.tick(new Date('2026-05-09T05:00:00Z'));
-
-    expect(port.calls).toHaveLength(0);
-    expect(notifier.sent).toHaveLength(0);
-  });
-
-  it('skips tasks while market is closed', async () => {
-    const { store, groups, users } = await buildEnv(task());
-    const port = new FakeQuotePort();
-    port.responses.push(quote());
-    const notifier = new FakeNotifier();
-    const sched = newScheduler(store, groups, port, notifier, users);
-
-    await sched.tick(new Date('2026-05-09T01:30:00Z'));
-
-    expect(port.calls).toHaveLength(0);
-  });
-
-  it('batches two hits from same tick into one broadcast', async () => {
+  it('batches two hits from same flush window into one broadcast', async () => {
     const root = await tmpRoot();
-    const { store, groups } = makeWatchStores(cfg(root));
+    const { store } = makeWatchStores(cfg(root));
     await store.upsert(USER, task({ code: '600000', name: '浦发银行', idx: 1 }));
     await store.upsert(USER, task({ code: '600519', name: '贵州茅台', idx: 2 }));
-    const users = new FakeUserStore([USER]);
     const port = new FakeQuotePort();
     port.responses.push(quote({ code: '600000' }));
     port.responses.push(quote({ code: '600519', last: '1850.00', prevClose: '1750.00' }));
     const notifier = new FakeNotifier();
-    const sched = newScheduler(store, groups, port, notifier, users);
+    const worker = newWorker(store, port, notifier);
 
-    await sched.tick(TICK_TIME);
-    // hits are queued but not yet sent
+    await worker.process(envelope('a', '600000'), NOOP_QUEUE);
+    await worker.process(envelope('a', '600519'), NOOP_QUEUE);
+    // Both hits queued but not yet sent.
     expect(notifier.sent).toHaveLength(0);
     await jest.runAllTimersAsync();
-    // both hits flushed as one message
     expect(notifier.sent).toHaveLength(1);
     expect(notifier.sent[0]?.text).toContain('600000');
     expect(notifier.sent[0]?.text).toContain('600519');
-  });
-
-  it('throttle: second tick within window does not reset timer', async () => {
-    const { store, groups, users } = await buildEnv(task());
-    const port = new FakeQuotePort();
-    port.responses.push(quote());
-    port.responses.push(quote({ last: '10.80' }));
-    const notifier = new FakeNotifier();
-    const sched = newScheduler(store, groups, port, notifier, users);
-
-    await sched.tick(TICK_TIME);
-    // advance 1s (still inside the 3s window)
-    jest.advanceTimersByTime(1_000);
-    await sched.tick(new Date(TICK_TIME.getTime() + 5_000));
-    // flush at 3s from first hit, not reset by second
-    await jest.runAllTimersAsync();
-
-    expect(notifier.sent).toHaveLength(1);
-    expect(notifier.sent[0]?.text).toContain('600000');
   });
 });

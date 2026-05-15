@@ -29,9 +29,7 @@ export class LocalKlineRefAdapter implements WatchKlineRefPort {
     try {
       bars = await this.reader.lastNForCode(code, MA_LOOKBACK);
     } catch (err) {
-      this.logger.warn(
-        `watch_kline_ref_fail code=${code} trace_id=${traceId} err=${String(err)}`,
-      );
+      this.logger.warn(`watch_kline_ref_fail code=${code} trace_id=${traceId} err=${String(err)}`);
       return null;
     }
     if (bars.length < MA_LOOKBACK) return null;

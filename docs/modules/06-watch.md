@@ -23,6 +23,8 @@
 | Service | `quant_core/services/watch_quote_service.py`                                          | 拉行情 + 评估 hit                                                                                                                                                                  |
 | RPC     | `quant_rpc/ops/watch.py`                                                              | ops `watch.quote_one` / `watch.universe_refresh`（schema 含 amount/volume）                                                                                                        |
 | API     | `apps/api/src/modules/watch/`                                                         | `GET /api/watch`、`POST /api/watch`、`GET/POST /api/watch/groups`、`PATCH/DELETE /api/watch/groups/:name`；实时流通过 Socket.IO `watch.snapshot` topic（[12-socket.md](./12-socket.md)） |
+| Producer | `watch.scheduler.ts`                                                                 | 5s tick：遍历每用户每任务，按 `(enabled, market open, intervalSec elapsed)` 入队 per-market 队列（A/HK/US 各一），`watch:userId:market:code` 去重 |
+| Consumer | `watch-worker.ts`                                                                    | 队列消费：fetch 报价 → evaluate 条件 → patch `WatchTaskStore` → 命中走 hit 批量节流（3s 窗口） → `ChannelService.broadcast`；transport 类错误重抛交队列做池退避（见 `07-orchestration.md`） |
 | Notify  | `apps/api/src/modules/watch/domain/{evaluate,format}.ts` + `ChannelService.broadcast` | 条件求值 + 文本渲染 + 多 IM 投递（[11-channel.md](./11-channel.md)）                                                                                                               |
 | Web     | `feat-watch-live`、`feat-watch-live/watch-add-form`                                   | 实时表格 + 多选 + 状态徽标；trend baseline 含 window 字段                                                                                                                          |
 
@@ -79,5 +81,5 @@ type WatchCondition =
 - **任务**：`data/watch/tasks.json`（带 `groupName` 外键），由 `feat-watch-live` 通过 `POST /api/watch` 维护。
 - **Group 配置**：`data/watch/groups.json`，由 `WatchGroupStore` 管理；写入与 task 一样走 atomic `tmp+rename` + 1s 节流。
 - **报价快照**：`FileKeyValueStore`，每 key 一文件 + envelope。
-- **trend 样本**：`WatchScheduler` 内存 Map，键 `market:code`，存 `{ts, price}` 对；按 `latestTs - max(window) - intervalSec` 滚动裁剪（上限墙钟跨度 ≈ `WATCH_TREND_WINDOW_MAX_SEC` = 4 h）；跨交易日清空；进程重启即丢失（acceptable warm-up window）。
+- **trend 样本**：`WatchWorker` 内存 Map，键 `userId|market:code`，存 `{ts, price}` 对；按 `latestTs - max(window) - intervalSec` 滚动裁剪（上限墙钟跨度 ≈ `WATCH_TREND_WINDOW_MAX_SEC` = 4 h）；跨交易日清空；进程重启即丢失（acceptable warm-up window）。
 - **黑名单交叉**：A 股若进入 `data/blacklist.json`，watch 仍可手动盯（`POST /api/watch` 不查黑名单），但同步路径会跳过其 meta / kline 更新（详见 `12-blacklist.md`）。
