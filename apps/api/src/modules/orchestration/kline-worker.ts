@@ -65,6 +65,22 @@ export class KlineWorker implements JobProcessor<KlineJob> {
       if (rows.length > 0) {
         await this.writer.appendBars(rows);
       }
+      // Post-hook (`docs/perf/storage-unify-rollout.md` item 9): refresh
+      // the persisted ret_* + derived block on stock_meta for this code
+      // now that fresh kline is in place. Best-effort — a projection
+      // failure must not fail the sync; the snapshot handler has an
+      // on-demand fallback when the persisted block is stale.
+      try {
+        await this.flight.doGet(
+          'upsert_stock_metrics_for_code',
+          { code: job.data.code, trace_id: job.data.traceId },
+          { traceId: job.data.traceId, deadlineMs: 10_000 },
+        );
+      } catch (projErr) {
+        this.logger.warn(
+          `kline_metrics_projection_failed code=${job.data.code} trace_id=${job.data.traceId ?? ''} err=${projErr instanceof Error ? projErr.message : String(projErr)}`,
+        );
+      }
       this.logger.log(
         `kline_job_done code=${job.data.code} mode=${report.mode} fetched=${String(report.fetchedBars)} written_to_local_store=${String(rows.length)} trace_id=${job.data.traceId ?? ''}`,
       );

@@ -100,3 +100,38 @@ class StockMeta:
     """Up to 8 quarters of financials, ordered oldest → newest."""
     financials_updated_at: datetime | None = None
     """Last time the financials track populated this row (UTC)."""
+    # ---- Persisted snapshot projection. Populated by
+    # ``upsert_stock_metrics_for_code`` after every kline sync; ``None``
+    # on a freshly-listed stock with no bars yet.
+    metrics: PersistedMetrics | None = None
+    """Latest projected returns + derived-metric block, or ``None``."""
+    metrics_updated_at: datetime | None = None
+    """When :attr:`metrics` was last refreshed (UTC)."""
+
+
+@dataclass(frozen=True, slots=True)
+class PersistedMetrics:
+    """Pre-computed list-view metrics persisted alongside the row.
+
+    Mirrors :class:`quant_core.domain.pure.compute_metrics.StockMetrics`
+    sans the ``code`` field (encoded by the parent ``StockMeta``).
+    Every numeric field is ``None`` when its input was missing or its
+    denominator was non-positive — same nullability rules as the
+    snapshot handler's on-demand path.
+    """
+
+    asof: date | None
+    """Latest kline trade_date the metrics were computed against."""
+    ret_1d: Decimal | None
+    ret_5d: Decimal | None
+    ret_10d: Decimal | None
+    ret_20d: Decimal | None
+    ret_90d: Decimal | None
+    ret_250d: Decimal | None
+    mkt_cap: Decimal | None
+    float_mkt_cap: Decimal | None
+    pe_ttm: Decimal | None
+    pe_dynamic: Decimal | None
+    pb: Decimal | None
+    peg: Decimal | None
+    gross_margin_ttm: Decimal | None

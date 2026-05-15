@@ -22,7 +22,7 @@ from decimal import Decimal
 from typing import TYPE_CHECKING, Final
 
 import pyarrow as pa
-from quant_core.domain.types.stock import QuarterlyFinancials, StockMeta
+from quant_core.domain.types.stock import PersistedMetrics, QuarterlyFinancials, StockMeta
 
 from quant_cache.parquet_record_repo import Codec
 
@@ -46,15 +46,49 @@ STOCK_META_SCHEMA: Final[pa.Schema] = pa.schema(
         ("net_assets_period", pa.date32()),
         ("quarterlies_json", pa.string()),
         ("financials_updated_at", pa.timestamp("us", tz="UTC")),
+        # Persisted snapshot projection (storage-unify item 9). Populated
+        # after each kline sync by ``upsert_stock_metrics_for_code``; all
+        # nullable so legacy v1/v2 rows read back without migration.
+        ("metrics_asof", pa.date32()),
+        ("metrics_updated_at", pa.timestamp("us", tz="UTC")),
+        ("ret_1d", pa.string()),
+        ("ret_5d", pa.string()),
+        ("ret_10d", pa.string()),
+        ("ret_20d", pa.string()),
+        ("ret_90d", pa.string()),
+        ("ret_250d", pa.string()),
+        ("mkt_cap", pa.string()),
+        ("float_mkt_cap", pa.string()),
+        ("pe_ttm", pa.string()),
+        ("pe_dynamic", pa.string()),
+        ("pb", pa.string()),
+        ("peg", pa.string()),
+        ("gross_margin_ttm", pa.string()),
     ]
 )
 """Schema of the stock-meta parquet file."""
+
+_METRIC_DECIMAL_FIELDS: Final[tuple[str, ...]] = (
+    "ret_1d",
+    "ret_5d",
+    "ret_10d",
+    "ret_20d",
+    "ret_90d",
+    "ret_250d",
+    "mkt_cap",
+    "float_mkt_cap",
+    "pe_ttm",
+    "pe_dynamic",
+    "pb",
+    "peg",
+    "gross_margin_ttm",
+)
 
 STOCK_META_KEY_FIELD: Final[str] = "code"
 
 
 def stock_meta_to_row(item: StockMeta) -> Mapping[str, object]:
-    return {
+    row: dict[str, object] = {
         "code": item.code,
         "name": item.name,
         "name_pinyin": item.name_pinyin,
@@ -68,7 +102,13 @@ def stock_meta_to_row(item: StockMeta) -> Mapping[str, object]:
         "net_assets_period": item.net_assets_period,
         "quarterlies_json": _quarterlies_to_json(item.quarterlies),
         "financials_updated_at": item.financials_updated_at,
+        "metrics_asof": item.metrics.asof if item.metrics is not None else None,
+        "metrics_updated_at": item.metrics_updated_at,
     }
+    for field_name in _METRIC_DECIMAL_FIELDS:
+        value = getattr(item.metrics, field_name) if item.metrics is not None else None
+        row[field_name] = _decimal_to_str_or_none(value)
+    return row
 
 
 def stock_meta_from_row(row: Mapping[str, object]) -> StockMeta:
@@ -94,7 +134,20 @@ def stock_meta_from_row(row: Mapping[str, object]) -> StockMeta:
         net_assets_period=_date_or_none(row.get("net_assets_period")),
         quarterlies=_json_to_quarterlies(row.get("quarterlies_json")),
         financials_updated_at=_datetime_or_none(row.get("financials_updated_at")),
+        metrics=_persisted_metrics_from_row(row),
+        metrics_updated_at=_datetime_or_none(row.get("metrics_updated_at"), field="metrics_updated_at"),
     )
+
+
+def _persisted_metrics_from_row(row: Mapping[str, object]) -> PersistedMetrics | None:
+    asof = _date_or_none(row.get("metrics_asof"), field="metrics_asof")
+    decimals = {f: _str_to_decimal_or_none(row.get(f)) for f in _METRIC_DECIMAL_FIELDS}
+    # All-null + no asof → no projection yet. Anything non-null on the
+    # other side → keep a populated block (asof may still be null if a
+    # legacy row only has historical decimals).
+    if asof is None and not any(v is not None for v in decimals.values()):
+        return None
+    return PersistedMetrics(asof=asof, **decimals)
 
 
 def stock_meta_key(item: StockMeta) -> str:
@@ -121,21 +174,23 @@ def _str_to_decimal_or_none(value: object) -> Decimal | None:
     return Decimal(str(value))
 
 
-def _date_or_none(value: object) -> date | None:
+def _date_or_none(value: object, *, field: str = "net_assets_period") -> date | None:
     if value is None:
         return None
     if not isinstance(value, date):
-        raise ValueError(f"net_assets_period must be a date, got {type(value).__name__}")
+        raise ValueError(f"{field} must be a date, got {type(value).__name__}")
     return value
 
 
-def _datetime_or_none(value: object) -> datetime | None:
+def _datetime_or_none(
+    value: object, *, field: str = "financials_updated_at"
+) -> datetime | None:
     if value is None:
         return None
     if not isinstance(value, datetime):
-        raise ValueError(f"financials_updated_at must be a datetime, got {type(value).__name__}")
+        raise ValueError(f"{field} must be a datetime, got {type(value).__name__}")
     if value.tzinfo is None:
-        raise ValueError("financials_updated_at must be timezone-aware")
+        raise ValueError(f"{field} must be timezone-aware")
     return value
 
 
