@@ -14,10 +14,19 @@ Configuration via env (CLAUDE.md §1.4 / §2 — no global singletons):
 from __future__ import annotations
 
 import argparse
+import contextlib
+import faulthandler
 import logging
 import os
+import signal
 import sys
+import threading
+import traceback
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from types import FrameType
 
 from quant_cache.file_kv_store import FileKeyValueStore
 from quant_cache.flat_prefix_kline_repo import FlatPrefixKlineRepo
@@ -131,9 +140,7 @@ def _assert_data_root_ok(root: Path, log: logging.Logger) -> None:
         )
         log.error(msg)
         raise SystemExit(msg)
-    log.info(
-        "data_root_ok root=%s meta_rows=%d", root, metadata.num_rows
-    )
+    log.info("data_root_ok root=%s meta_rows=%d", root, metadata.num_rows)
 
 
 def main() -> int:
@@ -151,6 +158,46 @@ def main() -> int:
         format="%(asctime)s %(levelname)s %(name)s %(message)s",
     )
     log = logging.getLogger("quant_rpc.main")
+
+    # Why: previous silent exits during long scans (see api.log ECONNREFUSED
+    # bursts) left no traceback — only a multiprocessing leaked-semaphore
+    # warning. Wire faulthandler so native crashes (segfault from pyarrow /
+    # py_mini_racer / pandas) dump every thread's C+Python stack, and
+    # log any signal we get before exiting so SIGTERM/SIGINT/SIGKILL paths
+    # are distinguishable from a pure native crash.
+    faulthandler.enable(file=sys.stderr, all_threads=True)
+    for _sig_name in ("SIGUSR1",):
+        _s = getattr(signal, _sig_name, None)
+        if _s is not None:
+            faulthandler.register(_s, file=sys.stderr, all_threads=True, chain=False)
+
+    def _trace_signal(signum: int, frame: FrameType | None) -> None:
+        name = signal.Signals(signum).name
+        log.warning("signal_received name=%s signum=%d", name, signum)
+        sys.stderr.write(f"\n--- thread stacks at {name} ---\n")
+        for tid, fr in sys._current_frames().items():
+            sys.stderr.write(f"\n# thread {tid}\n")
+            traceback.print_stack(fr, file=sys.stderr)
+        sys.stderr.flush()
+        # Re-raise default behaviour so the process actually exits.
+        signal.signal(signum, signal.SIG_DFL)
+        os.kill(os.getpid(), signum)
+
+    for _sig_name in ("SIGTERM", "SIGINT", "SIGHUP", "SIGABRT"):
+        _s = getattr(signal, _sig_name, None)
+        if _s is not None:
+            with contextlib.suppress(OSError, ValueError):
+                signal.signal(_s, _trace_signal)
+
+    def _log_exit() -> None:
+        log.warning(
+            "interpreter_exiting active_threads=%d",
+            threading.active_count(),
+        )
+
+    import atexit
+
+    atexit.register(_log_exit)
 
     # Warm up V8 on the main thread before gRPC worker threads spin up.
     # akshare's `stock_zh_a_daily` (sina) constructs `py_mini_racer.MiniRacer()`
