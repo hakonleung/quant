@@ -28,7 +28,7 @@
  */
 
 import { readdir, stat } from 'node:fs/promises';
-import { dirname, join, relative } from 'node:path';
+import { join, relative } from 'node:path';
 import { DuckDBInstance } from '@duckdb/node-api';
 
 interface Args {
