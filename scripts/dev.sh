@@ -308,6 +308,41 @@ run_stop() {
     rm -f "$(pidfile "$tag")"
   done
 
+  # Sweep orphans owned by $USER that don't appear in any pidfile. These
+  # come from prior foreground `pnpm dev` runs (no pidfile written) or
+  # direct `pnpm --filter api dev` invocations whose grandchildren got
+  # reparented to launchd/systemd and outlived their original shell.
+  # Without this step, `dev:stop` then `dev:start` silently lands a new
+  # process behind a stale one that still owns the port.
+  local sigs=()
+  [[ $RUN_API -eq 1 ]] && sigs+=("tsx watch src/main.ts")
+  [[ $RUN_WEB -eq 1 ]] && sigs+=("next dev")
+  [[ $RUN_PY  -eq 1 ]] && sigs+=("quant_rpc.main")
+  local swept=0
+  for sig in "${sigs[@]}"; do
+    # -U "$USER" restricts to current user; -f matches against full args.
+    local orphan_pids
+    orphan_pids="$(pgrep -U "$USER" -f "$sig" 2>/dev/null || true)"
+    [[ -z "$orphan_pids" ]] && continue
+    for opid in $orphan_pids; do
+      pid_alive "$opid" || continue
+      swept=1
+      echo "${C_DIM}■ sweep orphan pid=${opid} (${sig})${C_RESET}"
+      kill -TERM "$opid" 2>/dev/null || true
+    done
+  done
+  if [[ $swept -eq 1 ]]; then
+    sleep 1
+    for sig in "${sigs[@]}"; do
+      local survivors
+      survivors="$(pgrep -U "$USER" -f "$sig" 2>/dev/null || true)"
+      for opid in $survivors; do
+        pid_alive "$opid" && kill -KILL "$opid" 2>/dev/null || true
+      done
+    done
+    any=1
+  fi
+
   if [[ $any -eq 0 ]]; then
     echo "${C_DIM}(nothing was running)${C_RESET}"
   else
