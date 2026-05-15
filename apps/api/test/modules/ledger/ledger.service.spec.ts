@@ -5,8 +5,12 @@ import path from 'node:path';
 import type { ChatTokenUsage, LedgerEntry } from '@quant/shared';
 
 import { FrozenClock } from '../../../src/common/clock.js';
-import type { AuthConfigShape } from '../../../src/modules/auth/config/auth.config.js';
-import { LedgerCacheStore } from '../../../src/modules/ledger/ledger-cache.store.js';
+import {
+  LEDGER_CACHE_TABLE_SPEC,
+  LedgerCacheStore,
+  type LedgerCacheRow,
+} from '../../../src/modules/ledger/ledger-cache.store.js';
+import { InMemoryUserScopedRecordStore } from '../../fakes/in-memory-user-scoped-record.store.js';
 import { LedgerService } from '../../../src/modules/ledger/ledger.service.js';
 import { LedgerStore } from '../../../src/modules/ledger/ledger.store.js';
 import type { LlmService } from '../../../src/modules/llm/llm.service.js';
@@ -66,29 +70,19 @@ async function tmpRoot(): Promise<string> {
   return fs.mkdtemp(path.join(os.tmpdir(), 'ledger-svc-'));
 }
 
-function cfg(dataRoot: string): AuthConfigShape {
-  return {
-    mode: 'disabled',
-    nextauthSecret: null,
-    dataRoot,
-    adminUserId: 'admin',
-    adminUserIds: new Set<string>(),
-  };
-}
-
 async function setup(seed: readonly LedgerEntry[] = []): Promise<{
   store: LedgerStore;
   cache: LedgerCacheStore;
   root: string;
 }> {
   const root = await tmpRoot();
-  const cfgVal = cfg(root);
   const blob = makeUserBlobStore();
   const store = new LedgerStore(blob.store);
   if (seed.length > 0) {
     await store.replace(USER, seed);
   }
-  const cache = new LedgerCacheStore(cfgVal);
+  const cacheInner = new InMemoryUserScopedRecordStore<LedgerCacheRow>(LEDGER_CACHE_TABLE_SPEC);
+  const cache = new LedgerCacheStore(cacheInner);
   return { store, cache, root };
 }
 

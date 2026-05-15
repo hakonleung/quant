@@ -1,8 +1,11 @@
 /**
- * JSON-backed registry of known users. One file per deployment at
- * `data/users/_meta/users.json`. The `_meta` prefix sits lexically
- * before any real userId so it cannot collide with a real per-user
- * directory (`data/users/${userId}/...`).
+ * Parquet-backed registry of known users. One file per deployment at
+ * `data/users/_meta/users.parquet`. The `_meta` prefix sits lexically
+ * before any real userId so the file path cannot collide with a real
+ * per-user directory (`data/users/${userId}/...`).
+ *
+ * Self-migration: legacy `data/users/_meta/users.json` is adopted on
+ * first boot and renamed `.bak`.
  */
 
 import { promises as fs } from 'node:fs';
@@ -10,7 +13,8 @@ import path from 'node:path';
 import { Inject, Injectable, Logger, type OnModuleInit } from '@nestjs/common';
 import { z } from 'zod';
 
-import { atomicWriteJson, readJsonOr } from '../watch/domain/atomic-json.js';
+import { DuckDBParquetRecordStore } from '../../common/storage/adapters/duckdb-parquet-record.store.js';
+import type { RecordTableSpec } from '../../common/storage/ports/record-store.port.js';
 import { AUTH_CONFIG, type AuthConfigShape } from './config/auth.config.js';
 
 const UserRecordSchema = z
@@ -34,10 +38,24 @@ const UserRecordSchema = z
 
 export type UserRecord = z.infer<typeof UserRecordSchema>;
 
-const UsersFileSchema = z.object({ users: z.array(UserRecordSchema) }).strict();
-type UsersFile = z.infer<typeof UsersFileSchema>;
+export const USERS_TABLE_SPEC: RecordTableSpec<UserRecord> = {
+  table: 'users',
+  schema: UserRecordSchema,
+  pk: (row) => row.id,
+  columns: [
+    { name: 'id', type: 'VARCHAR', nullable: false, primaryKey: true },
+    { name: 'provider', type: 'VARCHAR', nullable: false },
+    { name: 'externalId', type: 'VARCHAR', nullable: false },
+    { name: 'tenantKey', type: 'VARCHAR' },
+    { name: 'displayName', type: 'VARCHAR', nullable: false },
+    { name: 'email', type: 'VARCHAR' },
+    { name: 'avatarUrl', type: 'VARCHAR' },
+    { name: 'createdAt', type: 'VARCHAR', nullable: false },
+    { name: 'lastLoginAt', type: 'VARCHAR' },
+  ],
+};
 
-const EMPTY_FILE: UsersFile = { users: [] };
+const LegacyUsersFileSchema = z.object({ users: z.array(UserRecordSchema) }).strict();
 
 @Injectable()
 export class UserStore implements OnModuleInit {
@@ -45,27 +63,27 @@ export class UserStore implements OnModuleInit {
   private readonly users = new Map<string, UserRecord>();
   private mutexChain: Promise<unknown> = Promise.resolve();
   private loaded = false;
+  private readonly inner: DuckDBParquetRecordStore<UserRecord>;
+  private readonly dataDir: string;
 
-  constructor(@Inject(AUTH_CONFIG) private readonly cfg: AuthConfigShape) {}
+  constructor(@Inject(AUTH_CONFIG) private readonly cfg: AuthConfigShape) {
+    this.dataDir = path.join(cfg.dataRoot, 'users', '_meta');
+    this.inner = new DuckDBParquetRecordStore<UserRecord>({
+      dataRoot: this.dataDir,
+      spec: USERS_TABLE_SPEC,
+    });
+  }
 
   async onModuleInit(): Promise<void> {
     await this.load();
   }
 
-  private get file(): string {
-    return path.join(this.cfg.dataRoot, 'users', '_meta', 'users.json');
-  }
-
   async load(): Promise<void> {
     return this.withLock(async () => {
       if (this.loaded) return;
-      const raw = await readJsonOr<unknown>(this.file, EMPTY_FILE);
-      const parsed = UsersFileSchema.safeParse(raw);
-      if (!parsed.success) {
-        this.logger.warn(`users.json failed validation, starting empty: ${parsed.error.message}`);
-      } else {
-        for (const u of parsed.data.users) this.users.set(u.id, u);
-      }
+      await this.adoptLegacyIfNeeded();
+      const rows = await this.inner.list();
+      for (const u of rows) this.users.set(u.id, u);
       this.loaded = true;
       this.logger.log(`loaded ${String(this.users.size)} users`);
     });
@@ -82,7 +100,8 @@ export class UserStore implements OnModuleInit {
   async upsert(record: UserRecord): Promise<UserRecord> {
     return this.withLock(async () => {
       this.users.set(record.id, record);
-      await this.flush();
+      await this.inner.upsert(record);
+      await this.inner.flush();
       return record;
     });
   }
@@ -92,8 +111,10 @@ export class UserStore implements OnModuleInit {
     await this.withLock(async () => {
       const existing = this.users.get(id);
       if (existing === undefined) return;
-      this.users.set(id, { ...existing, lastLoginAt: when });
-      await this.flush();
+      const next: UserRecord = { ...existing, lastLoginAt: when };
+      this.users.set(id, next);
+      await this.inner.upsert(next);
+      await this.inner.flush();
     });
   }
 
@@ -103,7 +124,7 @@ export class UserStore implements OnModuleInit {
       const id = this.cfg.adminUserId;
       if (this.users.has(id)) return;
       const now = new Date().toISOString();
-      this.users.set(id, {
+      const seed: UserRecord = {
         id,
         provider: 'admin',
         externalId: id,
@@ -113,20 +134,57 @@ export class UserStore implements OnModuleInit {
         avatarUrl: null,
         createdAt: now,
         lastLoginAt: now,
-      });
-      await this.flush();
+      };
+      this.users.set(id, seed);
+      await this.inner.upsert(seed);
+      await this.inner.flush();
     });
   }
 
-  private async flush(): Promise<void> {
-    const data: UsersFile = { users: Array.from(this.users.values()) };
-    await fs.mkdir(path.dirname(this.file), { recursive: true });
-    await atomicWriteJson(this.file, data);
+  /**
+   * Adopt the legacy `users.json` when the parquet file is absent.
+   * Reads + validates + bulk-upserts into the new store, then renames
+   * the JSON to `.bak` for one-release rollback.
+   */
+  private async adoptLegacyIfNeeded(): Promise<void> {
+    const parquet = path.join(this.dataDir, 'users.parquet');
+    const legacy = path.join(this.dataDir, 'users.json');
+    if (await fileExists(parquet)) return;
+    if (!(await fileExists(legacy))) return;
+    let raw: unknown;
+    try {
+      raw = JSON.parse(await fs.readFile(legacy, 'utf8'));
+    } catch (err: unknown) {
+      this.logger.warn(`users.json parse failed during migration: ${String(err)}`);
+      return;
+    }
+    const parsed = LegacyUsersFileSchema.safeParse(raw);
+    if (!parsed.success) {
+      this.logger.warn(`users.json failed validation during migration: ${parsed.error.message}`);
+      return;
+    }
+    if (parsed.data.users.length > 0) {
+      await this.inner.upsertMany(parsed.data.users);
+      await this.inner.flush();
+    }
+    await fs.rename(legacy, `${legacy}.bak`);
+    this.logger.log(
+      `users.json migrated → users.parquet (${String(parsed.data.users.length)} rows)`,
+    );
   }
 
   private async withLock<T>(fn: () => Promise<T>): Promise<T> {
     const next = this.mutexChain.then(fn, fn);
     this.mutexChain = next.catch(() => undefined);
     return next;
+  }
+}
+
+async function fileExists(p: string): Promise<boolean> {
+  try {
+    await fs.stat(p);
+    return true;
+  } catch {
+    return false;
   }
 }

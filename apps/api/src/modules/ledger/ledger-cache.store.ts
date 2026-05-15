@@ -1,32 +1,85 @@
 /**
  * Per-user AI-analysis cache. Keyed by `userId → hash(enriched entries)`
  * so eviction (32-cap LRU) is per-user and `clearForUser` is one map
- * delete. On-disk shape mirrors the in-memory layout —
- * `data/users/{userId}/_ledger/ai-cache.json` is a flat object map.
+ * delete.
+ *
+ * Backed by `UserScopedRecordStore<LedgerCacheRow>` — one parquet per
+ * user at `data/users/{userId}/ledger_cache.parquet`; each cache entry
+ * is one row keyed by hash, value JSON-encoded in `payload_json`.
+ *
+ * Self-migration: legacy `data/users/{userId}/_ledger/ai-cache.json` is
+ * adopted on first access and renamed `.bak` (the adapter handles it).
  */
 
 import { createHash } from 'node:crypto';
 import path from 'node:path';
-import { promises as fs } from 'node:fs';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { LedgerAnalysisSchema, type EnrichedLedgerEntry, type LedgerAnalysis } from '@quant/shared';
 import { z } from 'zod';
 
-import { atomicWriteJson, readJsonOr } from '../watch/domain/atomic-json.js';
-import { AUTH_CONFIG, type AuthConfigShape } from '../auth/config/auth.config.js';
+import { FileSystemUserScopedRecordStore } from '../../common/storage/adapters/filesystem-user-scoped-record.store.js';
+import type { RecordTableSpec } from '../../common/storage/ports/record-store.port.js';
+import type { UserScopedRecordStore } from '../../common/storage/ports/user-scoped-record-store.port.js';
+import type { AuthConfigShape } from '../auth/config/auth.config.js';
+import { LEDGER_CACHE_USER_RECORD_STORE } from './ledger-cache.tokens.js';
 
 const MAX_ENTRIES_PER_USER = 32;
 
+export interface LedgerCacheRow {
+  readonly hash: string;
+  readonly payload_json: string;
+}
+
+export const LedgerCacheRowSchema = z
+  .object({ hash: z.string().min(1), payload_json: z.string() })
+  .strict();
+
+export const LEDGER_CACHE_TABLE_SPEC: RecordTableSpec<LedgerCacheRow> = {
+  table: 'ledger_cache',
+  schema: LedgerCacheRowSchema,
+  pk: (row) => row.hash,
+  columns: [
+    { name: 'hash', type: 'VARCHAR', nullable: false, primaryKey: true },
+    { name: 'payload_json', type: 'VARCHAR', nullable: false },
+  ],
+};
+
 const CacheFileSchema = z.record(z.string(), LedgerAnalysisSchema);
+
+function decodeLegacy(raw: unknown): readonly LedgerCacheRow[] {
+  const parsed = CacheFileSchema.safeParse(raw);
+  if (!parsed.success) return [];
+  return Object.entries(parsed.data).map(([hash, value]) => ({
+    hash,
+    payload_json: JSON.stringify(value),
+  }));
+}
+
+export function buildLedgerCacheUserScopedStore(
+  cfg: AuthConfigShape,
+  logger: { warn: (m: string) => void; log?: (m: string) => void },
+): UserScopedRecordStore<LedgerCacheRow> {
+  return new FileSystemUserScopedRecordStore<LedgerCacheRow>({
+    dataRoot: cfg.dataRoot,
+    spec: LEDGER_CACHE_TABLE_SPEC,
+    legacyJsonPath: (uid) =>
+      path.join(cfg.dataRoot, 'users', uid, '_ledger', 'ai-cache.json'),
+    legacyDecode: decodeLegacy,
+    logger,
+  });
+}
 
 @Injectable()
 export class LedgerCacheStore {
   private readonly logger = new Logger(LedgerCacheStore.name);
-  private readonly caches = new Map<string, Map<string, LedgerAnalysis>>();
   private readonly mutexes = new Map<string, Promise<unknown>>();
-  private readonly loaded = new Set<string>();
 
-  constructor(@Inject(AUTH_CONFIG) private readonly cfg: AuthConfigShape) {}
+  constructor(
+    @Inject(LEDGER_CACHE_USER_RECORD_STORE)
+    private readonly inner: UserScopedRecordStore<LedgerCacheRow>,
+  ) {
+    void this.logger;
+  }
 
   static keyFor(enriched: readonly EnrichedLedgerEntry[]): string {
     const slim = enriched.map((e) => ({
@@ -39,65 +92,37 @@ export class LedgerCacheStore {
   }
 
   async get(userId: string, key: string): Promise<LedgerAnalysis | null> {
-    await this.ensureLoaded(userId);
-    return this.caches.get(userId)?.get(key) ?? null;
+    const row = await this.inner.get(userId, key);
+    if (row === null) return null;
+    try {
+      const parsed = LedgerAnalysisSchema.safeParse(JSON.parse(row.payload_json) as unknown);
+      return parsed.success ? parsed.data : null;
+    } catch {
+      return null;
+    }
   }
 
   async put(userId: string, key: string, value: LedgerAnalysis): Promise<void> {
     return this.withLock(userId, async () => {
-      await this.ensureLoadedLocked(userId);
-      const cache = this.cacheFor(userId);
-      cache.delete(key);
-      cache.set(key, value);
-      while (cache.size > MAX_ENTRIES_PER_USER) {
-        const oldest = cache.keys().next().value;
-        if (oldest === undefined) break;
-        cache.delete(oldest);
+      await this.inner.upsert(userId, { hash: key, payload_json: JSON.stringify(value) });
+      // Evict oldest entries (FIFO) when over the per-user cap. Row
+      // insertion order is preserved by the underlying record store,
+      // so `list()` returns LRU-ordered entries.
+      const rows = await this.inner.list(userId);
+      if (rows.length > MAX_ENTRIES_PER_USER) {
+        const toDelete = rows.slice(0, rows.length - MAX_ENTRIES_PER_USER).map((r) => r.hash);
+        await this.inner.deleteMany(userId, toDelete);
       }
-      const file = this.fileFor(userId);
-      await fs.mkdir(path.dirname(file), { recursive: true });
-      await atomicWriteJson(file, Object.fromEntries(cache));
+      await this.inner.flush(userId);
     });
   }
 
   /** Drop a user's cache (on logout / account delete). */
   async clearForUser(userId: string): Promise<void> {
     return this.withLock(userId, async () => {
-      this.caches.delete(userId);
-      this.loaded.delete(userId);
+      await this.inner.purge(userId);
+      await this.inner.flush(userId);
     });
-  }
-
-  private cacheFor(userId: string): Map<string, LedgerAnalysis> {
-    let m = this.caches.get(userId);
-    if (m === undefined) {
-      m = new Map();
-      this.caches.set(userId, m);
-    }
-    return m;
-  }
-
-  private fileFor(userId: string): string {
-    return path.join(this.cfg.dataRoot, 'users', userId, '_ledger', 'ai-cache.json');
-  }
-
-  private async ensureLoaded(userId: string): Promise<void> {
-    if (this.loaded.has(userId)) return;
-    return this.withLock(userId, async () => this.ensureLoadedLocked(userId));
-  }
-
-  private async ensureLoadedLocked(userId: string): Promise<void> {
-    if (this.loaded.has(userId)) return;
-    const file = this.fileFor(userId);
-    const raw = await readJsonOr<unknown>(file, {});
-    const parsed = CacheFileSchema.safeParse(raw);
-    if (!parsed.success) {
-      this.logger.warn(`ai-cache.json for ${userId} failed validation, starting empty`);
-      this.caches.set(userId, new Map());
-    } else {
-      this.caches.set(userId, new Map(Object.entries(parsed.data)));
-    }
-    this.loaded.add(userId);
   }
 
   private async withLock<T>(userId: string, fn: () => Promise<T>): Promise<T> {

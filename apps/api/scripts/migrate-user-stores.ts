@@ -171,6 +171,8 @@ async function migrateOne(
   const userDir = join(dataRoot, 'users', userId);
   const userBlob = join(userDir, 'user.parquet');
   const llmLedger = join(userDir, 'user_llm_ledger.parquet');
+  const ledgerCacheParquet = join(userDir, 'ledger_cache.parquet');
+  const ledgerCacheLegacy = join(userDir, '_ledger', 'ai-cache.json');
   const watchGroups = join(userDir, 'watch_groups.parquet');
   const watchTasks = join(userDir, 'watch_tasks.parquet');
   const ledger = join(userDir, 'ledger.parquet');
@@ -287,6 +289,39 @@ async function migrateOne(
         notes.push(
           `[dry-run] would adopt legacy llm-ledger.json → user_llm_ledger.parquet (entries=${migrated.entries.length})`,
         );
+      }
+    }
+  }
+
+  // --- ledger_cache.parquet (adopt legacy ai-cache.json) ---
+  if (!(await fileExists(ledgerCacheParquet)) && (await fileExists(ledgerCacheLegacy))) {
+    let raw: unknown;
+    try {
+      raw = JSON.parse(await fs.readFile(ledgerCacheLegacy, 'utf8'));
+    } catch (err: unknown) {
+      notes.push(`ai-cache.json parse failed: ${String(err)}`);
+      raw = null;
+    }
+    if (raw !== null && typeof raw === 'object' && !Array.isArray(raw)) {
+      const entries = Object.entries(raw as Record<string, unknown>);
+      legacyToArchive.push(ledgerCacheLegacy);
+      if (!dryRun && entries.length > 0) {
+        const sql = entries
+          .map(
+            ([hash, value]) =>
+              `('${hash.replace(/'/g, "''")}', '${JSON.stringify(value).replace(/'/g, "''")}')`,
+          )
+          .join(', ');
+        await conn.runAndReadAll(
+          `COPY (SELECT * FROM (VALUES ${sql}) AS t(hash, payload_json)) TO '${ledgerCacheParquet.replace(/'/g, "''")}' (FORMAT PARQUET)`,
+        );
+        notes.push(`adopted ai-cache.json → ledger_cache.parquet (entries=${entries.length})`);
+      } else if (entries.length > 0) {
+        notes.push(
+          `[dry-run] would adopt ai-cache.json → ledger_cache.parquet (entries=${entries.length})`,
+        );
+      } else {
+        notes.push('ai-cache.json empty — nothing to migrate');
       }
     }
   }
