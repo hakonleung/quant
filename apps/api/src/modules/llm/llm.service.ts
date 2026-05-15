@@ -291,7 +291,6 @@ export class LlmService {
     );
     this.recorder.record({
       userId: ctx.userId,
-      providerRow: r.row,
       model: r.model,
       scope: ctx.scope,
       usage,
@@ -314,7 +313,6 @@ export class LlmService {
     );
     this.recorder.record({
       userId: ctx.userId,
-      providerRow: r.row,
       model: r.model,
       scope: ctx.scope,
       usage: ZERO_USAGE,

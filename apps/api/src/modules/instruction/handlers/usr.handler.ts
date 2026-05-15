@@ -1,5 +1,5 @@
 /**
- * `/usr` — print the caller's resolved identity + permissions.
+ * `/usr` — print the caller's resolved identity + LLM token usage.
  *
  * Renders the resolved internal `userId`, the inbound channel + sender
  * when the call arrived via IM, and — when the IM sender was promoted
@@ -30,8 +30,8 @@ type Args = z.infer<typeof argsSchema>;
 export class UsrHandler extends InstructionRegistrarBase<Args> {
   readonly spec: InstructionSpec<Args> = {
     id: instructionId('usr'),
-    summary: "Show the caller's resolved userId, source, admin status, and LLM spend totals.",
-    summaryCn: '显示当前用户 ID、权限与 LLM 累计消耗',
+    summary: "Show the caller's resolved userId, source, admin status, and LLM token usage.",
+    summaryCn: '显示当前用户 ID、权限与 LLM 使用情况',
     group: 'system',
     argsSchema,
     imAliases: ['我的', '账号', '我'],
@@ -67,28 +67,29 @@ export class UsrHandler extends InstructionRegistrarBase<Args> {
       this.ledger.summarize(userId, null),
     ]);
     if (total.callCount === 0) return null;
-    const byScope = Array.from(total.byScope.entries()).sort((a, b) => b[1].cnyCost - a[1].cnyCost);
-    return { today, month, total, byScope };
+    const byScope = Array.from(total.byScope.entries()).sort(
+      (a, b) => b[1].usage.total - a[1].usage.total,
+    );
+    const byModel = Array.from(total.byModel.entries()).sort(
+      (a, b) => b[1].usage.total - a[1].usage.total,
+    );
+    return { today, month, total, byScope, byModel };
   }
 
   private ledgerTextSection(data: LedgerSnapshot | null): string {
-    if (data === null) return '【LLM 消耗】\n```\n(no calls yet)\n```';
+    if (data === null) return '【LLM 使用】\n```\n(no calls yet)\n```';
     const spendRows: readonly (readonly [string, string, string, string])[] = [
-      ['scope', 'cny', 'calls', 'tokens'],
-      ['today', `¥ ${data.today.totalCnyCost.toFixed(4)}`, String(data.today.callCount), String(data.today.totalUsage.total)],
-      ['month', `¥ ${data.month.totalCnyCost.toFixed(4)}`, String(data.month.callCount), String(data.month.totalUsage.total)],
-      ['total', `¥ ${data.total.totalCnyCost.toFixed(4)}`, String(data.total.callCount), String(data.total.totalUsage.total)],
+      ['scope', 'calls', 'in', 'out'],
+      ...spendRow('today', data.today),
+      ...spendRow('month', data.month),
+      ...spendRow('total', data.total),
     ];
-    const out = [`【LLM 消耗】`, render4ColTable(spendRows)];
+    const out = [`【LLM 使用】`, render4ColTable(spendRows)];
     if (data.byScope.length > 0) {
-      const byScopeRows: readonly (readonly [string, string, string])[] = [
-        ['scope', 'cny', 'calls'],
-        ...data.byScope.map(
-          ([scope, agg]) =>
-            [scope, `¥ ${agg.cnyCost.toFixed(4)}`, String(agg.callCount)] as const,
-        ),
-      ];
-      out.push(`【按 scope 拆分】`, render3ColTable(byScopeRows));
+      out.push(`【按 scope 拆分】`, render3ColTable(scopeOrModelRows('scope', data.byScope)));
+    }
+    if (data.byModel.length > 0) {
+      out.push(`【按 model 拆分】`, render3ColTable(scopeOrModelRows('model', data.byModel)));
     }
     return out.join('\n');
   }
@@ -101,14 +102,39 @@ interface LedgerSnapshot {
   readonly month: UserLlmLedgerSummary;
   readonly total: UserLlmLedgerSummary;
   readonly byScope: readonly (readonly [ScopeKey, ScopeAgg])[];
+  readonly byModel: readonly (readonly [string, ScopeAgg])[];
+}
+
+function spendRow(
+  label: string,
+  s: UserLlmLedgerSummary,
+): readonly (readonly [string, string, string, string])[] {
+  return [
+    [
+      label,
+      String(s.callCount),
+      String(s.totalUsage.input),
+      String(s.totalUsage.output),
+    ],
+  ];
 }
 
 function spendCells(s: UserLlmLedgerSummary): Record<string, string> {
   return {
-    cny: `¥ ${s.totalCnyCost.toFixed(4)}`,
     calls: String(s.callCount),
-    tokens: String(s.totalUsage.total),
+    in: String(s.totalUsage.input),
+    out: String(s.totalUsage.output),
   };
+}
+
+function scopeOrModelRows(
+  header: 'scope' | 'model',
+  agg: readonly (readonly [string, ScopeAgg])[],
+): readonly (readonly [string, string, string])[] {
+  return [
+    [header, 'calls', 'tokens'],
+    ...agg.map(([k, a]) => [k, String(a.callCount), String(a.usage.total)] as const),
+  ];
 }
 
 function buildIdentityRows(
@@ -146,7 +172,7 @@ function ledgerTableSections(data: LedgerSnapshot | null): Record<string, unknow
   if (data === null) {
     return [
       {
-        title: 'LLM 消耗',
+        title: 'LLM 使用',
         columns: [{ name: 'note', displayName: '', horizontalAlign: 'left' }],
         rows: [{ note: '(no calls yet)' }],
       },
@@ -154,12 +180,12 @@ function ledgerTableSections(data: LedgerSnapshot | null): Record<string, unknow
   }
   const sections: Record<string, unknown>[] = [
     {
-      title: 'LLM 消耗',
+      title: 'LLM 使用',
       columns: [
         { name: 'scope', displayName: 'scope', horizontalAlign: 'left', width: '90px' },
-        { name: 'cny', displayName: 'cny', horizontalAlign: 'right', width: '110px' },
         { name: 'calls', displayName: 'calls', horizontalAlign: 'right', width: '80px' },
-        { name: 'tokens', displayName: 'tokens', horizontalAlign: 'right', width: '100px' },
+        { name: 'in', displayName: 'in', horizontalAlign: 'right', width: '90px' },
+        { name: 'out', displayName: 'out', horizontalAlign: 'right', width: '90px' },
       ],
       rows: [
         { scope: 'today', ...spendCells(data.today) },
@@ -173,13 +199,28 @@ function ledgerTableSections(data: LedgerSnapshot | null): Record<string, unknow
       title: '按 scope 拆分',
       columns: [
         { name: 'scope', displayName: 'scope', horizontalAlign: 'left', width: '160px' },
-        { name: 'cny', displayName: 'cny', horizontalAlign: 'right', width: '120px' },
         { name: 'calls', displayName: 'calls', horizontalAlign: 'right', width: '90px' },
+        { name: 'tokens', displayName: 'tokens', horizontalAlign: 'right', width: '110px' },
       ],
-      rows: data.byScope.map(([scope, agg]) => ({
+      rows: data.byScope.map(([scope, a]) => ({
         scope,
-        cny: `¥ ${agg.cnyCost.toFixed(4)}`,
-        calls: String(agg.callCount),
+        calls: String(a.callCount),
+        tokens: String(a.usage.total),
+      })),
+    });
+  }
+  if (data.byModel.length > 0) {
+    sections.push({
+      title: '按 model 拆分',
+      columns: [
+        { name: 'model', displayName: 'model', horizontalAlign: 'left', width: '160px' },
+        { name: 'calls', displayName: 'calls', horizontalAlign: 'right', width: '90px' },
+        { name: 'tokens', displayName: 'tokens', horizontalAlign: 'right', width: '110px' },
+      ],
+      rows: data.byModel.map(([model, a]) => ({
+        model,
+        calls: String(a.callCount),
+        tokens: String(a.usage.total),
       })),
     });
   }

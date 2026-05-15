@@ -8,7 +8,9 @@
  * because `/usr` is the only consumer.
  *
  * Self-migration: legacy `data/users/{userId}/llm-ledger.json` is
- * adopted on first access and renamed `.bak`.
+ * adopted on first access and renamed `.bak`. v1 payloads are
+ * down-converted to v2 (drop `provider`, `cnyCost`) on read; the next
+ * mutate rewrites the parquet in v2 form.
  */
 
 import path from 'node:path';
@@ -23,7 +25,7 @@ import type { UserScopedRecordStore } from '../../../common/storage/ports/user-s
 import { USER_LLM_LEDGER_USER_RECORD_STORE } from '../llm.tokens.js';
 import {
   EMPTY_USER_LLM_LEDGER,
-  UserLlmLedgerSchema,
+  migrateLedgerPayload,
   type UserLlmLedger,
   type UserLlmLedgerEntry,
 } from './user-llm-ledger.types.js';
@@ -51,9 +53,9 @@ export const USER_LLM_LEDGER_TABLE_SPEC: RecordTableSpec<UserLlmLedgerRow> = {
 };
 
 function decodeLegacy(raw: unknown): readonly UserLlmLedgerRow[] {
-  const result = UserLlmLedgerSchema.safeParse(raw);
-  if (!result.success) return [];
-  return [{ id: SINGLETON_KEY, payload_json: JSON.stringify(result.data) }];
+  const migrated = migrateLedgerPayload(raw);
+  if (migrated === null) return [];
+  return [{ id: SINGLETON_KEY, payload_json: JSON.stringify(migrated) }];
 }
 
 export function buildUserLlmLedgerUserScopedStore(
@@ -69,18 +71,16 @@ export function buildUserLlmLedgerUserScopedStore(
   });
 }
 
+export interface UserLlmLedgerScopeAgg {
+  readonly usage: { readonly input: number; readonly output: number; readonly total: number };
+  readonly callCount: number;
+}
+
 export interface UserLlmLedgerSummary {
-  readonly totalCnyCost: number;
   readonly totalUsage: { readonly input: number; readonly output: number; readonly total: number };
   readonly callCount: number;
-  readonly byScope: ReadonlyMap<
-    UserLlmLedgerEntry['scope'],
-    {
-      readonly cnyCost: number;
-      readonly usage: { readonly input: number; readonly output: number; readonly total: number };
-      readonly callCount: number;
-    }
-  >;
+  readonly byScope: ReadonlyMap<UserLlmLedgerEntry['scope'], UserLlmLedgerScopeAgg>;
+  readonly byModel: ReadonlyMap<string, UserLlmLedgerScopeAgg>;
 }
 
 @Injectable()
@@ -121,8 +121,9 @@ export class UserLlmLedgerStore {
     const row = await this.inner.get(userId, SINGLETON_KEY);
     if (row === null) return structuredClone(EMPTY_USER_LLM_LEDGER);
     try {
-      const parsed = JSON.parse(row.payload_json) as UserLlmLedger;
-      if (parsed.schemaVersion === 1 && Array.isArray(parsed.entries)) return parsed;
+      const raw = JSON.parse(row.payload_json) as unknown;
+      const migrated = migrateLedgerPayload(raw);
+      if (migrated !== null) return migrated;
     } catch {
       // fall through
     }
@@ -156,28 +157,23 @@ export class UserLlmLedgerStore {
 }
 
 function aggregate(entries: readonly UserLlmLedgerEntry[]): UserLlmLedgerSummary {
-  let totalCny = 0;
   let totalIn = 0;
   let totalOut = 0;
-  const byScope = new Map<
-    UserLlmLedgerEntry['scope'],
-    { cnyCost: number; usage: { input: number; output: number; total: number }; callCount: number }
-  >();
-  for (const e of entries) {
-    totalCny += e.cnyCost;
-    totalIn += e.usage.input;
-    totalOut += e.usage.output;
-    const cur = byScope.get(e.scope);
+  const byScope = new Map<UserLlmLedgerEntry['scope'], UserLlmLedgerScopeAgg>();
+  const byModel = new Map<string, UserLlmLedgerScopeAgg>();
+  const accumulate = (
+    map: Map<string, UserLlmLedgerScopeAgg>,
+    key: string,
+    e: UserLlmLedgerEntry,
+  ): void => {
+    const cur = map.get(key);
     if (cur === undefined) {
-      byScope.set(e.scope, {
-        cnyCost: e.cnyCost,
+      map.set(key, {
         usage: { input: e.usage.input, output: e.usage.output, total: e.usage.total },
         callCount: 1,
       });
     } else {
-      cur.cnyCost += e.cnyCost;
-      byScope.set(e.scope, {
-        cnyCost: cur.cnyCost,
+      map.set(key, {
         usage: {
           input: cur.usage.input + e.usage.input,
           output: cur.usage.output + e.usage.output,
@@ -186,11 +182,17 @@ function aggregate(entries: readonly UserLlmLedgerEntry[]): UserLlmLedgerSummary
         callCount: cur.callCount + 1,
       });
     }
+  };
+  for (const e of entries) {
+    totalIn += e.usage.input;
+    totalOut += e.usage.output;
+    accumulate(byScope as Map<string, UserLlmLedgerScopeAgg>, e.scope, e);
+    accumulate(byModel, e.model, e);
   }
   return {
-    totalCnyCost: Math.round(totalCny * 10_000) / 10_000,
     totalUsage: { input: totalIn, output: totalOut, total: totalIn + totalOut },
     callCount: entries.length,
-    byScope,
+    byScope: byScope as ReadonlyMap<UserLlmLedgerEntry['scope'], UserLlmLedgerScopeAgg>,
+    byModel,
   };
 }

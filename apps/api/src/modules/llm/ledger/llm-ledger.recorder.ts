@@ -11,13 +11,11 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 
 import { CLOCK, type Clock } from '../../../common/clock.js';
-import { priceCallCny, type LlmProviderRow } from '../providers.js';
 import { UserLlmLedgerStore } from './user-llm-ledger.store.js';
 import type { ChatTokenUsage, LlmScope } from '@quant/shared';
 
 export interface LlmLedgerRecordArgs {
   readonly userId: string;
-  readonly providerRow: LlmProviderRow;
   readonly model: string;
   readonly scope: LlmScope;
   readonly usage: ChatTokenUsage;
@@ -36,23 +34,20 @@ export class LlmLedgerRecorder {
   ) {}
 
   record(args: LlmLedgerRecordArgs): void {
-    const cnyCost = priceCallCny(args.providerRow, args.usage);
     const ts = this.clock.now().toISOString();
     void this.store
       .append(args.userId, {
         ts,
-        provider: args.providerRow.provider,
         model: args.model,
         scope: args.scope,
         usage: args.usage,
-        cnyCost,
         durationMs: args.durationMs,
         ok: args.ok,
         traceId: args.traceId,
       })
       .catch((err: unknown) => {
         this.logger.warn(
-          `llm_ledger_append_failed userId=${args.userId} provider=${args.providerRow.provider} traceId=${args.traceId} err=${String(err)}`,
+          `llm_ledger_append_failed userId=${args.userId} model=${args.model} traceId=${args.traceId} err=${String(err)}`,
         );
       });
   }
