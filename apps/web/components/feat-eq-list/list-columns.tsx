@@ -3,42 +3,30 @@
 /**
  * Column-definition builders for EQ.LIST.
  *
- * Each column knows: width, label, alignment, optional stickiness,
- * how to render its cell from a {@link ListRow}, and how to extract
- * its sortable value. `buildColumns` composes the user's applied
- * columns + dynamic-sector evidence keys into the final array the
- * ScrollGrid renders.
- *
- * Lifted out of `feat-eq-list.tsx` so the orchestrator stays under
- * the 400-line ceiling and so column heuristics (which key drives
- * which cell formatter) live next to the data shape they describe.
+ * Each column reads its value directly from a {@link ListRow} —
+ * since the row is now BE-assembled by `useStockListRows` every
+ * derived/return field is already on the row, no per-cell snapshot
+ * lookup needed.
  */
 
 import { Flex, Text } from '@chakra-ui/react';
-import type { StockSnapshotDto } from '@quant/shared';
 
-import {
-  appliedNeedsSnapshot,
-  getColumnSpec,
-  type ColumnKey,
-} from '../../lib/eqty/columns.catalog.js';
+import { type ColumnKey } from '../../lib/eqty/columns.catalog.js';
 import {
   evidenceColumnKind,
   evidenceSortKey,
   formatEvidence,
   toNumberOrNull,
   type EvidenceColumnKind,
+  type ListRow,
 } from '../../lib/fp/eq-list-fp.js';
 
 import { ChgPctCell, CnyCell, PctCell, PriceCell } from './list-cells.js';
 import { STICKY_COL_WIDTH, type ColumnDef } from './list-types.js';
 
-export { appliedNeedsSnapshot };
-
 export function buildColumns(
   applied: readonly ColumnKey[],
   evidenceKeys: readonly string[],
-  snapshotByCode: ReadonlyMap<string, StockSnapshotDto>,
 ): readonly ColumnDef[] {
   const out: ColumnDef[] = [];
   // CODE is always first + sticky regardless of user preference; the
@@ -47,7 +35,7 @@ export function buildColumns(
   out.push(makeCodeColumn());
   for (const key of applied) {
     if (key === 'name') continue;
-    const def = makeAppliedColumn(key, snapshotByCode);
+    const def = makeAppliedColumn(key);
     if (def !== null) out.push(def);
   }
   for (const k of evidenceKeys) {
@@ -93,10 +81,7 @@ function makeCodeColumn(): ColumnDef {
   };
 }
 
-function makeAppliedColumn(
-  key: ColumnKey,
-  snapshotByCode: ReadonlyMap<string, StockSnapshotDto>,
-): ColumnDef | null {
+function makeAppliedColumn(key: ColumnKey): ColumnDef | null {
   switch (key) {
     case 'name':
       return null; // handled by makeCodeColumn
@@ -154,70 +139,56 @@ function makeAppliedColumn(
         sortValue: (r) => r.consecUpDays,
       };
     case 'ret5d':
-      return returnColumn('ret5d', '5D%', snapshotByCode, (s) => s.returns.ret_5d);
+      return returnColumn('ret5d', '5D%');
     case 'ret10d':
-      return returnColumn('ret10d', '10D%', snapshotByCode, (s) => s.returns.ret_10d);
+      return returnColumn('ret10d', '10D%');
     case 'ret20d':
-      return returnColumn('ret20d', '20D%', snapshotByCode, (s) => s.returns.ret_20d);
+      return returnColumn('ret20d', '20D%');
     case 'ret90d':
-      return returnColumn('ret90d', '90D%', snapshotByCode, (s) => s.returns.ret_90d);
+      return returnColumn('ret90d', '90D%');
     case 'ret250d':
-      return returnColumn('ret250d', '250D%', snapshotByCode, (s) => s.returns.ret_250d);
+      return returnColumn('ret250d', '250D%');
     case 'mktCap':
-      return derivedColumn('mktCap', '总市值', 110, snapshotByCode, (d) => d.mkt_cap, 'cny');
+      return derivedColumn('mktCap', '总市值', 110, 'cny');
     case 'floatMktCap':
-      return derivedColumn(
-        'floatMktCap',
-        '流通市值',
-        110,
-        snapshotByCode,
-        (d) => d.float_mkt_cap,
-        'cny',
-      );
+      return derivedColumn('floatMktCap', '流通市值', 110, 'cny');
     case 'peTtm':
-      return derivedColumn('peTtm', 'PE-TTM', 90, snapshotByCode, (d) => d.pe_ttm, 'ratio');
+      return derivedColumn('peTtm', 'PE-TTM', 90, 'ratio');
     case 'peDynamic':
-      return derivedColumn('peDynamic', 'PE动态', 90, snapshotByCode, (d) => d.pe_dynamic, 'ratio');
+      return derivedColumn('peDynamic', 'PE动态', 90, 'ratio');
     case 'pb':
-      return derivedColumn('pb', 'PB', 70, snapshotByCode, (d) => d.pb, 'ratio');
+      return derivedColumn('pb', 'PB', 70, 'ratio');
     case 'peg':
-      return derivedColumn('peg', 'PEG', 70, snapshotByCode, (d) => d.peg, 'ratio');
+      return derivedColumn('peg', 'PEG', 70, 'ratio');
     case 'grossMargin':
-      return derivedColumn(
-        'grossMargin',
-        '毛利率',
-        90,
-        snapshotByCode,
-        (d) => d.gross_margin_ttm,
-        'pct',
-      );
+      return derivedColumn('grossMargin', '毛利率', 90, 'pct');
   }
+}
+
+function readNumber(r: ListRow, key: ColumnKey): number | null {
+  const v = (r as unknown as Record<string, unknown>)[key];
+  if (typeof v === 'number' && Number.isFinite(v)) return v;
+  if (typeof v === 'string') {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
+  }
+  return null;
 }
 
 function derivedColumn(
   key: ColumnKey,
   label: string,
   w: number,
-  snapshotByCode: ReadonlyMap<string, StockSnapshotDto>,
-  pick: (d: StockSnapshotDto['derived']) => string | null,
   format: 'cny' | 'ratio' | 'pct',
 ): ColumnDef {
-  const sortValue = (code: string): number | null => {
-    const snap = snapshotByCode.get(code);
-    if (snap === undefined) return null;
-    const raw = pick(snap.derived);
-    if (raw === null) return null;
-    const n = Number(raw);
-    return Number.isFinite(n) ? n : null;
-  };
-  const spec = getColumnSpec(key);
+  const sortValue = (r: ListRow): number | null => readNumber(r, key);
   return {
-    key: spec.key,
+    key,
     label,
     w,
     align: 'right',
     render: (r) => {
-      const v = sortValue(r.code);
+      const v = sortValue(r);
       if (v === null) {
         return (
           <Text fontFamily="mono" fontSize="11px" color="ink3">
@@ -233,38 +204,23 @@ function derivedColumn(
         </Text>
       );
     },
-    sortValue: (r) => sortValue(r.code),
+    sortValue,
   };
 }
 
 /**
- * Period-return column. Server returns the *fractional* change against
- * `close_qfq` N bars ago (e.g. `"0.0532"` for +5.32 %). Pass the raw
- * fraction straight to {@link ChgPctCell} — that cell already scales by
- * 100; multiplying here too would render +5.32 % as +532 %.
+ * Period-return column. Values on the row are already fractional
+ * (e.g. `0.0532` for +5.32 %); pass straight to {@link ChgPctCell}
+ * which handles the ×100 scaling.
  */
-function returnColumn(
-  key: ColumnKey,
-  label: string,
-  snapshotByCode: ReadonlyMap<string, StockSnapshotDto>,
-  pick: (snap: StockSnapshotDto) => string | null,
-): ColumnDef {
-  const fraction = (code: string): number | null => {
-    const snap = snapshotByCode.get(code);
-    if (snap === undefined) return null;
-    const raw = pick(snap);
-    if (raw === null) return null;
-    const n = Number(raw);
-    return Number.isFinite(n) ? n : null;
-  };
-  const spec = getColumnSpec(key);
+function returnColumn(key: ColumnKey, label: string): ColumnDef {
   return {
-    key: spec.key,
+    key,
     label,
     w: 80,
     align: 'right',
-    render: (r) => <ChgPctCell value={fraction(r.code)} />,
-    sortValue: (r) => fraction(r.code),
+    render: (r) => <ChgPctCell value={readNumber(r, key)} />,
+    sortValue: (r) => readNumber(r, key),
   };
 }
 

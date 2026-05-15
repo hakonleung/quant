@@ -24,7 +24,6 @@ import {
   evaluateColumnFilter,
   flattenEvidence,
   listRowFromStockListRow,
-  snapshotMapFromStockListRows,
   type ListRow,
 } from '../../lib/fp/eq-list-fp.js';
 import { useBlacklistSet } from '../../lib/hooks/use-blacklist.js';
@@ -146,16 +145,11 @@ export function FeatEqList({ bare }: FeatEqListProps = {}): React.ReactElement {
 
   const appliedColumns = useSettingsStore((s) => s.appliedColumns);
   const columnFilters = useSettingsStore((s) => s.columnFilters);
-  // Snapshots-by-code now derives from the unified BE response —
-  // no second roundtrip. The map shape is preserved so list-columns
-  // doesn't need to change.
-  const snapshotMap = useMemo(
-    () => snapshotMapFromStockListRows(stockListRows),
-    [stockListRows],
-  );
+  // Columns read every value (including derived/return fields) straight
+  // from the row — list-columns no longer needs a parallel snapshot map.
   const columns: readonly ColumnDef[] = useMemo(
-    () => buildColumns(appliedColumns, evidenceKeys, snapshotMap),
-    [appliedColumns, evidenceKeys, snapshotMap],
+    () => buildColumns(appliedColumns, evidenceKeys),
+    [appliedColumns, evidenceKeys],
   );
 
   // Per-column predicates from the USR column manager — applied after
