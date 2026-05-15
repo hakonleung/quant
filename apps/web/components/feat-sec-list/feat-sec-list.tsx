@@ -119,6 +119,7 @@ export function FeatSecList({ bare }: FeatSecListProps = {}): React.ReactElement
     id: ALL_SECTOR_ID,
     name: 'All',
     kind: 'user',
+    market: 'a',
     count: allCodes.length,
     meta: 'every stock',
     chgPct: null,

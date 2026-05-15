@@ -120,16 +120,20 @@ interface SectorImportRowProps {
 
 export function SectorImportRow({ onBatchPick }: SectorImportRowProps): React.ReactElement | null {
   const sectors = useSectorsStore((s) => s.sectors);
-  const { data: universe } = useStockUniverse('a');
-  const codeToStock = useMemo(() => {
+  // Pull all three markets so HK / US user sectors resolve too. Lookup
+  // key is `${market}:${code}` since codes can collide across markets
+  // (e.g. A-share 600519 vs an HK 600519 listing).
+  const { data: universe } = useStockUniverse();
+  const lookup = useMemo(() => {
     const m = new Map<string, UniverseStock>();
-    for (const s of universe) if (s.market === 'a') m.set(s.code, s);
+    for (const s of universe) m.set(`${s.market}:${s.code}`, s);
     return m;
   }, [universe]);
   const onImport = (sector: Sector): void => {
+    const sectorMarket = sector.market ?? 'a';
     const stocks: UniverseStock[] = [];
     for (const c of sector.codes) {
-      const hit = codeToStock.get(c);
+      const hit = lookup.get(`${sectorMarket}:${c}`);
       if (hit !== undefined) stocks.push(hit);
     }
     if (stocks.length > 0) onBatchPick(stocks);
@@ -151,7 +155,7 @@ export function SectorImportRow({ onBatchPick }: SectorImportRowProps): React.Re
     return (): void => {
       window.removeEventListener('keydown', handler);
     };
-  }, [sectors, codeToStock]);
+  }, [sectors, lookup]);
   if (sectors.length === 0) return null;
   return (
     <Flex gap="4px" wrap="wrap" align="center" mb="6px">
@@ -198,6 +202,9 @@ export function PickRow({ state, setState }: RowProps): React.ReactElement {
   const onRemove = (idx: number): void => {
     setState((prev) => ({ ...prev, picked: prev.picked.filter((_, i) => i !== idx) }));
   };
+  const onClear = (): void => {
+    setState((prev) => ({ ...prev, picked: [] }));
+  };
   return (
     <Box>
       <SectorImportRow onBatchPick={onBatchPick} />
@@ -207,7 +214,14 @@ export function PickRow({ state, setState }: RowProps): React.ReactElement {
           search and pick one or more stocks · same condition applies to all
         </Text>
       ) : (
-        <Flex mt="4px" gap="4px" wrap="wrap">
+        <Flex mt="4px" gap="4px" wrap="wrap" align="center">
+          <MonoButton
+            icon="delete"
+            label={`clear ${String(state.picked.length)} picked stocks`}
+            onClick={onClear}
+          >
+            clear ({state.picked.length})
+          </MonoButton>
           {state.picked.map((p, i) => (
             <Flex
               key={`${p.market}:${p.code}`}

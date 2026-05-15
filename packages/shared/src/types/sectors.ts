@@ -9,6 +9,7 @@
 
 import { z } from 'zod';
 import { ScreenPlanAstSchema, RankSpecSchema, UniversePlanAstSchema } from './nl-screen.js';
+import { WatchMarketSchema } from './watch.js';
 
 export const SectorKindSchema = z.enum(['user', 'dynamic']);
 export type SectorKind = z.infer<typeof SectorKindSchema>;
@@ -23,6 +24,15 @@ export const SectorSchema = z.object({
   id: z.string(),
   name: z.string().min(1),
   kind: SectorKindSchema,
+  /**
+   * Market this sector belongs to. Optional — missing means `'a'` (preserves
+   * existing persisted records and pre-existing test fixtures). `'hk'` / `'us'`
+   * user sectors are display-only: the EQ list panel renders just code + name
+   * since no kline / snapshot pipeline backs those markets in V1. Dynamic
+   * sectors are A-stock only (the NL screen plans hit A-stock parquet); the
+   * field is therefore meaningful only for `kind: 'user'`.
+   */
+  market: WatchMarketSchema.optional(),
   count: z.number().int().nonnegative(),
   meta: z.string(),
   chgPct: z.number().nullable(),

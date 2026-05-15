@@ -10,7 +10,7 @@
  */
 
 import { Box, Button, Flex, Input, Text } from '@chakra-ui/react';
-import type { NlScreenResult, ScreenMatchView } from '@quant/shared';
+import type { NlScreenResult, ScreenMatchView, WatchMarket } from '@quant/shared';
 import { useState } from 'react';
 
 import { useCurrentUserId } from '../../lib/hooks/use-current-user.js';
@@ -28,6 +28,7 @@ interface Props {
 export function NewSectorDialog({ open, onClose }: Props): React.ReactElement | null {
   const [tab, setTab] = useState<Tab>('user');
   const [title, setTitle] = useState('');
+  const [market, setMarket] = useState<WatchMarket>('a');
   const [nl, setNl] = useState('');
   const [preview, setPreview] = useState<NlScreenResult | null>(null);
   const screen = useNlScreen();
@@ -38,6 +39,7 @@ export function NewSectorDialog({ open, onClose }: Props): React.ReactElement | 
 
   const reset = (): void => {
     setTitle('');
+    setMarket('a');
     setNl('');
     setPreview(null);
     setTab('user');
@@ -71,6 +73,7 @@ export function NewSectorDialog({ open, onClose }: Props): React.ReactElement | 
       id: '',
       name: t,
       kind: 'user',
+      market,
       count: 0,
       meta: 'manual basket',
       chgPct: null,
@@ -100,6 +103,7 @@ export function NewSectorDialog({ open, onClose }: Props): React.ReactElement | 
       id: '',
       name: t,
       kind: 'dynamic',
+      market: 'a',
       count: codes.length,
       meta: snapshot.nl,
       chgPct: null,
@@ -147,7 +151,7 @@ export function NewSectorDialog({ open, onClose }: Props): React.ReactElement | 
         <Tabs tab={tab} setTab={setTab} />
         <Box flex="1" overflow="auto" p="14px">
           {tab === 'user' ? (
-            <UserForm title={title} setTitle={setTitle} />
+            <UserForm title={title} setTitle={setTitle} market={market} setMarket={setMarket} />
           ) : (
             <DynamicForm
               title={title}
@@ -272,9 +276,13 @@ function Tabs({ tab, setTab }: { tab: Tab; setTab: (t: Tab) => void }): React.Re
 function UserForm({
   title,
   setTitle,
+  market,
+  setMarket,
 }: {
   title: string;
   setTitle: (v: string) => void;
+  market: WatchMarket;
+  setMarket: (v: WatchMarket) => void;
 }): React.ReactElement {
   return (
     <Flex direction="column" gap="10px">
@@ -297,7 +305,41 @@ function UserForm({
           _focus={{ borderColor: 'accent', boxShadow: 'none' }}
         />
       </Field>
-      <Hint>// empty basket — fill members later from the list panel</Hint>
+      <Field label="MARKET">
+        <Flex gap="6px">
+          {(['a', 'hk', 'us'] as const).map((m) => {
+            const active = market === m;
+            return (
+              <Box
+                as="button"
+                key={m}
+                onClick={(): void => {
+                  setMarket(m);
+                }}
+                px="12px"
+                h="28px"
+                fontFamily="mono"
+                fontSize="11px"
+                letterSpacing="0.18em"
+                textTransform="uppercase"
+                borderWidth="1px"
+                borderColor={active ? 'accent' : 'line'}
+                bg={active ? 'accentBg' : 'panel'}
+                color={active ? 'accent' : 'ink2'}
+                cursor="pointer"
+                _hover={active ? {} : { borderColor: 'ink2' }}
+              >
+                {m}
+              </Box>
+            );
+          })}
+        </Flex>
+      </Field>
+      <Hint>
+        {market === 'a'
+          ? '// empty basket — fill members later from the list panel'
+          : '// basic info only (code + name) — no kline / snapshot in v1'}
+      </Hint>
     </Flex>
   );
 }

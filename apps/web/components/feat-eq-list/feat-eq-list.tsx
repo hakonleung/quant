@@ -35,6 +35,7 @@ import { ALL_SECTOR_ID, useUiStore } from '../../lib/stores/ui.store.js';
 import { FeatView } from '../feat-view/feat-view.js';
 import { ConfirmCancelled, useConfirm } from '../../lib/hooks/use-confirm.js';
 
+import { BasicList } from './basic-list.js';
 import { buildColumns } from './list-columns.js';
 import { DynamicHeader, EditableTitle, FilterHeader, UserSectorHeader } from './list-headers.js';
 import type { ColumnDef, SortState } from './list-types.js';
@@ -52,6 +53,22 @@ interface FeatEqListProps {
 }
 
 export function FeatEqList({ bare }: FeatEqListProps = {}): React.ReactElement {
+  const activeSectorId = useUiStore((s) => s.activeSectorId);
+  const sectors = useSectorsStore((s) => s.sectors);
+  const activeSector = sectors.find((x) => x.id === activeSectorId) ?? null;
+  // HK / US user sectors render a basic list (code + name only) since
+  // there is no kline / snapshot pipeline behind those markets in V1.
+  if (
+    activeSector !== null &&
+    activeSector.kind === 'user' &&
+    (activeSector.market === 'hk' || activeSector.market === 'us')
+  ) {
+    return <BasicList sector={activeSector} market={activeSector.market} bare={bare ?? false} />;
+  }
+  return <FeatEqListInner bare={bare ?? false} />;
+}
+
+function FeatEqListInner({ bare }: FeatEqListProps = {}): React.ReactElement {
   const activeSectorId = useUiStore((s) => s.activeSectorId);
   const setFocusCode = useUiStore((s) => s.setFocusCode);
   const focusCode = useUiStore((s) => s.focusCode);
