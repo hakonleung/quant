@@ -139,11 +139,12 @@ describe('SectorsStore migration & id allocation', () => {
 describe('SectorsStore legacy filesystem migration', () => {
   it('imports legacy sectors.json into record store and renames to .bak', async () => {
     const dir = await tmpDir();
-    const file = path.join(dir, 'sectors.json');
+    const file = path.join(dir, 'sectors', 'sectors.json');
     const legacy = [
       { ...userBase('legacy-foo'), id: 'legacy-foo' },
       { ...userBase('s2'), id: 's2' },
     ];
+    await fs.mkdir(path.dirname(file), { recursive: true });
     await fs.writeFile(file, JSON.stringify(legacy));
 
     const { store, record } = makeStore(dir);

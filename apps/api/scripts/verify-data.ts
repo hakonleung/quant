@@ -10,7 +10,7 @@
  *   2. **Self-consistent.** Per-table row counts are reported; obvious
  *      red flags (zero rows on a non-empty store, code that's
  *      lexicographically out of partition) are flagged.
- *   3. **Cross-store.** Kline codes must appear in ``meta/stocks.parquet``
+ *   3. **Cross-store.** Kline codes must appear in ``stock_metas.parquet``
  *      (or be reported as orphans — usually means a brand-new listing
  *      arrived before the meta sync ran). Per-user parquets are
  *      enumerated; their schemas are checked.
@@ -223,7 +223,7 @@ async function checkMetaVsKline(
   dataRoot: string,
   klineCodes: Set<string>,
 ): Promise<void> {
-  const path = join(dataRoot, 'meta', 'stocks.parquet');
+  const path = join(dataRoot, 'stock_metas.parquet');
   if (!(await fileExists(path))) return;
   const result = await conn.runAndReadAll(
     `SELECT DISTINCT code FROM read_parquet('${path}');`,
@@ -325,7 +325,7 @@ async function main(): Promise<void> {
   const conn = await inst.connect();
 
   // Shared single-file tables.
-  await checkSharedTable(conn, args.dataRoot, 'meta/stocks.parquet', {
+  await checkSharedTable(conn, args.dataRoot, 'stock_metas.parquet', {
     required: ['code', 'name', 'industries', 'list_date'],
     recommended: ['metrics_asof', 'metrics_updated_at', 'ret_5d', 'mkt_cap'],
     rebuildHint:
@@ -335,7 +335,7 @@ async function main(): Promise<void> {
     // Singleton-row payload: id + codes_json + computedAt
     required: ['id', 'codes_json'],
   });
-  await checkSharedTable(conn, args.dataRoot, 'sectors/sectors.parquet', {
+  await checkSharedTable(conn, args.dataRoot, 'public_sectors.parquet', {
     required: ['id', 'payload_json'],
   });
   await checkSharedTable(conn, args.dataRoot, 'sentiment_stock.parquet', {

@@ -18,6 +18,7 @@
  *
  * Self-migration: on first load, if the record store is empty AND a
  * legacy `data/sectors/sectors.json` exists, the JSON is imported and
+ * the parquet now lives flat at `data/public_sectors.parquet`. The
  * renamed `.bak`. The legacy `s{n}` id reseq + `createdBy/published`
  * backfill from the JSON version are preserved.
  */
@@ -50,7 +51,7 @@ export const SectorRowSchema = z.object({
 });
 
 export const SECTORS_TABLE_SPEC: RecordTableSpec<SectorRow> = {
-  table: 'sectors',
+  table: 'public_sectors',
   schema: SectorRowSchema,
   pk: (row) => row.id,
   columns: [
@@ -204,7 +205,11 @@ export class SectorsStore implements OnModuleInit {
   }
 
   private async migrateLegacyIfPresent(): Promise<readonly Sector[] | null> {
-    const legacyPath = path.join(this.legacyDir, 'sectors.json');
+    // Pre-storage-unify layout: `data/sectors/sectors.json`. The
+    // parquet file moved up to `data/public_sectors.parquet`, but the
+    // legacy JSON lookup keeps its historical path so existing data
+    // dirs still migrate.
+    const legacyPath = path.join(this.legacyDir, 'sectors', 'sectors.json');
     let raw: string;
     try {
       raw = await fs.readFile(legacyPath, 'utf8');

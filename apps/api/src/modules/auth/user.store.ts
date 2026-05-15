@@ -1,11 +1,11 @@
 /**
  * Parquet-backed registry of known users. One file per deployment at
- * `data/users/_meta/users.parquet`. The `_meta` prefix sits lexically
- * before any real userId so the file path cannot collide with a real
- * per-user directory (`data/users/${userId}/...`).
+ * `data/all_users.parquet`. Lives flat at the data root because it's
+ * a system-wide index — not per-user state.
  *
  * Self-migration: legacy `data/users/_meta/users.json` is adopted on
- * first boot and renamed `.bak`.
+ * first boot and renamed `.bak`. The earlier intermediate location
+ * (`data/users/_meta/users.parquet`) is also adopted if present.
  */
 
 import { promises as fs } from 'node:fs';
@@ -39,7 +39,7 @@ const UserRecordSchema = z
 export type UserRecord = z.infer<typeof UserRecordSchema>;
 
 export const USERS_TABLE_SPEC: RecordTableSpec<UserRecord> = {
-  table: 'users',
+  table: 'all_users',
   schema: UserRecordSchema,
   pk: (row) => row.id,
   columns: [
@@ -67,7 +67,7 @@ export class UserStore implements OnModuleInit {
   private readonly dataDir: string;
 
   constructor(@Inject(AUTH_CONFIG) private readonly cfg: AuthConfigShape) {
-    this.dataDir = path.join(cfg.dataRoot, 'users', '_meta');
+    this.dataDir = cfg.dataRoot;
     this.inner = new DuckDBParquetRecordStore<UserRecord>({
       dataRoot: this.dataDir,
       spec: USERS_TABLE_SPEC,
@@ -142,18 +142,30 @@ export class UserStore implements OnModuleInit {
   }
 
   /**
-   * Adopt the legacy `users.json` when the parquet file is absent.
-   * Reads + validates + bulk-upserts into the new store, then renames
-   * the JSON to `.bak` for one-release rollback.
+   * Adopt legacy data when `data/all_users.parquet` is absent. Two
+   * legacy locations, checked in order:
+   *   1. `data/users/_meta/users.parquet` — intermediate location
+   *      used during one storage-unify rollout step.
+   *   2. `data/users/_meta/users.json`  — the original JSON store.
+   * Both get renamed `.bak` after successful adoption.
    */
   private async adoptLegacyIfNeeded(): Promise<void> {
-    const parquet = path.join(this.dataDir, 'users.parquet');
-    const legacy = path.join(this.dataDir, 'users.json');
+    const parquet = path.join(this.dataDir, 'all_users.parquet');
     if (await fileExists(parquet)) return;
-    if (!(await fileExists(legacy))) return;
+
+    const metaDir = path.join(this.dataDir, 'users', '_meta');
+    const intermediateParquet = path.join(metaDir, 'users.parquet');
+    if (await fileExists(intermediateParquet)) {
+      await fs.rename(intermediateParquet, parquet);
+      this.logger.log(`users/_meta/users.parquet → all_users.parquet (relocated)`);
+      return;
+    }
+
+    const legacyJson = path.join(metaDir, 'users.json');
+    if (!(await fileExists(legacyJson))) return;
     let raw: unknown;
     try {
-      raw = JSON.parse(await fs.readFile(legacy, 'utf8'));
+      raw = JSON.parse(await fs.readFile(legacyJson, 'utf8'));
     } catch (err: unknown) {
       this.logger.warn(`users.json parse failed during migration: ${String(err)}`);
       return;
@@ -167,9 +179,9 @@ export class UserStore implements OnModuleInit {
       await this.inner.upsertMany(parsed.data.users);
       await this.inner.flush();
     }
-    await fs.rename(legacy, `${legacy}.bak`);
+    await fs.rename(legacyJson, `${legacyJson}.bak`);
     this.logger.log(
-      `users.json migrated → users.parquet (${String(parsed.data.users.length)} rows)`,
+      `users.json migrated → all_users.parquet (${String(parsed.data.users.length)} rows)`,
     );
   }
 

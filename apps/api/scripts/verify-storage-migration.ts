@@ -145,7 +145,7 @@ async function checkSectors(
   dataRoot: string,
 ): Promise<CheckResult | null> {
   const legacy = join(dataRoot, 'sectors', 'sectors.json.bak');
-  const parquet = join(dataRoot, 'sectors', 'sectors.parquet');
+  const parquet = join(dataRoot, 'public_sectors.parquet');
   if (!(await fileExists(legacy))) return null;
   if (!(await fileExists(parquet))) {
     return { store: 'sectors', legacyPath: legacy, parquetPath: parquet, ok: false, notes: ['parquet missing'] };

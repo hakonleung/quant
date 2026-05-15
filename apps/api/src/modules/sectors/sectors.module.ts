@@ -25,7 +25,7 @@ import {
 } from './sectors.store.js';
 import { SECTORS_FLIGHT_CLIENT } from './sectors.token.js';
 
-const DEFAULT_DATA_DIR = '../../data/sectors';
+const DEFAULT_DATA_DIR = '../../data';
 const DEFAULT_FLIGHT_TARGET = '127.0.0.1:8815';
 
 @Module({

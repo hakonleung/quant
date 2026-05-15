@@ -1,6 +1,6 @@
 """Pure projector: ``(StockMeta, kline_bars) -> StockMetrics``.
 
-Persisted to ``data/meta/stocks.parquet`` after each kline sync so the
+Persisted to ``data/stock_metas.parquet`` after each kline sync so the
 list-view payload doesn't recompute on every read (see
 ``docs/perf/storage-unify-rollout.md`` item 9). Trigger: NestJS
 ``KlineWorker.process`` calls ``upsert_stock_metrics_for_code`` once

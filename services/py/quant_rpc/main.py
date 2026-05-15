@@ -93,8 +93,8 @@ def _assert_data_root_ok(root: Path, log: logging.Logger) -> None:
     Three checks, in order of cheapness:
 
     1. The directory must exist.
-    2. ``meta/stocks.parquet`` must exist (every deployment has one).
-    3. ``meta/stocks.parquet`` must have at least one row — if it's
+    2. ``stock_metas.parquet`` must exist (every deployment has one).
+    3. ``stock_metas.parquet`` must have at least one row — if it's
        empty, the service can boot but every meta-driven response (`/api/
        stocks`, `/api/stocks/snapshots`, blacklist refresh, screen
        universe) silently returns empty, which is the exact regression
@@ -108,7 +108,7 @@ def _assert_data_root_ok(root: Path, log: logging.Logger) -> None:
         )
         log.error(msg)
         raise SystemExit(msg)
-    meta_path = root / "meta" / "stocks.parquet"
+    meta_path = root / "stock_metas.parquet"
     if not meta_path.is_file():
         msg = (
             f"meta parquet missing at {meta_path}. Either data_root is "
@@ -163,7 +163,7 @@ def main() -> int:
 
     root = _data_root()
     _assert_data_root_ok(root, log)
-    meta_path = root / "meta" / "stocks.parquet"
+    meta_path = root / "stock_metas.parquet"
     # One canonical kline store, owned by NestJS's KlineWriterService at
     # `data/kline/<prefix>.parquet`. The Python in-process readers
     # (screen / pattern / blacklist) hit the same files through
