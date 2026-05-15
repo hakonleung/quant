@@ -15,9 +15,9 @@
  *      arrived before the meta sync ran). Per-user parquets are
  *      enumerated; their schemas are checked.
  *
- * Also surfaces "should-be-gone" leftovers — legacy ``.bak`` files,
- * the retired ``data/kline.py/`` directory, etc. — so the rollout's
- * housekeeping has a single command to run.
+ * Also surfaces stray ``*.json`` files anywhere under ``data/`` —
+ * everything is parquet-backed now, a JSON snuck in usually means a
+ * regression in someone's store.
  *
  * Run:
  *   pnpm --filter @quant/api tsx scripts/verify-data.ts \
@@ -279,37 +279,17 @@ async function checkUserScopedParquets(
 }
 
 async function findLeftovers(dataRoot: string): Promise<void> {
-  // Things the rollout retired that shouldn't still be on disk.
-  const stragglers: Array<{ relpath: string; reason: string }> = [
-    { relpath: 'kline.py', reason: 'retired in storage-unify item #1 (Python now reads data/kline/)' },
-    { relpath: 'kline.bak', reason: 'rollback anchor — drop once you trust the new layout' },
-  ];
-  for (const s of stragglers) {
-    if (await fileExists(join(dataRoot, s.relpath))) {
-      warn(`leftover: ${s.relpath}`, s.reason);
-    }
-  }
-  // Find any *.json next to its *.parquet (un-migrated legacy JSON).
+  // Stray *.json under data/ — everything is parquet-backed now, a
+  // JSON anywhere in here usually means a regression. The few known
+  // exceptions (lookup tables, runtime KV state) are filtered out.
   const files = await walk(dataRoot);
   for (const f of files) {
     if (!f.endsWith('.json')) continue;
-    if (f.endsWith('.bak') || f.endsWith('.json.bak')) continue;
-    if (f.includes('/_state/') || f.includes('/_meta/')) continue;
-    // sys-cfg.json under per-user dirs is fine (not a migration target).
-    if (/\/users\/[^/]+\/sys-cfg\//.test(f)) continue;
-    if (/llm-ledger\.json$/.test(f)) {
-      warn(`unmigrated json: ${relative(dataRoot, f)}`, 'llm-ledger.json should auto-migrate on next user access');
-      continue;
-    }
+    if (f.includes('/_state/')) continue;
+    if (f.includes('/.legacy/')) continue;
+    // Watch universe lookup tables ship as JSON (akshare round-trip).
+    if (/\/watch\/universe_(hk|us)\.json$/.test(f)) continue;
     warn(`leftover json: ${relative(dataRoot, f)}`, 'investigate — should be parquet by now');
-  }
-  // Surface .bak files as info (not errors — they're intentional rollback anchors).
-  let bakCount = 0;
-  for (const f of files) {
-    if (f.endsWith('.bak')) bakCount += 1;
-  }
-  if (bakCount > 0) {
-    warn('.bak files', `${bakCount} legacy rollback anchor(s) under data/ — safe to delete once happy`);
   }
 }
 
