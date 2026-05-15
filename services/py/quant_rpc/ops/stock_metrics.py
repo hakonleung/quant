@@ -111,6 +111,7 @@ class UpsertStockMetricsForCodeHandler:
 def _persisted_from_computed(m: StockMetrics) -> PersistedMetrics:
     return PersistedMetrics(
         asof=m.asof,
+        price=m.price,
         ret_1d=m.ret_1d,
         ret_5d=m.ret_5d,
         ret_10d=m.ret_10d,

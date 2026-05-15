@@ -49,12 +49,14 @@ class StockMetrics:
     ``None`` so the UI's "—" path stays correct.
 
     ``asof`` is the latest kline ``trade_date`` the metrics were computed
-    against; a downstream reader can compare against the current kline
-    watermark to decide whether the persisted block is fresh.
+    against. ``price`` (``close_qfq`` at ``asof``) rides along so the
+    snapshot handler can serve the full row from this block alone,
+    skipping a second kline read on every list request.
     """
 
     code: str
     asof: date | None
+    price: Decimal | None
     # returns
     ret_1d: Decimal | None
     ret_5d: Decimal | None
@@ -94,6 +96,7 @@ def compute_metrics(meta: StockMeta, bars: Sequence[DailyBar]) -> StockMetrics:
         return StockMetrics(
             code=meta.code,
             asof=None,
+            price=None,
             **_EMPTY_RETURNS,
             mkt_cap=None,
             float_mkt_cap=None,
@@ -110,6 +113,7 @@ def compute_metrics(meta: StockMeta, bars: Sequence[DailyBar]) -> StockMetrics:
     return StockMetrics(
         code=meta.code,
         asof=latest.trade_date,
+        price=latest_close if latest_close > 0 else None,
         **returns,
         mkt_cap=derived.mkt_cap,
         float_mkt_cap=derived.float_mkt_cap,

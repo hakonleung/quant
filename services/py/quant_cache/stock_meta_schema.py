@@ -51,6 +51,7 @@ STOCK_META_SCHEMA: Final[pa.Schema] = pa.schema(
         # nullable so legacy v1/v2 rows read back without migration.
         ("metrics_asof", pa.date32()),
         ("metrics_updated_at", pa.timestamp("us", tz="UTC")),
+        ("metrics_price", pa.string()),
         ("ret_1d", pa.string()),
         ("ret_5d", pa.string()),
         ("ret_10d", pa.string()),
@@ -84,6 +85,10 @@ _METRIC_DECIMAL_FIELDS: Final[tuple[str, ...]] = (
     "gross_margin_ttm",
 )
 
+# Same logical field but stored under a prefixed column name to avoid
+# colliding with a future top-level ``price`` field on stock_meta.
+_METRIC_PRICE_FIELD: Final[str] = "metrics_price"
+
 STOCK_META_KEY_FIELD: Final[str] = "code"
 
 
@@ -104,6 +109,9 @@ def stock_meta_to_row(item: StockMeta) -> Mapping[str, object]:
         "financials_updated_at": item.financials_updated_at,
         "metrics_asof": item.metrics.asof if item.metrics is not None else None,
         "metrics_updated_at": item.metrics_updated_at,
+        _METRIC_PRICE_FIELD: _decimal_to_str_or_none(
+            item.metrics.price if item.metrics is not None else None,
+        ),
     }
     for field_name in _METRIC_DECIMAL_FIELDS:
         value = getattr(item.metrics, field_name) if item.metrics is not None else None
@@ -141,13 +149,13 @@ def stock_meta_from_row(row: Mapping[str, object]) -> StockMeta:
 
 def _persisted_metrics_from_row(row: Mapping[str, object]) -> PersistedMetrics | None:
     asof = _date_or_none(row.get("metrics_asof"), field="metrics_asof")
+    price = _str_to_decimal_or_none(row.get(_METRIC_PRICE_FIELD))
     decimals = {f: _str_to_decimal_or_none(row.get(f)) for f in _METRIC_DECIMAL_FIELDS}
-    # All-null + no asof → no projection yet. Anything non-null on the
-    # other side → keep a populated block (asof may still be null if a
-    # legacy row only has historical decimals).
-    if asof is None and not any(v is not None for v in decimals.values()):
+    # All-null + no asof + no price → no projection yet. Anything non-null
+    # on the other side → keep a populated block.
+    if asof is None and price is None and not any(v is not None for v in decimals.values()):
         return None
-    return PersistedMetrics(asof=asof, **decimals)
+    return PersistedMetrics(asof=asof, price=price, **decimals)
 
 
 def stock_meta_key(item: StockMeta) -> str:

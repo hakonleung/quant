@@ -8,6 +8,14 @@ returns (``ret_5d`` / ``ret_10d`` / ``ret_20d`` / ``ret_90d`` /
 ``ret_250d``) computed against ``close_qfq``. An empty ``codes`` list
 expands to the full meta universe (mirrors ``kline/bulk``).
 
+The handler **prefers the persisted ``meta.metrics`` block** populated
+by the post-kline-sync projector (``docs/perf/storage-unify-rollout.md``
+item 9). When the block exists, no kline reads happen on the request
+path — meta parquet alone serves the full snapshot. Codes that never
+got projected (legacy rows, brand-new listings with no bars yet) fall
+back to the on-demand ``KlineService.get_last_n`` recompute, preserving
+the v1 behaviour for the edge case.
+
 Codes that the meta cache doesn't know are silently dropped; codes
 whose kline cache is empty produce a row with ``price`` / ``asof`` /
 every derived & return field set to ``None``. A return field stays
@@ -27,7 +35,8 @@ from typing import TYPE_CHECKING, Final
 
 import pyarrow as pa
 from quant_cache.stock_meta_schema import STOCK_META_SCHEMA, stock_meta_to_row
-from quant_core.domain.pure.derive_metrics import DerivedMetrics, derive_metrics
+from quant_core.domain.pure.derive_metrics import derive_metrics
+from quant_core.domain.types.stock import PersistedMetrics
 from quant_core.errors import QuantError
 
 if TYPE_CHECKING:
@@ -72,28 +81,45 @@ def _dec_to_str(value: Decimal | None) -> str | None:
     return None if value is None else str(value)
 
 
-def _row(
-    meta: StockMeta,
-    price: Decimal | None,
-    asof: date | None,
-    m: DerivedMetrics,
-    returns: Mapping[int, Decimal | None],
-) -> dict[str, object]:
+def _row(meta: StockMeta, metrics: PersistedMetrics) -> dict[str, object]:
     base = dict(stock_meta_to_row(meta))
     base.update(
-        price=_dec_to_str(price),
-        asof=asof,
-        mkt_cap=_dec_to_str(m.mkt_cap),
-        float_mkt_cap=_dec_to_str(m.float_mkt_cap),
-        pe_ttm=_dec_to_str(m.pe_ttm),
-        pe_dynamic=_dec_to_str(m.pe_dynamic),
-        pb=_dec_to_str(m.pb),
-        peg=_dec_to_str(m.peg),
-        gross_margin_ttm=_dec_to_str(m.gross_margin_ttm),
+        price=_dec_to_str(metrics.price),
+        asof=metrics.asof,
+        mkt_cap=_dec_to_str(metrics.mkt_cap),
+        float_mkt_cap=_dec_to_str(metrics.float_mkt_cap),
+        pe_ttm=_dec_to_str(metrics.pe_ttm),
+        pe_dynamic=_dec_to_str(metrics.pe_dynamic),
+        pb=_dec_to_str(metrics.pb),
+        peg=_dec_to_str(metrics.peg),
+        gross_margin_ttm=_dec_to_str(metrics.gross_margin_ttm),
     )
-    for window in RETURN_WINDOWS:
-        base[f"ret_{window}d"] = _dec_to_str(returns.get(window))
+    base["ret_1d"] = _dec_to_str(metrics.ret_1d)
+    base["ret_5d"] = _dec_to_str(metrics.ret_5d)
+    base["ret_10d"] = _dec_to_str(metrics.ret_10d)
+    base["ret_20d"] = _dec_to_str(metrics.ret_20d)
+    base["ret_90d"] = _dec_to_str(metrics.ret_90d)
+    base["ret_250d"] = _dec_to_str(metrics.ret_250d)
     return base
+
+
+_EMPTY_METRICS: Final[PersistedMetrics] = PersistedMetrics(
+    asof=None,
+    price=None,
+    ret_1d=None,
+    ret_5d=None,
+    ret_10d=None,
+    ret_20d=None,
+    ret_90d=None,
+    ret_250d=None,
+    mkt_cap=None,
+    float_mkt_cap=None,
+    pe_ttm=None,
+    pe_dynamic=None,
+    pb=None,
+    peg=None,
+    gross_margin_ttm=None,
+)
 
 
 def _require_str_list(args: Mapping[str, object], key: str) -> list[str]:
@@ -153,9 +179,8 @@ class ListStockSnapshotsHandler:
         metas = self._meta.list_all() if not codes else self._meta.get_batch(codes)
         rows: list[dict[str, object]] = []
         for meta in metas:
-            price, asof, returns = self._latest_close_and_returns(meta.code)
-            derived = derive_metrics(meta, price)
-            rows.append(_row(meta, price, asof, derived, returns))
+            metrics = meta.metrics if meta.metrics is not None else self._recompute(meta)
+            rows.append(_row(meta, metrics))
         if not rows:
             return STOCK_SNAPSHOT_SCHEMA.empty_table()
         table = pa.Table.from_pylist(rows, schema=STOCK_SNAPSHOT_SCHEMA)
@@ -171,35 +196,47 @@ class ListStockSnapshotsHandler:
             return None
         return self._full_cache
 
-    def _latest_close_and_returns(
-        self, code: str
-    ) -> tuple[Decimal | None, date | None, dict[int, Decimal | None]]:
-        """Resolve the most recent ``close_qfq`` plus period returns.
+    def _recompute(self, meta: StockMeta) -> PersistedMetrics:
+        """On-demand fallback when ``meta.metrics`` is absent.
 
-        We slice the largest configured window once and derive every
-        smaller window from the same buffer — one parquet read per code
-        instead of N. Missing windows (kline shorter than the lookback)
-        come back as ``None``. Failures are swallowed → empty triple.
+        Mirrors the v1 path that lived in :meth:`_latest_close_and_returns`
+        — one ``get_last_n`` read sliced into every return window. Used
+        only for legacy meta rows that pre-date the persisted projector;
+        post-projector codes never hit this branch.
         """
-        empty: dict[int, Decimal | None] = {w: None for w in RETURN_WINDOWS}
-        depth = max(RETURN_WINDOWS) + 1  # +1 because ret needs the bar N steps back
+        depth = max(RETURN_WINDOWS) + 1
         try:
-            table = self._kline.get_last_n(code, depth)
+            table = self._kline.get_last_n(meta.code, depth)
         except Exception:  # noqa: BLE001 — repo boundary
-            return (None, None, empty)
+            return _EMPTY_METRICS
         if table.num_rows == 0:
-            return (None, None, empty)
+            return _EMPTY_METRICS
         rows = table.to_pylist()
         last = rows[-1]
-        raw_close = last.get("close_qfq")
         # Kline parquet uses ``trade_date`` (KLINE_SCHEMA); the legacy
         # ``date`` lookup left ``asof`` permanently null on every
         # snapshot row even when the kline cache was populated.
-        raw_date = last.get("trade_date")
-        latest = self._coerce_decimal(raw_close)
-        asof = raw_date if isinstance(raw_date, date) else None
+        latest = self._coerce_decimal(last.get("close_qfq"))
+        asof_raw = last.get("trade_date")
+        asof = asof_raw if isinstance(asof_raw, date) else None
         if latest is None or latest <= 0:
-            return (latest, asof, empty)
+            return PersistedMetrics(
+                asof=asof,
+                price=latest,
+                ret_1d=None,
+                ret_5d=None,
+                ret_10d=None,
+                ret_20d=None,
+                ret_90d=None,
+                ret_250d=None,
+                mkt_cap=None,
+                float_mkt_cap=None,
+                pe_ttm=None,
+                pe_dynamic=None,
+                pb=None,
+                peg=None,
+                gross_margin_ttm=None,
+            )
         returns: dict[int, Decimal | None] = {}
         for window in RETURN_WINDOWS:
             idx = len(rows) - 1 - window
@@ -211,7 +248,24 @@ class ListStockSnapshotsHandler:
                 returns[window] = None
                 continue
             returns[window] = (latest - base) / base
-        return (latest, asof, returns)
+        derived = derive_metrics(meta, latest)
+        return PersistedMetrics(
+            asof=asof,
+            price=latest,
+            ret_1d=returns.get(1),
+            ret_5d=returns.get(5),
+            ret_10d=returns.get(10),
+            ret_20d=returns.get(20),
+            ret_90d=returns.get(90),
+            ret_250d=returns.get(250),
+            mkt_cap=derived.mkt_cap,
+            float_mkt_cap=derived.float_mkt_cap,
+            pe_ttm=derived.pe_ttm,
+            pe_dynamic=derived.pe_dynamic,
+            pb=derived.pb,
+            peg=derived.peg,
+            gross_margin_ttm=derived.gross_margin_ttm,
+        )
 
     @staticmethod
     def _coerce_decimal(value: object) -> Decimal | None:

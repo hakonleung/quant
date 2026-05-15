@@ -122,6 +122,9 @@ class PersistedMetrics:
 
     asof: date | None
     """Latest kline trade_date the metrics were computed against."""
+    price: Decimal | None
+    """``close_qfq`` at ``asof`` — persisted so the snapshot row can be
+    served without a second kline read."""
     ret_1d: Decimal | None
     ret_5d: Decimal | None
     ret_10d: Decimal | None
