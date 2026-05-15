@@ -109,6 +109,96 @@ export function flattenEvidence(
   return out;
 }
 
+/**
+ * Round-trip a BE-assembled `StockListRow[]` back into the
+ * `StockSnapshotDto`-shaped map the legacy `buildColumns` derived /
+ * return cells read from. Avoids rewriting list-columns.tsx during
+ * the swap; once that file is rewritten to read straight from the
+ * row, this helper goes away.
+ */
+export function snapshotMapFromStockListRows(
+  rows: readonly import('@quant/shared').StockListRow[],
+): ReadonlyMap<string, import('@quant/shared').StockSnapshotDto> {
+  const m = new Map<string, import('@quant/shared').StockSnapshotDto>();
+  for (const r of rows) {
+    m.set(r.code, {
+      meta: {
+        code: r.code,
+        name: r.name ?? r.code,
+        name_pinyin: '',
+        industries: '',
+        list_date: '1970-01-01',
+        float_pct: '0',
+        updated_at: '1970-01-01T00:00:00.000Z',
+        total_share: null,
+        float_share: null,
+        net_assets: null,
+        net_assets_period: null,
+        quarterlies: [],
+        financials_updated_at: null,
+      },
+      price: r.price === null ? null : String(r.price),
+      asof: null,
+      derived: {
+        mkt_cap: r.mktCap === null ? null : String(r.mktCap),
+        float_mkt_cap: r.floatMktCap === null ? null : String(r.floatMktCap),
+        pe_ttm: r.peTtm === null ? null : String(r.peTtm),
+        pe_dynamic: r.peDynamic === null ? null : String(r.peDynamic),
+        pb: r.pb === null ? null : String(r.pb),
+        peg: r.peg === null ? null : String(r.peg),
+        gross_margin_ttm: r.grossMargin === null ? null : String(r.grossMargin),
+      },
+      returns: {
+        ret_1d: r.chgPct === null ? null : String(r.chgPct),
+        ret_5d: r.ret5d === null ? null : String(r.ret5d),
+        ret_10d: r.ret10d === null ? null : String(r.ret10d),
+        ret_20d: r.ret20d === null ? null : String(r.ret20d),
+        ret_90d: r.ret90d === null ? null : String(r.ret90d),
+        ret_250d: r.ret250d === null ? null : String(r.ret250d),
+      },
+    });
+  }
+  return m;
+}
+
+/**
+ * Adapt a BE-assembled `StockListRow` into the FE's `ListRow` shape.
+ * Reuses the same evidence flattening / coerceNumeric pipeline so
+ * downstream sort/filter/render see the same per-key normalization
+ * they always have. The FE `ListRow.consecUpDays` keeps its legacy
+ * name so existing column extractors don't churn.
+ */
+export function listRowFromStockListRow(
+  row: import('@quant/shared').StockListRow,
+  rawEvidence: Readonly<Record<string, unknown>> | undefined,
+): ListRow {
+  const evidence = rawEvidence === undefined ? {} : flattenEvidence(rawEvidence);
+  const out: Record<string, unknown> = {
+    ...evidence,
+    code: row.code,
+    name: row.name ?? row.code,
+    statsReady: true,
+    price: row.price ?? 0,
+    chgPct: row.chgPct,
+    turnoverRate: row.turnoverRate,
+    turnover: row.turnover,
+    consecUpDays: row.consecUp ?? 0,
+    ret5d: row.ret5d,
+    ret10d: row.ret10d,
+    ret20d: row.ret20d,
+    ret90d: row.ret90d,
+    ret250d: row.ret250d,
+    mktCap: row.mktCap,
+    floatMktCap: row.floatMktCap,
+    peTtm: row.peTtm,
+    peDynamic: row.peDynamic,
+    pb: row.pb,
+    peg: row.peg,
+    grossMargin: row.grossMargin,
+  };
+  return out as ListRow;
+}
+
 export function buildRows(
   codes: readonly string[],
   meta: ReadonlyMap<string, StockMetaDto>,

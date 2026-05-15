@@ -18,7 +18,7 @@ export async function POST(request: Request): Promise<Response> {
     const body = (await request.json()) as unknown;
     const out: StockListRowsResponse = await nestJson(
       request,
-      `/stock-list/rows`,
+      `/api/stock-list/rows`,
       (raw) => StockListRowsResponseSchema.parse(raw),
       { method: 'POST', body },
     );

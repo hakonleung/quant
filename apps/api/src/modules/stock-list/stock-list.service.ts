@@ -83,7 +83,19 @@ export class StockListService {
     const snapshotByCode = new Map<string, StockSnapshotDto>();
     for (const s of snapshots) snapshotByCode.set(s.meta.code, s);
 
-    const rows: StockListRow[] = args.codes.map((code) => {
+    // Empty `codes` means "full universe" — same convention the
+    // underlying meta.listSnapshots / kline.lastNBulk already follow.
+    // In that mode we enumerate from whichever side returned data
+    // (snapshots first, then any kline-only codes), so the synthetic
+    // FE All sector and the IM full-universe paths share one code path.
+    const enumeratedCodes: readonly string[] =
+      args.codes.length > 0
+        ? args.codes
+        : Array.from(
+            new Set([...snapshotByCode.keys(), ...Object.keys(klineBulk)]),
+          ).sort();
+
+    const rows: StockListRow[] = enumeratedCodes.map((code) => {
       const snap = snapshotByCode.get(code);
       const bars = klineBulk[code] ?? [];
       const stats = bars.length > 0 ? deriveStockStats(bars) : null;

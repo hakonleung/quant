@@ -219,6 +219,21 @@ describe('StockListService.assembleRows', () => {
     expect(out.rows[0]?.evidence).toEqual({ vol_ratio: '+12.3%', streak: '5d' });
   });
 
+  it('expands empty codes to the universe (enumerated from snapshots + klineBulk)', async () => {
+    const meta = new FakeMeta([SNAP_A, SNAP_B]);
+    const kline = new FakeKline({
+      '600519': [bar('2026-05-15', 1700)],
+      '000001': [bar('2026-05-15', 12.3)],
+      '000002': [bar('2026-05-15', 5)], // kline-only
+    });
+    const out = await svc(meta, kline).assembleRows({
+      kind: 'user-sector',
+      codes: [],
+      traceId: TRACE,
+    });
+    expect(out.rows.map((r) => r.code).sort()).toEqual(['000001', '000002', '600519']);
+  });
+
   it('handles a missing snapshot for a requested code (returns row with nulls)', async () => {
     const meta = new FakeMeta([SNAP_A]);
     const kline = new FakeKline({});

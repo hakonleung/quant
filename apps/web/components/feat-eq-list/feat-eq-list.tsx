@@ -14,28 +14,29 @@
  */
 
 import { Box, Flex, Text } from '@chakra-ui/react';
-import type { ColumnFilter, StockMetaDto } from '@quant/shared';
+import type { ColumnFilter, StockListKind, StockMetaDto } from '@quant/shared';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { Feat } from '../../lib/eqty/feat.js';
 import {
   BUILTIN_KEYS,
-  buildRows,
   compareValues,
   evaluateColumnFilter,
   flattenEvidence,
+  listRowFromStockListRow,
+  snapshotMapFromStockListRows,
   type ListRow,
 } from '../../lib/fp/eq-list-fp.js';
 import { useBlacklistSet } from '../../lib/hooks/use-blacklist.js';
-import { useKlineBulk, useStockSnapshots } from '../../lib/hooks/use-eqty-data.js';
 import { useStockList } from '../../lib/hooks/use-stock-list.js';
+import { useStockListRows } from '../../lib/hooks/use-stock-list-rows.js';
 import { useSectorsStore } from '../../lib/stores/sectors.store.js';
 import { useSettingsStore } from '../../lib/stores/settings.store.js';
 import { ALL_SECTOR_ID, useUiStore } from '../../lib/stores/ui.store.js';
 import { FeatView } from '../feat-view/feat-view.js';
 import { ConfirmCancelled, useConfirm } from '../../lib/hooks/use-confirm.js';
 
-import { appliedNeedsSnapshot, buildColumns } from './list-columns.js';
+import { buildColumns } from './list-columns.js';
 import { DynamicHeader, EditableTitle, FilterHeader, UserSectorHeader } from './list-headers.js';
 import type { ColumnDef, SortState } from './list-types.js';
 import { ScrollGrid } from './scroll-grid.js';
@@ -86,13 +87,17 @@ export function FeatEqList({ bare }: FeatEqListProps = {}): React.ReactElement {
     if (sector === null) return [];
     return sector.codes;
   }, [isAll, sector, ready, blacklistSet]);
-  const bulkCodes: readonly string[] = isAll ? [] : codes;
-  // For "All" we deliberately send [] and rely on the server to expand
-  // to the full universe — force-enable the query in that mode so the
-  // hook's default-disabled-on-empty rule doesn't gate it off.
-  const klineBatch = useKlineBulk(bulkCodes, 5, {
-    enabled: isAll || bulkCodes.length > 0,
+  // Single BE-assembled fetch — replaces the legacy meta + kline +
+  // snapshot stitch. Empty `codes` means "full universe" on the BE
+  // (StockListService.assembleRows enumerates from snapshot results),
+  // so the synthetic All sector rides the same code path.
+  const listKind: StockListKind = isDynamic ? 'dynamic-sector' : 'user-sector';
+  const stockListQuery = useStockListRows({
+    kind: listKind,
+    codes: isAll ? [] : codes,
+    enabled: isAll || codes.length > 0,
   });
+  const stockListRows = stockListQuery.data?.rows ?? [];
 
   const evidenceKeys: readonly string[] = useMemo(() => {
     if (!isDynamic || sector === null) return [];
@@ -113,8 +118,11 @@ export function FeatEqList({ bare }: FeatEqListProps = {}): React.ReactElement {
   }, [isDynamic, sector]);
 
   const baseRows: readonly ListRow[] = useMemo(
-    () => buildRows(codes, universeByCode, klineBatch.byCode, sector?.evidence ?? null),
-    [codes, universeByCode, klineBatch.byCode, sector?.evidence],
+    () =>
+      stockListRows.map((r) =>
+        listRowFromStockListRow(r, sector?.evidence?.[r.code]),
+      ),
+    [stockListRows, sector?.evidence],
   );
 
   const [filter, setFilter] = useState('');
@@ -138,18 +146,16 @@ export function FeatEqList({ bare }: FeatEqListProps = {}): React.ReactElement {
 
   const appliedColumns = useSettingsStore((s) => s.appliedColumns);
   const columnFilters = useSettingsStore((s) => s.columnFilters);
-  // For the synthetic "All" sector we send empty codes — the snapshot
-  // endpoint expands to the full universe server-side (mirroring
-  // kline/bulk). Stuffing ~5500 codes into the query string would
-  // overflow Express's header budget and silently strand every
-  // snapshot-derived column with no data (the bug this branch fixes).
-  const snapshotCodes: readonly string[] = isAll ? [] : codes;
-  const snapshots = useStockSnapshots(snapshotCodes, {
-    enabled: appliedNeedsSnapshot(appliedColumns) && (isAll || snapshotCodes.length > 0),
-  });
+  // Snapshots-by-code now derives from the unified BE response —
+  // no second roundtrip. The map shape is preserved so list-columns
+  // doesn't need to change.
+  const snapshotMap = useMemo(
+    () => snapshotMapFromStockListRows(stockListRows),
+    [stockListRows],
+  );
   const columns: readonly ColumnDef[] = useMemo(
-    () => buildColumns(appliedColumns, evidenceKeys, snapshots.byCode),
-    [appliedColumns, evidenceKeys, snapshots.byCode],
+    () => buildColumns(appliedColumns, evidenceKeys, snapshotMap),
+    [appliedColumns, evidenceKeys, snapshotMap],
   );
 
   // Per-column predicates from the USR column manager — applied after
@@ -290,7 +296,7 @@ export function FeatEqList({ bare }: FeatEqListProps = {}): React.ReactElement {
   const listTone =
     error !== null && error !== undefined
       ? 'red'
-      : isLoading || klineBatch.isLoading || snapshots.isLoading
+      : isLoading || stockListQuery.isLoading
         ? 'amber'
         : 'green';
   return (
@@ -298,7 +304,7 @@ export function FeatEqList({ bare }: FeatEqListProps = {}): React.ReactElement {
       feat={Feat.Mkt}
       bare={bare ?? false}
       status={listTone}
-      statusBlink={isLoading || klineBatch.isLoading}
+      statusBlink={isLoading || stockListQuery.isLoading}
       titleSlot={
         <Flex align="baseline" gap="8px" minW={0}>
           <EditableTitle
