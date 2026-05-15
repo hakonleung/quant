@@ -51,6 +51,7 @@ describe('SentimentSchema', () => {
     rumor: '股权激励传闻',
     cachedAt: '2026-05-03T08:00:00.000Z',
     rawLog: ['line1', 'line2'],
+    result: '近端基本面稳健，估值修复空间存在。',
   };
 
   it('parses cachedAt with offset', () => {

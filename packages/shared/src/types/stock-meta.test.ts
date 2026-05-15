@@ -147,12 +147,22 @@ describe('StockSnapshotDtoSchema', () => {
     gross_margin_ttm: null,
   };
 
+  const baseReturns = {
+    ret_1d: null,
+    ret_5d: null,
+    ret_10d: null,
+    ret_20d: null,
+    ret_90d: null,
+    ret_250d: null,
+  };
+
   it('accepts a snapshot with no live price (cold cache)', () => {
     const ok = StockSnapshotDtoSchema.parse({
       meta: SAMPLE,
       price: null,
       asof: null,
       derived: baseDerived,
+      returns: baseReturns,
     });
     expect(ok.derived.mkt_cap).toBeNull();
   });
@@ -163,8 +173,10 @@ describe('StockSnapshotDtoSchema', () => {
       price: '1683.50',
       asof: '2026-05-04',
       derived: { ...baseDerived, mkt_cap: '2114000000000', pe_ttm: '24.5' },
+      returns: { ...baseReturns, ret_1d: '0.0123' },
     });
     expect(ok.price).toBe('1683.50');
     expect(ok.derived.pe_ttm).toBe('24.5');
+    expect(ok.returns.ret_1d).toBe('0.0123');
   });
 });
