@@ -180,46 +180,72 @@ async function migrateOne(
   const legacyToArchive: string[] = [];
 
   // --- user.parquet (consolidated) ---
-  const haveUserBlob = await fileExists(userBlob);
-  if (!haveUserBlob) {
-    const groupsRaw = await readSingletonPayload(conn, watchGroups);
-    const tasksRaw = await readSingletonPayload(conn, watchTasks);
-    const ledgerSlice = await readLedgerRows(conn, ledger);
-    const sysCfg = await readSysCfg(sysCfgJson);
+  const groupsRaw = await readSingletonPayload(conn, watchGroups);
+  const tasksRaw = await readSingletonPayload(conn, watchTasks);
+  const legacyLedgerSlice = await readLedgerRows(conn, ledger);
+  const legacySysCfg = await readSysCfg(sysCfgJson);
 
-    const haveAnyLegacy =
-      groupsRaw !== undefined ||
-      tasksRaw !== undefined ||
-      ledgerSlice !== undefined ||
-      sysCfg !== undefined;
-    if (!haveAnyLegacy) {
-      notes.push('no legacy files');
-    } else {
-      const groups = parseWatchGroupsArray(groupsRaw) ?? [];
-      const tasks = parseTaskFile(tasksRaw);
-      const watch: WatchSlice = { groups, tasks };
-      const blob: UserBlob = {
-        schemaVersion: USER_BLOB_SCHEMA_VERSION,
-        watch,
-        ledger: ledgerSlice ?? structuredClone(EMPTY_LEDGER_SLICE),
-        sysCfg: sysCfg ?? structuredClone(DEFAULT_SYS_CFG),
-      };
-      if (!dryRun) {
-        await writeSingletonParquet(conn, userBlob, blob);
-        notes.push(`wrote user.parquet (groups=${groups.length} tasks=${tasks.tasks.length} ledger=${blob.ledger.entries.length})`);
-      } else {
-        notes.push(`[dry-run] would write user.parquet (groups=${groups.length} tasks=${tasks.tasks.length} ledger=${blob.ledger.entries.length})`);
-      }
-      if (groupsRaw !== undefined) legacyToArchive.push(watchGroups);
-      if (tasksRaw !== undefined) legacyToArchive.push(watchTasks);
-      if (ledgerSlice !== undefined) legacyToArchive.push(ledger);
-      if (sysCfg !== undefined) legacyToArchive.push(sysCfgJson);
-    }
+  const haveAnyLegacy =
+    groupsRaw !== undefined ||
+    tasksRaw !== undefined ||
+    legacyLedgerSlice !== undefined ||
+    legacySysCfg !== undefined;
+  const haveUserBlob = await fileExists(userBlob);
+
+  if (!haveUserBlob && !haveAnyLegacy) {
+    notes.push('no legacy files');
   } else {
-    notes.push('user.parquet already present');
+    // Start from the existing user.parquet (if any) so we don't
+    // clobber slices it already owns. Legacy slices fill gaps where
+    // the existing blob has empty defaults.
+    const existing = haveUserBlob
+      ? await readSingletonPayload(conn, userBlob)
+      : undefined;
+    const startingBlob: UserBlob = parseExistingBlob(existing) ?? {
+      schemaVersion: USER_BLOB_SCHEMA_VERSION,
+      watch: { groups: [], tasks: structuredClone(EMPTY_WATCH_TASK_FILE) },
+      ledger: structuredClone(EMPTY_LEDGER_SLICE),
+      sysCfg: structuredClone(DEFAULT_SYS_CFG),
+    };
+
+    const merged = mergeLegacyIntoBlob(startingBlob, {
+      groups: parseWatchGroupsArray(groupsRaw),
+      tasksFile: tasksRaw === undefined ? undefined : parseTaskFile(tasksRaw),
+      ledger: legacyLedgerSlice,
+      sysCfg: legacySysCfg,
+    });
+
+    if (merged.changed) {
+      if (!dryRun) {
+        await writeSingletonParquet(conn, userBlob, merged.blob);
+        notes.push(
+          `wrote user.parquet (groups=${merged.blob.watch.groups.length} tasks=${merged.blob.watch.tasks.tasks.length} ledger=${merged.blob.ledger.entries.length})`,
+        );
+      } else {
+        notes.push(
+          `[dry-run] would write user.parquet (groups=${merged.blob.watch.groups.length} tasks=${merged.blob.watch.tasks.tasks.length} ledger=${merged.blob.ledger.entries.length})`,
+        );
+      }
+    } else if (haveUserBlob) {
+      notes.push('user.parquet already in sync');
+    }
+
+    // Archive any legacy file that contributed (or that exists at all
+    // — even if it didn't contribute because the blob already held the
+    // slice, we still want it out of the way to avoid future confusion).
+    if (groupsRaw !== undefined) legacyToArchive.push(watchGroups);
+    if (tasksRaw !== undefined) legacyToArchive.push(watchTasks);
+    if (legacyLedgerSlice !== undefined) legacyToArchive.push(ledger);
+    if (legacySysCfg !== undefined) legacyToArchive.push(sysCfgJson);
   }
 
   // --- user_llm_ledger.parquet (slim v2 rewrite) ---
+  // Three cases:
+  //   1. parquet exists — read it, strip dropped fields, rewrite if changed.
+  //   2. legacy llm-ledger.json exists, no parquet — adopt JSON, write v2
+  //      parquet, archive the JSON.
+  //   3. neither — skip silently.
+  const legacyLlmJson = join(userDir, 'llm-ledger.json');
   if (await fileExists(llmLedger)) {
     const raw = await readSingletonPayload(conn, llmLedger);
     const migrated = migrateLedgerPayload(raw);
@@ -234,7 +260,33 @@ async function migrateOne(
         await writeSingletonParquet(conn, llmLedger, migrated);
         notes.push(`rewrote user_llm_ledger.parquet (entries=${migrated.entries.length})`);
       } else {
-        notes.push(`[dry-run] would rewrite user_llm_ledger.parquet (entries=${migrated.entries.length})`);
+        notes.push(
+          `[dry-run] would rewrite user_llm_ledger.parquet (entries=${migrated.entries.length})`,
+        );
+      }
+    }
+  } else if (await fileExists(legacyLlmJson)) {
+    let raw: unknown;
+    try {
+      raw = JSON.parse(await fs.readFile(legacyLlmJson, 'utf8'));
+    } catch (err: unknown) {
+      notes.push(`legacy llm-ledger.json parse failed: ${String(err)}`);
+      raw = undefined;
+    }
+    const migrated = raw === undefined ? null : migrateLedgerPayload(raw);
+    if (migrated === null) {
+      notes.push('legacy llm-ledger.json unrecognized — skipped');
+    } else {
+      legacyToArchive.push(legacyLlmJson);
+      if (!dryRun) {
+        await writeSingletonParquet(conn, llmLedger, migrated);
+        notes.push(
+          `adopted legacy llm-ledger.json → user_llm_ledger.parquet (entries=${migrated.entries.length})`,
+        );
+      } else {
+        notes.push(
+          `[dry-run] would adopt legacy llm-ledger.json → user_llm_ledger.parquet (entries=${migrated.entries.length})`,
+        );
       }
     }
   }
@@ -249,6 +301,70 @@ async function migrateOne(
 
   const status: UserOutcome['status'] = haveUserBlob && legacyToArchive.length === 0 ? 'already' : 'migrated';
   return { userId, status, notes };
+}
+
+function parseExistingBlob(raw: unknown): UserBlob | undefined {
+  if (raw === null || raw === undefined || typeof raw !== 'object') return undefined;
+  const obj = raw as Record<string, unknown>;
+  if (obj['schemaVersion'] !== USER_BLOB_SCHEMA_VERSION) return undefined;
+  // Trust the on-disk shape — the live UserBlobStore writes a known
+  // structure and the in-memory merge code below tolerates absent
+  // sub-fields. Strict re-validation would reject the same loose-
+  // field-trip cases the store itself accepts on read.
+  return raw as UserBlob;
+}
+
+interface LegacyParts {
+  readonly groups: UserBlob['watch']['groups'] | undefined;
+  readonly tasksFile: WatchSlice['tasks'] | undefined;
+  readonly ledger: { readonly entries: UserBlob['ledger']['entries'] } | undefined;
+  readonly sysCfg: UserBlob['sysCfg'] | undefined;
+}
+
+function mergeLegacyIntoBlob(
+  blob: UserBlob,
+  legacy: LegacyParts,
+): { readonly blob: UserBlob; readonly changed: boolean } {
+  let changed = false;
+  let watch = blob.watch;
+  let ledger = blob.ledger;
+  let sysCfg = blob.sysCfg;
+
+  // Groups: replace only when the blob's slice is empty and legacy has rows.
+  if (legacy.groups !== undefined && legacy.groups.length > 0 && watch.groups.length === 0) {
+    watch = { ...watch, groups: [...legacy.groups] };
+    changed = true;
+  }
+  // Tasks: same — only fill if blob has none.
+  if (
+    legacy.tasksFile !== undefined &&
+    legacy.tasksFile.tasks.length > 0 &&
+    watch.tasks.tasks.length === 0
+  ) {
+    watch = { ...watch, tasks: legacy.tasksFile };
+    changed = true;
+  }
+  // Ledger entries: same.
+  if (
+    legacy.ledger !== undefined &&
+    legacy.ledger.entries.length > 0 &&
+    ledger.entries.length === 0
+  ) {
+    ledger = { entries: [...legacy.ledger.entries] };
+    changed = true;
+  }
+  // SysCfg: only fill if the blob is still on defaults (every key matches default).
+  if (legacy.sysCfg !== undefined && JSON.stringify(sysCfg) === JSON.stringify(DEFAULT_SYS_CFG)) {
+    if (JSON.stringify(legacy.sysCfg) !== JSON.stringify(DEFAULT_SYS_CFG)) {
+      sysCfg = legacy.sysCfg;
+      changed = true;
+    }
+  }
+
+  return {
+    blob: { schemaVersion: USER_BLOB_SCHEMA_VERSION, watch, ledger, sysCfg },
+    changed,
+  };
 }
 
 function parseTaskFile(raw: unknown): WatchSlice['tasks'] {

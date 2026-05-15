@@ -209,7 +209,7 @@ describe('migrate-user-stores', () => {
 
     const second = await runMigration({ dataRoot: root, dryRun: false });
     expect(second[0]?.status).toBe('already');
-    expect(second[0]?.notes.some((n) => n.includes('already present'))).toBe(true);
+    expect(second[0]?.notes.some((n) => n.includes('already in sync'))).toBe(true);
   });
 
   it('handles a user dir with no legacy files', async () => {
@@ -249,7 +249,7 @@ describe('migrate-user-stores', () => {
 
     const out = await runMigration({ dataRoot: root, dryRun: false });
     expect(out[0]?.notes.some((n) => n.includes('rewrote user_llm_ledger'))).toBe(true);
-    expect(out[0]?.notes.some((n) => n.includes('already present'))).toBe(true);
+    expect(out[0]?.notes.some((n) => n.includes('already in sync'))).toBe(true);
   });
 
   it('handles a user dir with a v2 LLM ledger already (no rewrite)', async () => {
