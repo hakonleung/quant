@@ -40,37 +40,24 @@ services/py/quant_core/generated/
 *.swp
 .AppleDouble
 
-# Runtime-only data dirs (audit logs, scratch caches). Underscore-prefixed
-# subdirs of data/ are operator-owned, not source.
-data/_*/
-# Sentiment cache is rebuilt on demand via NewsSentimentService — never source-tracked.
-data/sentiment/
 # Watch state (W-0): tasks.json is mutable runtime state. universe_{hk,us}.json
 # under data/watch IS source-tracked — fresh clones get the lookup tables
 # without an akshare round-trip.
 apps/api/data/
-# Sectors + Sys.Cfg are user state, never source-tracked.
-data/sectors/
-data/ta/
+
 # Per-user data dirs (post auth multi-user split). data/users/{uid}/...
 # holds personal ledger / watch / sys-cfg / AI cache; data/users/_meta/users.json
 # is the user registry. All user state, never source-tracked.
 data/users/
-# Verify-storage-migration writes this file. Always reproducible from the
-# script + data/, so don't carry it in git.
-data/migration-report.md
-# Legacy JSON snapshots renamed by self-migrating stores. Once the
-# storage-unify migration is complete and verified, these can be deleted
-# from disk; the .bak suffix is also kept out of git for that interim.
-data/*.json.bak
+
 data/all_users.parquet
 data/public_sectors.parquet
+data/.legacy
 
 # Test output
 coverage/
 playwright-report/
 test-results/
 .logs
-
 
 data.zip
