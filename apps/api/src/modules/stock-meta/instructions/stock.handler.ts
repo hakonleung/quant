@@ -4,6 +4,7 @@ import {
   okResult,
   okResultWithMeta,
   type InstructionResult,
+  type StockListRow,
   type StockSnapshotDto,
 } from '@quant/shared';
 import { z } from 'zod';
@@ -14,10 +15,8 @@ import { InstructionRegistry } from '../../instruction/instruction.registry.js';
 import type { InstructionSpec } from '../../instruction/instruction.types.js';
 import {
   formatStockTable,
-  rowFromSnapshot,
   stockTableMetaColumns,
   stockTableMetaRows,
-  type StockTableRow,
 } from '../domain/format-stock-table.js';
 import { StockMetaService } from '../stock-meta.service.js';
 
@@ -67,7 +66,14 @@ export class StockInstructionHandler extends InstructionRegistrarBase<Args> {
     if (matches.length === 0) return okResult(`no match for "${args.q ?? ''}"`);
 
     const subheader = `stock matches (${String(matches.length)})`;
-    const rows = await this.buildRows(matches, ctx.traceId);
+    let byCode: Map<string, StockSnapshotDto>;
+    try {
+      const snapshots = await this.stockMeta.snapshotAll(ctx.traceId);
+      byCode = new Map(snapshots.map((s) => [s.meta.code, s]));
+    } catch {
+      byCode = new Map();
+    }
+    const rows: StockListRow[] = matches.map((m) => buildRow(m.code, m.name, byCode.get(m.code)));
     const text = `${subheader}\n\n${formatStockTable(rows)}`;
     return okResultWithMeta(text, {
       stockTableColumns: stockTableMetaColumns(),
@@ -75,26 +81,34 @@ export class StockInstructionHandler extends InstructionRegistrarBase<Args> {
       stockTableSubheader: subheader,
     });
   }
+}
 
-  /**
-   * Join the matched meta rows with the cached snapshot universe so the
-   * IM table renders price + multi-period returns in addition to the
-   * code/name/industry columns. Falls back to meta-only rows if the
-   * snapshot fetch fails — still better than no table at all.
-   */
-  private async buildRows(
-    matches: readonly { readonly code: string; readonly name: string }[],
-    traceId: string,
-  ): Promise<readonly StockTableRow[]> {
-    let byCode: Map<string, StockSnapshotDto>;
-    try {
-      const snapshots = await this.stockMeta.snapshotAll(traceId);
-      byCode = new Map(snapshots.map((s) => [s.meta.code, s]));
-    } catch {
-      byCode = new Map();
-    }
-    return matches.map((m) =>
-      rowFromSnapshot({ code: m.code, name: m.name, snapshot: byCode.get(m.code) }),
-    );
-  }
+function buildRow(code: string, name: string, snap: StockSnapshotDto | undefined): StockListRow {
+  return {
+    code,
+    name,
+    price: parseDecimal(snap?.price),
+    chgPct: parseDecimal(snap?.returns.ret_1d),
+    turnoverRate: null,
+    turnover: null,
+    consecUp: null,
+    ret5d: parseDecimal(snap?.returns.ret_5d),
+    ret10d: parseDecimal(snap?.returns.ret_10d),
+    ret20d: parseDecimal(snap?.returns.ret_20d),
+    ret90d: parseDecimal(snap?.returns.ret_90d),
+    ret250d: parseDecimal(snap?.returns.ret_250d),
+    mktCap: parseDecimal(snap?.derived.mkt_cap),
+    floatMktCap: parseDecimal(snap?.derived.float_mkt_cap),
+    peTtm: parseDecimal(snap?.derived.pe_ttm),
+    peDynamic: parseDecimal(snap?.derived.pe_dynamic),
+    pb: parseDecimal(snap?.derived.pb),
+    peg: parseDecimal(snap?.derived.peg),
+    grossMargin: parseDecimal(snap?.derived.gross_margin_ttm),
+  };
+}
+
+function parseDecimal(raw: string | null | undefined): number | null {
+  if (raw === null || raw === undefined || raw === '') return null;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : null;
 }

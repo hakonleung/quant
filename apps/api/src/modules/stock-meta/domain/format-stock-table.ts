@@ -1,15 +1,8 @@
 /**
- * Pure formatter for IM stock-list tables.
- *
- * Aligned with the frontend EQ.LIST default columns
- * (apps/web/lib/eqty/columns.catalog.ts §defaultApplied):
- *   code · name · price · chg% · 换手 · 成交额 · 连涨 · 5d% · 20d% · 90d% · 250d%
- *
- * For dynamic sectors the caller appends extra "evidence" columns
- * keyed by the sector's evaluator output (e.g. `vol_ratio`, `streak`),
- * matching FE's per-row evidence rendering. Numeric evidence values are
- * formatted by the caller; this module only handles the well-known
- * built-in columns.
+ * IM stock-list table renderer. Consumes the canonical `StockListRow`
+ * DTO from `@quant/shared`, so the Feishu/xterm output and the FE list
+ * pane render the exact same column set + order. Evidence columns are
+ * appended verbatim (caller pre-formats values).
  *
  * Two outputs:
  *   - {@link formatStockTable}: monospace ASCII table for term / Slack.
@@ -18,108 +11,82 @@
  *     schema-2.0 native `table` widget via `output.meta.tableSections`.
  */
 
-const PCT_COL_KEYS = ['chgPct', 'turnoverRate', 'ret5d', 'ret20d', 'ret90d', 'ret250d'] as const;
+import {
+  STOCK_LIST_COLUMN_CATALOG,
+  type StockListColumnKey,
+  type StockListRow,
+} from '@quant/shared';
 
-/**
- * Built-in column order — must match the FE default applied set so the
- * IM card and the web mkt list line up. Keep this in lockstep with
- * `apps/web/lib/eqty/columns.catalog.ts`.
- */
-const BUILTIN_COLUMNS = [
-  { key: 'code', header: 'code', align: 'left' as const, width: 90, min: 6 },
-  { key: 'name', header: 'name', align: 'left' as const, width: 120, min: 10 },
-  { key: 'price', header: 'price', align: 'right' as const, width: 80, min: 8 },
-  { key: 'chgPct', header: 'chg%', align: 'right' as const, width: 80, min: 7 },
-  { key: 'turnoverRate', header: '换手', align: 'right' as const, width: 80, min: 6 },
-  { key: 'turnover', header: '成交额', align: 'right' as const, width: 100, min: 10 },
-  { key: 'consecUp', header: '连涨', align: 'right' as const, width: 80, min: 6 },
-  { key: 'ret5d', header: '5d%', align: 'right' as const, width: 80, min: 7 },
-  { key: 'ret20d', header: '20d%', align: 'right' as const, width: 80, min: 7 },
-  { key: 'ret90d', header: '90d%', align: 'right' as const, width: 80, min: 7 },
-  { key: 'ret250d', header: '250d%', align: 'right' as const, width: 80, min: 7 },
-] as const;
-
-type BuiltinKey = (typeof BUILTIN_COLUMNS)[number]['key'];
-
-/**
- * Build a {@link StockTableRow} from the snapshot DTO. Centralises the
- * "fields the snapshot endpoint doesn't carry → null" mapping so every
- * IM handler that joins snapshot data onto a stock list (sector.show,
- * screen, watch) ends up with the exact same shape — and a uniform
- * `—` rendering for kline-only metrics.
- */
-interface SnapshotForRow {
-  readonly price: string | null;
-  readonly returns: {
-    readonly ret_1d: string | null;
-    readonly ret_5d: string | null;
-    readonly ret_20d: string | null;
-    readonly ret_90d: string | null;
-    readonly ret_250d: string | null;
-  };
+interface RenderColumn {
+  readonly key: 'code' | StockListColumnKey;
+  readonly header: string;
+  readonly align: 'left' | 'right';
+  readonly width: number;
+  readonly min: number;
 }
 
-export function rowFromSnapshot(args: {
-  readonly code: string;
-  readonly name: string;
-  readonly snapshot: SnapshotForRow | undefined;
-  readonly evidence?: Readonly<Record<string, string | null>>;
-}): StockTableRow {
-  const fields = snapshotFields(args.snapshot);
-  return {
-    code: args.code,
-    name: args.name,
-    ...fields,
-    ...(args.evidence !== undefined ? { evidence: args.evidence } : {}),
-  };
-}
+const HEADER_OVERRIDES: Partial<Record<StockListColumnKey, string>> = {
+  name: 'code',
+  price: 'price',
+  chgPct: 'chg%',
+  turnoverRate: '换手',
+  turnover: '成交额',
+  consecUp: '连涨',
+  ret5d: '5d%',
+  ret10d: '10d%',
+  ret20d: '20d%',
+  ret90d: '90d%',
+  ret250d: '250d%',
+};
 
-function snapshotFields(snap: SnapshotForRow | undefined): Omit<StockTableRow, 'code' | 'name'> {
-  if (snap === undefined) {
-    return {
-      price: null,
-      chgPct: null,
-      turnoverRate: null,
-      turnover: null,
-      consecUpDays: null,
-      ret5d: null,
-      ret20d: null,
-      ret90d: null,
-      ret250d: null,
-    };
+const COLUMN_DEFAULTS: Readonly<
+  Record<StockListColumnKey, { align: 'left' | 'right'; width: number; min: number }>
+> = {
+  name: { align: 'left', width: 90, min: 6 },
+  price: { align: 'right', width: 80, min: 8 },
+  chgPct: { align: 'right', width: 80, min: 7 },
+  turnoverRate: { align: 'right', width: 80, min: 6 },
+  turnover: { align: 'right', width: 100, min: 10 },
+  consecUp: { align: 'right', width: 80, min: 6 },
+  ret5d: { align: 'right', width: 80, min: 7 },
+  ret10d: { align: 'right', width: 80, min: 7 },
+  ret20d: { align: 'right', width: 80, min: 7 },
+  ret90d: { align: 'right', width: 80, min: 7 },
+  ret250d: { align: 'right', width: 80, min: 7 },
+  mktCap: { align: 'right', width: 100, min: 10 },
+  floatMktCap: { align: 'right', width: 100, min: 10 },
+  peTtm: { align: 'right', width: 80, min: 7 },
+  peDynamic: { align: 'right', width: 80, min: 7 },
+  pb: { align: 'right', width: 70, min: 6 },
+  peg: { align: 'right', width: 70, min: 6 },
+  grossMargin: { align: 'right', width: 80, min: 7 },
+};
+
+/** The default column set rendered by IM tables — drops the 6 derived/snapshot
+ * fundamentals to keep the row width manageable inside Feishu/xterm. */
+const DEFAULT_IM_COLUMNS: readonly StockListColumnKey[] = STOCK_LIST_COLUMN_CATALOG
+  .filter((c) => c.group === 'core' || ['ret5d', 'ret20d', 'ret90d', 'ret250d'].includes(c.key))
+  .map((c) => c.key);
+
+function buildRenderColumns(columns: readonly StockListColumnKey[]): readonly RenderColumn[] {
+  // The leading separate `code` column comes from `StockListRow.code`;
+  // `name` from the shared catalog renders the human-readable name.
+  // Always show code first so users can map back to a ticker.
+  const out: RenderColumn[] = [
+    { key: 'code', header: 'code', align: 'left', width: 90, min: 6 },
+  ];
+  for (const key of columns) {
+    const defaults = COLUMN_DEFAULTS[key];
+    const header = HEADER_OVERRIDES[key] ?? key;
+    out.push({
+      key,
+      header: key === 'name' ? 'name' : header,
+      align: defaults.align,
+      width: defaults.width,
+      min: defaults.min,
+    });
   }
-  return {
-    price: snap.price,
-    chgPct: snap.returns.ret_1d,
-    turnoverRate: null,
-    turnover: null,
-    consecUpDays: null,
-    ret5d: snap.returns.ret_5d,
-    ret20d: snap.returns.ret_20d,
-    ret90d: snap.returns.ret_90d,
-    ret250d: snap.returns.ret_250d,
-  };
-}
-
-export interface StockTableRow {
-  readonly code: string;
-  readonly name: string;
-  readonly price: string | null;
-  readonly chgPct: string | null;
-  readonly turnoverRate: string | null;
-  readonly turnover: string | null;
-  readonly consecUpDays: number | null;
-  readonly ret5d: string | null;
-  readonly ret20d: string | null;
-  readonly ret90d: string | null;
-  readonly ret250d: string | null;
-  /**
-   * Dynamic-sector evidence cells, pre-formatted for display
-   * (`fmtPct` / `fmtCny` / etc. — caller's choice). Keys become column
-   * names and headers; column order follows the iteration order of the
-   * Map / object.
-   */
-  readonly evidence?: Readonly<Record<string, string | null>>;
+  return out;
 }
 
 export interface StockTableColumnMeta {
@@ -131,13 +98,15 @@ export interface StockTableColumnMeta {
 
 /**
  * Build the column descriptors for the Feishu schema-2.0 native table.
- * Always emits the built-in columns; appends one descriptor per evidence
- * key when the dynamic sector surfaced any.
+ * Always emits the leading `code` column + the supplied applied
+ * columns; appends one descriptor per evidence key.
  */
 export function stockTableMetaColumns(
   evidenceKeys: readonly string[] = [],
+  columns: readonly StockListColumnKey[] = DEFAULT_IM_COLUMNS,
 ): readonly StockTableColumnMeta[] {
-  const builtins: StockTableColumnMeta[] = BUILTIN_COLUMNS.map((c) => ({
+  const render = buildRenderColumns(columns);
+  const builtins: StockTableColumnMeta[] = render.map((c) => ({
     name: c.key,
     displayName: c.header,
     horizontalAlign: c.align,
@@ -153,30 +122,19 @@ export function stockTableMetaColumns(
 }
 
 /**
- * Convert {@link StockTableRow}s into the structured row shape consumed
+ * Convert {@link StockListRow}s into the structured row shape consumed
  * by the Feishu adapter through `output.meta.tableSections`. Pre-formats
  * every numeric cell to a display string so the renderer does no math
- * itself — keeps the column order / header labels in lockstep with the
- * text-table fallback.
+ * itself.
  */
 export function stockTableMetaRows(
-  rows: readonly StockTableRow[],
+  rows: readonly StockListRow[],
   evidenceKeys: readonly string[] = [],
+  columns: readonly StockListColumnKey[] = DEFAULT_IM_COLUMNS,
 ): readonly Readonly<Record<string, string | null>>[] {
   return rows.map((r) => {
-    const out: Record<string, string | null> = {
-      code: r.code,
-      name: r.name,
-      price: r.price,
-      chgPct: fmtPctOrNull(r.chgPct),
-      turnoverRate: fmtPctOrNull(r.turnoverRate),
-      turnover: fmtCnyOrNull(r.turnover),
-      consecUp: r.consecUpDays === null ? null : `${String(r.consecUpDays)}d`,
-      ret5d: fmtPctOrNull(r.ret5d),
-      ret20d: fmtPctOrNull(r.ret20d),
-      ret90d: fmtPctOrNull(r.ret90d),
-      ret250d: fmtPctOrNull(r.ret250d),
-    };
+    const out: Record<string, string | null> = { code: r.code };
+    for (const col of columns) out[col] = formatCell(r, col);
     const ev = r.evidence ?? {};
     for (const k of evidenceKeys) {
       out[`ev_${k}`] = ev[k] ?? null;
@@ -185,74 +143,81 @@ export function stockTableMetaRows(
   });
 }
 
-function fmtPctOrNull(raw: string | null): string | null {
-  if (raw === null || raw === '') return null;
-  const n = Number(raw);
-  if (!Number.isFinite(n)) return null;
+/** ASCII fallback rendered for term / Slack. */
+export function formatStockTable(
+  rows: readonly StockListRow[],
+  columns: readonly StockListColumnKey[] = DEFAULT_IM_COLUMNS,
+): string {
+  if (rows.length === 0) return '```\n(no data)\n```';
+  const render = buildRenderColumns(columns);
+  const cells = rows.map((r) => {
+    const cell: Record<string, string> = { code: r.code };
+    for (const col of columns) cell[col] = formatCell(r, col) ?? '—';
+    return cell;
+  });
+  const widths = new Map<string, number>();
+  for (const c of render) widths.set(c.key, Math.max(c.min, displayWidth(c.header)));
+  for (const row of cells) {
+    for (const c of render) {
+      const w = displayWidth(row[c.key] ?? '');
+      const cur = widths.get(c.key) ?? 0;
+      if (w > cur) widths.set(c.key, w);
+    }
+  }
+  const headerLine = render
+    .map((c) => pad(c.header, widths.get(c.key) ?? c.min, c.align))
+    .join('  ');
+  const separator = render.map((c) => '─'.repeat(widths.get(c.key) ?? c.min)).join('  ');
+  const bodyLines = cells.map((c) =>
+    render.map((col) => pad(c[col.key] ?? '', widths.get(col.key) ?? col.min, col.align)).join('  '),
+  );
+  return ['```', headerLine, separator, ...bodyLines, '```'].join('\n');
+}
+
+function formatCell(row: StockListRow, col: StockListColumnKey): string | null {
+  const v = (row as unknown as Record<string, unknown>)[col];
+  if (v === null || v === undefined) return null;
+  switch (col) {
+    case 'name':
+      return typeof v === 'string' ? v : String(v);
+    case 'consecUp':
+      return typeof v === 'number' ? `${String(v)}d` : null;
+    case 'price':
+      return typeof v === 'number' ? v.toFixed(2) : null;
+    case 'chgPct':
+    case 'turnoverRate':
+    case 'ret5d':
+    case 'ret10d':
+    case 'ret20d':
+    case 'ret90d':
+    case 'ret250d':
+    case 'grossMargin':
+      return typeof v === 'number' ? formatPct(v) : null;
+    case 'turnover':
+    case 'mktCap':
+    case 'floatMktCap':
+      return typeof v === 'number' ? formatCny(v) : null;
+    case 'peTtm':
+    case 'peDynamic':
+    case 'pb':
+    case 'peg':
+      return typeof v === 'number' ? v.toFixed(2) : null;
+  }
+}
+
+function formatPct(n: number): string {
+  if (!Number.isFinite(n)) return '—';
   const pct = n * 100;
   const sign = pct >= 0 ? '+' : '';
   return `${sign}${pct.toFixed(2)}%`;
 }
 
-function fmtCnyOrNull(raw: string | null): string | null {
-  if (raw === null || raw === '') return null;
-  const n = Number(raw);
-  if (!Number.isFinite(n)) return null;
+function formatCny(n: number): string {
+  if (!Number.isFinite(n)) return '—';
   if (Math.abs(n) >= 1e8) return `${(n / 1e8).toFixed(2)}亿`;
   if (Math.abs(n) >= 1e4) return `${(n / 1e4).toFixed(2)}万`;
   return n.toFixed(2);
 }
-
-/** ASCII fallback rendered for term / Slack. Built-in columns only. */
-export function formatStockTable(rows: readonly StockTableRow[]): string {
-  if (rows.length === 0) return '```\n(no data)\n```';
-  const cells = rows.map((r) => ({
-    code: r.code,
-    name: r.name,
-    price: r.price ?? '—',
-    chgPct: fmtPctOrNull(r.chgPct) ?? '—',
-    turnoverRate: fmtPctOrNull(r.turnoverRate) ?? '—',
-    turnover: fmtCnyOrNull(r.turnover) ?? '—',
-    consecUp: r.consecUpDays === null ? '—' : `${String(r.consecUpDays)}d`,
-    ret5d: fmtPctOrNull(r.ret5d) ?? '—',
-    ret20d: fmtPctOrNull(r.ret20d) ?? '—',
-    ret90d: fmtPctOrNull(r.ret90d) ?? '—',
-    ret250d: fmtPctOrNull(r.ret250d) ?? '—',
-  })) satisfies readonly Record<BuiltinKey, string>[];
-
-  const widths: Record<BuiltinKey, number> = {
-    code: 0,
-    name: 0,
-    price: 0,
-    chgPct: 0,
-    turnoverRate: 0,
-    turnover: 0,
-    consecUp: 0,
-    ret5d: 0,
-    ret20d: 0,
-    ret90d: 0,
-    ret250d: 0,
-  };
-  for (const c of BUILTIN_COLUMNS) widths[c.key] = c.min;
-  for (const c of BUILTIN_COLUMNS) {
-    widths[c.key] = Math.max(widths[c.key], displayWidth(c.header));
-  }
-  for (const row of cells) {
-    for (const c of BUILTIN_COLUMNS) {
-      const w = displayWidth(row[c.key]);
-      if (w > widths[c.key]) widths[c.key] = w;
-    }
-  }
-  const headerLine = BUILTIN_COLUMNS.map((c) => pad(c.header, widths[c.key], c.align)).join('  ');
-  const separator = BUILTIN_COLUMNS.map((c) => '─'.repeat(widths[c.key])).join('  ');
-  const bodyLines = cells.map((c) =>
-    BUILTIN_COLUMNS.map((col) => pad(c[col.key], widths[col.key], col.align)).join('  '),
-  );
-  return ['```', headerLine, separator, ...bodyLines, '```'].join('\n');
-}
-
-// Suppress "value never read" — PCT_COL_KEYS is exported elsewhere too.
-void PCT_COL_KEYS;
 
 function displayWidth(s: string): number {
   let w = 0;
@@ -285,3 +250,5 @@ function pad(s: string, target: number, side: 'left' | 'right'): string {
   const fill = ' '.repeat(target - w);
   return side === 'left' ? s + fill : fill + s;
 }
+
+export { DEFAULT_IM_COLUMNS };

@@ -1,13 +1,10 @@
 /**
  * `/sector show <idOrName>` — print one sector's basic info + stock table.
  *
- * The IM table mirrors the frontend EQ.LIST default columns (code, name,
- * price, chg%, 换手, 成交额, 连涨, 5d%, 20d%, 90d%, 250d%) so users
- * working in Feishu see the same shape as the web pane. Fields the
- * snapshot endpoint doesn't carry (turnoverRate / turnover / consecUp
- * — those are kline-derived) render as `—`. For dynamic sectors we
- * append one extra column per evaluator-evidence key so screening
- * results show their underlying metric inline.
+ * Row assembly is delegated to `StockListService.assembleRows({ kind: 'user-sector' | 'dynamic-sector' })`,
+ * which is the same composition the FE list pane uses. Evidence keys
+ * for dynamic sectors are pre-formatted here and threaded through
+ * `evidenceByCode` so they appear as extra columns on every row.
  */
 
 import { Inject, Injectable } from '@nestjs/common';
@@ -19,7 +16,6 @@ import {
   QuantError,
   type InstructionResult,
   type Sector,
-  type StockSnapshotDto,
 } from '@quant/shared';
 import { z } from 'zod';
 
@@ -27,18 +23,14 @@ import type { InstructionCtx } from '../../instruction/instruction.port.js';
 import { InstructionRegistrarBase } from '../../instruction/instruction.provider.js';
 import { InstructionRegistry } from '../../instruction/instruction.registry.js';
 import type { InstructionSpec } from '../../instruction/instruction.types.js';
-import { StockMetaService } from '../../stock-meta/stock-meta.service.js';
 import {
   formatStockTable,
-  rowFromSnapshot,
   stockTableMetaColumns,
   stockTableMetaRows,
-  type StockTableRow,
 } from '../../stock-meta/domain/format-stock-table.js';
+import { StockListService } from '../../stock-list/stock-list.service.js';
 import { SectorsService } from '../sectors.service.js';
 
-// 30 rows of the code-fenced stock table fits comfortably under
-// `truncateForCard`'s 3000-char ceiling.
 const MAX_TABLE_ROWS = 30;
 
 const argsSchema = z
@@ -62,7 +54,7 @@ export class SectorShowInstructionHandler extends InstructionRegistrarBase<Args>
   constructor(
     @Inject(InstructionRegistry) registry: InstructionRegistry,
     @Inject(SectorsService) private readonly sectors: SectorsService,
-    @Inject(StockMetaService) private readonly stockMeta: StockMetaService,
+    @Inject(StockListService) private readonly stockList: StockListService,
   ) {
     super(registry);
   }
@@ -94,54 +86,47 @@ export class SectorShowInstructionHandler extends InstructionRegistrarBase<Args>
         : '';
 
     const evidenceKeys = collectEvidenceKeys(sector, codes);
+    const evidenceByCode = buildEvidenceByCode(sector, codes, evidenceKeys);
 
-    let rows: StockTableRow[] | null = null;
     let tableText: string;
     try {
-      const allSnapshots = await this.stockMeta.snapshotAll(ctx.traceId);
-      const byCode = new Map<string, StockSnapshotDto>(allSnapshots.map((s) => [s.meta.code, s]));
-      rows = codes.map((code) => buildRow(code, byCode.get(code), sector, evidenceKeys));
-      tableText = formatStockTable(rows);
+      const out = await this.stockList.assembleRows({
+        kind: sector.kind === 'dynamic' ? 'dynamic-sector' : 'user-sector',
+        codes,
+        traceId: ctx.traceId,
+        ...(Object.keys(evidenceByCode).length > 0 ? { evidenceByCode } : {}),
+      });
+      tableText = formatStockTable(out.rows);
+      const text = `${headerLine}\n\n${tableText}${tail}`;
+      return okResultWithMeta(text, {
+        stockTableColumns: stockTableMetaColumns(evidenceKeys),
+        stockTableRows: stockTableMetaRows(out.rows, evidenceKeys),
+        stockTableSubheader: `${headerLine}${tail.length > 0 ? `  ·  ${tail.trim()}` : ''}`,
+      });
     } catch {
       tableText = codes.join(', ');
+      return okResult(`${headerLine}\n\n${tableText}${tail}`);
     }
-
-    const text = `${headerLine}\n\n${tableText}${tail}`;
-    if (rows === null) return okResult(text);
-    return okResultWithMeta(text, {
-      stockTableColumns: stockTableMetaColumns(evidenceKeys),
-      stockTableRows: stockTableMetaRows(rows, evidenceKeys),
-      stockTableSubheader: `${headerLine}${tail.length > 0 ? `  ·  ${tail.trim()}` : ''}`,
-    });
   }
 }
 
-function buildRow(
-  code: string,
-  snap: StockSnapshotDto | undefined,
+function buildEvidenceByCode(
   sector: Sector,
+  codes: readonly string[],
   evidenceKeys: readonly string[],
-): StockTableRow {
-  const evidence = pickEvidence(sector, code, evidenceKeys);
-  return rowFromSnapshot({
-    code,
-    name: snap?.meta.name ?? code,
-    snapshot: snap,
-    evidence,
-  });
-}
-
-function pickEvidence(
-  sector: Sector,
-  code: string,
-  evidenceKeys: readonly string[],
-): Readonly<Record<string, string | null>> {
-  const raw =
-    sector.kind === 'dynamic' && sector.evidence !== undefined
-      ? (sector.evidence[code] ?? {})
-      : {};
-  const out: Record<string, string | null> = {};
-  for (const k of evidenceKeys) out[k] = formatEvidenceValue(raw[k]);
+): Readonly<Record<string, Readonly<Record<string, string>>>> {
+  if (sector.kind !== 'dynamic' || sector.evidence === undefined) return {};
+  const out: Record<string, Record<string, string>> = {};
+  for (const code of codes) {
+    const inner = sector.evidence[code];
+    if (inner === undefined) continue;
+    const formatted: Record<string, string> = {};
+    for (const k of evidenceKeys) {
+      const v = formatEvidenceValue(inner[k]);
+      if (v !== null) formatted[k] = v;
+    }
+    if (Object.keys(formatted).length > 0) out[code] = formatted;
+  }
   return out;
 }
 

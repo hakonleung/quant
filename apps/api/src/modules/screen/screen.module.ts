@@ -10,6 +10,7 @@ import { Module } from '@nestjs/common';
 
 import { FlightClient } from '../../adapters/flight/flight-client.js';
 import { SYSTEM_CLOCK_PROVIDER } from '../../common/clock.js';
+import { StockListModule } from '../stock-list/stock-list.module.js';
 import { StockMetaModule } from '../stock-meta/stock-meta.module.js';
 import { ScreenInstructionHandler } from './instructions/screen.handler.js';
 import { NlToDslService } from './nl-to-dsl.service.js';
@@ -20,7 +21,7 @@ import { SCREEN_FLIGHT_CLIENT } from './screen.token.js';
 const DEFAULT_FLIGHT_TARGET = '127.0.0.1:8815';
 
 @Module({
-  imports: [StockMetaModule],
+  imports: [StockMetaModule, StockListModule],
   controllers: [ScreenController],
   providers: [
     {

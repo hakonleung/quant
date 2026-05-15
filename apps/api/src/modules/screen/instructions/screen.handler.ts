@@ -9,8 +9,7 @@
  * `mode: 'async'`: the IM listener acks immediately with a "queued"
  * card and pushes the matches once the worker finishes.
  *
- * v1 only exposes the NL entry point — `nl2dsl` and `run` would need
- * an AST input (impractical to type in IM); they remain HTTP-only.
+ * Match table delegates to `StockListService.assembleRows({ kind: 'screen' })`.
  */
 
 import { Inject, Injectable } from '@nestjs/common';
@@ -22,7 +21,6 @@ import {
   QuantError,
   type InstructionResult,
   type NlScreenResult,
-  type StockSnapshotDto,
 } from '@quant/shared';
 import { z } from 'zod';
 
@@ -32,11 +30,9 @@ import { InstructionRegistry } from '../../instruction/instruction.registry.js';
 import type { InstructionSpec } from '../../instruction/instruction.types.js';
 import {
   formatStockTable,
-  rowFromSnapshot,
   stockTableMetaRows,
-  type StockTableRow,
 } from '../../stock-meta/domain/format-stock-table.js';
-import { StockMetaService } from '../../stock-meta/stock-meta.service.js';
+import { StockListService } from '../../stock-list/stock-list.service.js';
 import { ScreenService } from '../screen.service.js';
 
 const boolFlag = z
@@ -88,7 +84,7 @@ export class ScreenInstructionHandler extends InstructionRegistrarBase<Args> {
   constructor(
     @Inject(InstructionRegistry) registry: InstructionRegistry,
     @Inject(ScreenService) private readonly screen: ScreenService,
-    @Inject(StockMetaService) private readonly stockMeta: StockMetaService,
+    @Inject(StockListService) private readonly stockList: StockListService,
   ) {
     super(registry);
   }
@@ -113,29 +109,19 @@ export class ScreenInstructionHandler extends InstructionRegistrarBase<Args> {
       result.matches.length > MAX_MATCHES_DISPLAY
         ? `\n(+${String(result.matches.length - MAX_MATCHES_DISPLAY)} more)`
         : '';
-    let rows: StockTableRow[] | null = null;
-    let table: string;
     try {
-      const allSnapshots = await this.stockMeta.snapshotAll(ctx.traceId);
-      const byCode = new Map<string, StockSnapshotDto>(allSnapshots.map((s) => [s.meta.code, s]));
-      rows = codes.map((code) => {
-        const snap = byCode.get(code);
-        return rowFromSnapshot({ code, name: snap?.meta.name ?? code, snapshot: snap });
+      const out = await this.stockList.assembleRows({
+        kind: 'screen',
+        codes,
+        traceId: ctx.traceId,
       });
-      table = formatStockTable(rows);
+      const text = `${head}\n\n${formatStockTable(out.rows)}${tail}`;
+      return okResultWithMeta(text, {
+        stockTableRows: stockTableMetaRows(out.rows),
+        stockTableSubheader: `${head}${tail.length > 0 ? `  ·  ${tail.trim()}` : ''}`,
+      });
     } catch {
-      // Snapshot fetch failed — fall back to a bare code list so the user
-      // still sees the matches; no structured rows in this branch.
-      table = codes.join(', ');
+      return okResult(`${head}\n\n${codes.join(', ')}${tail}`);
     }
-    const text = `${head}\n\n${table}${tail}`;
-    if (rows === null) return okResult(text);
-    // Surface the rows on `output.meta` so the Feishu adapter renders the
-    // schema-2.0 native `table` element instead of falling back to
-    // ASCII-padded markdown (which Feishu can't align).
-    return okResultWithMeta(text, {
-      stockTableRows: stockTableMetaRows(rows),
-      stockTableSubheader: `${head}${tail.length > 0 ? `  ·  ${tail.trim()}` : ''}`,
-    });
   }
 }

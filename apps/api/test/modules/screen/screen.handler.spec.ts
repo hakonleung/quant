@@ -4,7 +4,7 @@ import { InstructionRegistry } from '../../../src/modules/instruction/instructio
 import type { InstructionCtx } from '../../../src/modules/instruction/instruction.port.js';
 import { ScreenInstructionHandler } from '../../../src/modules/screen/instructions/screen.handler.js';
 import type { ScreenService } from '../../../src/modules/screen/screen.service.js';
-import type { StockMetaService } from '../../../src/modules/stock-meta/stock-meta.service.js';
+import type { StockListService } from '../../../src/modules/stock-list/stock-list.service.js';
 
 const ctx: InstructionCtx = { traceId: 't1', source: 'im', userId: 'feishu:ou_a' };
 
@@ -17,16 +17,16 @@ function build(opts: { resolve?: NlScreenResult; reject?: Error }): ScreenInstru
       return Promise.resolve(opts.resolve);
     },
   };
-  // Stub the snapshot service so the table formatter falls back to the
-  // bare comma-separated code list — these unit tests cover handler
-  // shape, not table rendering (covered by format-stock-table.spec).
-  const stockMeta: Pick<StockMetaService, 'snapshotAll'> = {
-    snapshotAll: () => Promise.reject(new Error('no snapshot in unit test')),
+  // Stub assembleRows to throw so the handler's fallback path renders
+  // a bare comma-separated code list — these unit tests cover handler
+  // shape, not row assembly (covered by stock-list.service.spec).
+  const stockList: Pick<StockListService, 'assembleRows'> = {
+    assembleRows: () => Promise.reject(new Error('no rows in unit test')),
   };
   return new ScreenInstructionHandler(
     reg,
     screen as unknown as ScreenService,
-    stockMeta as unknown as StockMetaService,
+    stockList as unknown as StockListService,
   );
 }
 
