@@ -50,8 +50,7 @@ from quant_rpc.ops.financials import (
     EnrichFinancialsForCodeHandler,
     FindStaleFinancialsHandler,
 )
-from quant_rpc.ops.kline import ListKlineWatermarksHandler, SyncKlineForCodeHandler
-from quant_rpc.ops.kline_read import ListKlineBulkLastNHandler, ListKlineForCodeHandler
+from quant_rpc.ops.kline import SyncKlineForCodeHandler
 from quant_rpc.ops.pattern import FindSimilarPatternsHandler
 from quant_rpc.ops.screen_ops import ScreenRunHandler
 from quant_rpc.ops.stock_meta import (
@@ -153,9 +152,6 @@ def main() -> int:
     registry.register(EnrichOneHandler(sync_service))
     registry.register(SyncKlineForCodeHandler(kline_service))
     registry.register(UpsertStockMetricsForCodeHandler(meta_repo, kline_repo, clock))
-    registry.register(ListKlineWatermarksHandler(meta_repo, kline_repo))
-    registry.register(ListKlineForCodeHandler(kline_service))
-    registry.register(ListKlineBulkLastNHandler(kline_service, meta_repo))
     watch_source = AKShareWatchSource()
     watch_service = WatchQuoteService(quotes=watch_source, universe=watch_source)
     registry.register(WatchQuoteOneHandler(watch_service))

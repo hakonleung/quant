@@ -10,10 +10,11 @@ modules/09-update-orchestration.md §6.2).
   in-process screen / pattern / blacklist services that still read via
   :class:`KlineRepo` keep working; NestJS now owns the canonical store
   via :class:`KlineWriterService` (plan §3.3 — Phase 2 write flip).
-* ``list_kline_watermarks`` — no args; returns one row per stock-meta
-  code with its current K-line watermark (``last_date`` is null when no
-  bars are stored yet). Powers the cron inspector that decides which
-  codes need a sync this tick.
+
+The read-side ops (``list_kline_for_code`` / ``list_kline_bulk_last_n`` /
+``list_kline_watermarks``) were retired once NestJS started serving
+kline reads from its own ``DuckDBParquetTimeSeriesStore``; the
+orchestrator gets watermarks directly from ``KlineReaderService``.
 """
 
 from __future__ import annotations
@@ -26,16 +27,13 @@ import pyarrow as pa
 from quant_core.errors import QuantError
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping, Sequence
+    from collections.abc import Mapping
 
     from quant_core.domain.types.kline import DailyBar
-    from quant_core.ports.kline_repo import KlineRepo
-    from quant_core.ports.stock_meta_repo import StockMetaRepo
     from quant_core.services.kline_service import KlineService
 
 
 _SYNC_OP: Final[str] = "sync_kline_for_code"
-_WATERMARKS_OP: Final[str] = "list_kline_watermarks"
 
 
 # Matches NestJS apps/api/src/modules/kline/kline.row.ts:KLINE_COLUMNS so
@@ -57,14 +55,6 @@ SYNC_BARS_SCHEMA: Final[pa.Schema] = pa.schema(
         ("ma10", pa.float64()),
         ("ma20", pa.float64()),
         ("ma60", pa.float64()),
-    ]
-)
-
-
-WATERMARKS_SCHEMA: Final[pa.Schema] = pa.schema(
-    [
-        ("code", pa.string()),
-        ("last_date", pa.date32()),
     ]
 )
 
@@ -162,30 +152,3 @@ def _bar_to_row(bar: DailyBar) -> dict[str, object]:
 
 def _opt_float(v: Decimal | None) -> float | None:
     return float(v) if v is not None else None
-
-
-class ListKlineWatermarksHandler:
-    """``list_kline_watermarks`` — every stock-meta code + its kline watermark.
-
-    ``last_date`` is ``null`` for codes whose K-line cache is still empty.
-    The orchestrator treats those as "stale, sync me first".
-    """
-
-    op = _WATERMARKS_OP
-    schema = WATERMARKS_SCHEMA
-
-    __slots__ = ("_meta_repo", "_repo")
-
-    def __init__(self, meta_repo: StockMetaRepo, repo: KlineRepo) -> None:
-        self._meta_repo = meta_repo
-        self._repo = repo
-
-    def execute(self, args: Mapping[str, object]) -> pa.Table:
-        del args
-        rows: list[dict[str, object]] = []
-        for meta in self._meta_repo.list_all():
-            last = self._repo.last_trade_date(meta.code)
-            rows.append({"code": meta.code, "last_date": last})
-        if not rows:
-            return WATERMARKS_SCHEMA.empty_table()
-        return pa.Table.from_pylist(rows, schema=WATERMARKS_SCHEMA)

@@ -27,16 +27,14 @@ import {
   type TaSectorMember,
 } from '@quant/shared';
 
-import { FlightClient } from '../../adapters/flight/flight-client.js';
 import { CLOCK, type Clock } from '../../common/clock.js';
-import { arrowTableToKlineBars } from '../kline/domain/arrow-mapper.js';
+import { KlineReaderService } from '../kline/kline-reader.service.js';
 import { LlmService } from '../llm/llm.service.js';
 import { StockMetaService } from '../stock-meta/stock-meta.service.js';
 import { decodeTaAnalysis } from './domain/decode-ta.js';
 import { buildSectorSummaryPrompt } from './prompts/sector-summary.prompt.js';
 import { buildTaSystemPrompt, buildTaUserPrompt } from './prompts/ta-analyze.prompt.js';
 import { TaCacheStore } from './ta-cache.store.js';
-import { TA_FLIGHT_CLIENT } from './ta.token.js';
 
 const BARS_WINDOW = 90;
 
@@ -48,7 +46,7 @@ export interface TaCallContext {
 @Injectable()
 export class TaService {
   constructor(
-    @Inject(TA_FLIGHT_CLIENT) private readonly flight: FlightClient,
+    @Inject(KlineReaderService) private readonly klineReader: KlineReaderService,
     @Inject(StockMetaService) private readonly meta: StockMetaService,
     @Inject(LlmService) private readonly llm: LlmService,
     @Inject(TaCacheStore) private readonly cache: TaCacheStore,
@@ -106,13 +104,9 @@ export class TaService {
     return result;
   }
 
-  private async fetchBars(code: string, traceId: string): Promise<readonly KlineBar[]> {
-    const result = await this.flight.doGet(
-      'list_kline_for_code',
-      { code, n: BARS_WINDOW },
-      { traceId },
-    );
-    return arrowTableToKlineBars(result.value);
+  private async fetchBars(code: string, _traceId: string): Promise<readonly KlineBar[]> {
+    void _traceId;
+    return this.klineReader.lastNForCode(code, BARS_WINDOW);
   }
 
   /**

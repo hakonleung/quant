@@ -7,16 +7,19 @@
  * - `findIncompleteMeta` — scans `list_stock_meta_all`, returns codes
  *   whose `industries` is empty (i.e. only the bulk endpoint has touched
  *   them so XQ enrichment is still owed).
- * - `findStaleKline` — scans `list_kline_watermarks`, returns codes whose
- *   K-line cache is empty or older than today's Beijing-time date.
+ * - `findStaleKline` — walks the local meta universe + local kline
+ *   watermarks (`KlineReaderService.lastTradeDates`) and returns codes
+ *   whose K-line cache is empty or older than today's Beijing-time date.
  */
 
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { isAShareCode } from '@quant/shared';
 import { FlightClient } from '../../adapters/flight/flight-client.js';
 import { BlacklistStore } from '../blacklist/blacklist.store.js';
+import { KlineReaderService } from '../kline/kline-reader.service.js';
 import { ORCH_FLIGHT_CLIENT } from './flight.token.js';
 import { arrowTableToStockMetaDtos } from '../stock-meta/domain/arrow-mapper.js';
+import { StockMetaService } from '../stock-meta/stock-meta.service.js';
 
 /** Calendar-day staleness threshold for blacklisted A-share kline. */
 const BLACKLIST_KLINE_REFRESH_DAYS = 10;
@@ -29,6 +32,8 @@ export class CacheInspector {
   constructor(
     @Inject(ORCH_FLIGHT_CLIENT) private readonly flight: FlightClient,
     @Inject(BlacklistStore) private readonly blacklist: BlacklistStore,
+    @Inject(StockMetaService) private readonly stockMeta: StockMetaService,
+    @Inject(KlineReaderService) private readonly klineReader: KlineReaderService,
   ) {}
 
   async findIncompleteMeta(traceId: string): Promise<readonly string[]> {
@@ -107,23 +112,28 @@ export class CacheInspector {
   }
 
   async findStaleKline(traceId: string): Promise<readonly string[]> {
-    const [watermarks, latestTradeDay] = await Promise.all([
-      this.flight.doGet('list_kline_watermarks', {}, { traceId }),
+    // Universe + watermarks both come from local stores now — no more
+    // Flight round-trip per orchestrator tick. `listAll` is in-process
+    // cached (5-min TTL with background revalidation, see
+    // StockMetaService); `lastTimestamps` is a single DuckDB query
+    // over the per-prefix kline parquet so it's O(partitions).
+    const [metas, latestTradeDay] = await Promise.all([
+      this.stockMeta.listAll(traceId),
       this.fetchLatestTradeDay(traceId),
     ]);
-    const table = watermarks.value;
+    const codes = metas.map((m) => m.code);
+    const watermarks = await this.klineReader.lastTradeDates(codes);
     interface Row {
       readonly code: string;
       readonly lastDate: string | null;
     }
-    const rows: Row[] = [];
-    for (let i = 0; i < table.numRows; i++) {
-      const proxy = table.get(i);
-      if (proxy === null) continue;
-      const raw = proxy.toJSON() as { code: unknown; last_date: unknown };
-      if (typeof raw.code !== 'string') continue;
-      rows.push({ code: raw.code, lastDate: parseDateCell(raw.last_date) });
-    }
+    const rows: Row[] = codes.map((code) => {
+      const ts = watermarks.get(code);
+      return {
+        code,
+        lastDate: ts === undefined ? null : ts.toISOString().slice(0, 10),
+      };
+    });
     // Authoritative threshold = the latest trading day whose bar is
     // expected to be available right now (akshare calendar +
     // post-close gating, owned by Python). On weekends, holidays, or
