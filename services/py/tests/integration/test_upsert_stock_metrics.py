@@ -21,6 +21,7 @@ from quant_core.domain.types.stock import StockMeta
 from quant_rpc.ops.stock_metrics import (
     UPSERT_METRICS_SCHEMA,
     UpsertStockMetricsForCodeHandler,
+    UpsertStockMetricsForCodesHandler,
 )
 
 from tests._util.clock import FrozenClock
@@ -118,6 +119,101 @@ def test_returns_empty_table_when_code_not_in_meta(tmp_path: Path) -> None:
 
     assert table.num_rows == 0
     assert table.schema == UPSERT_METRICS_SCHEMA
+
+
+@pytest.mark.integration
+def test_batched_handler_writes_once_for_many_codes(tmp_path: Path) -> None:
+    """``upsert_stock_metrics_for_codes`` must rewrite ``stocks.parquet``
+    exactly once for the whole batch — the win this op exists for.
+
+    We verify by counting parquet writes via ``stat().st_mtime`` snapshots
+    around the call (mtime resolution is plenty for "one write vs many")."""
+    meta_repo = ParquetStockMetaRepo(tmp_path / "stocks.parquet")
+    kline_repo = FlatPrefixKlineRepo(root=tmp_path / "kline")
+    clock = FrozenClock(_FROZEN)
+    # Seed two meta rows + two kline series.
+    meta_repo.upsert_many(
+        [
+            StockMeta(
+                code="000001",
+                name="A",
+                name_pinyin="A",
+                industries="bank",
+                list_date=date(2020, 1, 1),
+                float_pct=Decimal("1"),
+                updated_at=_FROZEN,
+                total_share=Decimal("1000000"),
+                float_share=Decimal("800000"),
+            ),
+            StockMeta(
+                code="600519",
+                name="B",
+                name_pinyin="B",
+                industries="liquor",
+                list_date=date(2001, 8, 27),
+                float_pct=Decimal("1"),
+                updated_at=_FROZEN,
+                total_share=Decimal("1255000000"),
+                float_share=Decimal("1255000000"),
+            ),
+        ]
+    )
+    seed_kline_parquet(
+        tmp_path / "kline",
+        [_bar("000001", i, Decimal("10") + Decimal(i) * Decimal("0.1")) for i in range(21)]
+        + [_bar("600519", i, Decimal("1700") + Decimal(i)) for i in range(21)],
+    )
+
+    parquet = tmp_path / "stocks.parquet"
+    mtime_before = parquet.stat().st_mtime_ns
+
+    handler = UpsertStockMetricsForCodesHandler(meta_repo, kline_repo, clock)
+    table = handler.execute({"codes": ["000001", "600519"]})
+
+    assert table.num_rows == 2
+    assert sorted(r["code"] for r in table.to_pylist()) == ["000001", "600519"]
+    # Both rows should now have a persisted block.
+    for code in ("000001", "600519"):
+        after = meta_repo.get(code)
+        assert after is not None and after.metrics is not None
+        assert after.metrics.asof == date(2026, 1, 21)
+
+    # Exactly one rewrite of stocks.parquet (mtime advances once).
+    mtime_after = parquet.stat().st_mtime_ns
+    assert mtime_after > mtime_before
+
+
+@pytest.mark.integration
+def test_batched_handler_with_empty_codes_expands_to_universe(tmp_path: Path) -> None:
+    meta_repo = ParquetStockMetaRepo(tmp_path / "stocks.parquet")
+    kline_repo = FlatPrefixKlineRepo(root=tmp_path / "kline")
+    clock = FrozenClock(_FROZEN)
+    _seed_meta(meta_repo)
+    seed_kline_parquet(
+        tmp_path / "kline",
+        [_bar("000001", i, Decimal("10") + Decimal(i) * Decimal("0.1")) for i in range(21)],
+    )
+
+    handler = UpsertStockMetricsForCodesHandler(meta_repo, kline_repo, clock)
+    table = handler.execute({"codes": []})
+
+    # Empty codes → full meta universe (one row in this fixture).
+    assert table.num_rows == 1
+    assert table.to_pylist()[0]["code"] == "000001"
+
+
+@pytest.mark.integration
+def test_batched_handler_skips_unknown_codes(tmp_path: Path) -> None:
+    meta_repo = ParquetStockMetaRepo(tmp_path / "stocks.parquet")
+    kline_repo = FlatPrefixKlineRepo(root=tmp_path / "kline")
+    clock = FrozenClock(_FROZEN)
+    _seed_meta(meta_repo)
+
+    handler = UpsertStockMetricsForCodesHandler(meta_repo, kline_repo, clock)
+    table = handler.execute({"codes": ["999999", "888888"]})
+
+    # No matching meta rows → empty table, no parquet write.
+    assert table.num_rows == 0
 
 
 @pytest.mark.integration

@@ -63,7 +63,10 @@ from quant_rpc.ops.stock_meta_admin import (
     EnrichOneHandler,
     SyncFullHandler,
 )
-from quant_rpc.ops.stock_metrics import UpsertStockMetricsForCodeHandler
+from quant_rpc.ops.stock_metrics import (
+    UpsertStockMetricsForCodeHandler,
+    UpsertStockMetricsForCodesHandler,
+)
 from quant_rpc.ops.stock_snapshot import ListStockSnapshotsHandler
 from quant_rpc.ops.trading_calendar import GetLatestTradeDayHandler
 from quant_rpc.ops.watch import WatchQuoteOneHandler, WatchUniverseRefreshHandler
@@ -152,6 +155,7 @@ def main() -> int:
     registry.register(EnrichOneHandler(sync_service))
     registry.register(SyncKlineForCodeHandler(kline_service))
     registry.register(UpsertStockMetricsForCodeHandler(meta_repo, kline_repo, clock))
+    registry.register(UpsertStockMetricsForCodesHandler(meta_repo, kline_repo, clock))
     watch_source = AKShareWatchSource()
     watch_service = WatchQuoteService(quotes=watch_source, universe=watch_source)
     registry.register(WatchQuoteOneHandler(watch_service))
