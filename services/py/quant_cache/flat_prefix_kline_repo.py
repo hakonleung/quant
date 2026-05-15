@@ -75,9 +75,9 @@ _ALIASES: Final[dict[str, str]] = {"trade_date": "ts"}
 # either projected once or aliased on every appearance.
 _SYNTHESISED: Final[dict[str, str]] = {
     "pct_chg_qfq": (
-        '(close_qfq - LAG(close_qfq) OVER (PARTITION BY code ORDER BY ts)) '
-        '/ NULLIF(LAG(close_qfq) OVER (PARTITION BY code ORDER BY ts), 0)'
-        ' AS pct_chg_qfq'
+        "(close_qfq - LAG(close_qfq) OVER (PARTITION BY code ORDER BY ts)) "
+        "/ NULLIF(LAG(close_qfq) OVER (PARTITION BY code ORDER BY ts), 0)"
+        " AS pct_chg_qfq"
     ),
 }
 
@@ -95,10 +95,15 @@ class FlatPrefixKlineRepo:
                 f"failed to create kline root: {root}", {"root": str(root)}
             ) from exc
         self._root = root
-        # One persistent in-memory DuckDB connection per repo instance.
-        # DuckDB's planner reuses parquet metadata across queries when the
-        # connection stays alive, which matters for the per-tick watch
-        # MA-ref reads (one query × 5000 codes).
+        # One persistent in-memory DuckDB connection per repo instance —
+        # the planner reuses parquet metadata across queries when the
+        # connection stays alive (matters for the per-tick watch MA-ref
+        # reads: one query x 5000 codes). DuckDBPyConnection itself is
+        # NOT thread-safe (concurrent execute/fetch segfaults pyarrow),
+        # so every call path below takes `self._con.cursor()` — a cursor
+        # shares the parent's catalog + parquet metadata cache but
+        # executes independently, which is the supported way to talk to
+        # one DuckDB instance from multiple Flight gRPC worker threads.
         self._con = duckdb.connect(":memory:")
 
     # -- KlineRepo (read paths) -----------------------------------------
@@ -137,15 +142,14 @@ class FlatPrefixKlineRepo:
             "ORDER BY ts"
         )
         try:
-            self._con.execute(
+            cur = self._con.cursor()
+            cur.execute(
                 sql,
                 {"path": str(path), "code": code, "start": start, "end": end},
             )
-            result = self._con.to_arrow_table()
+            result = cur.to_arrow_table()
         except duckdb.Error as exc:
-            raise CacheBackendUnavailable(
-                "duckdb get_range failed", {"code": code}
-            ) from exc
+            raise CacheBackendUnavailable("duckdb get_range failed", {"code": code}) from exc
         return _cast_to_schema(result, output_names)
 
     def get_universe_slice(
@@ -178,7 +182,8 @@ class FlatPrefixKlineRepo:
             "ORDER BY code, ts"
         )
         try:
-            self._con.execute(
+            cur = self._con.cursor()
+            cur.execute(
                 sql,
                 {
                     "paths": paths,
@@ -187,7 +192,7 @@ class FlatPrefixKlineRepo:
                     "end": end,
                 },
             )
-            result = self._con.to_arrow_table()
+            result = cur.to_arrow_table()
         except duckdb.Error as exc:
             raise CacheBackendUnavailable(
                 "duckdb universe_slice failed", {"codes_count": len(codes)}
@@ -213,13 +218,9 @@ class FlatPrefixKlineRepo:
             "WHERE code = $code ORDER BY ts DESC LIMIT 1"
         )
         try:
-            rows = self._con.execute(
-                sql, {"path": str(path), "code": code}
-            ).fetchall()
+            rows = self._con.cursor().execute(sql, {"path": str(path), "code": code}).fetchall()
         except duckdb.Error as exc:
-            raise CacheBackendUnavailable(
-                "duckdb get_last_bar failed", {"code": code}
-            ) from exc
+            raise CacheBackendUnavailable("duckdb get_last_bar failed", {"code": code}) from exc
         if not rows:
             return None
         return _row_to_daily_bar(code, rows[0])
@@ -228,24 +229,14 @@ class FlatPrefixKlineRepo:
         path = self._path_for_prefix(code[:3])
         if not path.exists():
             return None
-        sql = (
-            "SELECT max(ts) FROM read_parquet($path) WHERE code = $code"
-        )
+        sql = "SELECT max(ts) FROM read_parquet($path) WHERE code = $code"
         try:
-            rows = self._con.execute(
-                sql, {"path": str(path), "code": code}
-            ).fetchall()
+            rows = self._con.cursor().execute(sql, {"path": str(path), "code": code}).fetchall()
         except duckdb.Error as exc:
-            raise CacheBackendUnavailable(
-                "duckdb last_trade_date failed", {"code": code}
-            ) from exc
+            raise CacheBackendUnavailable("duckdb last_trade_date failed", {"code": code}) from exc
         if not rows or rows[0][0] is None:
             return None
-        value = rows[0][0]
-        # duckdb returns a python ``date`` for date32 columns.
-        from datetime import date as _date
-
-        return value if isinstance(value, _date) else None
+        return _as_date(rows[0][0])
 
     # -- internals ------------------------------------------------------
 
@@ -277,9 +268,7 @@ def _build_select(
         cols = ["code", "ts AS trade_date"] + [
             c for c in _CANONICAL_COLUMNS if c not in ("code", "ts")
         ]
-        out = ["code", "trade_date"] + [
-            c for c in _CANONICAL_COLUMNS if c not in ("code", "ts")
-        ]
+        out = ["code", "trade_date"] + [c for c in _CANONICAL_COLUMNS if c not in ("code", "ts")]
         return ", ".join(cols), out
     out_names: list[str] = []
     select_parts: list[str] = []
@@ -294,9 +283,7 @@ def _build_select(
                 f"unknown kline column: {name!r}",
                 {
                     "field": name,
-                    "allowed": sorted(
-                        _CANONICAL_COLUMNS | _ALIASES.keys() | _SYNTHESISED.keys()
-                    ),
+                    "allowed": sorted(_CANONICAL_COLUMNS | _ALIASES.keys() | _SYNTHESISED.keys()),
                 },
             )
         if name == on_disk:
@@ -435,8 +422,16 @@ def _as_int(v: object) -> int:
 
 
 def _as_date(v: object) -> date:
-    from datetime import date
+    # DuckDB returns either ``datetime.date`` (connection-level fetch) or
+    # ``datetime.datetime`` (cursor-level fetch) for the same date32 column,
+    # depending on which API the caller used. Since ``datetime`` subclasses
+    # ``date``, a naive isinstance check leaks ``datetime`` instances out
+    # and the next downstream comparison (``date > datetime``) raises
+    # ``TypeError``. Normalize to ``date`` here.
+    from datetime import date, datetime
 
+    if isinstance(v, datetime):
+        return v.date()
     if isinstance(v, date):
         return v
     raise TypeError(f"trade_date must be a date, got {type(v).__name__}")
