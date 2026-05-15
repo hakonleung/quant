@@ -9,8 +9,12 @@
  * users).
  */
 
-import { Injectable, Logger } from '@nestjs/common';
-import { instructionId, type InstructionId } from '@quant/shared';
+import { Injectable, Logger, type OnApplicationBootstrap } from '@nestjs/common';
+import {
+  assertHandlerCoverage,
+  instructionId,
+  type InstructionId,
+} from '@quant/shared';
 
 import type { AnyInstructionHandler, InstructionHandler } from './instruction.port.js';
 import type { AnyInstructionSpec, InstructionSpec } from './instruction.types.js';
@@ -21,7 +25,7 @@ export interface InstructionEntry {
 }
 
 @Injectable()
-export class InstructionRegistry {
+export class InstructionRegistry implements OnApplicationBootstrap {
   private readonly logger = new Logger(InstructionRegistry.name);
   private readonly byId = new Map<string, InstructionEntry>();
   /** ASCII aliases (InstructionId-validated), e.g. `watch.list → watch`. */
@@ -83,5 +87,41 @@ export class InstructionRegistry {
     // `instructionId(...)` re-validates the string via the shared regex
     // before re-branding; cheaper than tracking branded keys end-to-end.
     return instructionId(real);
+  }
+
+  /**
+   * Assert the registered handler set matches the shared manifest's
+   * `supportedOn: 'be'` slice. Throws on mismatch (missing handler for
+   * a manifest entry, or registered handler not in the manifest).
+   */
+  assertManifestCoverage(): void {
+    assertHandlerCoverage({
+      side: 'be',
+      registeredIds: [...this.byId.keys()],
+    });
+  }
+
+  /**
+   * Runs after every feature module's `onModuleInit` has registered.
+   * Fails boot loudly if the manifest and the live handler set drift —
+   * the user's "explicit declaration of unsupported commands" rule.
+   *
+   * Contract tests boot Nest with a partial module set, so we warn
+   * instead of throwing in `NODE_ENV=test`. Production always throws.
+   */
+  onApplicationBootstrap(): void {
+    try {
+      this.assertManifestCoverage();
+      this.logger.log(
+        `instruction_manifest_ok registered=${String(this.byId.size)}`,
+      );
+    } catch (err: unknown) {
+      if (process.env['NODE_ENV'] === 'test') {
+        this.logger.warn(`instruction_manifest_drift (test-mode warn): ${String(err)}`);
+        return;
+      }
+      this.logger.error(`instruction_manifest_drift: ${String(err)}`);
+      throw err;
+    }
   }
 }

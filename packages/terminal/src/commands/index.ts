@@ -4,6 +4,8 @@
  * individual commands and assemble a custom registry.
  */
 
+import { assertHandlerCoverage } from '@quant/shared';
+
 import { agentCommand } from './agent.js';
 import { analyzeCommand } from './analyze.js';
 import { cacheCommand } from './cache.js';
@@ -53,5 +55,12 @@ export function createDefaultRegistry(): CommandRegistry {
   r.register(usrCommand);
   r.register(agentCommand);
   r.register(helpCommand(r));
+  // Fail-loud if the FE registry drifts from the shared manifest —
+  // the user's "explicit declaration of unsupported commands" rule
+  // applies to FE the same way it does to BE.
+  assertHandlerCoverage({
+    side: 'fe',
+    registeredIds: r.list().map((s) => s.name),
+  });
   return r;
 }
