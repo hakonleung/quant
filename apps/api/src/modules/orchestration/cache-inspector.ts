@@ -23,6 +23,7 @@ import { BlacklistStore } from '../blacklist/blacklist.store.js';
 import { KlineReaderService } from '../kline/kline-reader.service.js';
 import { ORCH_FLIGHT_CLIENT } from './flight.token.js';
 import { arrowTableToStockMetaDtos } from '../stock-meta/domain/arrow-mapper.js';
+import { LocalStockMetaWriterService } from '../stock-meta/local-stock-meta-writer.service.js';
 import { StockMetaService } from '../stock-meta/stock-meta.service.js';
 
 /** Calendar-day staleness threshold for blacklisted A-share kline. */
@@ -44,6 +45,8 @@ export class CacheInspector {
     @Inject(BlacklistStore) private readonly blacklist: BlacklistStore,
     @Inject(StockMetaService) private readonly stockMeta: StockMetaService,
     @Inject(KlineReaderService) private readonly klineReader: KlineReaderService,
+    @Inject(LocalStockMetaWriterService)
+    private readonly metaWriter: LocalStockMetaWriterService,
   ) {}
 
   /**
@@ -120,14 +123,16 @@ export class CacheInspector {
   }> {
     try {
       const result = await this.flight.doGet('bulk_sync_financials', {}, { traceId });
-      const table = result.value;
-      if (table.numRows === 0) return { fetched: 0, updated: 0 };
-      const proxy = table.get(0);
-      if (proxy === null) return { fetched: 0, updated: 0 };
-      const raw = proxy.toJSON() as { fetched_codes?: unknown; updated_codes?: unknown };
+      // Python returns merged rows in STOCK_META_SCHEMA + counts in
+      // schema metadata; storage is NestJS-owned, so persist locally.
+      const rows = arrowTableToStockMetaDtos(result.value);
+      if (rows.length > 0) {
+        await this.metaWriter.upsertMetas(rows);
+      }
+      const meta = result.value.schema.metadata;
       return {
-        fetched: typeof raw.fetched_codes === 'number' ? raw.fetched_codes : 0,
-        updated: typeof raw.updated_codes === 'number' ? raw.updated_codes : 0,
+        fetched: readSchemaInt(meta, 'fetched_codes'),
+        updated: readSchemaInt(meta, 'updated_codes', rows.length),
       };
     } catch (err) {
       this.logger.warn(
@@ -201,6 +206,18 @@ export class CacheInspector {
  * Decode an Arrow `date32` cell into ISO `YYYY-MM-DD`. See the doc on
  * `apache-arrow` inconsistency notes in the historical commit log.
  */
+function readSchemaInt(
+  meta: ReadonlyMap<string, string> | Record<string, string> | null | undefined,
+  key: string,
+  fallback = 0,
+): number {
+  if (meta === null || meta === undefined) return fallback;
+  const raw = meta instanceof Map ? meta.get(key) : (meta as Record<string, string>)[key];
+  if (raw === undefined) return fallback;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : fallback;
+}
+
 export function parseDateCell(value: unknown): string | null {
   if (value === null || value === undefined) return null;
   if (value instanceof Date) {

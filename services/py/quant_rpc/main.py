@@ -28,7 +28,6 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from types import FrameType
 
-from quant_cache.file_kv_store import FileKeyValueStore
 from quant_cache.flat_prefix_kline_repo import FlatPrefixKlineRepo
 from quant_cache.parquet_stock_meta_repo import ParquetStockMetaRepo
 from quant_core.adapters.clock import SystemClock
@@ -219,16 +218,14 @@ def main() -> int:
     # FlatPrefixKlineRepo; the float64 → decimal128 cast happens at the
     # repo boundary so business code keeps working in Decimal.
     kline_root = root / "kline"
-    kv_root = root / "_state"
     log.info("data_root=%s", root)
 
     clock = SystemClock()
     meta_repo = ParquetStockMetaRepo(meta_path)
     kline_repo = FlatPrefixKlineRepo(kline_root)
-    kv = FileKeyValueStore(kv_root, clock)
 
     meta_chain: SourceChain[StockMetaSource] = SourceChain([AKShareStockMetaSource()])
-    sync_service = StockMetaSyncService(meta_chain, meta_repo, kv, clock)
+    sync_service = StockMetaSyncService(meta_chain, meta_repo, clock)
     meta_service = StockMetaService(meta_repo)
 
     kline_source = AKShareKlineSource()

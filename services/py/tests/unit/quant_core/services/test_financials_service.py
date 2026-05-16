@@ -1,9 +1,10 @@
 """Tests for ``FinancialsService`` — bulk merge, per-stock merge, watermark.
 
-Uses fake bulk source / per-stock enricher (just dataclass-shaped
-return objects) so we don't have to touch akshare. The repo + clock
-ports use simple in-memory implementations so the test asserts the
-final ``StockMeta`` shape after merge.
+Storage-unify: the service no longer persists. Tests assert the
+returned :class:`StockMeta` payloads — the caller (NestJS) does the
+write. ``_FakeRepo`` here is read-only; ``upsert_many`` is wired only
+because the production :class:`StockMetaRepo` protocol still declares
+it (other production callers use it).
 """
 
 from __future__ import annotations
@@ -22,10 +23,8 @@ from quant_io.sources.akshare_financials import (
 class _FakeRepo:
     def __init__(self, items: list[StockMeta]) -> None:
         self._by_code: dict[str, StockMeta] = {m.code: m for m in items}
-        self.upserts: list[list[StockMeta]] = []
 
     def upsert_many(self, items: list[StockMeta]) -> None:
-        self.upserts.append(list(items))
         for m in items:
             self._by_code[m.code] = m
 
@@ -84,7 +83,7 @@ def _replace(meta: StockMeta, **overrides: object) -> StockMeta:
 
 
 class TestBulkRefresh:
-    def test_writes_quarterlies_and_watermark(self) -> None:
+    def test_returns_merged_rows_with_quarterlies_and_watermark(self) -> None:
         repo = _FakeRepo([_meta()])
         clock = _FixedClock(datetime(2026, 5, 1, tzinfo=UTC))
         bulk = _FakeBulk(
@@ -108,11 +107,13 @@ class TestBulkRefresh:
         svc = FinancialsService(repo=repo, clock=clock, bulk=bulk, enricher=_FakeEnricher({}))
         report = svc.bulk_refresh()
         assert report.fetched_codes == 1
-        assert report.updated_codes == 1
-        stored = repo.get("600519")
-        assert stored is not None
-        assert stored.quarterlies[-1].revenue == Decimal("99000000000")
-        assert stored.financials_updated_at == clock.now()
+        assert len(report.merged) == 1
+        merged = report.merged[0]
+        assert merged.code == "600519"
+        assert merged.quarterlies[-1].revenue == Decimal("99000000000")
+        assert merged.financials_updated_at == clock.now()
+        # Repo unchanged — service is pure compute.
+        assert repo.get("600519") == _meta()
 
     def test_orphan_codes_skipped(self) -> None:
         repo = _FakeRepo([])  # no meta rows
@@ -129,8 +130,7 @@ class TestBulkRefresh:
         )
         svc = FinancialsService(repo=repo, clock=clock, bulk=bulk, enricher=_FakeEnricher({}))
         report = svc.bulk_refresh()
-        assert report.updated_codes == 0
-        assert repo.upserts == []
+        assert report.merged == ()
 
     def test_existing_extras_preserved_on_merge(self) -> None:
         # Slow-path enricher previously filled operating_cost — bulk must
@@ -166,12 +166,11 @@ class TestBulkRefresh:
                 ),
             }
         )
-        FinancialsService(
+        report = FinancialsService(
             repo=repo, clock=clock, bulk=bulk, enricher=_FakeEnricher({})
         ).bulk_refresh()
-        stored = repo.get("600519")
-        assert stored is not None
-        latest = stored.quarterlies[-1]
+        merged = report.merged[0]
+        latest = merged.quarterlies[-1]
         assert latest.revenue == Decimal("99000000000")  # bulk overrides
         assert latest.net_profit == Decimal("52000000000")
         assert latest.operating_cost == Decimal("11000000000")  # preserved
@@ -199,11 +198,10 @@ class TestBulkRefresh:
                 ),
             }
         )
-        FinancialsService(
+        merged = FinancialsService(
             repo=repo, clock=clock, bulk=bulk, enricher=_FakeEnricher({})
-        ).bulk_refresh()
-        stored = repo.get("600519")
-        assert stored is not None and stored.net_assets is None
+        ).bulk_refresh().merged[0]
+        assert merged.net_assets is None
 
     def test_net_assets_computed_when_total_share_known(self) -> None:
         repo = _FakeRepo([_meta(total_share=Decimal("1000"))])
@@ -226,20 +224,18 @@ class TestBulkRefresh:
                 ),
             }
         )
-        FinancialsService(
+        merged = FinancialsService(
             repo=repo, clock=clock, bulk=bulk, enricher=_FakeEnricher({})
-        ).bulk_refresh()
-        stored = repo.get("600519")
-        assert stored is not None
-        assert stored.net_assets == Decimal("20000")
-        assert stored.net_assets_period == date(2025, 9, 30)
+        ).bulk_refresh().merged[0]
+        assert merged.net_assets == Decimal("20000")
+        assert merged.net_assets_period == date(2025, 9, 30)
 
 
 # ---- enrich_one ----------------------------------------------------------
 
 
 class TestEnrichOne:
-    def test_writes_share_counts_and_extras(self) -> None:
+    def test_returns_merged_meta_with_share_counts_and_extras(self) -> None:
         existing = _meta(
             quarterlies=(
                 QuarterlyFinancials(
@@ -266,17 +262,18 @@ class TestEnrichOne:
             bulk=_FakeBulk({}),
             enricher=_FakeEnricher({"600519": delta}),
         )
-        assert svc.enrich_one("600519") is True
-        stored = repo.get("600519")
-        assert stored is not None
-        assert stored.total_share == Decimal("2000")
-        assert stored.float_share == Decimal("1500")
-        assert stored.float_pct == Decimal("0.75")
-        latest = stored.quarterlies[-1]
+        merged = svc.enrich_one("600519")
+        assert merged is not None
+        assert merged.total_share == Decimal("2000")
+        assert merged.float_share == Decimal("1500")
+        assert merged.float_pct == Decimal("0.75")
+        latest = merged.quarterlies[-1]
         assert latest.operating_cost == Decimal("40")
         assert latest.net_profit_excl_nr == Decimal("38")
+        # Repo untouched — caller persists.
+        assert repo.get("600519") == existing
 
-    def test_unknown_code_returns_false(self) -> None:
+    def test_unknown_code_returns_none(self) -> None:
         repo = _FakeRepo([])
         svc = FinancialsService(
             repo=repo,
@@ -284,9 +281,9 @@ class TestEnrichOne:
             bulk=_FakeBulk({}),
             enricher=_FakeEnricher({}),
         )
-        assert svc.enrich_one("600519") is False
+        assert svc.enrich_one("600519") is None
 
-    def test_no_delta_returns_false(self) -> None:
+    def test_no_delta_returns_none(self) -> None:
         repo = _FakeRepo([_meta()])
         svc = FinancialsService(
             repo=repo,
@@ -294,7 +291,7 @@ class TestEnrichOne:
             bulk=_FakeBulk({}),
             enricher=_FakeEnricher({"600519": None}),
         )
-        assert svc.enrich_one("600519") is False
+        assert svc.enrich_one("600519") is None
 
 
 # ---- find_stale_financials ----------------------------------------------
@@ -317,7 +314,6 @@ class TestFindStale:
         )
 
     def test_missing_total_share_is_stale(self) -> None:
-        # Even with a fresh watermark, missing total_share → stale.
         m = _meta(
             code="000001",
             total_share=None,

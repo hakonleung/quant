@@ -1,13 +1,18 @@
 """Admin Flight ops for stock metadata.
 
-Two ops:
+Three ops:
 
 * ``check_stock_meta_sources`` — runs ``healthcheck`` on every source in
   the chain and returns one Arrow row per source.
-* ``sync_stock_meta_full`` — runs the full source → repo sync and returns
-  a single-row table with the result counts.
+* ``sync_stock_meta_full`` — runs the full source → diff and returns the
+  added-plus-changed meta rows in :data:`STOCK_META_SCHEMA`, with the
+  diff counts encoded in the schema metadata. **Does not persist** —
+  NestJS's ``LocalStockMetaWriterService`` writes them.
+* ``enrich_stock_meta_for_code`` — single-code companion to the full
+  sync. Returns 0 or 1 row in :data:`STOCK_META_SCHEMA`.
 
-Both ops take no args (the chain composition is fixed at server start).
+Storage-unify-rollout: storage is NestJS-owned end-to-end on the meta
+parquet. Python only fetches + diffs.
 """
 
 from __future__ import annotations
@@ -15,11 +20,13 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Final
 
 import pyarrow as pa
+from quant_cache.stock_meta_schema import STOCK_META_SCHEMA, stock_meta_to_row
 from quant_core.errors import QuantError
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
+    from quant_core.domain.types.stock import StockMeta
     from quant_core.services.stock_meta_sync_service import StockMetaSyncService
 
 
@@ -35,24 +42,6 @@ SOURCE_HEALTH_SCHEMA: Final[pa.Schema] = pa.schema(
         ("latency_ms", pa.int64()),
         ("quota_remaining", pa.int64()),
         ("last_error", pa.string()),
-    ]
-)
-
-SYNC_REPORT_SCHEMA: Final[pa.Schema] = pa.schema(
-    [
-        ("source", pa.string()),
-        ("fetched", pa.int64()),
-        ("added", pa.int64()),
-        ("changed", pa.int64()),
-        ("unchanged", pa.int64()),
-    ]
-)
-
-
-ENRICH_REPORT_SCHEMA: Final[pa.Schema] = pa.schema(
-    [
-        ("code", pa.string()),
-        ("found", pa.bool_()),
     ]
 )
 
@@ -87,10 +76,14 @@ class CheckSourcesHandler:
 
 
 class SyncFullHandler:
-    """``sync_stock_meta_full`` — pull from sources, upsert into local repo."""
+    """``sync_stock_meta_full`` — pull from sources, diff against local repo.
+
+    Returns the added-plus-changed rows; diff counts ride along as
+    schema metadata so NestJS can log them without a second op.
+    """
 
     op = _SYNC_OP
-    schema = SYNC_REPORT_SCHEMA
+    schema = STOCK_META_SCHEMA
 
     __slots__ = ("_sync",)
 
@@ -100,30 +93,28 @@ class SyncFullHandler:
     def execute(self, args: Mapping[str, object]) -> pa.Table:
         del args
         report = self._sync.run_full_sync()
-        return pa.Table.from_pylist(
-            [
-                {
-                    "source": report.source,
-                    "fetched": report.fetched,
-                    "added": report.added,
-                    "changed": report.changed,
-                    "unchanged": report.unchanged,
-                }
-            ],
-            schema=SYNC_REPORT_SCHEMA,
-        )
+        metadata = {
+            b"source": report.source.encode("utf-8"),
+            b"fetched": str(report.fetched).encode("ascii"),
+            b"added": str(report.added).encode("ascii"),
+            b"changed": str(report.changed).encode("ascii"),
+            b"unchanged": str(report.unchanged).encode("ascii"),
+        }
+        schema = STOCK_META_SCHEMA.with_metadata(metadata)
+        if not report.upserts:
+            return schema.empty_table()
+        return _metas_to_table(report.upserts, schema)
 
 
 class EnrichOneHandler:
-    """``enrich_stock_meta_for_code`` — pull one stock's full meta + upsert.
+    """``enrich_stock_meta_for_code`` — pull one stock's full meta.
 
     Single-code companion to :class:`SyncFullHandler`; powers the
-    NestJS orchestration's per-code enrich queue
-    (`docs/modules/09-update-orchestration.md` §6.1).
+    NestJS orchestration's per-code enrich queue. 0 or 1 row.
     """
 
     op = _ENRICH_OP
-    schema = ENRICH_REPORT_SCHEMA
+    schema = STOCK_META_SCHEMA
 
     __slots__ = ("_sync",)
 
@@ -139,7 +130,10 @@ class EnrichOneHandler:
                 {"key": "code"},
             )
         item = self._sync.enrich_one(raw_code)
-        return pa.Table.from_pylist(
-            [{"code": raw_code, "found": item is not None}],
-            schema=ENRICH_REPORT_SCHEMA,
-        )
+        if item is None:
+            return STOCK_META_SCHEMA.empty_table()
+        return _metas_to_table([item], STOCK_META_SCHEMA)
+
+
+def _metas_to_table(items: list[StockMeta] | tuple[StockMeta, ...], schema: pa.Schema) -> pa.Table:
+    return pa.Table.from_pylist([stock_meta_to_row(item) for item in items], schema=schema)

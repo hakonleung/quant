@@ -14,6 +14,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DuckDBInstance, type DuckDBConnection } from '@duckdb/node-api';
+import type { StockMetaDto } from '@quant/shared';
 
 import { FrozenClock } from '../../../src/common/clock.js';
 import { LocalStockMetaAdapter } from '../../../src/modules/stock-meta/local-stock-meta.adapter.js';
@@ -178,5 +179,79 @@ describe('LocalStockMetaWriterService', () => {
     // 999999 was never in the seed → still not in the universe.
     const missing = await adapter.getOne('999999');
     expect(missing).toBeNull();
+  });
+
+  describe('upsertMetas', () => {
+    const sampleMeta = (overrides: Partial<StockMetaDto> = {}): StockMetaDto => ({
+      code: '600519',
+      name: '贵州茅台 v2',
+      name_pinyin: 'GZMT',
+      industries: '食品饮料,白酒,新主线',
+      list_date: '2001-08-27',
+      float_pct: '0.95',
+      updated_at: '2026-05-16T00:00:00+00:00',
+      total_share: '1255980000',
+      float_share: '1193180000',
+      net_assets: '230000000000',
+      net_assets_period: '2026-03-31',
+      quarterlies: [
+        {
+          period: '2026-03-31',
+          revenue: '50000000000',
+          operating_cost: '10000000000',
+          net_profit: '25000000000',
+          net_profit_excl_nr: '24500000000',
+        },
+      ],
+      financials_updated_at: '2026-05-15T08:00:00+00:00',
+      ...overrides,
+    });
+
+    it('replaces non-metric columns on an existing code', async () => {
+      await writer.upsertMetas([sampleMeta()]);
+      const meta = await adapter.getOne('600519');
+      expect(meta).not.toBeNull();
+      expect(meta?.name).toBe('贵州茅台 v2');
+      expect(meta?.industries).toBe('食品饮料,白酒,新主线');
+      expect(meta?.total_share).toBe('1255980000');
+      expect(meta?.financials_updated_at).toBe('2026-05-15T08:00:00.000+00:00');
+      expect(meta?.quarterlies).toHaveLength(1);
+      expect(meta?.quarterlies[0]?.revenue).toBe('50000000000');
+    });
+
+    it('preserves existing metrics columns on an existing code', async () => {
+      // First populate metrics, then upsert meta — metrics must survive.
+      await writer.upsertMetrics([sampleRow('600519')]);
+      await writer.upsertMetas([sampleMeta()]);
+      const snap = await adapter.listSnapshots(['600519']);
+      expect(snap[0]?.price).toBe('1700.5');
+      expect(snap[0]?.derived.mkt_cap).toBe('2133727500000');
+      expect(snap[0]?.returns.ret_5d).toBe('0.05');
+    });
+
+    it('inserts a brand new code with null metric columns', async () => {
+      const fresh = sampleMeta({ code: '300750', name: '宁德时代', name_pinyin: 'NDSD' });
+      await writer.upsertMetas([fresh]);
+      const meta = await adapter.getOne('300750');
+      expect(meta?.name).toBe('宁德时代');
+      const snap = await adapter.listSnapshots(['300750']);
+      expect(snap).toHaveLength(1);
+      expect(snap[0]?.price).toBeNull();
+      expect(snap[0]?.derived.mkt_cap).toBeNull();
+    });
+
+    it('leaves unrelated rows untouched', async () => {
+      await writer.upsertMetas([sampleMeta()]);
+      const other = await adapter.getOne('000001');
+      expect(other?.name).toBe('平安银行');
+      expect(other?.industries).toBe('银行');
+    });
+
+    it('is a no-op when given an empty batch', async () => {
+      await writer.upsertMetas([]);
+      const meta = await adapter.getOne('600519');
+      // Seed name (unchanged) — no rewrite happened.
+      expect(meta?.name).toBe('贵州茅台');
+    });
   });
 });

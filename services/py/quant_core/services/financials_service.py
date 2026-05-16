@@ -10,7 +10,11 @@ Two public entry points map 1:1 to Flight ops:
   ``operating_cost`` / ``net_profit_excl_nr`` (TTM 毛利率 prerequisite)
   and refreshes ``total_share`` / ``float_share``.
 
-Pure orchestration: no IO of its own; sources / repo / clock are ports.
+Storage-unify-rollout: neither method persists. They return the
+merged :class:`StockMeta` rows; NestJS's ``LocalStockMetaWriterService``
+writes them back. Reads still go through the repo so the diff is
+computed against the canonical parquet — NestJS and Python see the
+same file because it lives on shared local disk.
 """
 
 from __future__ import annotations
@@ -44,8 +48,10 @@ class FinancialsBulkReport:
 
     fetched_codes: int
     """Codes that the bulk source returned at least one quarter for."""
-    updated_codes: int
-    """Codes whose meta row was actually re-upserted."""
+    merged: tuple[StockMeta, ...]
+    """Merged meta rows ready to be written by NestJS. Empty when no
+    incoming row produced a different :class:`StockMeta` than what the
+    repo already had."""
 
 
 class FinancialsService:
@@ -69,11 +75,15 @@ class FinancialsService:
     # -- bulk -----------------------------------------------------------------
 
     def bulk_refresh(self) -> FinancialsBulkReport:
-        """Pull 8 quarters and merge into every known meta row."""
+        """Pull 8 quarters, merge into every known meta row, return them.
+
+        Pure compute: nothing is persisted here. NestJS receives the
+        merged rows over Flight and writes them.
+        """
         today = self._clock.now().date()
         payloads = self._bulk.fetch_recent(today=today)
         if not payloads:
-            return FinancialsBulkReport(fetched_codes=0, updated_codes=0)
+            return FinancialsBulkReport(fetched_codes=0, merged=())
         existing_by_code = {m.code: m for m in self._repo.list_all()}
         now = self._clock.now()
         merged: list[StockMeta] = []
@@ -88,31 +98,31 @@ class FinancialsService:
             if updated == existing:
                 continue
             merged.append(updated)
-        if merged:
-            self._repo.upsert_many(merged)
         return FinancialsBulkReport(
             fetched_codes=len(payloads),
-            updated_codes=len(merged),
+            merged=tuple(merged),
         )
 
     # -- per-stock -----------------------------------------------------------
 
-    def enrich_one(self, code: str) -> bool:
+    def enrich_one(self, code: str) -> StockMeta | None:
         """Slow-path fill of ``operating_cost`` / ``net_profit_excl_nr`` /
-        share counts for ``code``. Returns whether the meta row was
-        rewritten.
+        share counts for ``code``.
+
+        Returns the merged :class:`StockMeta` for the caller to persist,
+        or ``None`` when the row was missing, the source returned nothing,
+        or the merge produced an identical row (write would be a no-op).
         """
         existing = self._repo.get(code)
         if existing is None:
-            return False
+            return None
         delta = self._enricher.fetch_for(code)
         if delta is None:
-            return False
+            return None
         merged = _merge_enrichment(existing, delta, now=self._clock.now())
         if merged == existing:
-            return False
-        self._repo.upsert_many([merged])
-        return True
+            return None
+        return merged
 
     # -- inspector helpers ---------------------------------------------------
 

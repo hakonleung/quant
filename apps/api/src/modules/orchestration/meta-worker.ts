@@ -4,7 +4,12 @@
  * Processes a single `meta_pkg` envelope by running whichever sub-steps
  * the `needBasic` / `needFinancials` flags request, in order:
  *   1. `enrich_stock_meta_for_code` — basic info from XQ.
- *   2. `enrich_financials_for_code` — financials + pe/pb recompute.
+ *   2. `enrich_financials_for_code` — financials + per-stock fill-in.
+ *
+ * Storage-unify: each Flight op now *returns* the merged `StockMeta`
+ * row (0 or 1 in `STOCK_META_SCHEMA`) instead of persisting it. NestJS
+ * writes via {@link LocalStockMetaWriterService} so the meta parquet
+ * has exactly one writer.
  *
  * Retry / pool-backoff policy is owned by the queue (see
  * `OrchestrationModule`). Transient errors (`RATE_LIMITED`,
@@ -17,6 +22,8 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import { isAShareCode } from '@quant/shared';
 import { FlightClient } from '../../adapters/flight/flight-client.js';
 import { BlacklistStore } from '../blacklist/blacklist.store.js';
+import { arrowTableToStockMetaDtos } from '../stock-meta/domain/arrow-mapper.js';
+import { LocalStockMetaWriterService } from '../stock-meta/local-stock-meta-writer.service.js';
 import { ORCH_FLIGHT_CLIENT } from './flight.token.js';
 import type { JobEnvelope, JobProcessor, MetaJob, ReQueue } from './domain/types.js';
 
@@ -27,6 +34,8 @@ export class MetaWorker implements JobProcessor<MetaJob> {
   constructor(
     @Inject(ORCH_FLIGHT_CLIENT) private readonly flight: FlightClient,
     @Inject(BlacklistStore) private readonly blacklist: BlacklistStore,
+    @Inject(LocalStockMetaWriterService)
+    private readonly metaWriter: LocalStockMetaWriterService,
   ) {}
 
   async process(job: JobEnvelope<MetaJob>, _queue: ReQueue<MetaJob>): Promise<void> {
@@ -39,10 +48,22 @@ export class MetaWorker implements JobProcessor<MetaJob> {
       return;
     }
     if (needBasic) {
-      await this.flight.doGet('enrich_stock_meta_for_code', { code }, { traceId });
+      const result = await this.flight.doGet(
+        'enrich_stock_meta_for_code',
+        { code },
+        { traceId },
+      );
+      const rows = arrowTableToStockMetaDtos(result.value);
+      if (rows.length > 0) await this.metaWriter.upsertMetas(rows);
     }
     if (needFinancials) {
-      await this.flight.doGet('enrich_financials_for_code', { code }, { traceId });
+      const result = await this.flight.doGet(
+        'enrich_financials_for_code',
+        { code },
+        { traceId },
+      );
+      const rows = arrowTableToStockMetaDtos(result.value);
+      if (rows.length > 0) await this.metaWriter.upsertMetas(rows);
     }
     this.logger.debug(
       `meta_pkg_done code=${code} basic=${String(needBasic)} financials=${String(needFinancials)} trace_id=${traceId}`,

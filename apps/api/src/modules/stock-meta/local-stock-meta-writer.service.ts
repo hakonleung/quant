@@ -1,25 +1,25 @@
 /**
- * NestJS-side writer for ``data/stock_metas.parquet`` metrics columns.
+ * NestJS-side writer for ``data/stock_metas.parquet``.
  *
- * Storage-unify-rollout: the previous design had Python's
- * ``upsert_stock_metrics_for_code{,s}`` Flight ops persist the
- * computed metrics block directly to the meta parquet, which left
- * two processes racing on the same file every time a kline-worker
- * job fired. The compute ops now return the projection via Arrow;
- * this service writes it locally so NestJS owns the meta parquet
- * end-to-end on the metrics-column side.
+ * Storage-unify-rollout: every parquet write now flows through this
+ * service. Two upsert paths:
  *
- * Strategy: load the parquet via DuckDB, patch the metrics columns
- * for the incoming code(s) using a single LEFT JOIN against the new
- * rows, COPY the merged table to a sibling tmp file, atomic rename.
- * In-process writes serialise via {@link writeChain}; the meta-sync
- * cron (still in Python for now) is intentionally scheduled
- * disjointly from kline workers so the across-process race window
- * stays empty in practice — see ``docs/perf/storage-unify-rollout.md``.
+ *   - {@link upsertMetrics} — patches the ``metrics_*`` block produced
+ *     by the post-kline projector (``compute_stock_metrics_for_code``).
+ *   - {@link upsertMetas} — patches the non-metric (meta) columns
+ *     produced by the meta-sync / financials Flight ops. Existing
+ *     ``metrics_*`` columns on matched rows are preserved verbatim
+ *     so a financials cron tick never wipes the snapshot block.
  *
- * After every successful write the local adapter cache is
- * invalidated so the next read picks up the new metrics block
- * immediately rather than waiting on the 60s SWR window.
+ * Both paths use the same in-process serialisation chain
+ * ({@link writeChain}) — they share the parquet file, so a metrics
+ * patch and a meta upsert cannot race their read-modify-write cycles.
+ *
+ * Strategy for each path: load the parquet via DuckDB, overlay the
+ * incoming rows via a CTE + JOIN, COPY the merged table to a sibling
+ * tmp file, atomic rename. After every successful write the local
+ * adapter cache is invalidated so the next read picks up the new
+ * rows immediately rather than waiting on the 60s SWR window.
  */
 
 import { rename, rm, stat } from 'node:fs/promises';
@@ -27,6 +27,7 @@ import { join } from 'node:path';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import type { DuckDBConnection } from '@duckdb/node-api';
 import { DuckDBInstance } from '@duckdb/node-api';
+import type { QuarterlyFinancials, StockMetaDto } from '@quant/shared';
 
 import { CLOCK, type Clock } from '../../common/clock.js';
 import { LocalStockMetaAdapter, STOCK_META_DATA_DIR } from './local-stock-meta.adapter.js';
@@ -99,14 +100,33 @@ export class LocalStockMetaWriterService {
   async upsertMetrics(rows: readonly StockMetricsRow[]): Promise<void> {
     if (rows.length === 0) return;
     const next = this.writeChain.then(
-      () => this.runUpsert(rows),
-      () => this.runUpsert(rows),
+      () => this.runUpsertMetrics(rows),
+      () => this.runUpsertMetrics(rows),
     );
     this.writeChain = next.catch(() => undefined);
     await next;
   }
 
-  private async runUpsert(rows: readonly StockMetricsRow[]): Promise<void> {
+  /**
+   * Patch the non-metric (meta) columns for ``rows``: existing codes
+   * have their meta block replaced verbatim; new codes are inserted
+   * with NULL ``metrics_*`` columns. Existing codes' ``metrics_*``
+   * columns are passed through unchanged so a meta-side write never
+   * stomps the snapshot block the kline-worker projector wrote.
+   *
+   * No-op when ``rows`` is empty.
+   */
+  async upsertMetas(rows: readonly StockMetaDto[]): Promise<void> {
+    if (rows.length === 0) return;
+    const next = this.writeChain.then(
+      () => this.runUpsertMetas(rows),
+      () => this.runUpsertMetas(rows),
+    );
+    this.writeChain = next.catch(() => undefined);
+    await next;
+  }
+
+  private async runUpsertMetrics(rows: readonly StockMetricsRow[]): Promise<void> {
     if (!(await fileExists(this.filePath))) {
       this.logger.warn(
         `stock_metas.parquet missing at ${this.filePath}; skipping metrics upsert for ${rows.length} row(s)`,
@@ -117,7 +137,7 @@ export class LocalStockMetaWriterService {
     const updatedAt = this.clock.now();
     const tmp = `${this.filePath}.tmp-${process.pid}-${Date.now()}`;
     try {
-      await conn.run(this.buildCopySql(rows, tmp, updatedAt));
+      await conn.run(this.buildMetricsCopySql(rows, tmp, updatedAt));
       await rename(tmp, this.filePath);
       this.adapter.invalidate();
       this.logger.log(`stock_metrics_upsert wrote=${rows.length}`);
@@ -127,7 +147,27 @@ export class LocalStockMetaWriterService {
     }
   }
 
-  private buildCopySql(
+  private async runUpsertMetas(rows: readonly StockMetaDto[]): Promise<void> {
+    if (!(await fileExists(this.filePath))) {
+      this.logger.warn(
+        `stock_metas.parquet missing at ${this.filePath}; skipping meta upsert for ${rows.length} row(s)`,
+      );
+      return;
+    }
+    const conn = await this.connection();
+    const tmp = `${this.filePath}.tmp-${process.pid}-${Date.now()}`;
+    try {
+      await conn.run(this.buildMetasCopySql(rows, tmp));
+      await rename(tmp, this.filePath);
+      this.adapter.invalidate();
+      this.logger.log(`stock_meta_upsert wrote=${rows.length}`);
+    } catch (err) {
+      await rm(tmp, { force: true });
+      throw err;
+    }
+  }
+
+  private buildMetricsCopySql(
     rows: readonly StockMetricsRow[],
     tmpPath: string,
     updatedAt: Date,
@@ -185,6 +225,75 @@ export class LocalStockMetaWriterService {
     `;
   }
 
+  private buildMetasCopySql(rows: readonly StockMetaDto[], tmpPath: string): string {
+    const newCols = [
+      'code',
+      'name',
+      'name_pinyin',
+      'industries',
+      'list_date',
+      'float_pct',
+      'updated_at',
+      'total_share',
+      'float_share',
+      'net_assets',
+      'net_assets_period',
+      'quarterlies_json',
+      'financials_updated_at',
+    ];
+    const newColList = newCols.map(quoteIdent).join(', ');
+    const valuesSql = rows.map((r) => this.metaRowToValues(r)).join(',\n        ');
+    // Existing-row → CASE picks new-side when n matched, else old-side.
+    // Inserted row → o is NULL for everything, including metric columns
+    // (DuckDB FULL OUTER JOIN), so those land NULL automatically.
+    const selectMeta = newCols
+      .map((c) => `CASE WHEN n.code IS NOT NULL THEN n.${quoteIdent(c)} ELSE o.${quoteIdent(c)} END AS ${quoteIdent(c)}`)
+      .join(',\n      ');
+    const preservedMetrics = [
+      'metrics_asof',
+      'metrics_updated_at',
+      ...METRIC_DECIMAL_COLUMNS,
+    ]
+      .map((c) => `o.${quoteIdent(c)} AS ${quoteIdent(c)}`)
+      .join(', ');
+    return `
+      COPY (
+        WITH new_metas(${newColList}) AS (
+          SELECT * FROM (VALUES
+        ${valuesSql}
+          ) AS t(${newColList})
+        )
+        SELECT
+          ${selectMeta},
+          ${preservedMetrics}
+        FROM new_metas AS n
+        FULL OUTER JOIN read_parquet(${quoteLiteral(this.filePath)}) AS o
+          ON o.code = n.code
+      ) TO ${quoteLiteral(tmpPath)} (FORMAT PARQUET);
+    `;
+  }
+
+  private metaRowToValues(row: StockMetaDto): string {
+    const parts: string[] = [
+      quoteLiteral(row.code),
+      quoteLiteral(row.name),
+      quoteLiteral(row.name_pinyin),
+      quoteLiteral(row.industries),
+      `DATE '${row.list_date}'`,
+      quoteLiteral(row.float_pct),
+      `TIMESTAMP '${isoToDuckDbTimestamp(row.updated_at)}'`,
+      quoteOptionalString(row.total_share),
+      quoteOptionalString(row.float_share),
+      quoteOptionalString(row.net_assets),
+      row.net_assets_period === null ? 'CAST(NULL AS DATE)' : `DATE '${row.net_assets_period}'`,
+      quoteQuarterliesJson(row.quarterlies),
+      row.financials_updated_at === null
+        ? 'CAST(NULL AS TIMESTAMP)'
+        : `TIMESTAMP '${isoToDuckDbTimestamp(row.financials_updated_at)}'`,
+    ];
+    return `(${parts.join(', ')})`;
+  }
+
   private rowToValues(row: StockMetricsRow): string {
     // Column order must match `newCols` in buildCopySql.
     const parts: string[] = [
@@ -230,6 +339,30 @@ function quoteLiteral(s: string): string {
 function quoteOptionalString(v: string | null): string {
   if (v === null) return 'CAST(NULL AS VARCHAR)';
   return `'${v.replace(/'/g, "''")}'`;
+}
+
+function quoteQuarterliesJson(quarterlies: readonly QuarterlyFinancials[]): string {
+  if (quarterlies.length === 0) return 'CAST(NULL AS VARCHAR)';
+  // Mirror Python's `_quarterlies_to_json` shape exactly so the round-trip
+  // through `LocalStockMetaAdapter` produces the same `quarterlies` array.
+  const compact = quarterlies.map((q) => ({
+    period: q.period,
+    revenue: q.revenue,
+    operating_cost: q.operating_cost,
+    net_profit: q.net_profit,
+    net_profit_excl_nr: q.net_profit_excl_nr,
+  }));
+  const json = JSON.stringify(compact);
+  return `'${json.replace(/'/g, "''")}'`;
+}
+
+function isoToDuckDbTimestamp(iso: string): string {
+  // ISO 8601 with offset (e.g. "2026-05-01T00:00:00+00:00") → DuckDB
+  // TIMESTAMP literal in plain "YYYY-MM-DD HH:MM:SS[.fff]" form. The
+  // meta parquet stores TIMESTAMP(us, UTC); shifting offset to UTC
+  // first keeps the column consistent with what Python wrote.
+  const d = new Date(iso);
+  return d.toISOString().replace('T', ' ').replace('Z', '');
 }
 
 async function fileExists(path: string): Promise<boolean> {
