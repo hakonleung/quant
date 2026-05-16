@@ -40,6 +40,7 @@ import { ScreenService } from '../screen/screen.service.js';
 import { SectorsService } from '../sectors/sectors.service.js';
 import { NewsSentimentService } from '../sentiment/news-sentiment.service.js';
 import { StockListService } from '../stock-list/stock-list.service.js';
+import { KlineReaderService } from '../kline/kline-reader.service.js';
 import { StockMetaService } from '../stock-meta/stock-meta.service.js';
 import { TaService } from '../ta/ta.service.js';
 import { WatchTaskStore } from '../watch/watch-task.store.js';
@@ -65,6 +66,8 @@ import { buildSectorRefreshCell } from './cells/sector-refresh.cell.js';
 import { buildSectorRmCell } from './cells/sector-rm.cell.js';
 import { buildSectorShowCell } from './cells/sector-show.cell.js';
 import { buildStockCell } from './cells/stock.cell.js';
+import { buildStockInfoCell } from './cells/stock-info.cell.js';
+import { buildStockKlineCell } from './cells/stock-kline.cell.js';
 import { buildTaCell } from './cells/ta.cell.js';
 import { buildTaSectorCell } from './cells/ta-sector.cell.js';
 import { buildUpdateCell } from './cells/update.cell.js';
@@ -93,6 +96,8 @@ export type MigratedIds =
   | 'ledger.add'
   | 'ledger.remove'
   | 'stock'
+  | 'stock.info'
+  | 'stock.kline'
   | 'watch'
   | 'watch.add'
   | 'watch.remove'
@@ -124,6 +129,7 @@ export class BeInstructionCenter implements BeInstructionCenterPort {
     @Inject(SectorsService) sectors: SectorsService,
     @Inject(LedgerService) ledgerService: LedgerService,
     @Inject(StockMetaService) stockMeta: StockMetaService,
+    @Inject(KlineReaderService) klineReader: KlineReaderService,
     @Inject(WatchService) watch: WatchService,
     @Inject(StockListService) stockList: StockListService,
     @Inject(NewsSentimentService) sentiment: NewsSentimentService,
@@ -148,6 +154,8 @@ export class BeInstructionCenter implements BeInstructionCenterPort {
       'ledger.add': buildLedgerAddCell({ ledger: ledgerService }),
       'ledger.remove': buildLedgerRemoveCell({ ledger: ledgerService }),
       stock: buildStockCell({ stockMeta }),
+      'stock.info': buildStockInfoCell({ stockMeta, kline: klineReader }),
+      'stock.kline': buildStockKlineCell({ kline: klineReader }),
       watch: buildWatchCell({ watch, stockList }),
       'watch.add': buildWatchAddCell({ watch }),
       'watch.remove': buildWatchRemoveCell({ taskStore: watchTaskStore }),

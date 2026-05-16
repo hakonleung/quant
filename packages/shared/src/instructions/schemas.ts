@@ -15,9 +15,11 @@
 import { z } from 'zod';
 
 import { ChannelIdSchema } from '../types/channel.js';
+import { KlineBarSchema } from '../types/eqty.js';
 import { LedgerAnalysisSchema } from '../types/ledger.js';
 import { SectorSchema } from '../types/sectors.js';
 import { StockListRowSchema } from '../types/stock-list.js';
+import { StockMetaDtoSchema, StockSnapshotDtoSchema } from '../types/stock-meta.js';
 import { TaAnalysisSchema, TaSectorAnalysisSchema } from '../types/ta.js';
 import { AgentHistoryEntrySchema, AGENT_HISTORY_MAX_ENTRIES } from './agent-history.js';
 
@@ -197,6 +199,44 @@ export const StockSearchResultSchema = z
   })
   .strict();
 export type StockSearchResult = z.infer<typeof StockSearchResultSchema>;
+
+/** Range token accepted by `stock.kline`. */
+export const KlineRangeSchema = z.enum(['30D', '90D', '250D']);
+
+/**
+ * `/stock.info` — composite info view: meta + latest snapshot +
+ * the last 30 daily bars (so the FE can draw a sparkline without a
+ * second round-trip).
+ */
+export const StockInfoArgsSchema = z
+  .object({
+    code: z.string().regex(/^\d{6}$/u, '6-digit code expected'),
+  })
+  .strict();
+export const StockInfoResultSchema = z
+  .object({
+    meta: StockMetaDtoSchema,
+    snapshot: StockSnapshotDtoSchema.nullable(),
+    recentBars: KlineBarSchema.array(),
+  })
+  .strict();
+export type StockInfoResult = z.infer<typeof StockInfoResultSchema>;
+
+/** `/stock.kline` — range-scoped bar list for one code. */
+export const StockKlineArgsSchema = z
+  .object({
+    code: z.string().regex(/^\d{6}$/u, '6-digit code expected'),
+    range: KlineRangeSchema.default('30D'),
+  })
+  .strict();
+export const StockKlineResultSchema = z
+  .object({
+    code: z.string(),
+    range: KlineRangeSchema,
+    bars: KlineBarSchema.array(),
+  })
+  .strict();
+export type StockKlineResult = z.infer<typeof StockKlineResultSchema>;
 
 // ── sectors ─────────────────────────────────────────────────────────────
 

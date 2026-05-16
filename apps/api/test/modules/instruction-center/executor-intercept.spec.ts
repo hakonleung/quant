@@ -35,6 +35,7 @@ import type { ScreenService } from '../../../src/modules/screen/screen.service.j
 import type { SectorsService } from '../../../src/modules/sectors/sectors.service.js';
 import type { NewsSentimentService } from '../../../src/modules/sentiment/news-sentiment.service.js';
 import type { StockListService } from '../../../src/modules/stock-list/stock-list.service.js';
+import type { KlineReaderService } from '../../../src/modules/kline/kline-reader.service.js';
 import type { StockMetaService } from '../../../src/modules/stock-meta/stock-meta.service.js';
 import type { TaService } from '../../../src/modules/ta/ta.service.js';
 import type { WatchTaskStore } from '../../../src/modules/watch/watch-task.store.js';
@@ -74,6 +75,9 @@ function build(): {
     listAll: () => Promise.resolve([]),
     snapshotAll: () => Promise.resolve([]),
   } as unknown as StockMetaService;
+  const klineReader = {
+    lastNForCode: () => Promise.resolve([]),
+  } as unknown as KlineReaderService;
   const watch: WatchService = {
     list: () => Promise.resolve([]),
   } as unknown as WatchService;
@@ -119,6 +123,7 @@ function build(): {
     sectors,
     ledgerSvc,
     stockMeta,
+    klineReader,
     watch,
     stockList,
     sentimentSvc,
@@ -229,6 +234,8 @@ describe('InstructionExecutor → BeInstructionCenter intercept', () => {
       'sector.show',
       'sector.unpublish',
       'stock',
+      'stock.info',
+      'stock.kline',
       'ta',
       'ta.sector',
       'update',
@@ -259,6 +266,9 @@ describe('InstructionExecutor → BeInstructionCenter intercept', () => {
         listAll: () => Promise.resolve([]),
         snapshotAll: () => Promise.resolve([]),
       } as unknown as StockMetaService;
+      const klineReader = {
+        lastNForCode: () => Promise.resolve([]),
+      } as unknown as KlineReaderService;
       const watch: WatchService = { list: () => Promise.resolve([]) } as unknown as WatchService;
       const stockList: StockListService = {
         assembleRows: () => Promise.resolve({ rows: [] }),
@@ -302,6 +312,7 @@ describe('InstructionExecutor → BeInstructionCenter intercept', () => {
         sectors,
         ledgerSvc,
         stockMeta,
+        klineReader,
         watch,
         stockList,
         sentimentSvc,
@@ -355,6 +366,9 @@ describe('InstructionExecutor → BeInstructionCenter intercept', () => {
       listAll: () => Promise.resolve([]),
       snapshotAll: () => Promise.resolve([]),
     } as unknown as StockMetaService;
+    const klineReader = {
+      lastNForCode: () => Promise.resolve([]),
+    } as unknown as KlineReaderService;
     const watch: WatchService = { list: () => Promise.resolve([]) } as unknown as WatchService;
     const stockList: StockListService = {
       assembleRows: () => Promise.resolve({ rows: [] }),
@@ -409,6 +423,7 @@ describe('InstructionExecutor → BeInstructionCenter intercept', () => {
       sectors,
       ledgerSvc,
       stockMeta,
+      klineReader,
       watch,
       stockList,
       sentimentSvc,
