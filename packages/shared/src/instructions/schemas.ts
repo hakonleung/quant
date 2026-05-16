@@ -161,6 +161,20 @@ export const SectorUnpublishArgsSchema = sectorIdShape.strict();
 export const SectorRefreshArgsSchema = sectorIdShape.strict();
 export const SectorRmArgsSchema = sectorIdShape.strict();
 
+/**
+ * Sync-ack result shared by `/sector.publish`, `/sector.unpublish`,
+ * `/sector.rm`. Renderer turns the (id, action) pair into a one-line
+ * confirmation; `action` is the past-tense verb consumed by the
+ * renderer's verb table so the wording stays consistent.
+ */
+export const SectorAckResultSchema = z
+  .object({
+    id: z.string().min(1),
+    action: z.enum(['published', 'unpublished', 'deleted']),
+  })
+  .strict();
+export type SectorAckResult = z.infer<typeof SectorAckResultSchema>;
+
 // ── watch ───────────────────────────────────────────────────────────────
 
 export const WatchArgsSchema = z.object({ sub: z.enum(['list']).default('list') }).strict();
@@ -220,6 +234,36 @@ export const WatchGroupArgsSchema = z
       .describe('on|resume to enable, off|pause to disable'),
   })
   .strict();
+
+/** `/watch.add` ack — the created task summary. */
+export const WatchAddResultSchema = z
+  .object({
+    idx: z.number().int().positive(),
+    market: z.enum(['a', 'hk', 'us']),
+    code: z.string().min(1),
+    name: z.string(),
+    groupName: z.string().min(1),
+  })
+  .strict();
+export type WatchAddResult = z.infer<typeof WatchAddResultSchema>;
+
+/** `/watch.remove` ack — the removed task's w-index. */
+export const WatchRemoveResultSchema = z
+  .object({
+    idx: z.number().int().positive(),
+  })
+  .strict();
+export type WatchRemoveResult = z.infer<typeof WatchRemoveResultSchema>;
+
+/** `/watch.group` ack — the resulting enabled state + the verb the user requested. */
+export const WatchGroupResultSchema = z
+  .object({
+    name: z.string().min(1),
+    enabled: z.boolean(),
+    requestedState: z.enum(['on', 'off', 'pause', 'resume']),
+  })
+  .strict();
+export type WatchGroupResult = z.infer<typeof WatchGroupResultSchema>;
 
 // ── analysis ────────────────────────────────────────────────────────────
 

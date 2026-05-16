@@ -46,6 +46,7 @@ import {
   LedgerAnalyzeArgsSchema,
   LedgerArgsSchema,
   LedgerListResultSchema,
+  SectorAckResultSchema,
   PingArgsSchema,
   ScreenArgsSchema,
   SectorArgsSchema,
@@ -63,10 +64,13 @@ import {
   UsrArgsSchema,
   UsrResultSchema,
   WatchAddArgsSchema,
+  WatchAddResultSchema,
   WatchArgsSchema,
   WatchGroupArgsSchema,
+  WatchGroupResultSchema,
   WatchListResultSchema,
   WatchRemoveArgsSchema,
+  WatchRemoveResultSchema,
   WebSearchArgsSchema,
 } from './schemas.js';
 
@@ -256,8 +260,10 @@ const ENTRIES = [
     mode: 'sync',
     supportedOn: ['be'],
     summary: 'Mark a sector as published',
+    imAliases: ['发布板块', '公开板块'],
+    destructive: true,
     argsSchema: SectorPublishArgsSchema,
-    resultSchema: LegacyOutputSchema,
+    resultSchema: SectorAckResultSchema,
   },
   {
     id: 'sector.unpublish',
@@ -265,8 +271,10 @@ const ENTRIES = [
     mode: 'sync',
     supportedOn: ['be'],
     summary: 'Mark a sector as unpublished',
+    imAliases: ['取消发布板块', '下架板块'],
+    destructive: true,
     argsSchema: SectorUnpublishArgsSchema,
-    resultSchema: LegacyOutputSchema,
+    resultSchema: SectorAckResultSchema,
   },
   {
     id: 'sector.refresh',
@@ -285,8 +293,9 @@ const ENTRIES = [
     supportedOn: ['be'],
     summary: 'Delete a sector',
     destructive: true,
+    imAliases: ['删除板块', '移除板块'],
     argsSchema: SectorRmArgsSchema,
-    resultSchema: LegacyOutputSchema,
+    resultSchema: SectorAckResultSchema,
   },
 
   // ── watch ───────────────────────────────────────────────────────────
@@ -307,8 +316,9 @@ const ENTRIES = [
     mode: 'sync',
     supportedOn: ['be'],
     summary: 'Add a watch task',
+    imAliases: ['添加自选', '加自选', '添加预警'],
     argsSchema: WatchAddArgsSchema,
-    resultSchema: LegacyOutputSchema,
+    resultSchema: WatchAddResultSchema,
   },
   {
     id: 'watch.remove',
@@ -317,8 +327,9 @@ const ENTRIES = [
     supportedOn: ['be'],
     summary: 'Remove a watch task',
     destructive: true,
+    imAliases: ['删除自选', '移除自选', '删除预警'],
     argsSchema: WatchRemoveArgsSchema,
-    resultSchema: LegacyOutputSchema,
+    resultSchema: WatchRemoveResultSchema,
   },
   {
     id: 'watch.group',
@@ -326,8 +337,9 @@ const ENTRIES = [
     mode: 'sync',
     supportedOn: ['be'],
     summary: 'Manage watch groups',
+    imAliases: ['暂停自选', '恢复自选', '盯盘开关'],
     argsSchema: WatchGroupArgsSchema,
-    resultSchema: LegacyOutputSchema,
+    resultSchema: WatchGroupResultSchema,
   },
 
   // ── analysis ────────────────────────────────────────────────────────
