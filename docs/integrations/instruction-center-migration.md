@@ -16,8 +16,15 @@ shared via `packages/shared/src/instructions/`.
     `sector.refresh` (migrated from legacy `SectorRefreshInstructionHandler`),
     `stock.info`, `stock.kline`. Each wraps an existing service —
     no new endpoints, just typed access through the manifest.
-- **Phase 3 partial — FE cells.** `usr`, `clear`, `cache`, `focus`,
-  `update`, `help` migrated to `apps/web/lib/instructions/cells/`.
+- **Phase 3 — FE cells.** Migrated to
+  `apps/web/lib/instructions/cells/`: `usr`, `clear`, `cache`,
+  `focus`, `update`, `help`, `ledger` + 3 subs, `stock` + 2 subs,
+  `screen`. Legacy `help.ts`, `ledger.ts`, `stock.ts`, `screen.ts`
+  removed from `packages/terminal/src/commands/`.
+  - `screen` migration changed syntax: the redundant `nl` keyword is
+    gone (`screen <query>` is enough). Confirm flow now uses the
+    `confirm-required` envelope code — handler throws it, renderer
+    surfaces the confirm widget.
 - **Phase 4 cleanup.** Dropped `supportedOn`,
   `conditionallyRegistered`, `assertHandlerCoverage`, and the
   `OnApplicationBootstrap` coverage check now that mapped-type config
@@ -40,24 +47,17 @@ BE cell:
 
 ## Still on the legacy `CommandRegistry`
 
-`stock`, `ledger`, `analyze`, `ta`, `screen`, `watch`, `sector`,
-`agent`. These work today through `runCommand(line, ctx, registry)`;
-the FE shell falls through to that path when `feCenterCanDispatch`
-returns false.
+`watch`, `sector`, `analyze`, `ta`, `agent`. These work today
+through `runCommand(line, ctx, registry)`; the FE shell falls
+through to that path when `feCenterCanDispatch` returns false.
 
-## Remaining FE-side blockers
-
-The BE manifest now covers every legacy subcommand. The FE side
-still defers for these reasons:
+## Why those four remain
 
 | Command | Blocker |
 |---------|---------|
-| `analyze`, `ta` | Renderer reads `Sentiment` fields (`topTheme`, `topDriver`, `cachedAt`) that the in-progress `SentimentSchema` refactor is removing. Migrating now commits code against a moving target. |
-| `screen` | Legacy renderer expects `{ matches, dslSummary }`; manifest result is `{ nl, asof, codes, stockRows }`. Cell renderer needs to be rewritten against the new payload shape. |
-| `ledger` | Multi-stage `rm` confirm + four subcommand ids; cell renderer needs to host the confirm widget for `ledger.remove`. |
-| `watch` | `watch.add` is a multi-field interactive form, not a one-shot invoke. |
-| `sector` | `sector.add` is a multi-step form (name → kind → codes). Cell handler is one-shot; the form lives in the FE renderer. |
-| `stock` | Picker is pure-FE state, not a BE invoke; cell renderer needs to drive the picker via `host.stockIndex`. |
+| `analyze`, `ta` | Renderer reads `Sentiment` fields that the in-progress `SentimentSchema` refactor is removing. Migrate after that lands. |
+| `watch` | Legacy `watch add` is a guided multi-field form whose submit calls `watchUpsertAction` (full WatchTask shape — conditions, intervals). Manifest `watch.add` takes only `{ code, market, group, name? }`. Migration requires either expanding the manifest schema or accepting a reduced FE UX. |
+| `sector` | Legacy `sector add` is a multi-step form (name → kind → codes); reproducing it as a cell renderer means dispatching a follow-up `sector.add sector=<json>` line on form-submit. Doable but heavier than the other migrations. |
 | `agent` | Streaming subscription + event dispatcher. The `InstructionCell` shape is request/response — agent needs either a `StreamingInstructionCell<E, I>` variant or stays out of the center. |
 
 ## Recommended order to finish
