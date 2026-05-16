@@ -19,6 +19,9 @@ import {
 
 import { invokeInstruction, type InvokeOptions } from './client.js';
 import type { FeEnv, InstructionInvoker } from './fe-types.js';
+import { buildCacheCell } from './cells/cache.cell.js';
+import { buildClearCell } from './cells/clear.cell.js';
+import { buildFocusCell } from './cells/focus.cell.js';
 import { buildUsrCell } from './cells/usr.cell.js';
 
 /**
@@ -27,7 +30,7 @@ import { buildUsrCell } from './cells/usr.cell.js';
  * (`sector.publish` / `analyze.sector` / agent.confirm / channel.send
  *  / web.search / etc.) stay excluded — they're never invoked from FE.
  */
-export type FeMigratedIds = 'usr';
+export type FeMigratedIds = 'usr' | 'clear' | 'cache' | 'focus';
 
 type Excluded = Exclude<AllInstructionIds, FeMigratedIds>;
 type Configured = Exclude<AllInstructionIds, Excluded>;
@@ -44,6 +47,9 @@ const defaultInvoker: InstructionInvoker = {
 export function buildFeCenter(): InstructionCenter<FeEnv, Excluded> {
   const cfg: InstructionConfig<FeEnv, Excluded> = {
     usr: buildUsrCell(),
+    clear: buildClearCell(),
+    cache: buildCacheCell(),
+    focus: buildFocusCell(),
   };
   return new InstructionCenter<FeEnv, Excluded>(cfg);
 }

@@ -27,6 +27,7 @@ import type {
 import type {
   CommandCtx,
   CommandRunOutput,
+  StockIndex,
 } from '@quant/terminal';
 
 import type { InvokeOptions } from './client.js';
@@ -50,11 +51,14 @@ export interface FeCtx extends CommandCtx {
 }
 
 /**
- * Renderer dependency bag. Empty today; reserved for future widget
- * primitives (prompt / pickStock / pager) so cells declare what host
- * capability they touch.
+ * Renderer dependency bag. Today exposes the stock completion index
+ * so cells like `focus` can render an interactive picker without
+ * reaching into `ctx` (renderers only receive `host` per the cell
+ * model). Grows as more widget primitives surface.
  */
-export interface TermHost {}
+export interface TermHost {
+  readonly stockIndex: StockIndex;
+}
 
 export type TermOutput = CommandRunOutput;
 

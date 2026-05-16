@@ -55,7 +55,7 @@ export function feCenterCanDispatch(line: string): boolean {
 export async function feDispatch(
   line: string,
   ctx: FeCtx,
-  host: TermHost = {},
+  host: TermHost = { stockIndex: ctx.stockIndex },
 ): Promise<TermOutput> {
   return feCenter.dispatch(line, ctx, host, {
     onResolved: (id, envelope) => {

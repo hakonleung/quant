@@ -6,9 +6,6 @@
 
 import { agentCommand } from './agent.js';
 import { analyzeCommand } from './analyze.js';
-import { cacheCommand } from './cache.js';
-import { clearCommand } from './clear.js';
-import { focusCommand } from './focus.js';
 import { helpCommand } from './help.js';
 import { ledgerCommand } from './ledger.js';
 import { sectorCommand } from './sector.js';
@@ -22,9 +19,6 @@ import { createRegistry, type CommandRegistry } from '../registry.js';
 export {
   agentCommand,
   analyzeCommand,
-  cacheCommand,
-  clearCommand,
-  focusCommand,
   helpCommand,
   ledgerCommand,
   sectorCommand,
@@ -38,7 +32,6 @@ export {
 export function createDefaultRegistry(): CommandRegistry {
   const r = createRegistry();
   r.register(stockCommand);
-  r.register(focusCommand);
   r.register(sectorCommand);
   r.register(analyzeCommand);
   r.register(taCommand);
@@ -46,10 +39,13 @@ export function createDefaultRegistry(): CommandRegistry {
   r.register(ledgerCommand);
   r.register(screenCommand);
   r.register(updateCommand);
-  r.register(cacheCommand);
-  r.register(clearCommand);
-  // `usr` migrated to FE InstructionCenter cell — apps/web handles it
-  // via feCenter intercept before falling through to this registry.
+  // The following are served by the FE InstructionCenter cells in
+  // `apps/web/lib/instructions/cells/*.cell.ts`. The terminal shell
+  // checks `feCenterCanDispatch(line)` first; misses fall through here.
+  //   - usr   — typed BE proxy
+  //   - clear — engine-event cell
+  //   - cache — FE runner-cache inspect / clear
+  //   - focus — FE focus state + interactive picker
   r.register(agentCommand);
   r.register(helpCommand(r));
   return r;
