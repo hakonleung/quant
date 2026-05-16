@@ -16,6 +16,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 
 import { registerStoreExportGlobal } from './storage/export-stores.js';
 import { ThemeProvider } from './theme/provider.js';
+import { startWebVitals } from './web-vitals/store.js';
 
 interface ProvidersProps {
   readonly children: ReactNode;
@@ -30,6 +31,10 @@ export function Providers({ children }: ProvidersProps): ReactNode {
   );
   useEffect(() => {
     registerStoreExportGlobal();
+    // Subscribe to web-vitals at app root so LCP/CLS listeners are
+    // registered before the user's first interaction — see
+    // `lib/web-vitals/store.ts` for the reasoning.
+    startWebVitals();
   }, []);
   return (
     <ThemeProvider>

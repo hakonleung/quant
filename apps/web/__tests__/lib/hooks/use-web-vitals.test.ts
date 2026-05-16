@@ -1,16 +1,18 @@
 /**
- * Hook-side test for `useWebVitals`.
+ * Hook-side test for `useWebVitals` + the underlying web-vitals
+ * singleton store.
  *
- * web-vitals callbacks are mocked so we can drive each metric channel
- * independently and assert that the hook (a) starts in the empty
- * state, (b) routes each channel into the matching field, and (c)
- * normalises the rating string into the local union (defaulting
- * unknown values to `'poor'` so a future library widening can't sneak
- * an invalid colour through `vitalColor`).
+ * The hook now reads from a module-level store seeded by
+ * `startWebVitals()` (booted at app root in `Providers`). The
+ * `web-vitals` package is mocked so we can drive each metric channel
+ * independently and assert that the store (a) starts empty, (b)
+ * routes each channel into the matching field, (c) normalises the
+ * rating string into the local union (defaulting unknown values to
+ * `'poor'`), and (d) fans the snapshot out to subscribed components.
  */
 
 import { act, renderHook } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { Metric } from 'web-vitals';
 
@@ -32,7 +34,20 @@ vi.mock('web-vitals', () => ({
   },
 }));
 
-afterEach(() => {
+beforeEach(async () => {
+  const { startWebVitals, __resetWebVitalsForTest } = await import(
+    '../../../lib/web-vitals/store.js'
+  );
+  __resetWebVitalsForTest();
+  lcpCbs.length = 0;
+  inpCbs.length = 0;
+  clsCbs.length = 0;
+  startWebVitals();
+});
+
+afterEach(async () => {
+  const { __resetWebVitalsForTest } = await import('../../../lib/web-vitals/store.js');
+  __resetWebVitalsForTest();
   lcpCbs.length = 0;
   inpCbs.length = 0;
   clsCbs.length = 0;
@@ -117,15 +132,24 @@ describe('useWebVitals', () => {
     expect(result.current.inp).toEqual({ value: 480, rating: 'needs-improvement' });
   });
 
-  it('ignores callbacks fired after unmount', async () => {
+  it('fans the same snapshot to multiple subscribers', async () => {
     const { useWebVitals } = await import('../../../lib/hooks/use-web-vitals.js');
-    const { result, unmount } = renderHook(() => useWebVitals());
-    unmount();
-    // The "mounted" flag should swallow the late update; vitest will
-    // complain if we'd called setState on an unmounted node.
+    const a = renderHook(() => useWebVitals());
+    const b = renderHook(() => useWebVitals());
     act(() => {
-      lcpCbs[0]?.(metric('LCP', 2200, 'good'));
+      lcpCbs[0]?.(metric('LCP', 1800, 'good'));
     });
-    expect(result.current.lcp).toBeNull();
+    expect(a.result.current.lcp).toEqual({ value: 1800, rating: 'good' });
+    expect(b.result.current.lcp).toEqual({ value: 1800, rating: 'good' });
+  });
+
+  it('startWebVitals is idempotent — re-calling does not re-register listeners', async () => {
+    const { startWebVitals } = await import('../../../lib/web-vitals/store.js');
+    startWebVitals();
+    startWebVitals();
+    // Only the single registration from beforeEach should exist.
+    expect(lcpCbs.length).toBe(1);
+    expect(inpCbs.length).toBe(1);
+    expect(clsCbs.length).toBe(1);
   });
 });
