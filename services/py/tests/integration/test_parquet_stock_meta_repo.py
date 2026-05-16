@@ -3,6 +3,11 @@
 Exercises the adapter against a real parquet file on tmp_path: the codec
 round-trip, ordering guarantees, and the business-flavoured queries
 (``get_many`` order/skip semantics, ``list_by_industry``).
+
+The repo is read-only post-storage-unify-rollout; tests seed via
+:func:`seed_stock_meta_parquet` (direct ``pyarrow`` write through the
+shared codec), which is exactly the on-disk shape NestJS's writer
+produces.
 """
 
 from __future__ import annotations
@@ -12,7 +17,8 @@ from typing import TYPE_CHECKING
 import pytest
 from quant_cache.parquet_stock_meta_repo import ParquetStockMetaRepo
 
-from tests._util.stock_meta_fixtures import SEED, make_meta
+from tests._util.stock_meta_fixtures import SEED
+from tests._util.stock_meta_seeder import seed_stock_meta_parquet
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -20,9 +26,9 @@ if TYPE_CHECKING:
 
 @pytest.fixture
 def repo(tmp_path: Path) -> ParquetStockMetaRepo:
-    r = ParquetStockMetaRepo(tmp_path / "stocks.parquet")
-    r.upsert_many(SEED)
-    return r
+    path = tmp_path / "stocks.parquet"
+    seed_stock_meta_parquet(path, SEED)
+    return ParquetStockMetaRepo(path)
 
 
 @pytest.mark.integration
@@ -53,7 +59,9 @@ class TestParquetStockMetaRepo:
     def test_list_by_industry_unknown_returns_empty(self, repo: ParquetStockMetaRepo) -> None:
         assert repo.list_by_industry("not-an-industry") == []
 
-    def test_list_all_returns_every_stock_sorted_by_code(self, repo: ParquetStockMetaRepo) -> None:
+    def test_list_all_returns_every_stock_sorted_by_code(
+        self, repo: ParquetStockMetaRepo
+    ) -> None:
         codes = [m.code for m in repo.list_all()]
         assert codes == sorted(codes)
         assert set(codes) == {m.code for m in SEED}
@@ -62,13 +70,8 @@ class TestParquetStockMetaRepo:
         empty = ParquetStockMetaRepo(tmp_path / "empty.parquet")
         assert empty.list_all() == []
 
-    def test_upsert_overwrites_by_code(self, repo: ParquetStockMetaRepo) -> None:
-        updated = make_meta("600519", name="MOUTAI v2", industries="白酒")
-        repo.upsert_many([updated])
-        assert repo.get("600519") == updated
-
     def test_persists_across_repo_instances(self, tmp_path: Path) -> None:
         path = tmp_path / "stocks.parquet"
-        ParquetStockMetaRepo(path).upsert_many(SEED)
+        seed_stock_meta_parquet(path, SEED)
         again = ParquetStockMetaRepo(path)
         assert again.get("600519") == SEED[0]

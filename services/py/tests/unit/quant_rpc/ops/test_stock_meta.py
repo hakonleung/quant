@@ -31,10 +31,6 @@ class _FakeRepo:
     def __init__(self, items: Iterable[StockMeta]) -> None:
         self._by_code: dict[str, StockMeta] = {m.code: m for m in items}
 
-    def upsert_many(self, items: Iterable[StockMeta]) -> None:  # pragma: no cover
-        for m in items:
-            self._by_code[m.code] = m
-
     def get(self, code: str) -> StockMeta | None:  # pragma: no cover
         return self._by_code.get(code)
 

@@ -1,6 +1,6 @@
 """Flight ops for the financials track (modules/01-stock-meta.md §5.3).
 
-Three ops complement the existing meta ops:
+Two ops complement the existing meta ops:
 
 * ``bulk_sync_financials`` — runs :meth:`FinancialsService.bulk_refresh`
   and returns the merged meta rows in :data:`STOCK_META_SCHEMA` with the
@@ -10,9 +10,12 @@ Three ops complement the existing meta ops:
 * ``enrich_financials_for_code`` — single-code slow path counterpart;
   args ``{"code": "600519"}``. Returns 0 or 1 row in
   :data:`STOCK_META_SCHEMA`.
-* ``find_stale_financials`` — read-only, returns the codes the
-  inspector should hand to the per-stock queue. Args:
-  ``{"max_age_days": 7}``.
+
+The "which codes are stale" lookup used to live here too
+(``find_stale_financials``) but moved to NestJS's ``CacheInspector``
+once meta read became local. Field-completeness + watermark math is
+a pure filter, not a numerical algorithm — co-locating it with the
+reader saves a Flight round-trip per cron tick.
 """
 
 from __future__ import annotations
@@ -31,14 +34,6 @@ if TYPE_CHECKING:
 
 _BULK_OP: Final[str] = "bulk_sync_financials"
 _ENRICH_OP: Final[str] = "enrich_financials_for_code"
-_STALE_OP: Final[str] = "find_stale_financials"
-
-
-STALE_FINANCIALS_SCHEMA: Final[pa.Schema] = pa.schema(
-    [
-        ("code", pa.string()),
-    ]
-)
 
 
 class BulkSyncFinancialsHandler:
@@ -96,29 +91,3 @@ class EnrichFinancialsForCodeHandler:
         )
 
 
-class FindStaleFinancialsHandler:
-    """``find_stale_financials`` — codes due for per-stock enrich."""
-
-    op = _STALE_OP
-    schema = STALE_FINANCIALS_SCHEMA
-
-    __slots__ = ("_service",)
-
-    def __init__(self, service: FinancialsService) -> None:
-        self._service = service
-
-    def execute(self, args: Mapping[str, object]) -> pa.Table:
-        max_age = args.get("max_age_days", 7)
-        if isinstance(max_age, bool) or not isinstance(max_age, int) or max_age <= 0:
-            raise QuantError(
-                "INVALID_ARGUMENT",
-                "args.max_age_days must be a positive int",
-                {"value": str(max_age)},
-            )
-        codes = self._service.find_stale_financials(max_age_days=max_age)
-        if not codes:
-            return STALE_FINANCIALS_SCHEMA.empty_table()
-        return pa.Table.from_pylist(
-            [{"code": c} for c in codes],
-            schema=STALE_FINANCIALS_SCHEMA,
-        )

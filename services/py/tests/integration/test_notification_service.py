@@ -7,7 +7,6 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 import pytest
-from quant_cache.file_kv_store import FileKeyValueStore
 from quant_core.domain.types.notification import (
     Notification,
     NotifierResult,
@@ -18,7 +17,45 @@ from quant_core.services.notification_service import NotificationService
 from tests._util.clock import FrozenClock
 
 if TYPE_CHECKING:
+    from collections.abc import Iterable
     from pathlib import Path
+
+
+class _InMemoryKv:
+    """Test-only ``KeyValueStore`` with monotonic-clock TTL.
+
+    Replaced the ``FileKeyValueStore`` adapter once it was retired in the
+    storage-unify-rollout — NotificationService only needs ``get`` /
+    ``put`` with TTL and the file layout was orthogonal to the test.
+    """
+
+    def __init__(self, clock: FrozenClock) -> None:
+        self._clock = clock
+        self._items: dict[str, tuple[bytes, datetime | None]] = {}
+
+    def get(self, key: str) -> bytes | None:
+        entry = self._items.get(key)
+        if entry is None:
+            return None
+        value, expires_at = entry
+        if expires_at is not None and self._clock.now() >= expires_at:
+            del self._items[key]
+            return None
+        return value
+
+    def put(self, key: str, value: bytes, *, ttl_sec: int | None = None) -> None:
+        from datetime import timedelta
+
+        expires_at: datetime | None = None
+        if ttl_sec is not None:
+            expires_at = self._clock.now() + timedelta(seconds=ttl_sec)
+        self._items[key] = (value, expires_at)
+
+    def delete(self, key: str) -> None:
+        self._items.pop(key, None)
+
+    def list_prefix(self, prefix: str) -> Iterable[str]:
+        return sorted(k for k in self._items if k.startswith(prefix))
 
 
 class _FakeNotifier:
@@ -65,11 +102,8 @@ def _make_n(
 
 
 @pytest.fixture
-def kv(tmp_path: Path) -> FileKeyValueStore:
-    return FileKeyValueStore(
-        root=tmp_path / "kv",
-        clock=FrozenClock(datetime(2026, 5, 3, 12, 0, tzinfo=UTC)),
-    )
+def kv() -> _InMemoryKv:
+    return _InMemoryKv(FrozenClock(datetime(2026, 5, 3, 12, 0, tzinfo=UTC)))
 
 
 def _build_service(
@@ -81,7 +115,7 @@ def _build_service(
     clock: FrozenClock | None = None,
 ) -> tuple[NotificationService, FrozenClock]:
     use_clock = clock or FrozenClock(datetime(2026, 5, 3, 12, 0, tzinfo=UTC))
-    kv = FileKeyValueStore(root=tmp_path / "kv", clock=use_clock)
+    kv = _InMemoryKv(use_clock)
     svc = NotificationService(
         channels=channels,
         rules=rules,

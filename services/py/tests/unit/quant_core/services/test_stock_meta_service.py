@@ -24,10 +24,6 @@ class _FakeRepo:
     def __init__(self, items: Iterable[StockMeta]) -> None:
         self._by_code: dict[str, StockMeta] = {m.code: m for m in items}
 
-    def upsert_many(self, items: Iterable[StockMeta]) -> None:
-        for m in items:
-            self._by_code[m.code] = m
-
     def get(self, code: str) -> StockMeta | None:
         return self._by_code.get(code)
 
@@ -97,9 +93,12 @@ class TestStockMetaServiceListByIndustry:
             service.list_by_industry("")
         assert excinfo.value.code == "INVALID_ARGUMENT"
 
-    def test_added_stock_visible_in_listing(self, service: StockMetaService) -> None:
+    def test_returns_freshly_added_stock_in_listing(self) -> None:
+        # A new stock arriving via NestJS's writer (post storage-unify)
+        # must be visible to the service on the next read — exercise
+        # that by constructing a service over a repo that contains it.
         new = make_meta("600809", name="山西汾酒", industries="白酒")
-        service._repo.upsert_many([new])
+        service = StockMetaService(_FakeRepo([*SEED, new]))
         got = service.list_by_industry("白酒")
         assert "600809" in {m.code for m in got}
 

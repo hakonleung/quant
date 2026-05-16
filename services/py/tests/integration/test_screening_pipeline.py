@@ -8,7 +8,6 @@ from typing import TYPE_CHECKING
 
 import pytest
 from quant_cache.flat_prefix_kline_repo import FlatPrefixKlineRepo
-from tests._util.kline_seeder import seed_kline_parquet
 from quant_cache.parquet_stock_meta_repo import ParquetStockMetaRepo
 from quant_core.domain.rules.screen_parse import parse_plan
 from quant_core.domain.rules.universe_parse import parse_universe_plan
@@ -22,6 +21,9 @@ from quant_core.services.screening_pipeline import (
     ScreeningPipeline,
 )
 from quant_core.services.universe_screen_service import UniverseScreenService
+
+from tests._util.kline_seeder import seed_kline_parquet
+from tests._util.stock_meta_seeder import seed_stock_meta_parquet
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -84,15 +86,16 @@ def _bar(code: str, d: date, close: str) -> RawDailyBar:
 @pytest.mark.integration
 def test_pipeline_filters_universe_then_screens_then_ranks(tmp_path: Path) -> None:
     # Stock-meta universe: 4 codes; the pipeline should filter to 2 (drop ST + 北交所).
-    meta_repo = ParquetStockMetaRepo(path=tmp_path / "meta.parquet")
-    meta_repo.upsert_many(
+    seed_stock_meta_parquet(
+        tmp_path / "meta.parquet",
         [
             _meta("600000", "建设银行", list_date=date(2020, 1, 1)),
             _meta("000001", "ST平安", list_date=date(2020, 1, 1)),
             _meta("832000", "北交所X", list_date=date(2020, 1, 1)),
             _meta("000333", "美的集团", list_date=date(2020, 1, 1)),
-        ]
+        ],
     )
+    meta_repo = ParquetStockMetaRepo(path=tmp_path / "meta.parquet")
     # K-line: only the surviving codes have data; the others should match by accident if not filtered.
     kline_repo = FlatPrefixKlineRepo(root=tmp_path / "kline")
     bars = [

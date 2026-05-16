@@ -1,8 +1,11 @@
 """``StockMetaRepo`` domain port (modules/01-stock-meta.md §3).
 
-Business interface for stock-metadata persistence. Sits on top of the
-generic :class:`quant_core.ports.cache.RecordRepo`; the Parquet
-implementation lives in :mod:`quant_cache.parquet_stock_meta_repo`.
+Read-only business interface for stock-metadata persistence. The
+Parquet implementation lives in
+:mod:`quant_cache.parquet_stock_meta_repo`. Storage-unify-rollout:
+writes to ``data/stock_metas.parquet`` are NestJS-only (see
+``apps/api/src/modules/stock-meta/local-stock-meta-writer.service.ts``);
+Python services consume the file but never mutate it.
 
 Search-by-name (with pinyin support) is intentionally **not** in this
 milestone — it requires a name-index strategy and pinyin tokenizer. It
@@ -14,18 +17,14 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable, Sequence
+    from collections.abc import Sequence
 
     from quant_core.domain.types.stock import StockMeta
 
 
 @runtime_checkable
 class StockMetaRepo(Protocol):
-    """Persistence port for :class:`StockMeta`."""
-
-    def upsert_many(self, items: Iterable[StockMeta]) -> None:
-        """Insert-or-replace by ``code``."""
-        ...
+    """Read-only persistence port for :class:`StockMeta`."""
 
     def get(self, code: str) -> StockMeta | None:
         """Return the meta for ``code`` or ``None``."""

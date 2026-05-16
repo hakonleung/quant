@@ -1,10 +1,9 @@
-"""Tests for ``FinancialsService`` — bulk merge, per-stock merge, watermark.
+"""Tests for ``FinancialsService`` — bulk merge, per-stock merge.
 
 Storage-unify: the service no longer persists. Tests assert the
 returned :class:`StockMeta` payloads — the caller (NestJS) does the
-write. ``_FakeRepo`` here is read-only; ``upsert_many`` is wired only
-because the production :class:`StockMetaRepo` protocol still declares
-it (other production callers use it).
+write. ``_FakeRepo`` here is read-only, mirroring the production
+:class:`StockMetaRepo` protocol.
 """
 
 from __future__ import annotations
@@ -23,10 +22,6 @@ from quant_io.sources.akshare_financials import (
 class _FakeRepo:
     def __init__(self, items: list[StockMeta]) -> None:
         self._by_code: dict[str, StockMeta] = {m.code: m for m in items}
-
-    def upsert_many(self, items: list[StockMeta]) -> None:
-        for m in items:
-            self._by_code[m.code] = m
 
     def get(self, code: str) -> StockMeta | None:
         return self._by_code.get(code)
@@ -292,123 +287,3 @@ class TestEnrichOne:
             enricher=_FakeEnricher({"600519": None}),
         )
         assert svc.enrich_one("600519") is None
-
-
-# ---- find_stale_financials ----------------------------------------------
-
-
-class TestFindStale:
-    """Codes the per-stock enricher should pick up.
-
-    Field-completeness drives the list before the watermark — see
-    ``find_stale_financials`` docstring for the rationale.
-    """
-
-    def _full_quarter(self) -> QuarterlyFinancials:
-        return QuarterlyFinancials(
-            period=date(2025, 9, 30),
-            revenue=Decimal("100"),
-            operating_cost=Decimal("40"),
-            net_profit=Decimal("30"),
-            net_profit_excl_nr=Decimal("28"),
-        )
-
-    def test_missing_total_share_is_stale(self) -> None:
-        m = _meta(
-            code="000001",
-            total_share=None,
-            financials_updated_at=datetime(2026, 5, 1, tzinfo=UTC),
-            quarterlies=(self._full_quarter(),),
-        )
-        repo = _FakeRepo([m])
-        svc = FinancialsService(
-            repo=repo,
-            clock=_FixedClock(datetime(2026, 5, 1, tzinfo=UTC)),
-            bulk=_FakeBulk({}),
-            enricher=_FakeEnricher({}),
-        )
-        assert svc.find_stale_financials() == ["000001"]
-
-    def test_missing_operating_cost_in_recent_4q_is_stale(self) -> None:
-        partial = QuarterlyFinancials(
-            period=date(2025, 9, 30),
-            revenue=Decimal("100"),
-            operating_cost=None,
-            net_profit=Decimal("30"),
-            net_profit_excl_nr=None,
-        )
-        m = _meta(
-            code="000001",
-            total_share=Decimal("1000"),
-            financials_updated_at=datetime(2026, 5, 1, tzinfo=UTC),
-            quarterlies=(partial,),
-        )
-        repo = _FakeRepo([m])
-        svc = FinancialsService(
-            repo=repo,
-            clock=_FixedClock(datetime(2026, 5, 1, tzinfo=UTC)),
-            bulk=_FakeBulk({}),
-            enricher=_FakeEnricher({}),
-        )
-        assert svc.find_stale_financials() == ["000001"]
-
-    def test_complete_and_fresh_is_not_stale(self) -> None:
-        m = _meta(
-            code="000001",
-            total_share=Decimal("1000"),
-            float_share=Decimal("800"),
-            financials_updated_at=datetime(2026, 5, 1, tzinfo=UTC),
-            quarterlies=(self._full_quarter(),),
-        )
-        repo = _FakeRepo([m])
-        svc = FinancialsService(
-            repo=repo,
-            clock=_FixedClock(datetime(2026, 5, 1, tzinfo=UTC)),
-            bulk=_FakeBulk({}),
-            enricher=_FakeEnricher({}),
-        )
-        assert svc.find_stale_financials() == []
-
-    def test_lists_codes_without_watermark(self) -> None:
-        a = _meta(
-            code="000001",
-            total_share=Decimal("1000"),
-            quarterlies=(self._full_quarter(),),
-        )
-        b = _meta(
-            code="000002",
-            total_share=Decimal("1000"),
-            financials_updated_at=datetime(2026, 5, 1, tzinfo=UTC),
-            quarterlies=(self._full_quarter(),),
-        )
-        repo = _FakeRepo([a, b])
-        svc = FinancialsService(
-            repo=repo,
-            clock=_FixedClock(datetime(2026, 5, 1, tzinfo=UTC)),
-            bulk=_FakeBulk({}),
-            enricher=_FakeEnricher({}),
-        )
-        assert svc.find_stale_financials() == ["000001"]
-
-    def test_lists_codes_older_than_max_age(self) -> None:
-        old = _meta(
-            code="000001",
-            total_share=Decimal("1000"),
-            financials_updated_at=datetime(2026, 4, 1, tzinfo=UTC),
-            quarterlies=(self._full_quarter(),),
-        )
-        fresh = _meta(
-            code="000002",
-            total_share=Decimal("1000"),
-            financials_updated_at=datetime(2026, 4, 30, tzinfo=UTC),
-            quarterlies=(self._full_quarter(),),
-        )
-        repo = _FakeRepo([old, fresh])
-        svc = FinancialsService(
-            repo=repo,
-            clock=_FixedClock(datetime(2026, 5, 1, tzinfo=UTC)),
-            bulk=_FakeBulk({}),
-            enricher=_FakeEnricher({}),
-        )
-        # Default max_age=7 days → only the 30-day-old code is stale.
-        assert svc.find_stale_financials() == ["000001"]

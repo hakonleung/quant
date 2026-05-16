@@ -25,6 +25,7 @@ from quant_rpc.ops.stock_metrics import (
 )
 
 from tests._util.kline_seeder import seed_kline_parquet
+from tests._util.stock_meta_seeder import seed_stock_meta_parquet
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -57,8 +58,9 @@ def _bar(code: str, day_offset: int, close: Decimal) -> DailyBar:
     )
 
 
-def _seed_meta(repo: ParquetStockMetaRepo) -> None:
-    repo.upsert_many(
+def _seed_meta(meta_path: Path) -> None:
+    seed_stock_meta_parquet(
+        meta_path,
         [
             StockMeta(
                 code="000001",
@@ -71,7 +73,7 @@ def _seed_meta(repo: ParquetStockMetaRepo) -> None:
                 total_share=Decimal("1000000"),
                 float_share=Decimal("800000"),
             )
-        ]
+        ],
     )
 
 
@@ -79,7 +81,7 @@ def _seed_meta(repo: ParquetStockMetaRepo) -> None:
 def test_computes_metrics_for_known_code(tmp_path: Path) -> None:
     meta_repo = ParquetStockMetaRepo(tmp_path / "stocks.parquet")
     kline_repo = FlatPrefixKlineRepo(root=tmp_path / "kline")
-    _seed_meta(meta_repo)
+    _seed_meta(tmp_path / "stocks.parquet")
     seed_kline_parquet(
         tmp_path / "kline",
         [_bar("000001", i, Decimal("10") + Decimal(i) * Decimal("0.1")) for i in range(21)],
@@ -117,7 +119,8 @@ def test_batched_handler_returns_one_row_per_code(tmp_path: Path) -> None:
     meta_repo = ParquetStockMetaRepo(tmp_path / "stocks.parquet")
     kline_repo = FlatPrefixKlineRepo(root=tmp_path / "kline")
     # Seed two meta rows + two kline series.
-    meta_repo.upsert_many(
+    seed_stock_meta_parquet(
+        tmp_path / "stocks.parquet",
         [
             StockMeta(
                 code="000001",
@@ -141,7 +144,7 @@ def test_batched_handler_returns_one_row_per_code(tmp_path: Path) -> None:
                 total_share=Decimal("1255000000"),
                 float_share=Decimal("1255000000"),
             ),
-        ]
+        ],
     )
     seed_kline_parquet(
         tmp_path / "kline",
@@ -164,7 +167,7 @@ def test_batched_handler_returns_one_row_per_code(tmp_path: Path) -> None:
 def test_batched_handler_with_empty_codes_expands_to_universe(tmp_path: Path) -> None:
     meta_repo = ParquetStockMetaRepo(tmp_path / "stocks.parquet")
     kline_repo = FlatPrefixKlineRepo(root=tmp_path / "kline")
-    _seed_meta(meta_repo)
+    _seed_meta(tmp_path / "stocks.parquet")
     seed_kline_parquet(
         tmp_path / "kline",
         [_bar("000001", i, Decimal("10") + Decimal(i) * Decimal("0.1")) for i in range(21)],
@@ -182,7 +185,7 @@ def test_batched_handler_with_empty_codes_expands_to_universe(tmp_path: Path) ->
 def test_batched_handler_skips_unknown_codes(tmp_path: Path) -> None:
     meta_repo = ParquetStockMetaRepo(tmp_path / "stocks.parquet")
     kline_repo = FlatPrefixKlineRepo(root=tmp_path / "kline")
-    _seed_meta(meta_repo)
+    _seed_meta(tmp_path / "stocks.parquet")
 
     handler = ComputeStockMetricsForCodesHandler(meta_repo, kline_repo)
     table = handler.execute({"codes": ["999999", "888888"]})
@@ -195,7 +198,7 @@ def test_batched_handler_skips_unknown_codes(tmp_path: Path) -> None:
 def test_handles_meta_with_no_kline_bars(tmp_path: Path) -> None:
     meta_repo = ParquetStockMetaRepo(tmp_path / "stocks.parquet")
     kline_repo = FlatPrefixKlineRepo(root=tmp_path / "kline")
-    _seed_meta(meta_repo)
+    _seed_meta(tmp_path / "stocks.parquet")
 
     handler = ComputeStockMetricsForCodeHandler(meta_repo, kline_repo)
     table = handler.execute({"code": "000001"})

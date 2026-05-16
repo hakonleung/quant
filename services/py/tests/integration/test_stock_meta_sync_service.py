@@ -22,6 +22,7 @@ from quant_core.services.stock_meta_sync_service import StockMetaSyncService
 from tests._util.clock import FrozenClock
 from tests._util.fake_source import FakeStockMetaSource
 from tests._util.stock_meta_fixtures import SEED, make_meta
+from tests._util.stock_meta_seeder import seed_stock_meta_parquet
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -34,8 +35,13 @@ def _no_sleep(_seconds: float) -> None:
 
 
 @pytest.fixture
-def repo(tmp_path: Path) -> ParquetStockMetaRepo:
-    return ParquetStockMetaRepo(tmp_path / "stocks.parquet")
+def meta_path(tmp_path: Path) -> Path:
+    return tmp_path / "stocks.parquet"
+
+
+@pytest.fixture
+def repo(meta_path: Path) -> ParquetStockMetaRepo:
+    return ParquetStockMetaRepo(meta_path)
 
 
 @pytest.fixture
@@ -72,11 +78,14 @@ class TestFullSyncReport:
 
     def test_idempotent_resync_marks_everything_unchanged(
         self,
+        meta_path: Path,
         repo: ParquetStockMetaRepo,
         clock: FrozenClock,
     ) -> None:
-        # Seed the repo manually — service no longer writes.
-        repo.upsert_many(SEED)
+        # Seed via direct parquet write — the service no longer writes
+        # (storage-unify-rollout), so the cache contents are an input
+        # the test arranges before the diff.
+        seed_stock_meta_parquet(meta_path, SEED)
         source = FakeStockMetaSource(items=SEED)
         report = _make_service([source], repo, clock).run_full_sync()
         assert report.added == 0
@@ -86,10 +95,11 @@ class TestFullSyncReport:
 
     def test_changed_payload_counts_as_changed(
         self,
+        meta_path: Path,
         repo: ParquetStockMetaRepo,
         clock: FrozenClock,
     ) -> None:
-        repo.upsert_many(SEED)
+        seed_stock_meta_parquet(meta_path, SEED)
         modified = make_meta("600519", name="MOUTAI v2", industries="白酒")
         rest = tuple(m for m in SEED if m.code != "600519")
         source = FakeStockMetaSource(items=(*rest, modified))

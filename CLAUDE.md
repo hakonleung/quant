@@ -140,8 +140,8 @@
 ```
 
 - **Next.js**：UI、用户交互、SSR 渲染、SSE/WS 接收长任务进度。**不直接调外部数据源/LLM**。
-- **NestJS**：HTTP API 网关、参数校验、任务编排（短任务）、缓存读取、调度 Python 服务、**外部 LLM 客户端**（OpenAI 兼容协议；DeepSeek / Moonshot / Qwen / Doubao / OpenAI）。LLM provider 注册表与 token ledger 持久化都在 NestJS 侧；上层 service 通过 `LlmService` 统一调用。v1 不做鉴权（监听 127.0.0.1）。
-- **Python service**：行情/新闻拉取与缓存写入、筛选/形态/舆情计算、LangGraph 工作流。**Python 不再持有外部 LLM 客户端**；如未来 LangGraph 节点需要 LLM 推理，反向 RPC 调 NestJS `LlmService`。
+- **NestJS**：HTTP API 网关、参数校验、任务编排（短任务）、**所有持久化写入**（含 `data/kline/*.parquet` / `data/stock_metas.parquet` / `data/sectors/*` / `data/users/**/*` 等）、调度 Python 服务、**外部 LLM 客户端**（OpenAI 兼容协议；DeepSeek / Moonshot / Qwen / Doubao / OpenAI）。LLM provider 注册表与 token ledger 持久化都在 NestJS 侧；上层 service 通过 `LlmService` 统一调用。v1 不做鉴权（监听 127.0.0.1）。
+- **Python service**：行情/新闻外部源拉取（tushare / akshare）、筛选/形态/舆情计算、LangGraph 工作流。**Python 是 compute-only**：所有 Flight op 把算出来的结果回传 NestJS，由 NestJS 写盘（详见 `docs/perf/storage-unify-rollout.md`）。读盘允许（共享本地磁盘 + DuckDB 列裁剪），因为读不构成跨进程竞争；写盘只有 NestJS 一个 owner。**Python 不再持有外部 LLM 客户端**；如未来 LangGraph 节点需要 LLM 推理，反向 RPC 调 NestJS `LlmService`。
 
 ### 2.2 仓库结构（monorepo, pnpm workspaces + uv）
 

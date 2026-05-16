@@ -1,9 +1,16 @@
-"""Parquet-backed :class:`StockMetaRepo`.
+"""Parquet-backed :class:`StockMetaRepo` (read-only).
 
 Thin business adapter: delegates storage to the generic
 :class:`ParquetRecordRepo[StockMeta]` and translates the business-flavoured
 ``list_by_industry`` / ``get_many`` calls into ``QuerySpec`` queries on the
 underlying repo.
+
+Storage-unify-rollout: writes are NestJS-owned. The wrapping
+``upsert_many`` was removed once Python's Flight ops were demoted to
+compute-only. ``ParquetRecordRepo`` itself still has ``upsert_many``
+for tests that need to materialise a parquet via the codec round-trip,
+but no production code path mutates ``stock_metas.parquet`` from
+Python any more.
 """
 
 from __future__ import annotations
@@ -20,7 +27,7 @@ from quant_cache.stock_meta_schema import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable, Sequence
+    from collections.abc import Sequence
     from pathlib import Path
 
     from quant_core.domain.types.stock import StockMeta
@@ -40,9 +47,6 @@ class ParquetStockMetaRepo:
         )
 
     # -- StockMetaRepo --------------------------------------------------
-
-    def upsert_many(self, items: Iterable[StockMeta]) -> None:
-        self._repo.upsert_many(items)
 
     def get(self, code: str) -> StockMeta | None:
         return self._repo.get(code)

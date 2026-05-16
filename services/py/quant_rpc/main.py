@@ -58,7 +58,6 @@ from quant_rpc.ops.blacklist import ComputeAshareBlacklistHandler
 from quant_rpc.ops.financials import (
     BulkSyncFinancialsHandler,
     EnrichFinancialsForCodeHandler,
-    FindStaleFinancialsHandler,
 )
 from quant_rpc.ops.kline import SyncKlineForCodeHandler
 from quant_rpc.ops.pattern import FindSimilarPatternsHandler
@@ -255,7 +254,6 @@ def main() -> int:
     registry.register(ListStockSnapshotsHandler(meta_service, kline_service))
     registry.register(BulkSyncFinancialsHandler(financials_service))
     registry.register(EnrichFinancialsForCodeHandler(financials_service))
-    registry.register(FindStaleFinancialsHandler(financials_service))
     registry.register(CheckSourcesHandler(sync_service))
     registry.register(SyncFullHandler(sync_service))
     registry.register(EnrichOneHandler(sync_service))

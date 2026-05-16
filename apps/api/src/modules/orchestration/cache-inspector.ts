@@ -17,7 +17,7 @@
 /* eslint-disable @typescript-eslint/consistent-type-assertions -- Arrow proxy.toJSON() is `any` from the library; narrow at the boundary. */
 
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import { isAShareCode } from '@quant/shared';
+import { isAShareCode, type StockMetaDto } from '@quant/shared';
 import { FlightClient } from '../../adapters/flight/flight-client.js';
 import { BlacklistStore } from '../blacklist/blacklist.store.js';
 import { KlineReaderService } from '../kline/kline-reader.service.js';
@@ -29,6 +29,16 @@ import { StockMetaService } from '../stock-meta/stock-meta.service.js';
 /** Calendar-day staleness threshold for blacklisted A-share kline. */
 const BLACKLIST_KLINE_REFRESH_DAYS = 10;
 const DAY_MS = 86_400_000;
+/**
+ * Per-stock financials are considered stale (and re-queued for the
+ * slow-path enricher) when their watermark crosses this many days,
+ * matching what Python's `find_stale_financials` used to enforce.
+ */
+const STALE_FINANCIALS_MAX_AGE_DAYS = 7;
+/** TTM gross-margin only reads the most recent year; older holes
+ * don't gate the derived metric, so we cap the operating-cost check
+ * at the last 4 quarterlies. */
+const STALE_QUARTERS_CHECKED = 4;
 
 export interface MetaScanItem {
   readonly code: string;
@@ -88,30 +98,18 @@ export class CacheInspector {
   }
 
   private async findStaleFinancialCodes(traceId: string): Promise<readonly string[]> {
-    try {
-      const result = await this.flight.doGet(
-        'find_stale_financials',
-        { max_age_days: 7 },
-        { traceId },
-      );
-      const out: string[] = [];
-      const table = result.value;
-      for (let i = 0; i < table.numRows; i++) {
-        const proxy = table.get(i);
-        if (proxy === null) continue;
-        const raw = proxy.toJSON() as { code: unknown };
-        if (typeof raw.code === 'string') {
-          if (isAShareCode(raw.code) && this.blacklist.has(raw.code)) continue;
-          out.push(raw.code);
-        }
-      }
-      return out;
-    } catch (err) {
-      this.logger.warn(
-        `find_stale_financials failed: ${err instanceof Error ? err.message : String(err)}`,
-      );
-      return [];
+    // Field-completeness + watermark check over the local meta universe —
+    // mirrors the (now-removed) Python `find_stale_financials` op. The
+    // logic is a pure filter, not a numerical algorithm, so co-locating
+    // it with the reader avoids a Flight round-trip every cron tick.
+    const metas = await this.stockMeta.listAll(traceId);
+    const cutoff = Date.now() - STALE_FINANCIALS_MAX_AGE_DAYS * DAY_MS;
+    const out: string[] = [];
+    for (const meta of metas) {
+      if (isAShareCode(meta.code) && this.blacklist.has(meta.code)) continue;
+      if (isFinancialsStale(meta, cutoff)) out.push(meta.code);
     }
+    return out;
   }
 
   /**
@@ -208,6 +206,24 @@ export class CacheInspector {
  * Decode an Arrow `date32` cell into ISO `YYYY-MM-DD`. See the doc on
  * `apache-arrow` inconsistency notes in the historical commit log.
  */
+function isFinancialsStale(meta: StockMetaDto, cutoffMs: number): boolean {
+  // Field-completeness drives the list before the watermark — see the
+  // original Python docstring on FinancialsService.find_stale_financials
+  // for the rationale (total_share + operating_cost are both per-stock
+  // slow-path outputs; bulk_refresh never fills them).
+  if (meta.total_share === null) return true;
+  if (meta.quarterlies.length > 0) {
+    const recent = meta.quarterlies.slice(-STALE_QUARTERS_CHECKED);
+    for (const q of recent) {
+      if (q.operating_cost === null) return true;
+    }
+  }
+  if (meta.financials_updated_at === null) return true;
+  const ts = Date.parse(meta.financials_updated_at);
+  if (!Number.isFinite(ts)) return true;
+  return ts < cutoffMs;
+}
+
 function readSchemaInt(
   meta: ReadonlyMap<string, string> | Record<string, string> | null | undefined,
   key: string,

@@ -84,10 +84,6 @@ class _FakeMetaRepo:
     def __init__(self, metas: Iterable[StockMeta]) -> None:
         self._by_code = {m.code: m for m in metas}
 
-    def upsert_many(self, items: Iterable[StockMeta]) -> None:  # pragma: no cover
-        for m in items:
-            self._by_code[m.code] = m
-
     def get(self, code: str) -> StockMeta | None:  # pragma: no cover
         return self._by_code.get(code)
 
@@ -119,7 +115,7 @@ def _kline_for_handler(fake: _FakeKline) -> KlineService:
     only needs ``.get_last_n``, but mypy strict insists on the nominal
     type. ``cast`` is the lightest fix and is fine here per CLAUDE.md
     §1.2.1 (cast is banned only for *external* inputs)."""
-    return cast(KlineService, fake)
+    return cast("KlineService", fake)
 
 
 @pytest.mark.unit
