@@ -16,6 +16,7 @@ import { z } from 'zod';
 
 import { ChannelIdSchema } from '../types/channel.js';
 import { StockListRowSchema } from '../types/stock-list.js';
+import { TaAnalysisSchema, TaSectorAnalysisSchema } from '../types/ta.js';
 import { AgentHistoryEntrySchema, AGENT_HISTORY_MAX_ENTRIES } from './agent-history.js';
 
 const TRUTHY = new Set(['1', 'true', 'TRUE', 'yes', 'on']);
@@ -291,6 +292,7 @@ export const AnalyzeSectorArgsSchema = z
   })
   .strict();
 
+
 export const TaArgsSchema = z
   .object({
     code: z.string().min(1).describe('A-share 6-digit stock code, e.g. 600519'),
@@ -312,6 +314,24 @@ export const TaSectorArgsSchema = z
     ),
   })
   .strict();
+
+/** `/ta <code>` result — typed alias of the existing TaAnalysis. */
+export const TaResultSchema = TaAnalysisSchema;
+export type TaResult = z.infer<typeof TaResultSchema>;
+
+/**
+ * `/ta.sector` result — sector identity + the TaSectorAnalysis payload.
+ * Identity is duplicated here (rather than relying on the renderer
+ * looking up sectors again) so the data layer stays self-contained.
+ */
+export const TaSectorResultSchema = z
+  .object({
+    sectorId: z.string().min(1),
+    sectorName: z.string().min(1),
+    analysis: TaSectorAnalysisSchema,
+  })
+  .strict();
+export type TaSectorResult = z.infer<typeof TaSectorResultSchema>;
 
 // ── screening ───────────────────────────────────────────────────────────
 

@@ -59,7 +59,9 @@ import {
   StockArgsSchema,
   StockSearchResultSchema,
   TaArgsSchema,
+  TaResultSchema,
   TaSectorArgsSchema,
+  TaSectorResultSchema,
   UpdateArgsSchema,
   UsrArgsSchema,
   UsrResultSchema,
@@ -372,8 +374,10 @@ const ENTRIES = [
     supportedOn: ['fe', 'be'],
     summary: 'Technical analysis for one stock',
     costsCredits: true,
+    requiresImConfirm: true,
+    imAliases: ['技术', '走势', '技分'],
     argsSchema: TaArgsSchema,
-    resultSchema: LegacyOutputSchema,
+    resultSchema: TaResultSchema,
   },
   {
     id: 'ta.sector',
@@ -382,8 +386,10 @@ const ENTRIES = [
     supportedOn: ['be'],
     summary: 'TA aggregated across a sector',
     costsCredits: true,
+    requiresImConfirm: true,
+    imAliases: ['板块技术', '板块走势', '板块技分'],
     argsSchema: TaSectorArgsSchema,
-    resultSchema: LegacyOutputSchema,
+    resultSchema: TaSectorResultSchema,
   },
 
   // ── screening ───────────────────────────────────────────────────────
