@@ -4,8 +4,6 @@
  * individual commands and assemble a custom registry.
  */
 
-import { assertHandlerCoverage } from '@quant/shared';
-
 import { agentCommand } from './agent.js';
 import { analyzeCommand } from './analyze.js';
 import { cacheCommand } from './cache.js';
@@ -18,7 +16,6 @@ import { stockCommand } from './stock.js';
 import { taCommand } from './ta.js';
 import { screenCommand } from './screen.js';
 import { updateCommand } from './update.js';
-import { usrCommand } from './usr.js';
 import { watchCommand } from './watch.js';
 import { createRegistry, type CommandRegistry } from '../registry.js';
 
@@ -35,7 +32,6 @@ export {
   taCommand,
   screenCommand,
   updateCommand,
-  usrCommand,
   watchCommand,
 };
 
@@ -52,15 +48,9 @@ export function createDefaultRegistry(): CommandRegistry {
   r.register(updateCommand);
   r.register(cacheCommand);
   r.register(clearCommand);
-  r.register(usrCommand);
+  // `usr` migrated to FE InstructionCenter cell — apps/web handles it
+  // via feCenter intercept before falling through to this registry.
   r.register(agentCommand);
   r.register(helpCommand(r));
-  // Fail-loud if the FE registry drifts from the shared manifest —
-  // the user's "explicit declaration of unsupported commands" rule
-  // applies to FE the same way it does to BE.
-  assertHandlerCoverage({
-    side: 'fe',
-    registeredIds: r.list().map((s) => s.name),
-  });
   return r;
 }

@@ -199,6 +199,15 @@ export class BeInstructionCenter implements BeInstructionCenterPort {
     return this.center.peek(id, rawArgs, ctx);
   }
 
+  /**
+   * HTTP-friendly: returns the raw `ResultOf<I>` cell handler payload
+   * (no renderer pass, no `InstructionResult` envelope). Throws on
+   * cell handler failure — caller maps to HTTP error.
+   */
+  async invokeRaw(id: Configured, args: unknown, ctx: BeCtx): Promise<unknown> {
+    return this.center.invoke(id, args as never, ctx);
+  }
+
   private async executeImpl(id: Configured, args: unknown, ctx: BeCtx): Promise<ImOutput> {
     try {
       const data = await this.center.invoke(id, args as never, ctx);

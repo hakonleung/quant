@@ -1,0 +1,56 @@
+/**
+ * FE-side singleton `InstructionCenter`.
+ *
+ * Mirrors the BE `BeInstructionCenter` shape: one cell per migrated
+ * id, the rest in `Excluded`. The FE shell (`useTerminal`) checks
+ * `feCenter.has(id)` before dispatching; misses fall through to the
+ * legacy `CommandRegistry`, so the migration is incremental.
+ *
+ * Grow `MigratedIds` one id at a time. The mapped-type config check
+ * fails the build if you add an id here without a matching cell file
+ * (and vice versa).
+ */
+
+import {
+  InstructionCenter,
+  type AllInstructionIds,
+  type InstructionConfig,
+} from '@quant/shared';
+
+import { invokeInstruction, type InvokeOptions } from './client.js';
+import type { FeEnv, InstructionInvoker } from './fe-types.js';
+import { buildUsrCell } from './cells/usr.cell.js';
+
+/**
+ * Migrated FE instruction ids — extend as cells move from the legacy
+ * `packages/terminal/src/commands/` directory to here. BE-only ids
+ * (`sector.publish` / `analyze.sector` / agent.confirm / channel.send
+ *  / web.search / etc.) stay excluded — they're never invoked from FE.
+ */
+export type FeMigratedIds = 'usr';
+
+type Excluded = Exclude<AllInstructionIds, FeMigratedIds>;
+type Configured = Exclude<AllInstructionIds, Excluded>;
+
+/** Process-singleton invoker — every cell uses the same client. */
+const defaultInvoker: InstructionInvoker = {
+  invoke: <I extends AllInstructionIds>(
+    id: I,
+    args: import('@quant/shared').ArgsOf<I>,
+    options?: InvokeOptions,
+  ) => invokeInstruction(id, args, options),
+};
+
+export function buildFeCenter(): InstructionCenter<FeEnv, Excluded> {
+  const cfg: InstructionConfig<FeEnv, Excluded> = {
+    usr: buildUsrCell(),
+  };
+  return new InstructionCenter<FeEnv, Excluded>(cfg);
+}
+
+/** Process-wide singleton. Hooks (`useTerminal`) consume this directly. */
+export const feCenter = buildFeCenter();
+
+export type FeConfiguredId = Configured;
+
+export { defaultInvoker };

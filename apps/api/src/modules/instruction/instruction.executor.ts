@@ -29,6 +29,7 @@ import {
   okResult,
   parseInstructionLine,
   INSTRUCTION_MANIFEST,
+  InstructionDispatchError,
   type CommandManifestEntry,
   type InstructionResult,
 } from '@quant/shared';
@@ -141,6 +142,69 @@ export class InstructionExecutor {
       );
       return errResult('handler', err instanceof Error ? err.message : String(err));
     }
+  }
+
+  /**
+   * HTTP-friendly typed entry — returns the raw `ResultOf<I>` payload
+   * (no `InstructionResult` envelope, no renderer). The
+   * `POST /api/instructions/:id` controller calls this and maps the
+   * `InstructionEnvelope`-shaped outcome to HTTP status codes.
+   *
+   * Migrated ids: skip the cell's renderer, return raw cell handler
+   *   output via `center.invokeRaw`.
+   * Legacy ids: call the registered handler, then unwrap the returned
+   *   `InstructionResult` — the `output` field IS the raw data for
+   *   legacy `resultSchema: InstructionOutputSchema` entries.
+   *
+   * Throws `InstructionDispatchError` on any failure so the controller
+   * branches on `error.code` to set HTTP status.
+   */
+  async executeTyped(
+    id: string,
+    args: Record<string, unknown>,
+    ctx: InstructionCtx,
+  ): Promise<unknown> {
+    const entry = this.resolveEntry(id);
+    if (entry === undefined) {
+      throw new InstructionDispatchError('not-found', `unknown instruction: ${id}`);
+    }
+    const validation = entry.spec.argsSchema.safeParse(args);
+    if (!validation.success) {
+      const issues = validation.error.issues
+        .map((i) => `${i.path.join('.')}: ${i.message}`)
+        .join('; ');
+      throw new InstructionDispatchError('validation', issues);
+    }
+    if (this.center !== null && this.center.has(id)) {
+      try {
+        return await this.center.invokeRaw(id, validation.data, ctx);
+      } catch (err) {
+        if (err instanceof InstructionDispatchError) throw err;
+        this.logger.warn(
+          `instruction_typed_throw id=${id} traceId=${ctx.traceId} err=${String(err)}`,
+        );
+        throw new InstructionDispatchError(
+          'handler',
+          err instanceof Error ? err.message : String(err),
+        );
+      }
+    }
+    // Legacy path — handler returns InstructionResult, unwrap output
+    // as the raw data (consistent with `resultSchema: InstructionOutputSchema`).
+    const handler: AnyInstructionHandler = entry.handler;
+    let result: InstructionResult;
+    try {
+      result = await handler.execute(validation.data, ctx);
+    } catch (err) {
+      throw new InstructionDispatchError(
+        'handler',
+        err instanceof Error ? err.message : String(err),
+      );
+    }
+    if (!result.ok) {
+      throw new InstructionDispatchError(result.error.code, result.error.message);
+    }
+    return result.output;
   }
 
   /**

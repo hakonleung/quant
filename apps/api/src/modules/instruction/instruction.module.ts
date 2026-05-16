@@ -21,6 +21,7 @@ import { ChannelEchoHandler } from './handlers/channel-echo.handler.js';
 import { HelpHandler } from './handlers/help.handler.js';
 import { PingHandler } from './handlers/ping.handler.js';
 import { INSTRUCTION_CONFIG, loadInstructionConfig } from './instruction.config.js';
+import { InstructionController } from './instruction.controller.js';
 import { InstructionExecutor } from './instruction.executor.js';
 import { InstructionImListener } from './instruction.im.listener.js';
 import { InstructionRegistry } from './instruction.registry.js';
@@ -33,6 +34,7 @@ import { SocketInstructionAdapter } from './socket-instruction.adapter.js';
     InstructionCenterModule,
     BullModule.registerQueue({ name: INSTRUCTION_ASYNC_QUEUE }),
   ],
+  controllers: [InstructionController],
   providers: [
     SYSTEM_CLOCK_PROVIDER,
     {

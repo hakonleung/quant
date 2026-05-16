@@ -43,4 +43,15 @@ export interface BeInstructionCenterPort {
     rawArgs: Record<string, unknown>,
     ctx: InstructionCtx,
   ): Promise<boolean>;
+  /**
+   * HTTP-friendly typed invoke — runs the cell handler and returns
+   * the raw `ResultOf<I>` payload (no `InstructionResult` envelope,
+   * no renderer pass). The new `POST /api/instructions/:id` endpoint
+   * uses this so the FE shell receives the same typed data the BE
+   * renderer would, ready to feed into the FE cell renderer.
+   *
+   * Throws on cell handler failure; caller is responsible for
+   * mapping to HTTP error responses.
+   */
+  invokeRaw(id: string, args: unknown, ctx: InstructionCtx): Promise<unknown>;
 }

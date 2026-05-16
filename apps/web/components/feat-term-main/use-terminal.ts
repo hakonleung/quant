@@ -49,6 +49,13 @@ import {
 import { useQueryClient } from '@tanstack/react-query';
 
 import { parseTrailingCursorUp } from '../../lib/fp/parse-trailing-cursor-up.js';
+import { defaultInvoker } from '../../lib/instructions/fe-center.js';
+import {
+  feCenterCanDispatch,
+  feDispatch,
+  termOutputToEvents,
+} from '../../lib/instructions/dispatch.js';
+import type { FeCtx } from '../../lib/instructions/fe-types.js';
 import { useUiStore } from '../../lib/stores/ui.store.js';
 import { installRunner } from '../../lib/term/install-runner.js';
 
@@ -183,8 +190,19 @@ export function useTerminal(): TerminalApi {
   const applyEffect = useCallback(
     (eff: Effect): void => {
       if (eff.kind === 'runCommand') {
-        const ctx = buildCtx();
-        void runCommand(eff.line, ctx, registry).then((events: readonly Event[]) => {
+        const baseCtx = buildCtx();
+        // Intercept: when feCenter has the head, dispatch through the
+        // new cell model (typed BE call + revalidate fan-out). Misses
+        // fall through to the legacy registry path so migration is
+        // incremental.
+        if (feCenterCanDispatch(eff.line)) {
+          const feCtx: FeCtx = { ...baseCtx, api: defaultInvoker };
+          void feDispatch(eff.line, feCtx).then((out) => {
+            for (const ev of termOutputToEvents(out)) dispatch(ev);
+          });
+          return;
+        }
+        void runCommand(eff.line, baseCtx, registry).then((events: readonly Event[]) => {
           for (const ev of events) dispatch(ev);
         });
         return;
