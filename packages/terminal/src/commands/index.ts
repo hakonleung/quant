@@ -7,7 +7,6 @@
 import { agentCommand } from './agent.js';
 import { analyzeCommand } from './analyze.js';
 import { sectorCommand } from './sector.js';
-import { stockCommand } from './stock.js';
 import { taCommand } from './ta.js';
 import { screenCommand } from './screen.js';
 import { watchCommand } from './watch.js';
@@ -17,7 +16,6 @@ export {
   agentCommand,
   analyzeCommand,
   sectorCommand,
-  stockCommand,
   taCommand,
   screenCommand,
   watchCommand,
@@ -25,21 +23,13 @@ export {
 
 export function createDefaultRegistry(): CommandRegistry {
   const r = createRegistry();
-  r.register(stockCommand);
   r.register(sectorCommand);
   r.register(analyzeCommand);
   r.register(taCommand);
   r.register(watchCommand);
   r.register(screenCommand);
-  // The following are served by the FE InstructionCenter cells in
-  // `apps/web/lib/instructions/cells/*.cell.ts`. The terminal shell
-  // checks `feCenterCanDispatch(line)` first; misses fall through here.
-  //   - usr    — typed BE proxy
-  //   - clear  — engine-event cell
-  //   - cache  — FE runner-cache inspect / clear
-  //   - focus  — FE focus state + interactive picker
-  //   - update — BE proxy (cron orchestrator scan)
   r.register(agentCommand);
-  // `help` migrated to `apps/web/lib/instructions/cells/help.cell.ts`.
+  // Migrated to `apps/web/lib/instructions/cells/*.cell.ts`:
+  //   usr, clear, cache, focus, update, help, ledger.*, stock.*
   return r;
 }
