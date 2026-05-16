@@ -15,7 +15,6 @@ import { SYSTEM_CLOCK_PROVIDER } from '../../common/clock.js';
 import { KlineModule } from '../kline/kline.module.js';
 import { StockListModule } from '../stock-list/stock-list.module.js';
 import { StockMetaModule } from '../stock-meta/stock-meta.module.js';
-import { ScreenInstructionHandler } from './instructions/screen.handler.js';
 import { NlToDslService } from './nl-to-dsl.service.js';
 import { ScreenController } from './screen.controller.js';
 import { ScreenExecService } from './screen-exec.service.js';
@@ -31,7 +30,7 @@ import { UniverseFilterService } from './universe-filter.service.js';
     UniverseFilterService,
     ScreenExecService,
     ScreenService,
-    ScreenInstructionHandler,
+    // `screen` migrated to `BeInstructionCenter` (instruction-center/cells/screen.cell.ts).
   ],
   exports: [ScreenService, ScreenExecService],
 })

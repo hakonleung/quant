@@ -24,7 +24,6 @@ import { AgentStreamFinalizer } from './agent-stream-finalizer.js';
 import { AgentToolBridge } from './agent-tool-bridge.js';
 import { AgentConfirmInstructionHandler } from './instructions/agent-confirm.handler.js';
 import { AgentInstructionHandler } from './instructions/agent.handler.js';
-import { WebSearchInstructionHandler } from './instructions/web-search.handler.js';
 
 @Module({
   imports: [
@@ -47,7 +46,7 @@ import { WebSearchInstructionHandler } from './instructions/web-search.handler.j
     AgentService,
     AgentInstructionHandler,
     AgentConfirmInstructionHandler,
-    WebSearchInstructionHandler,
+    // `web.search` migrated to `BeInstructionCenter` (instruction-center/cells/web-search.cell.ts).
   ],
   exports: [AgentService, AgentHistoryStore],
 })

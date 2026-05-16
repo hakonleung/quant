@@ -30,7 +30,9 @@ import {
 import { CLOCK, type Clock } from '../../common/clock.js';
 import { AuthConfig } from '../auth/config/auth.config.js';
 import { LedgerService } from '../ledger/ledger.service.js';
+import { LlmService } from '../llm/llm.service.js';
 import { UserLlmLedgerStore } from '../llm/ledger/user-llm-ledger.store.js';
+import { ScreenService } from '../screen/screen.service.js';
 import { SectorsService } from '../sectors/sectors.service.js';
 import { NewsSentimentService } from '../sentiment/news-sentiment.service.js';
 import { StockListService } from '../stock-list/stock-list.service.js';
@@ -42,11 +44,13 @@ import { WatchService } from '../watch/watch.service.js';
 import type { BeEnv, BeCtx, ImHost, ImOutput } from './be-types.js';
 import { buildAnalyzeCell } from './cells/analyze.cell.js';
 import { buildLedgerCell } from './cells/ledger.cell.js';
+import { buildLedgerAnalyzeCell } from './cells/ledger-analyze.cell.js';
 import { buildSectorCell } from './cells/sector.cell.js';
 import {
   buildSectorPublishCell,
   buildSectorUnpublishCell,
 } from './cells/sector-publish.cell.js';
+import { buildScreenCell } from './cells/screen.cell.js';
 import { buildSectorRmCell } from './cells/sector-rm.cell.js';
 import { buildStockCell } from './cells/stock.cell.js';
 import { buildTaCell } from './cells/ta.cell.js';
@@ -56,6 +60,7 @@ import { buildWatchCell } from './cells/watch.cell.js';
 import { buildWatchAddCell } from './cells/watch-add.cell.js';
 import { buildWatchGroupCell } from './cells/watch-group.cell.js';
 import { buildWatchRemoveCell } from './cells/watch-remove.cell.js';
+import { buildWebSearchCell } from './cells/web-search.cell.js';
 
 /**
  * Migrated instruction ids — grow this union one entry at a time as
@@ -77,7 +82,10 @@ export type MigratedIds =
   | 'watch.group'
   | 'analyze'
   | 'ta'
-  | 'ta.sector';
+  | 'ta.sector'
+  | 'screen'
+  | 'ledger.analyze'
+  | 'web.search';
 
 type Excluded = Exclude<AllInstructionIds, MigratedIds>;
 type Configured = Exclude<AllInstructionIds, Excluded>;
@@ -100,6 +108,8 @@ export class BeInstructionCenter {
     @Inject(NewsSentimentService) sentiment: NewsSentimentService,
     @Inject(WatchTaskStore) watchTaskStore: WatchTaskStore,
     @Inject(TaService) ta: TaService,
+    @Inject(ScreenService) screen: ScreenService,
+    @Inject(LlmService) llm: LlmService,
   ) {
     const cfg: InstructionConfig<BeEnv, Excluded> = {
       usr: buildUsrCell({ authCfg, ledger, clock }),
@@ -116,6 +126,9 @@ export class BeInstructionCenter {
       analyze: buildAnalyzeCell({ sentiment }),
       ta: buildTaCell({ ta }),
       'ta.sector': buildTaSectorCell({ ta, sectors }),
+      screen: buildScreenCell({ screen, stockList }),
+      'ledger.analyze': buildLedgerAnalyzeCell({ ledger: ledgerService }),
+      'web.search': buildWebSearchCell({ llm }),
     };
     this.center = new InstructionCenter<BeEnv, Excluded>(cfg);
   }
