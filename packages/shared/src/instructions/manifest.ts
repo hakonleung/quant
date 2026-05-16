@@ -44,11 +44,13 @@ import {
   FocusArgsSchema,
   HelpArgsSchema,
   LedgerAnalyzeArgsSchema,
+  LedgerAnalyzeResultSchema,
   LedgerArgsSchema,
   LedgerListResultSchema,
   SectorAckResultSchema,
   PingArgsSchema,
   ScreenArgsSchema,
+  ScreenResultSchema,
   SectorArgsSchema,
   SectorPublishArgsSchema,
   SectorRefreshArgsSchema,
@@ -74,6 +76,7 @@ import {
   WatchRemoveArgsSchema,
   WatchRemoveResultSchema,
   WebSearchArgsSchema,
+  WebSearchResultSchema,
 } from './schemas.js';
 
 /**
@@ -400,9 +403,10 @@ const ENTRIES = [
     supportedOn: ['fe', 'be'],
     summary: 'Natural-language stock screen',
     costsCredits: true,
+    requiresImConfirm: true,
     imAliases: ['筛选', '选股'],
     argsSchema: ScreenArgsSchema,
-    resultSchema: LegacyOutputSchema,
+    resultSchema: ScreenResultSchema,
   },
 
   // ── ledger ──────────────────────────────────────────────────────────
@@ -423,8 +427,9 @@ const ENTRIES = [
     supportedOn: ['be'],
     summary: 'LLM-assisted ledger analysis',
     costsCredits: true,
+    imAliases: ['复盘', '账本复盘', '账本分析'],
     argsSchema: LedgerAnalyzeArgsSchema,
-    resultSchema: LegacyOutputSchema,
+    resultSchema: LedgerAnalyzeResultSchema,
   },
 
   // ── agent ───────────────────────────────────────────────────────────
@@ -454,8 +459,9 @@ const ENTRIES = [
     supportedOn: ['be'],
     summary: 'Hosted-tool web search invoked by the agent',
     costsCredits: true,
+    imAliases: ['网搜', '联网搜索', '搜网'],
     argsSchema: WebSearchArgsSchema,
-    resultSchema: LegacyOutputSchema,
+    resultSchema: WebSearchResultSchema,
   },
 
   // ── channel ─────────────────────────────────────────────────────────

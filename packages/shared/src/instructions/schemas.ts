@@ -15,6 +15,7 @@
 import { z } from 'zod';
 
 import { ChannelIdSchema } from '../types/channel.js';
+import { LedgerAnalysisSchema } from '../types/ledger.js';
 import { StockListRowSchema } from '../types/stock-list.js';
 import { TaAnalysisSchema, TaSectorAnalysisSchema } from '../types/ta.js';
 import { AgentHistoryEntrySchema, AGENT_HISTORY_MAX_ENTRIES } from './agent-history.js';
@@ -352,6 +353,30 @@ export const ScreenArgsSchema = z
   })
   .strict();
 
+/**
+ * `/screen` result — the NL screen result + the assembled stock-list
+ * rows for the top N matches (same compound pattern as `/watch`).
+ *
+ * `stockRows` is nullable because `StockListService.assembleRows` can
+ * fail (e.g. snapshot upstream down); when it does, the renderer
+ * falls back to a plain code list. `displayedCount` is the slice the
+ * renderer should treat as visible (handler enforces the top-N cap).
+ */
+export const ScreenResultSchema = z
+  .object({
+    nl: z.string(),
+    asof: z.string().regex(/^\d{4}-\d{2}-\d{2}$/u),
+    totalMatches: z.number().int().nonnegative(),
+    displayedCount: z.number().int().nonnegative(),
+    /** Truncated to the displayed slice — what the renderer turns into a table. */
+    codes: z.array(z.string()),
+    /** Pre-assembled snapshot rows for `codes`; null when assembly failed. */
+    stockRows: StockListRowSchema.array().nullable(),
+  })
+  .strict();
+export type ScreenResult = z.infer<typeof ScreenResultSchema>;
+
+
 // ── ledger ──────────────────────────────────────────────────────────────
 
 export const LedgerArgsSchema = z
@@ -395,6 +420,10 @@ export const LedgerAnalyzeArgsSchema = z
   })
   .strict();
 
+/** `/ledger.analyze` result — typed alias of the existing LedgerAnalysis. */
+export const LedgerAnalyzeResultSchema = LedgerAnalysisSchema;
+export type LedgerAnalyzeResult = z.infer<typeof LedgerAnalyzeResultSchema>;
+
 // ── agent ───────────────────────────────────────────────────────────────
 
 export const AgentArgsSchema = z
@@ -427,6 +456,19 @@ export const WebSearchArgsSchema = z
       .describe('Max result summaries to return (default 5)'),
   })
   .strict();
+
+/**
+ * `/web.search` result — the LLM-produced summary text. Carried as a
+ * single field (rather than collapsed to `string`) so future
+ * structured additions (e.g. `sources: SourceCitation[]`) can land
+ * without breaking the renderer / consumers.
+ */
+export const WebSearchResultSchema = z
+  .object({
+    text: z.string(),
+  })
+  .strict();
+export type WebSearchResult = z.infer<typeof WebSearchResultSchema>;
 
 // ── channel ─────────────────────────────────────────────────────────────
 
