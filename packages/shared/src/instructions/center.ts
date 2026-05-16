@@ -197,7 +197,6 @@ function buildAliasIndex(allowedIds: ReadonlySet<string>): AliasIndex {
     if (!allowedIds.has(entry.id)) continue;
     canonical.set(entry.id, entry.id);
     for (const a of entry.aliases ?? []) canonical.set(a, entry.id);
-    for (const a of entry.imAliases ?? []) canonical.set(a, entry.id);
   }
   return { canonical };
 }

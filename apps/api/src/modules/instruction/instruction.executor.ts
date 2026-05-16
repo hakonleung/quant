@@ -226,7 +226,6 @@ export class InstructionExecutor {
         const entry = manifestEntryOf(id);
         if (entry !== undefined) {
           for (const a of entry.aliases ?? []) out.set(a, id);
-          for (const a of entry.imAliases ?? []) out.set(a, id);
         }
       }
     }
@@ -253,10 +252,17 @@ export class InstructionExecutor {
           safeParse: () => ({ success: true, data: {} }),
         } as unknown as InstructionEntry['spec']['argsSchema']),
       ...(manifestEntry.mode !== undefined ? { mode: manifestEntry.mode } : {}),
-      ...(manifestEntry.imAliases !== undefined ? { imAliases: manifestEntry.imAliases } : {}),
-      ...(manifestEntry.costsCredits === true ? { costsCredits: true as const } : {}),
-      ...(manifestEntry.destructive === true ? { destructive: true as const } : {}),
-      ...(manifestEntry.requiresImConfirm === true ? { requiresImConfirm: true as const } : {}),
+      // Translate the new manifest fields back to the legacy
+      // InstructionSpec field names. Legacy handlers (the few not yet
+      // migrated to InstructionCenter cells) and the IM listener still
+      // read these; preserving the shim keeps the registry path working
+      // until phase-3 FE migration removes that surface entirely.
+      ...(manifestEntry.aliases !== undefined ? { imAliases: manifestEntry.aliases } : {}),
+      ...(manifestEntry.doubleConfirm === 'llm' ? { costsCredits: true as const } : {}),
+      ...(manifestEntry.doubleConfirm === 'destructive'
+        ? { destructive: true as const }
+        : {}),
+      ...(manifestEntry.imGate === true ? { requiresImConfirm: true as const } : {}),
     } as unknown as InstructionEntry['spec'];
     const handler: AnyInstructionHandler = {
       execute: (args, ctx) =>

@@ -192,6 +192,8 @@ describe('InstructionExecutor → BeInstructionCenter intercept', () => {
     expect(center.has('web.search')).toBe(true);
     expect(center.has('update')).toBe(true);
     expect(center.has('sector.show')).toBe(true);
+    expect(center.has('agent')).toBe(false);
+    expect(center.has('agent.confirm')).toBe(false);
     expect(center.has('analyze.sector')).toBe(false);
     expect(center.ids().slice().sort()).toEqual([
       'analyze',

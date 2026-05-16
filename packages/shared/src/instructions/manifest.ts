@@ -114,34 +114,38 @@ export interface CommandManifestEntry {
   readonly group: CommandGroup;
   /** Sync results land in the same response; async returns a queued ack. */
   readonly mode: CommandMode;
-  /** Where this command is implemented — fail-loud on missing handlers. */
-  readonly supportedOn: readonly CommandSide[];
-  /** ASCII aliases (e.g. `watch.list` → `watch`). Same on both sides. */
-  readonly aliases?: readonly string[];
-  /** Free-form aliases (Chinese, emoji) — IM-only. */
-  readonly imAliases?: readonly string[];
   readonly summary: string;
   readonly summaryCn?: string;
-  /** True when invoking this command spends user credits (LLM calls). */
-  readonly costsCredits?: boolean;
-  /** True when an irreversible side effect needs explicit IM confirmation. */
-  readonly destructive?: boolean;
   /**
-   * True when the IM listener should render a paid-confirm card before
-   * invoking the handler. Mirror of the legacy `InstructionSpec.requiresImConfirm`
-   * — required by the IM gate to know which instructions intercept the
-   * first call. Independent of `costsCredits` (a help-only tag); a paid
-   * instruction may skip the generic gate when it has its own internal
-   * confirm flow (e.g. `/agent`).
+   * Alternate tokens accepted by the dispatcher — covers both ASCII
+   * aliases (`watch.list` → `watch`) and free-form / Chinese aliases
+   * (`'账本'` → `ledger`). The parser's `knownIds()` map treats them
+   * uniformly; the old ASCII-vs-IM split had no consumer.
    */
-  readonly requiresImConfirm?: boolean;
+  readonly aliases?: readonly string[];
   /**
-   * True for handlers that are conditionally registered (e.g. gated on
-   * `INSTRUCTION_DEBUG_ENABLED`). The coverage assertion treats them as
-   * optional — present-or-absent is fine, but if registered the
-   * `supportedOn` declaration must include the side they appear on.
+   * Why the instruction needs a double-confirm surface:
+   *   - `'llm'`: triggers a paid external LLM call (help badges `[$]`,
+   *     agent loop gate fires per tool call).
+   *   - `'destructive'`: irreversible side effect (help badges `[!]`,
+   *     agent loop gate fires per tool call).
+   *
+   * Orthogonal to `imGate`: this captures *why*, `imGate` captures
+   * *how the IM surface confirms* (some destructive ops let the FE
+   * confirm without an IM card; some paid flows have handler-internal
+   * confirm and skip the generic gate too — `/agent` is the latter).
+   *
+   * Empty means no special confirm: zero LLM cost, fully reversible.
    */
-  readonly conditionallyRegistered?: boolean;
+  readonly doubleConfirm?: 'llm' | 'destructive';
+  /**
+   * When `true`, the IM listener interposes the generic paid-confirm
+   * card before dispatching. Independent of `doubleConfirm` so callers
+   * can opt out (e.g. `/agent` has its own internal confirm flow).
+   * Cells expose an optional `peek` hook to skip the card on cache
+   * hits — see `InstructionCell.peek` in `center.ts`.
+   */
+  readonly imGate?: boolean;
   /**
    * Single source of truth for the BE handler's argument shape.
    * Handlers `import { XxxArgsSchema } from '@quant/shared'` and
@@ -158,6 +162,20 @@ export interface CommandManifestEntry {
    * strongly-typed schema (e.g. `UsrResultSchema`).
    */
   readonly resultSchema: z.ZodTypeAny;
+  /**
+   * @deprecated Mapped-type coverage on `InstructionCenter` already
+   * enforces per-side cell presence at compile time. This field stays
+   * only so the legacy `InstructionRegistry.assertManifestCoverage`
+   * keeps working until phase-3 FE migration removes that path.
+   */
+  readonly supportedOn: readonly CommandSide[];
+  /**
+   * @deprecated Workaround for the same legacy assertion — debug-gated
+   * handlers (`ping` / `channel.echo` / `channel.send`) opt out of the
+   * "must be registered on this side" check. Disappears with
+   * `supportedOn`.
+   */
+  readonly conditionallyRegistered?: boolean;
 }
 
 const ENTRIES = [
@@ -187,7 +205,7 @@ const ENTRIES = [
     mode: 'sync',
     supportedOn: ['fe', 'be'],
     summary: "Show the caller's resolved userId + LLM token usage",
-    imAliases: ['我的', '账号', '我'],
+    aliases: ['我的', '账号', '我'],
     argsSchema: UsrArgsSchema,
     resultSchema: UsrResultSchema,
   },
@@ -224,8 +242,8 @@ const ENTRIES = [
     mode: 'sync',
     supportedOn: ['fe', 'be'],
     summary: 'Trigger the unified daily scan (meta + kline + blacklist + sectors)',
-    imAliases: ['更新'],
-    destructive: true,
+    aliases: ['更新'],
+    doubleConfirm: 'destructive',
     argsSchema: UpdateArgsSchema,
     resultSchema: UpdateResultSchema,
   },
@@ -237,7 +255,7 @@ const ENTRIES = [
     mode: 'sync',
     supportedOn: ['fe', 'be'],
     summary: 'Search A-share metadata by code, name, or pinyin',
-    imAliases: ['股票'],
+    aliases: ['股票'],
     argsSchema: StockArgsSchema,
     resultSchema: StockSearchResultSchema,
   },
@@ -249,7 +267,7 @@ const ENTRIES = [
     mode: 'sync',
     supportedOn: ['fe', 'be'],
     summary: 'List sectors visible to the caller',
-    imAliases: ['板块'],
+    aliases: ['板块'],
     argsSchema: SectorArgsSchema,
     resultSchema: SectorListResultSchema,
   },
@@ -259,7 +277,7 @@ const ENTRIES = [
     mode: 'sync',
     supportedOn: ['be'],
     summary: 'Show one sector with its stock table',
-    imAliases: ['查看板块', '板块详情'],
+    aliases: ['查看板块', '板块详情'],
     argsSchema: SectorShowArgsSchema,
     resultSchema: SectorShowResultSchema,
   },
@@ -269,8 +287,8 @@ const ENTRIES = [
     mode: 'sync',
     supportedOn: ['be'],
     summary: 'Mark a sector as published',
-    imAliases: ['发布板块', '公开板块'],
-    destructive: true,
+    aliases: ['发布板块', '公开板块'],
+    doubleConfirm: 'destructive',
     argsSchema: SectorPublishArgsSchema,
     resultSchema: SectorAckResultSchema,
   },
@@ -280,8 +298,8 @@ const ENTRIES = [
     mode: 'sync',
     supportedOn: ['be'],
     summary: 'Mark a sector as unpublished',
-    imAliases: ['取消发布板块', '下架板块'],
-    destructive: true,
+    aliases: ['取消发布板块', '下架板块'],
+    doubleConfirm: 'destructive',
     argsSchema: SectorUnpublishArgsSchema,
     resultSchema: SectorAckResultSchema,
   },
@@ -291,7 +309,7 @@ const ENTRIES = [
     mode: 'async',
     supportedOn: ['be'],
     summary: 'Recompute a dynamic sector',
-    costsCredits: true,
+    doubleConfirm: 'llm',
     argsSchema: SectorRefreshArgsSchema,
     resultSchema: LegacyOutputSchema,
   },
@@ -301,8 +319,8 @@ const ENTRIES = [
     mode: 'sync',
     supportedOn: ['be'],
     summary: 'Delete a sector',
-    destructive: true,
-    imAliases: ['删除板块', '移除板块'],
+    aliases: ['删除板块', '移除板块'],
+    doubleConfirm: 'destructive',
     argsSchema: SectorRmArgsSchema,
     resultSchema: SectorAckResultSchema,
   },
@@ -314,8 +332,7 @@ const ENTRIES = [
     mode: 'sync',
     supportedOn: ['fe', 'be'],
     summary: 'List watch tasks',
-    aliases: ['watch.list'],
-    imAliases: ['自选'],
+    aliases: ['watch.list', '自选'],
     argsSchema: WatchArgsSchema,
     resultSchema: WatchListResultSchema,
   },
@@ -325,7 +342,7 @@ const ENTRIES = [
     mode: 'sync',
     supportedOn: ['be'],
     summary: 'Add a watch task',
-    imAliases: ['添加自选', '加自选', '添加预警'],
+    aliases: ['添加自选', '加自选', '添加预警'],
     argsSchema: WatchAddArgsSchema,
     resultSchema: WatchAddResultSchema,
   },
@@ -335,8 +352,8 @@ const ENTRIES = [
     mode: 'sync',
     supportedOn: ['be'],
     summary: 'Remove a watch task',
-    destructive: true,
-    imAliases: ['删除自选', '移除自选', '删除预警'],
+    aliases: ['删除自选', '移除自选', '删除预警'],
+    doubleConfirm: 'destructive',
     argsSchema: WatchRemoveArgsSchema,
     resultSchema: WatchRemoveResultSchema,
   },
@@ -346,7 +363,7 @@ const ENTRIES = [
     mode: 'sync',
     supportedOn: ['be'],
     summary: 'Manage watch groups',
-    imAliases: ['暂停自选', '恢复自选', '盯盘开关'],
+    aliases: ['暂停自选', '恢复自选', '盯盘开关'],
     argsSchema: WatchGroupArgsSchema,
     resultSchema: WatchGroupResultSchema,
   },
@@ -358,9 +375,9 @@ const ENTRIES = [
     mode: 'async',
     supportedOn: ['fe', 'be'],
     summary: 'Sentiment analysis for one stock',
-    costsCredits: true,
-    requiresImConfirm: true,
-    imAliases: ['情绪分析', '舆情', '分析'],
+    aliases: ['情绪分析', '舆情', '分析'],
+    doubleConfirm: 'llm',
+    imGate: true,
     argsSchema: AnalyzeArgsSchema,
     resultSchema: SentimentSchema,
   },
@@ -370,7 +387,7 @@ const ENTRIES = [
     mode: 'async',
     supportedOn: ['be'],
     summary: 'Sentiment analysis aggregated across a sector',
-    costsCredits: true,
+    doubleConfirm: 'llm',
     argsSchema: AnalyzeSectorArgsSchema,
     resultSchema: LegacyOutputSchema,
   },
@@ -380,9 +397,9 @@ const ENTRIES = [
     mode: 'async',
     supportedOn: ['fe', 'be'],
     summary: 'Technical analysis for one stock',
-    costsCredits: true,
-    requiresImConfirm: true,
-    imAliases: ['技术', '走势', '技分'],
+    aliases: ['技术', '走势', '技分'],
+    doubleConfirm: 'llm',
+    imGate: true,
     argsSchema: TaArgsSchema,
     resultSchema: TaResultSchema,
   },
@@ -392,9 +409,9 @@ const ENTRIES = [
     mode: 'async',
     supportedOn: ['be'],
     summary: 'TA aggregated across a sector',
-    costsCredits: true,
-    requiresImConfirm: true,
-    imAliases: ['板块技术', '板块走势', '板块技分'],
+    aliases: ['板块技术', '板块走势', '板块技分'],
+    doubleConfirm: 'llm',
+    imGate: true,
     argsSchema: TaSectorArgsSchema,
     resultSchema: TaSectorResultSchema,
   },
@@ -406,9 +423,9 @@ const ENTRIES = [
     mode: 'async',
     supportedOn: ['fe', 'be'],
     summary: 'Natural-language stock screen',
-    costsCredits: true,
-    requiresImConfirm: true,
-    imAliases: ['筛选', '选股'],
+    aliases: ['筛选', '选股'],
+    doubleConfirm: 'llm',
+    imGate: true,
     argsSchema: ScreenArgsSchema,
     resultSchema: ScreenResultSchema,
   },
@@ -420,7 +437,7 @@ const ENTRIES = [
     mode: 'sync',
     supportedOn: ['fe', 'be'],
     summary: 'Show the user trade ledger',
-    imAliases: ['账本'],
+    aliases: ['账本'],
     argsSchema: LedgerArgsSchema,
     resultSchema: LedgerListResultSchema,
   },
@@ -430,8 +447,8 @@ const ENTRIES = [
     mode: 'async',
     supportedOn: ['be'],
     summary: 'LLM-assisted ledger analysis',
-    costsCredits: true,
-    imAliases: ['复盘', '账本复盘', '账本分析'],
+    aliases: ['复盘', '账本复盘', '账本分析'],
+    doubleConfirm: 'llm',
     argsSchema: LedgerAnalyzeArgsSchema,
     resultSchema: LedgerAnalyzeResultSchema,
   },
@@ -443,7 +460,7 @@ const ENTRIES = [
     mode: 'async',
     supportedOn: ['fe', 'be'],
     summary: 'Open-ended agent conversation',
-    costsCredits: true,
+    doubleConfirm: 'llm',
     argsSchema: AgentArgsSchema,
     resultSchema: LegacyOutputSchema,
   },
@@ -462,8 +479,8 @@ const ENTRIES = [
     mode: 'async',
     supportedOn: ['be'],
     summary: 'Hosted-tool web search invoked by the agent',
-    costsCredits: true,
-    imAliases: ['网搜', '联网搜索', '搜网'],
+    aliases: ['网搜', '联网搜索', '搜网'],
+    doubleConfirm: 'llm',
     argsSchema: WebSearchArgsSchema,
     resultSchema: WebSearchResultSchema,
   },
