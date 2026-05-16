@@ -113,7 +113,8 @@ class StockMeta:
 class PersistedMetrics:
     """Pre-computed list-view metrics persisted alongside the row.
 
-    Mirrors :class:`quant_core.domain.pure.compute_metrics.StockMetrics`
+    Mirrors the NestJS projector ``StockMetricsComputeService`` output
+    (apps/api/src/modules/stock-meta/stock-metrics-compute.service.ts)
     sans the ``code`` field (encoded by the parent ``StockMeta``).
     Every numeric field is ``None`` when its input was missing or its
     denominator was non-positive — same nullability rules as the

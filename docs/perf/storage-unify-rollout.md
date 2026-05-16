@@ -114,8 +114,15 @@ storage right now.
   `upsertMetas(rows)` for the non-metric upsert. Both serialise
   through a single `writeChain` mutex so they cannot race the
   parquet rewrite.
+- **In-process projector** (NestJS-only, no Flight hop):
+  - `StockMetricsComputeService.computeForCode` — projects
+    `(StockMetaDto, KlineBar[]) → StockMetricsRow` via the pure
+    `domain/pure/{derive,compute}-metrics.ts`. Called by
+    `KlineWorker` immediately after every `sync_kline_for_code`,
+    then handed to `LocalStockMetaWriterService.upsertMetrics`. The
+    previous `compute_stock_metrics_for_code{,s}` Flight ops were
+    retired — Python no longer carries this口径.
 - **Flight ops** (read-only on Python's storage):
-  - `compute_stock_metrics_for_code{,s}` — projector
   - `sync_stock_meta_full` — diff against repo, return rows + counts
   - `enrich_stock_meta_for_code` — single-code source fetch
   - `bulk_sync_financials` — full-market merge

@@ -4,16 +4,15 @@
  * Processes a `kline_pkg` envelope as a single atomic unit:
  *   1. `sync_kline_for_code` — pull fresh bars and append to local
  *      parquet via {@link KlineWriterService}.
- *   2. `compute_stock_metrics_for_code` — recompute the persisted
- *      `ret_*` / mkt_cap / PE / … block from the freshly-written kline
- *      history and the current meta row. Python only *computes*; the
- *      returned Arrow row is persisted locally by
- *      {@link LocalStockMetaWriterService}, so NestJS owns the meta
- *      parquet's metrics columns end-to-end (storage-unify).
- *      Best-effort relative to step (1): a projection failure does NOT
- *      mark the job failed, because the snapshot handler falls back to
- *      on-demand computation. Failure of step (1) bubbles to the queue,
- *      which applies retry / pool-backoff policy.
+ *   2. Recompute the persisted `ret_*` / mkt_cap / PE / … block via the
+ *      in-process {@link StockMetricsComputeService}, then persist it
+ *      with {@link LocalStockMetaWriterService}. The projector runs
+ *      entirely in NestJS now (no Flight hop) — see
+ *      `docs/perf/storage-unify-rollout.md`. Still best-effort relative
+ *      to step (1): a projection failure does NOT mark the job failed,
+ *      because the snapshot handler falls back to on-demand computation.
+ *      Failure of step (1) bubbles to the queue, which applies retry /
+ *      pool-backoff policy.
  *
  * Token-bucket rate limiting + the legacy 1-min circuit-breaker have
  * moved to the queue engine's `poolBackoff` config in
@@ -24,8 +23,8 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import { FlightClient } from '../../adapters/flight/flight-client.js';
 import { arrowTableToKlineRows, readSyncKlineReport } from '../kline/domain/arrow-mapper.js';
 import { KlineWriterService } from '../kline/kline-writer.service.js';
-import { arrowTableToStockMetricsRows } from '../stock-meta/domain/metrics-arrow-mapper.js';
 import { LocalStockMetaWriterService } from '../stock-meta/local-stock-meta-writer.service.js';
+import { StockMetricsComputeService } from '../stock-meta/stock-metrics-compute.service.js';
 import { ORCH_FLIGHT_CLIENT } from './flight.token.js';
 import type { JobEnvelope, JobProcessor, KlineJob, ReQueue } from './domain/types.js';
 
@@ -38,6 +37,8 @@ export class KlineWorker implements JobProcessor<KlineJob> {
     @Inject(KlineWriterService) private readonly writer: KlineWriterService,
     @Inject(LocalStockMetaWriterService)
     private readonly metaWriter: LocalStockMetaWriterService,
+    @Inject(StockMetricsComputeService)
+    private readonly metricsCompute: StockMetricsComputeService,
   ) {}
 
   async process(job: JobEnvelope<KlineJob>, _queue: ReQueue<KlineJob>): Promise<void> {
@@ -53,14 +54,9 @@ export class KlineWorker implements JobProcessor<KlineJob> {
       await this.writer.appendBars(rows);
     }
     try {
-      const projection = await this.flight.doGet(
-        'compute_stock_metrics_for_code',
-        { code, trace_id: traceId },
-        { traceId, deadlineMs: 10_000 },
-      );
-      const metricsRows = arrowTableToStockMetricsRows(projection.value);
-      if (metricsRows.length > 0) {
-        await this.metaWriter.upsertMetrics(metricsRows);
+      const metricsRow = await this.metricsCompute.computeForCode(code);
+      if (metricsRow !== null) {
+        await this.metaWriter.upsertMetrics([metricsRow]);
       }
     } catch (projErr) {
       this.logger.warn(

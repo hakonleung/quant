@@ -18,7 +18,6 @@ from typing import TYPE_CHECKING, cast
 
 import pyarrow as pa
 import pytest
-from quant_core.domain.pure.compute_metrics import compute_metrics
 from quant_core.domain.types.stock import PersistedMetrics, StockMeta
 from quant_core.services.kline_service import KlineService
 from quant_core.services.stock_meta_service import StockMetaService
@@ -188,34 +187,11 @@ class TestListStockSnapshotsHandler:
         # Windows larger than the bar count → None.
         assert row["ret_250d"] is None
 
-    def test_recompute_matches_compute_metrics_on_identical_bars(self) -> None:
-        """The fallback path must agree with the projector on the same input."""
-        bars = [_bar("000001", day=1 + i, close=str(50 + i)) for i in range(30)]
-        meta = _meta("000001", metrics=None)
-        kline_table = pa.table(
-            {
-                "close_qfq": [b.close_qfq for b in bars],
-                "trade_date": [b.trade_date for b in bars],
-            }
-        )
-        kline = _FakeKline({"000001": kline_table})
-        h = ListStockSnapshotsHandler(StockMetaService(_FakeMetaRepo([meta])), _kline_for_handler(kline))
-
-        table = h.execute({"codes": ["000001"]})
-        row = table.to_pylist()[0]
-        expected = compute_metrics(meta, bars)
-
-        assert row["price"] == str(expected.price)
-        for window in RETURN_WINDOWS:
-            field = f"ret_{window}d"
-            actual = row[field]
-            wanted = getattr(expected, field)
-            if wanted is None:
-                assert actual is None, f"{field}: expected None, got {actual!r}"
-            else:
-                assert actual is not None
-                # Both go through ``str(Decimal)`` — exact equality.
-                assert actual == str(wanted), f"{field}: {actual} != {wanted}"
+    # The previous "fallback agrees with projector on identical bars" test
+    # lived here as a parity guard against Py's ``compute_metrics``. The
+    # projector now lives in NestJS (storage-unify-rollout); the inverse
+    # parity guard sits next to the TS implementation. See
+    # ``apps/api/test/modules/stock-meta/domain/pure/derive-metrics.test.ts``.
 
     def test_empty_codes_expands_to_full_universe(self) -> None:
         ms = [_meta("000001"), _meta("000002")]

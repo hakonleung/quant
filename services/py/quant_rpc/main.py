@@ -72,10 +72,6 @@ from quant_rpc.ops.stock_meta_admin import (
     EnrichOneHandler,
     SyncFullHandler,
 )
-from quant_rpc.ops.stock_metrics import (
-    ComputeStockMetricsForCodeHandler,
-    ComputeStockMetricsForCodesHandler,
-)
 from quant_rpc.ops.stock_snapshot import ListStockSnapshotsHandler
 from quant_rpc.ops.trading_calendar import GetLatestTradeDayHandler
 from quant_rpc.ops.watch import WatchQuoteOneHandler, WatchUniverseRefreshHandler
@@ -258,8 +254,8 @@ def main() -> int:
     registry.register(SyncFullHandler(sync_service))
     registry.register(EnrichOneHandler(sync_service))
     registry.register(SyncKlineForCodeHandler(kline_service))
-    registry.register(ComputeStockMetricsForCodeHandler(meta_repo, kline_repo))
-    registry.register(ComputeStockMetricsForCodesHandler(meta_repo, kline_repo))
+    # `compute_stock_metrics_for_code{,s}` moved to NestJS in-process —
+    # see apps/api/src/modules/stock-meta/stock-metrics-compute.service.ts.
     # Watch quotes route per market. yfinance is the default US backend
     # because East Money / Sina (AKShare's US upstreams) have been
     # IP-throttling us; Yahoo's IPs sit on a separate family. Override

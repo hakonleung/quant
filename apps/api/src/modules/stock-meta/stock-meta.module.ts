@@ -17,15 +17,18 @@
 
 import { Module } from '@nestjs/common';
 import { SYSTEM_CLOCK_PROVIDER } from '../../common/clock.js';
+import { KlineModule } from '../kline/kline.module.js';
 import { STOCK_META_PORT } from './domain/stock-meta-port.js';
 import { LocalStockMetaAdapter, STOCK_META_DATA_DIR } from './local-stock-meta.adapter.js';
 import { LocalStockMetaWriterService } from './local-stock-meta-writer.service.js';
 import { StockMetaController } from './stock-meta.controller.js';
 import { StockMetaService } from './stock-meta.service.js';
+import { StockMetricsComputeService } from './stock-metrics-compute.service.js';
 
 const DEFAULT_DATA_DIR = '../../data';
 
 @Module({
+  imports: [KlineModule],
   controllers: [StockMetaController],
   providers: [
     {
@@ -35,10 +38,11 @@ const DEFAULT_DATA_DIR = '../../data';
     LocalStockMetaAdapter,
     { provide: STOCK_META_PORT, useExisting: LocalStockMetaAdapter },
     LocalStockMetaWriterService,
+    StockMetricsComputeService,
     SYSTEM_CLOCK_PROVIDER,
     StockMetaService,
     // `stock` (search) migrated to `BeInstructionCenter` (instruction-center/cells/stock.cell.ts).
   ],
-  exports: [StockMetaService, LocalStockMetaWriterService],
+  exports: [StockMetaService, LocalStockMetaWriterService, StockMetricsComputeService],
 })
 export class StockMetaModule {}
