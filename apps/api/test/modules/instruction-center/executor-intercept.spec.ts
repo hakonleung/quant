@@ -27,6 +27,7 @@ import type {
   UserLlmLedgerSummary,
 } from '../../../src/modules/llm/ledger/user-llm-ledger.store.js';
 import type { LlmService } from '../../../src/modules/llm/llm.service.js';
+import type { CronOrchestrator } from '../../../src/modules/orchestration/cron.orchestrator.js';
 import type { ScreenService } from '../../../src/modules/screen/screen.service.js';
 import type { SectorsService } from '../../../src/modules/sectors/sectors.service.js';
 import type { NewsSentimentService } from '../../../src/modules/sentiment/news-sentiment.service.js';
@@ -94,6 +95,9 @@ function build(): {
   const llm: LlmService = {
     completeWithWebSearch: () => Promise.reject(new Error('not used')),
   } as unknown as LlmService;
+  const cron: CronOrchestrator = {
+    fireScan: () => ({ started: true, traceId: 'fake-trace' }),
+  } as unknown as CronOrchestrator;
   const center = new BeInstructionCenter(
     authCfg,
     ledger,
@@ -108,6 +112,7 @@ function build(): {
     ta,
     screenSvc,
     llm,
+    cron,
   );
   const reg = new InstructionRegistry(center);
   const enqueued: InstructionAsyncJob[] = [];
@@ -185,6 +190,8 @@ describe('InstructionExecutor → BeInstructionCenter intercept', () => {
     expect(center.has('screen')).toBe(true);
     expect(center.has('ledger.analyze')).toBe(true);
     expect(center.has('web.search')).toBe(true);
+    expect(center.has('update')).toBe(true);
+    expect(center.has('sector.show')).toBe(true);
     expect(center.has('analyze.sector')).toBe(false);
     expect(center.ids().slice().sort()).toEqual([
       'analyze',
@@ -194,10 +201,12 @@ describe('InstructionExecutor → BeInstructionCenter intercept', () => {
       'sector',
       'sector.publish',
       'sector.rm',
+      'sector.show',
       'sector.unpublish',
       'stock',
       'ta',
       'ta.sector',
+      'update',
       'usr',
       'watch',
       'watch.add',
@@ -247,6 +256,9 @@ describe('InstructionExecutor → BeInstructionCenter intercept', () => {
       const llm: LlmService = {
         completeWithWebSearch: () => Promise.reject(new Error('not used')),
       } as unknown as LlmService;
+      const cron: CronOrchestrator = {
+        fireScan: () => ({ started: true, traceId: 'fake-trace' }),
+      } as unknown as CronOrchestrator;
       const center = new BeInstructionCenter(
         authCfg,
         ledger,
@@ -261,6 +273,7 @@ describe('InstructionExecutor → BeInstructionCenter intercept', () => {
         ta,
         screenSvc,
         llm,
+        cron,
       );
       const reg = new InstructionRegistry(center);
       const queued: InstructionAsyncJob[] = [];
@@ -336,6 +349,9 @@ describe('InstructionExecutor → BeInstructionCenter intercept', () => {
     const llm: LlmService = {
       completeWithWebSearch: () => Promise.reject(new Error('not used')),
     } as unknown as LlmService;
+    const cron: CronOrchestrator = {
+      fireScan: () => ({ started: true, traceId: 'fake-trace' }),
+    } as unknown as CronOrchestrator;
     const center = new BeInstructionCenter(
       authCfg,
       ledger,
@@ -350,6 +366,7 @@ describe('InstructionExecutor → BeInstructionCenter intercept', () => {
       ta,
       screenSvc,
       llm,
+      cron,
     );
     const reg = new InstructionRegistry(center);
     // Test the synthesised handler's peek directly — the IM gate uses

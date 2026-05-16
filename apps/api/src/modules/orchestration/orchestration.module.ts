@@ -26,7 +26,6 @@ import { CacheInspector } from './cache-inspector.js';
 import { CronOrchestrator } from './cron.orchestrator.js';
 import { InMemoryQueue } from './domain/in-memory-queue.js';
 import { KLINE_QUEUE, META_QUEUE, ORCH_FLIGHT_CLIENT } from './flight.token.js';
-import { UpdateInstructionHandler } from './instructions/update.handler.js';
 import { KlineWorker } from './kline-worker.js';
 import { MetaWorker } from './meta-worker.js';
 import { QueueBroadcaster } from './queue.broadcaster.js';
@@ -96,9 +95,9 @@ const DEFAULT_FLIGHT_TARGET = '127.0.0.1:8815';
     BatchSettler,
     CronOrchestrator,
     QueueBroadcaster,
-    UpdateInstructionHandler,
+    // `update` migrated to `BeInstructionCenter` (instruction-center/cells/update.cell.ts).
   ],
-  exports: [META_QUEUE, KLINE_QUEUE],
+  exports: [META_QUEUE, KLINE_QUEUE, CronOrchestrator],
 })
 export class OrchestrationModule implements OnModuleInit {
   constructor(

@@ -11,6 +11,7 @@ import { Global, Module, forwardRef } from '@nestjs/common';
 
 import { SYSTEM_CLOCK_PROVIDER } from '../../common/clock.js';
 import { LedgerModule } from '../ledger/ledger.module.js';
+import { OrchestrationModule } from '../orchestration/orchestration.module.js';
 import { ScreenModule } from '../screen/screen.module.js';
 import { SectorsModule } from '../sectors/sectors.module.js';
 import { SentimentModule } from '../sentiment/sentiment.module.js';
@@ -40,6 +41,7 @@ import { BeInstructionCenter } from './be-instruction-center.service.js';
     forwardRef((): typeof SentimentModule => SentimentModule),
     forwardRef((): typeof TaModule => TaModule),
     forwardRef((): typeof ScreenModule => ScreenModule),
+    forwardRef((): typeof OrchestrationModule => OrchestrationModule),
   ],
   providers: [SYSTEM_CLOCK_PROVIDER, BeInstructionCenter],
   exports: [BeInstructionCenter],

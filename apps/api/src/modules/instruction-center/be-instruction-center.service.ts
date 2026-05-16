@@ -32,6 +32,7 @@ import { AuthConfig } from '../auth/config/auth.config.js';
 import { LedgerService } from '../ledger/ledger.service.js';
 import { LlmService } from '../llm/llm.service.js';
 import { UserLlmLedgerStore } from '../llm/ledger/user-llm-ledger.store.js';
+import { CronOrchestrator } from '../orchestration/cron.orchestrator.js';
 import { ScreenService } from '../screen/screen.service.js';
 import { SectorsService } from '../sectors/sectors.service.js';
 import { NewsSentimentService } from '../sentiment/news-sentiment.service.js';
@@ -52,9 +53,11 @@ import {
 } from './cells/sector-publish.cell.js';
 import { buildScreenCell } from './cells/screen.cell.js';
 import { buildSectorRmCell } from './cells/sector-rm.cell.js';
+import { buildSectorShowCell } from './cells/sector-show.cell.js';
 import { buildStockCell } from './cells/stock.cell.js';
 import { buildTaCell } from './cells/ta.cell.js';
 import { buildTaSectorCell } from './cells/ta-sector.cell.js';
+import { buildUpdateCell } from './cells/update.cell.js';
 import { buildUsrCell } from './cells/usr.cell.js';
 import { buildWatchCell } from './cells/watch.cell.js';
 import { buildWatchAddCell } from './cells/watch-add.cell.js';
@@ -85,7 +88,9 @@ export type MigratedIds =
   | 'ta.sector'
   | 'screen'
   | 'ledger.analyze'
-  | 'web.search';
+  | 'web.search'
+  | 'update'
+  | 'sector.show';
 
 type Excluded = Exclude<AllInstructionIds, MigratedIds>;
 type Configured = Exclude<AllInstructionIds, Excluded>;
@@ -110,6 +115,7 @@ export class BeInstructionCenter {
     @Inject(TaService) ta: TaService,
     @Inject(ScreenService) screen: ScreenService,
     @Inject(LlmService) llm: LlmService,
+    @Inject(CronOrchestrator) cron: CronOrchestrator,
   ) {
     const cfg: InstructionConfig<BeEnv, Excluded> = {
       usr: buildUsrCell({ authCfg, ledger, clock }),
@@ -129,6 +135,8 @@ export class BeInstructionCenter {
       screen: buildScreenCell({ screen, stockList }),
       'ledger.analyze': buildLedgerAnalyzeCell({ ledger: ledgerService }),
       'web.search': buildWebSearchCell({ llm }),
+      update: buildUpdateCell({ cron }),
+      'sector.show': buildSectorShowCell({ sectors, stockList }),
     };
     this.center = new InstructionCenter<BeEnv, Excluded>(cfg);
   }
