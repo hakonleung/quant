@@ -20,7 +20,6 @@ import { Inject, Injectable } from '@nestjs/common';
 import {
   DEFAULT_APPLIED_STOCK_LIST_COLUMNS,
   DEFAULT_SORT_BY_KIND,
-  StockListRowSchema,
   appliedNeedsSnapshot,
   deriveStockStats,
   getStockListColumnSpec,
@@ -103,7 +102,11 @@ export class StockListService {
 
     rows.sort((a, b) => compareRows(a, b, sort));
 
-    StockListRowSchema.array().parse(rows);
+    // `buildRow` constructs rows from already-typed inputs; revalidating
+    // the entire ~5500-row array through zod on every request added noise
+    // without catching internal contract drift (CLAUDE.md §1.3 — internal
+    // pure functions trust the contract). The DTO schema still gates the
+    // BFF boundary in `apps/web/app/api/stock-list/rows/route.ts`.
     return {
       kind: args.kind,
       columns: [...columns],

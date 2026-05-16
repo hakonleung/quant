@@ -1,38 +1,31 @@
 /**
- * Composition root for the stock-meta feature. Reads the Flight target
- * from `QUANT_FLIGHT_TARGET` (defaults to local dev), constructs the
- * `FlightClient` once, and binds it as the {@link FLIGHT_CLIENT}
- * provider. The controller depends on `StockMetaService`, which in turn
- * depends on the {@link STOCK_META_PORT}.
+ * Composition root for the stock-meta feature.
  *
- * FlightClient lifetime: the channel is opened lazily by `@grpc/grpc-js`
- * on first call and torn down when the process exits. We don't wire an
- * explicit shutdown hook — the channel is idle-cheap, and Nest's
- * shutdown sequence does not block on background gRPC sockets.
+ * NestJS reads the Python-written `data/stock_metas.parquet` directly
+ * via DuckDB — see {@link LocalStockMetaAdapter}. Python remains the
+ * sole writer (post-kline-sync projector). The Flight round-trip was
+ * retired in favour of an in-process DuckDB scan with a 60s SWR cache;
+ * the historical `FlightStockMetaAdapter` is gone with it.
  */
 
 import { Module } from '@nestjs/common';
 import { SYSTEM_CLOCK_PROVIDER } from '../../common/clock.js';
-import { FlightClient } from '../../adapters/flight/flight-client.js';
 import { STOCK_META_PORT } from './domain/stock-meta-port.js';
-import { FLIGHT_CLIENT, FlightStockMetaAdapter } from './flight-stock-meta.adapter.js';
+import { LocalStockMetaAdapter, STOCK_META_DATA_DIR } from './local-stock-meta.adapter.js';
 import { StockInstructionHandler } from './instructions/stock.handler.js';
 import { StockMetaController } from './stock-meta.controller.js';
 import { StockMetaService } from './stock-meta.service.js';
 
-const DEFAULT_FLIGHT_TARGET = '127.0.0.1:8815';
+const DEFAULT_DATA_DIR = '../../data';
 
 @Module({
   controllers: [StockMetaController],
   providers: [
     {
-      provide: FLIGHT_CLIENT,
-      useFactory: (): FlightClient => {
-        const target = process.env['QUANT_FLIGHT_TARGET'] ?? DEFAULT_FLIGHT_TARGET;
-        return new FlightClient(target);
-      },
+      provide: STOCK_META_DATA_DIR,
+      useFactory: (): string => process.env['QUANT_DATA_DIR'] ?? DEFAULT_DATA_DIR,
     },
-    { provide: STOCK_META_PORT, useClass: FlightStockMetaAdapter },
+    { provide: STOCK_META_PORT, useClass: LocalStockMetaAdapter },
     SYSTEM_CLOCK_PROVIDER,
     StockMetaService,
     StockInstructionHandler,

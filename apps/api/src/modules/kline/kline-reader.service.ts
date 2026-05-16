@@ -9,17 +9,34 @@
  * Local-first by design: once the cross-process flip lands and Python
  * stops persisting parquet, this service is the *only* read path.
  * Until then it can be paired with a Flight fallback at the call site.
+ *
+ * `lastNBulk` is the hot path for EQ.LIST and IM stock-list renders.
+ * We cache the full-universe last-N result per `n` with a 60s SWR
+ * window: kline parquets only mutate on the daily 15:15 BJT cron, so
+ * staleness is bounded by the cache window, never by request latency.
+ * Code-subset calls filter from the cached snapshot instead of issuing
+ * a fresh DuckDB scan.
  */
 
 import { Inject, Injectable } from '@nestjs/common';
-import { KlineBarSchema, type KlineBar } from '@quant/shared';
+import { type KlineBar } from '@quant/shared';
 
 import type { TimeSeriesStore } from '../../common/storage/ports/time-series-store.port.js';
 import type { KlineRow } from './kline.row.js';
 import { KLINE_TIME_SERIES_STORE } from './kline.token.js';
 
+const BULK_CACHE_TTL_MS = 60_000;
+
+interface BulkCacheEntry {
+  readonly value: ReadonlyMap<string, readonly KlineBar[]>;
+  readonly fetchedAt: number;
+}
+
 @Injectable()
 export class KlineReaderService {
+  private readonly bulkCache = new Map<number, BulkCacheEntry>();
+  private readonly bulkInflight = new Map<number, Promise<ReadonlyMap<string, readonly KlineBar[]>>>();
+
   constructor(@Inject(KLINE_TIME_SERIES_STORE) private readonly store: TimeSeriesStore<KlineRow>) {}
 
   /** Last `n` bars for a single code, oldest first. Empty array when absent. */
@@ -41,14 +58,48 @@ export class KlineReaderService {
     codes: readonly string[],
     n: number,
   ): Promise<Record<string, readonly KlineBar[]>> {
-    const query = codes.length === 0 ? { tail: n } : { entityKeys: codes, tail: n };
-    const rows = await this.store.read(query);
-    const out: Record<string, KlineBar[]> = {};
+    const universe = await this.bulkUniverse(n);
+    const out: Record<string, readonly KlineBar[]> = {};
+    if (codes.length === 0) {
+      for (const [code, bars] of universe) out[code] = bars;
+      return out;
+    }
+    for (const code of codes) {
+      const bars = universe.get(code);
+      if (bars !== undefined) out[code] = bars;
+    }
+    return out;
+  }
+
+  /** Test hook — drop the in-process bulk cache. */
+  clearBulkCache(): void {
+    this.bulkCache.clear();
+  }
+
+  private async bulkUniverse(n: number): Promise<ReadonlyMap<string, readonly KlineBar[]>> {
+    const cached = this.bulkCache.get(n);
+    if (cached !== undefined && Date.now() - cached.fetchedAt < BULK_CACHE_TTL_MS) {
+      return cached.value;
+    }
+    const inflight = this.bulkInflight.get(n);
+    if (inflight !== undefined) return inflight;
+    const pending = this.scanUniverse(n).finally(() => {
+      this.bulkInflight.delete(n);
+    });
+    this.bulkInflight.set(n, pending);
+    const value = await pending;
+    this.bulkCache.set(n, { value, fetchedAt: Date.now() });
+    return value;
+  }
+
+  private async scanUniverse(n: number): Promise<ReadonlyMap<string, readonly KlineBar[]>> {
+    const rows = await this.store.read({ tail: n });
+    const out = new Map<string, KlineBar[]>();
     for (const row of rows) {
       const bar = rowToBar(row);
-      const bucket = out[row.code];
+      const bucket = out.get(row.code);
       if (bucket === undefined) {
-        out[row.code] = [bar];
+        out.set(row.code, [bar]);
       } else {
         bucket.push(bar);
       }
@@ -67,8 +118,12 @@ export class KlineReaderService {
   }
 }
 
+// Trust the store contract: `KlineRow` is built by `DuckDBParquetTimeSeriesStore`
+// which already normalises types per the column spec. Re-validating each bar
+// through zod added ~70% to assembleRows CPU time at 5500×30 bars and protected
+// against a contract we ourselves write — internal call, no zod (CLAUDE.md §1.3).
 function rowToBar(row: KlineRow): KlineBar {
-  return KlineBarSchema.parse({
+  return {
     date: tsToIsoDate(row.ts),
     open: row.open_qfq,
     high: row.high_qfq,
@@ -81,7 +136,7 @@ function rowToBar(row: KlineRow): KlineBar {
     ma10: row.ma10,
     ma20: row.ma20,
     ma60: row.ma60,
-  });
+  };
 }
 
 function tsToIsoDate(ts: Date): string {
