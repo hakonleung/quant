@@ -59,6 +59,6 @@ const DEFAULT_DATA_DIR = '../../data';
     KlineWriterService,
     KlineReaderService,
   ],
-  exports: [KlineWriterService, KlineReaderService, KLINE_TIME_SERIES_STORE],
+  exports: [KlineWriterService, KlineReaderService, KLINE_TIME_SERIES_STORE, KLINE_DATA_DIR],
 })
 export class KlineModule {}

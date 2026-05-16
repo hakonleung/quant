@@ -1,7 +1,6 @@
-# Screen executor — DuckDB SQL pushdown (Phase 3 plan + baseline)
+# Screen executor — DuckDB SQL pushdown
 
-> Status: **baseline captured**, pushdown not yet implemented.
-> Owner: open. Last updated: 2026-05-16.
+> Status: **shipped** (Phase 3 landed). Last updated: 2026-05-16.
 
 ## 背景与瓶颈定位
 
@@ -78,14 +77,25 @@ Codegen 量级估计 600–900 LOC TS（含递归 walker、参数绑定、子查
 
 ## 落地后实测
 
-（待 Phase 3 完成后填写）
+同一台机器,同一份 `data/`(5512 codes),`asof=2026-05-15`,N=10 measured + 3 warmup:
 
-| Plan                                          | baseline p50 / p95 | pushdown p50 / p95 | speedup |
-| --------------------------------------------- | ------------------ | ------------------ | ------- |
-| `simple-compare (close_qfq > 50)`             | 77.3 / 81.3        | TBD                | TBD     |
-| `aggregate (mean(close_qfq, 20) > 30)`        | 268.3 / 268.6      | TBD                | TBD     |
-| `for_all 5d (close_qfq > ma5)`                | 112.5 / 112.7      | TBD                | TBD     |
-| `consecutive 3d (volume > 1e7) + rank top-50` | 260.6 / 269.0      | TBD                | TBD     |
+| Plan                                          | baseline p50 / p95 | pushdown p50 / p95 | speedup | matches (parity) |
+| --------------------------------------------- | ------------------ | ------------------ | ------- | ---------------- |
+| `simple-compare (close_qfq > 50)`             | 77.3 / 81.3        | 39.1 / 39.6        | **2.0×** | 847 ↔ 847        |
+| `aggregate (mean(close_qfq, 20) > 30)`        | 268.3 / 268.6      | 116.9 / 134.0      | **2.3×** | 1562 ↔ 1562      |
+| `for_all 5d (close_qfq > ma5)`                | 112.5 / 112.7      | 54.0 / 55.1        | **2.1×** | 1075 ↔ 1075      |
+| `consecutive 3d (volume > 1e7) + rank top-50` | 260.6 / 269.0      | 195.8 / 209.1      | **1.3×** | 50 ↔ 50          |
+
+- **Matches set 完全一致**——parity test (`test/modules/screen/screen-parity.spec.ts`) 在 12 种代表性 AST 上断言 SQL 与解释器返回相同 code 集。
+- Consecutive 提升较小(1.3×)是因为 SQL 选出 50 个 code 后,evidence + rank metric (PeriodReturn 20d) 仍要走解释器,占 ~150ms 中的大头。其它三个 plan matches 多(>1k),evidence 阶段也按比例放大,所以整体加速比稳定在 ~2×。
+- 平均 **~2× 提升**,介于之前估计的 "≤20%(纯直译)" 和 "5–10×(理想 SQL)" 之间,符合 baseline 阶段重新校准的预期。
+- 关键修复:第一版 SQL 用 `WHERE a.ts = DATE 'asof'` 选 asof 行,但解释器用 "window 中最后一行"——停牌/退市 code 的最新 bar 早于 asof,导致 SQL 漏算 ~30% 的 code。换成 `ROW_NUMBER() OVER (PARTITION BY code ORDER BY ts DESC) = 1` 后 parity 恢复。Aggregate 的 "rows < days → NA" 也需要 `COUNT(*) OVER w >= days` 才能对齐 Py 的 `len(rows) < node.days` 语义,初版只用 `COUNT(field) >= 1` 太宽松。
+
+## 上线兜底
+
+`ScreenExecService.execute` 走 `canPushdown(plan.expr)`,**满足条件走 SQL,否则走解释器**。pushdown 路径里同时 enforce 解释器一致性:SQL 返回的每个 code,在 evidence 构建前再用解释器跑一遍 predicate,不一致就 log warn + drop——把潜在 parity bug 暴露成 prod 日志,不掉数据。`canPushdown` 拒收的形状(Aggregate / PeriodReturn 嵌套在 ForAll / Exists / Consecutive 内部)走解释器,无功能损失。
+
+如果未来一段时间 prod 日志无 `screen_pushdown_disagreement`,可以考虑去掉 enforce 二次验证以再减一遍解释器开销,但目前先留着。
 
 ## 回归风险与监控点
 

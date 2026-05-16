@@ -2,23 +2,31 @@
  * In-process screening executor. Direct replacement for the Python
  * `screen_run` Flight op + `ScreenService.execute` orchestration.
  *
- * Pipeline (mirrors `services/py/quant_core/services/screen_service.py`):
- *   1. Resolve the universe — either filter the meta cache through
- *      {@link UniverseFilterService} or use the full code list.
- *   2. Walk the AST ({@link summarise}) to figure out columns +
- *      lookback bars; widen by 1.6× + 10-day calendar buffer to be
- *      safe across non-trading days.
- *   3. Fetch the per-code kline slice via
- *      {@link KlineReaderService.bulkRangeForScreen} (DuckDB-backed,
- *      pct_chg_qfq synthesised).
- *   4. Evaluate the predicate per code via {@link evaluatePredicate}.
- *   5. Collect evidence + rank metric per match.
- *   6. Apply rank (sort + topN) when provided.
+ * Two execution paths:
  *
- * No Flight involvement; the call lives entirely in NestJS.
+ *   1. **SQL pushdown** (fast): when `canPushdown(plan.expr)` returns
+ *      true, compile the AST to a DuckDB SELECT and let the
+ *      vectorised engine produce the matched code set. We then fetch
+ *      kline for only those codes and run the interpreter on that
+ *      narrow set to build per-match evidence + rank metric. SQL
+ *      gives us the "filter 5500 codes fast"; the interpreter gives
+ *      us the "produce the exact same evidence dict the FE expects".
+ *   2. **Interpreter** (fallback): full universe → kline slice →
+ *      per-code interpreter eval. Used for AST shapes the codegen
+ *      can't handle (window assertions with nested aggregates, etc).
+ *
+ * Both paths share `evaluateMatches`, so evidence shape and rank
+ * behaviour stay identical.
+ *
+ * NULL semantics + Decimal-vs-DOUBLE parity: see
+ * `docs/perf/screen-pushdown.md`. Parity tests in
+ * `test/modules/screen/screen-parity.spec.ts` lock the two paths to
+ * the same matches on a representative plan set.
  */
 
-import { Inject, Injectable } from '@nestjs/common';
+import { join } from 'node:path';
+import { Inject, Injectable, Logger } from '@nestjs/common';
+import { DuckDBInstance, type DuckDBConnection } from '@duckdb/node-api';
 import {
   QuantError,
   type RankSpecView,
@@ -28,10 +36,13 @@ import {
 } from '@quant/shared';
 
 import { KlineReaderService } from '../kline/kline-reader.service.js';
+import { KLINE_DATA_DIR } from '../kline/kline.token.js';
 import { LocalStockMetaAdapter } from '../stock-meta/local-stock-meta.adapter.js';
 import { planSignature } from './domain/pure/plan-signature.js';
 import { buildEvidence, evidenceValue, type Evidence } from './domain/pure/screen-evidence.js';
 import { evaluatePredicate, evaluateScalar, type ScreenRow } from './domain/pure/screen-eval.js';
+import { canPushdown } from './domain/pure/screen-pushdown-check.js';
+import { compilePushdownSql } from './domain/pure/screen-sql-codegen.js';
 import { summarise } from './domain/pure/screen-summarise.js';
 import { UniverseFilterService } from './universe-filter.service.js';
 
@@ -42,11 +53,18 @@ const BUFFER_DAYS = 10;
 
 @Injectable()
 export class ScreenExecService {
+  private readonly logger = new Logger(ScreenExecService.name);
+  private connPromise: Promise<DuckDBConnection> | null = null;
+  private readonly klineParquetGlob: string;
+
   constructor(
     @Inject(KlineReaderService) private readonly klineReader: KlineReaderService,
     @Inject(LocalStockMetaAdapter) private readonly metaAdapter: LocalStockMetaAdapter,
     @Inject(UniverseFilterService) private readonly universeFilter: UniverseFilterService,
-  ) {}
+    @Inject(KLINE_DATA_DIR) klineDataRoot: string,
+  ) {
+    this.klineParquetGlob = join(klineDataRoot, 'kline', '*.parquet');
+  }
 
   async execute(
     plan: ScreenPlanAst,
@@ -60,17 +78,122 @@ export class ScreenExecService {
       return { matches: [], planSignature: signature };
     }
     const { lookbackDays } = summarise(plan.expr);
-    const rankLookback = rankLookbackBars(rank);
-    const lookback = Math.max(lookbackDays, rankLookback, 1);
+    const lookback = Math.max(lookbackDays, rankLookbackBars(rank), 1);
     const calendarDays = Math.floor(lookback * 1.6) + BUFFER_DAYS;
     const startMs = Math.max(asof.getTime() - calendarDays * 86_400_000, KLINE_FLOOR_DATE_MS);
     const start = new Date(startMs);
+
+    if (canPushdown(plan.expr)) {
+      try {
+        return await this.executePushdown(plan, asof, start, universe, rank, signature);
+      } catch (err) {
+        // A codegen / execution failure shouldn't break user-facing screen
+        // results. Log the cause and fall through to the interpreter.
+        this.logger.warn(
+          `screen_pushdown_failed signature=${signature} err=${err instanceof Error ? err.message : String(err)} — falling back to interpreter`,
+        );
+      }
+    }
+    return this.executeInterpreter(plan, asof, start, universe, rank, signature);
+  }
+
+  // -----------------------------------------------------------------------
+  // pushdown path
+  // -----------------------------------------------------------------------
+
+  private async executePushdown(
+    plan: ScreenPlanAst,
+    asof: Date,
+    start: Date,
+    universe: readonly string[],
+    rank: RankSpecView | null,
+    signature: string,
+  ): Promise<ScreenRunResult> {
+    const { sql } = compilePushdownSql({
+      asof: isoDate(asof),
+      start: isoDate(start),
+      universe,
+      predicate: plan.expr,
+      klineParquetGlob: this.klineParquetGlob,
+    });
+    const conn = await this.connection();
+    const result = await conn.runAndReadAll(sql);
+    const matchedCodes: string[] = [];
+    for (const row of result.getRowObjects()) {
+      const code = (row as Record<string, unknown>)['code'];
+      if (typeof code === 'string') matchedCodes.push(code);
+    }
+    if (matchedCodes.length === 0) {
+      return { matches: [], planSignature: signature };
+    }
+    // Fetch kline for just the matched set so evidence build is cheap.
+    const rowsByCode = await this.klineReader.bulkRangeForScreen(matchedCodes, start, asof);
+    const matches = this.evaluateMatches(plan, matchedCodes, rowsByCode, rank, {
+      // We already filtered at SQL level; trust the SQL but guard against
+      // silent disagreement (parity-bug surface). When the interpreter
+      // rejects an SQL-matched code we drop it and log a warning so
+      // the bug becomes visible without breaking the user request.
+      enforcePredicate: true,
+    });
+    const ordered = rank === null ? matches : applyRank(matches, rank);
+    return {
+      matches: ordered.map((m) => ({
+        code: m.code,
+        evidence: m.evidence as unknown as Record<string, unknown>,
+      })),
+      planSignature: signature,
+    };
+  }
+
+  // -----------------------------------------------------------------------
+  // interpreter path (fallback + the path for non-pushdownable plans)
+  // -----------------------------------------------------------------------
+
+  private async executeInterpreter(
+    plan: ScreenPlanAst,
+    asof: Date,
+    start: Date,
+    universe: readonly string[],
+    rank: RankSpecView | null,
+    signature: string,
+  ): Promise<ScreenRunResult> {
     const rowsByCode = await this.klineReader.bulkRangeForScreen(universe, start, asof);
-    const matchesRaw: Array<{ code: string; evidence: Evidence }> = [];
-    for (const code of universe) {
+    const matches = this.evaluateMatches(plan, universe, rowsByCode, rank, {
+      enforcePredicate: false,
+    });
+    const ordered = rank === null ? matches : applyRank(matches, rank);
+    return {
+      matches: ordered.map((m) => ({
+        code: m.code,
+        evidence: m.evidence as unknown as Record<string, unknown>,
+      })),
+      planSignature: signature,
+    };
+  }
+
+  private evaluateMatches(
+    plan: ScreenPlanAst,
+    codes: readonly string[],
+    rowsByCode: Record<string, readonly ScreenRow[]>,
+    rank: RankSpecView | null,
+    opts: { enforcePredicate: boolean },
+  ): Array<{ code: string; evidence: Evidence }> {
+    const out: Array<{ code: string; evidence: Evidence }> = [];
+    for (const code of codes) {
       const stockRows = rowsByCode[code] ?? [];
       if (stockRows.length === 0) continue;
-      if (!evaluatePredicate(stockRows, plan.expr)) continue;
+      // `enforcePredicate=false` is the legacy interpreter path: we
+      // evaluate the predicate to decide membership. `=true` is the
+      // pushdown path: SQL already filtered, but we still run the
+      // predicate to catch silent disagreement.
+      if (!evaluatePredicate(stockRows, plan.expr)) {
+        if (opts.enforcePredicate) {
+          this.logger.warn(
+            `screen_pushdown_disagreement code=${code} — SQL matched but interpreter rejected; dropping`,
+          );
+        }
+        continue;
+      }
       const evidence = buildEvidence(stockRows, plan.expr);
       const rankAttached: Evidence =
         rank === null
@@ -79,14 +202,14 @@ export class ScreenExecService {
               ...evidence,
               rank_metric: evidenceValue(evaluateScalar(stockRows, rank.metric)),
             };
-      matchesRaw.push({ code, evidence: rankAttached });
+      out.push({ code, evidence: rankAttached });
     }
-    const ordered = rank === null ? matchesRaw : applyRank(matchesRaw, rank);
-    return {
-      matches: ordered.map((m) => ({ code: m.code, evidence: m.evidence as unknown as Record<string, unknown> })),
-      planSignature: signature,
-    };
+    return out;
   }
+
+  // -----------------------------------------------------------------------
+  // helpers
+  // -----------------------------------------------------------------------
 
   private async resolveUniverse(plan: UniversePlanAst | null): Promise<string[]> {
     if (plan === null) {
@@ -94,6 +217,16 @@ export class ScreenExecService {
       return metas.map((m) => m.code);
     }
     return this.universeFilter.filterCodes(plan);
+  }
+
+  private connection(): Promise<DuckDBConnection> {
+    if (this.connPromise === null) {
+      this.connPromise = (async () => {
+        const inst = await DuckDBInstance.create(':memory:');
+        return inst.connect();
+      })();
+    }
+    return this.connPromise;
   }
 }
 
@@ -149,6 +282,13 @@ function applyRank(
     return out.slice(0, rank.topN);
   }
   return out;
+}
+
+function isoDate(d: Date): string {
+  const y = d.getUTCFullYear().toString().padStart(4, '0');
+  const m = (d.getUTCMonth() + 1).toString().padStart(2, '0');
+  const day = d.getUTCDate().toString().padStart(2, '0');
+  return `${y}-${m}-${day}`;
 }
 
 /** Used by ScreenRow consumers that need to materialise rows manually (tests). */

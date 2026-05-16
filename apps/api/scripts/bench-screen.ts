@@ -165,7 +165,7 @@ async function main(): Promise<void> {
   const klineReader = new KlineReaderService(klineStore);
   const metaAdapter = new LocalStockMetaAdapter(args.dataRoot);
   const universeFilter = new UniverseFilterService(metaAdapter);
-  const exec = new ScreenExecService(klineReader, metaAdapter, universeFilter);
+  const exec = new ScreenExecService(klineReader, metaAdapter, universeFilter, args.dataRoot);
 
   // Pick the freshest trade date across the loaded meta universe so we
   // exercise the real tail without hard-coding a probe code.
