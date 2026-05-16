@@ -3,8 +3,9 @@
 Persisted to ``data/stock_metas.parquet`` after each kline sync so the
 list-view payload doesn't recompute on every read (see
 ``docs/perf/storage-unify-rollout.md`` item 9). Trigger: NestJS
-``KlineWorker.process`` calls ``upsert_stock_metrics_for_code`` once
-the new bars are written, then this projector picks them up locally.
+``KlineWorker.process`` calls ``compute_stock_metrics_for_code`` to
+get a freshly projected row, then writes it via
+``LocalStockMetaWriterService`` — storage stays NestJS-owned.
 
 口径 single-source-of-truth still lives in
 :mod:`quant_core.domain.pure.derive_metrics` for the price-derived
@@ -89,8 +90,8 @@ def compute_metrics(meta: StockMeta, bars: Sequence[DailyBar]) -> StockMetrics:
             (including derived) is ``None`` and ``asof`` is ``None``.
 
     Returns:
-        Frozen :class:`StockMetrics` ready for
-        ``ParquetStockMetaRepo.upsert_metrics``.
+        Frozen :class:`StockMetrics` ready to be serialised by
+        ``ComputeStockMetricsFor{Code,Codes}Handler``.
     """
     if not bars:
         return StockMetrics(

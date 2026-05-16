@@ -75,8 +75,8 @@ from quant_rpc.ops.stock_meta_admin import (
     SyncFullHandler,
 )
 from quant_rpc.ops.stock_metrics import (
-    UpsertStockMetricsForCodeHandler,
-    UpsertStockMetricsForCodesHandler,
+    ComputeStockMetricsForCodeHandler,
+    ComputeStockMetricsForCodesHandler,
 )
 from quant_rpc.ops.stock_snapshot import ListStockSnapshotsHandler
 from quant_rpc.ops.trading_calendar import GetLatestTradeDayHandler
@@ -263,8 +263,8 @@ def main() -> int:
     registry.register(SyncFullHandler(sync_service))
     registry.register(EnrichOneHandler(sync_service))
     registry.register(SyncKlineForCodeHandler(kline_service))
-    registry.register(UpsertStockMetricsForCodeHandler(meta_repo, kline_repo, clock))
-    registry.register(UpsertStockMetricsForCodesHandler(meta_repo, kline_repo, clock))
+    registry.register(ComputeStockMetricsForCodeHandler(meta_repo, kline_repo))
+    registry.register(ComputeStockMetricsForCodesHandler(meta_repo, kline_repo))
     # Watch quotes route per market. yfinance is the default US backend
     # because East Money / Sina (AKShare's US upstreams) have been
     # IP-throttling us; Yahoo's IPs sit on a separate family. Override
