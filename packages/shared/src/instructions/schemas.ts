@@ -487,6 +487,30 @@ export const AgentConfirmArgsSchema = z
   .strict();
 export type AgentConfirmArgs = z.infer<typeof AgentConfirmArgsSchema>;
 
+/**
+ * `/agent` result — the trigger ack. The agent loop itself runs
+ * detached; the actual answer streams via the
+ * `instruction.agent.delta` socket frames keyed on `jobId`. The
+ * confirm-required / forbidden paths surface through the cell's
+ * error envelope (`InstructionDispatchError`).
+ */
+export const AgentResultSchema = z
+  .object({
+    jobId: z.string().uuid(),
+    maxToolCalls: z.number().int().positive(),
+  })
+  .strict();
+export type AgentResult = z.infer<typeof AgentResultSchema>;
+
+/** `/agent.confirm` result — trigger ack for resume. */
+export const AgentConfirmResultSchema = z
+  .object({
+    correlationId: z.string().min(1),
+    approve: z.boolean(),
+  })
+  .strict();
+export type AgentConfirmResult = z.infer<typeof AgentConfirmResultSchema>;
+
 export const WebSearchArgsSchema = z
   .object({
     q: z.string().min(1).max(500).describe('Search query — what to look up on the web'),

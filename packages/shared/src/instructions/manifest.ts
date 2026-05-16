@@ -35,6 +35,8 @@ import { InstructionOutputSchema } from './result.js';
 import {
   AgentArgsSchema,
   AgentConfirmArgsSchema,
+  AgentConfirmResultSchema,
+  AgentResultSchema,
   AnalyzeArgsSchema,
   AnalyzeSectorArgsSchema,
   CacheArgsSchema,
@@ -457,12 +459,16 @@ const ENTRIES = [
   {
     id: 'agent',
     group: 'agent',
-    mode: 'async',
+    // Trigger ack is sync (the small "▶ started" line). The actual agent
+    // loop runs detached and streams output via `instruction.agent.delta`
+    // socket frames.
+    mode: 'sync',
     supportedOn: ['fe', 'be'],
     summary: 'Open-ended agent conversation',
+    aliases: ['助手'],
     doubleConfirm: 'llm',
     argsSchema: AgentArgsSchema,
-    resultSchema: LegacyOutputSchema,
+    resultSchema: AgentResultSchema,
   },
   {
     id: 'agent.confirm',
@@ -471,7 +477,7 @@ const ENTRIES = [
     supportedOn: ['be'],
     summary: 'Confirm a queued agent action card',
     argsSchema: AgentConfirmArgsSchema,
-    resultSchema: LegacyOutputSchema,
+    resultSchema: AgentConfirmResultSchema,
   },
   {
     id: 'web.search',
