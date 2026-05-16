@@ -152,9 +152,7 @@ function pct(sorted: readonly number[], p: number): number {
 
 async function main(): Promise<void> {
   const args = parseArgs();
-  console.log(
-    `bench-screen: dataRoot=${args.dataRoot} warmup=${args.warmup} runs=${args.runs}`,
-  );
+  console.log(`bench-screen: dataRoot=${args.dataRoot} warmup=${args.warmup} runs=${args.runs}`);
 
   // The store joins `dataRoot + table` internally → data/kline.
   const klineStore = new DuckDBParquetTimeSeriesStore<KlineRow>({
@@ -203,9 +201,7 @@ async function main(): Promise<void> {
     samples.sort((a, b) => a - b);
     const p50 = pct(samples, 50);
     const p95 = pct(samples, 95);
-    console.log(
-      `[${c.label}] p50=${p50.toFixed(1)}ms p95=${p95.toFixed(1)}ms matches=${matches}`,
-    );
+    console.log(`[${c.label}] p50=${p50.toFixed(1)}ms p95=${p95.toFixed(1)}ms matches=${matches}`);
   }
 }
 

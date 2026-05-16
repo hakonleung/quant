@@ -1,5 +1,11 @@
 import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
-import type { RankSpecView, ScreenPlanAst, ScreenRunResult, Sector, UniversePlanAst } from '@quant/shared';
+import type {
+  RankSpecView,
+  ScreenPlanAst,
+  ScreenRunResult,
+  Sector,
+  UniversePlanAst,
+} from '@quant/shared';
 
 import { SectorsController } from '../../../src/modules/sectors/sectors.controller.js';
 import { SectorsService } from '../../../src/modules/sectors/sectors.service.js';
@@ -16,29 +22,29 @@ import type { RequestWithTraceId } from '../../../src/common/trace.middleware.js
 
 function fakeScreenExec(result: ScreenRunResult): ScreenExecService {
   return {
-    execute: async (): Promise<ScreenRunResult> => result,
+    execute: (): Promise<ScreenRunResult> => Promise.resolve(result),
   } as unknown as ScreenExecService;
 }
 
 interface RecordingExec {
   client: ScreenExecService;
-  calls: Array<{
+  calls: {
     plan: ScreenPlanAst;
     universe: UniversePlanAst | null;
     rank: RankSpecView | null;
-  }>;
+  }[];
 }
 
 function recordingScreenExec(result: ScreenRunResult): RecordingExec {
   const calls: RecordingExec['calls'] = [];
   const client = {
-    execute: async (
+    execute: (
       plan: ScreenPlanAst,
       universe: UniversePlanAst | null,
       rank: RankSpecView | null,
     ): Promise<ScreenRunResult> => {
       calls.push({ plan, universe, rank });
-      return result;
+      return Promise.resolve(result);
     },
   } as unknown as ScreenExecService;
   return { client, calls };

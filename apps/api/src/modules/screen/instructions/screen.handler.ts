@@ -4,10 +4,11 @@
  *   /screen "找昨日涨停今天回踩 ma5"
  *   /screen q="..." asof=2026-05-08
  *
- * Routes to `ScreenService.runNl` (Python `nl_screen` Flight op). LLM
- * translation + screen execution typically takes 5–15s, so the spec is
- * `mode: 'async'`: the IM listener acks immediately with a "queued"
- * card and pushes the matches once the worker finishes.
+ * Routes to `ScreenService.runNl` (NestJS-side LLM + in-process
+ * `ScreenExecService`). LLM translation + screen execution typically
+ * takes 5–15s, so the spec is `mode: 'async'`: the IM listener acks
+ * immediately with a "queued" card and pushes the matches once the
+ * worker finishes.
  *
  * Match table delegates to `StockListService.assembleRows({ kind: 'screen' })`.
  */

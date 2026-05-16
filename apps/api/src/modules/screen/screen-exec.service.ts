@@ -109,6 +109,29 @@ export class ScreenExecService {
     rank: RankSpecView | null,
     signature: string,
   ): Promise<ScreenRunResult> {
+    const matchedCodes = await this.runPushdownSql(plan, asof, start, universe);
+    if (matchedCodes.length === 0) {
+      return { matches: [], planSignature: signature };
+    }
+    const rowsByCode = await this.klineReader.bulkRangeForScreen(matchedCodes, start, asof);
+    const matches = this.evaluateMatches(plan, matchedCodes, rowsByCode, rank, {
+      // Trust SQL but enforce the interpreter as a parity guard; any
+      // disagreement is logged + dropped (see evaluateMatches).
+      enforcePredicate: true,
+    });
+    const ordered = rank === null ? matches : applyRank(matches, rank);
+    return {
+      matches: ordered.map((m) => ({ code: m.code, evidence: evidenceToWire(m.evidence) })),
+      planSignature: signature,
+    };
+  }
+
+  private async runPushdownSql(
+    plan: ScreenPlanAst,
+    asof: Date,
+    start: Date,
+    universe: readonly string[],
+  ): Promise<string[]> {
     const { sql } = compilePushdownSql({
       asof: isoDate(asof),
       start: isoDate(start),
@@ -120,29 +143,10 @@ export class ScreenExecService {
     const result = await conn.runAndReadAll(sql);
     const matchedCodes: string[] = [];
     for (const row of result.getRowObjects()) {
-      const code = (row as Record<string, unknown>)['code'];
-      if (typeof code === 'string') matchedCodes.push(code);
+      const code = readCodeField(row);
+      if (code !== null) matchedCodes.push(code);
     }
-    if (matchedCodes.length === 0) {
-      return { matches: [], planSignature: signature };
-    }
-    // Fetch kline for just the matched set so evidence build is cheap.
-    const rowsByCode = await this.klineReader.bulkRangeForScreen(matchedCodes, start, asof);
-    const matches = this.evaluateMatches(plan, matchedCodes, rowsByCode, rank, {
-      // We already filtered at SQL level; trust the SQL but guard against
-      // silent disagreement (parity-bug surface). When the interpreter
-      // rejects an SQL-matched code we drop it and log a warning so
-      // the bug becomes visible without breaking the user request.
-      enforcePredicate: true,
-    });
-    const ordered = rank === null ? matches : applyRank(matches, rank);
-    return {
-      matches: ordered.map((m) => ({
-        code: m.code,
-        evidence: m.evidence as unknown as Record<string, unknown>,
-      })),
-      planSignature: signature,
-    };
+    return matchedCodes;
   }
 
   // -----------------------------------------------------------------------
@@ -165,7 +169,7 @@ export class ScreenExecService {
     return {
       matches: ordered.map((m) => ({
         code: m.code,
-        evidence: m.evidence as unknown as Record<string, unknown>,
+        evidence: evidenceToWire(m.evidence),
       })),
       planSignature: signature,
     };
@@ -177,8 +181,8 @@ export class ScreenExecService {
     rowsByCode: Record<string, readonly ScreenRow[]>,
     rank: RankSpecView | null,
     opts: { enforcePredicate: boolean },
-  ): Array<{ code: string; evidence: Evidence }> {
-    const out: Array<{ code: string; evidence: Evidence }> = [];
+  ): { code: string; evidence: Evidence }[] {
+    const out: { code: string; evidence: Evidence }[] = [];
     for (const code of codes) {
       const stockRows = rowsByCode[code] ?? [];
       if (stockRows.length === 0) continue;
@@ -220,14 +224,38 @@ export class ScreenExecService {
   }
 
   private connection(): Promise<DuckDBConnection> {
-    if (this.connPromise === null) {
-      this.connPromise = (async () => {
-        const inst = await DuckDBInstance.create(':memory:');
-        return inst.connect();
-      })();
-    }
+    this.connPromise ??= (async () => {
+      const inst = await DuckDBInstance.create(':memory:');
+      return inst.connect();
+    })();
     return this.connPromise;
   }
+}
+
+/**
+ * Read the `code` field from a DuckDB row without an explicit type
+ * assertion. Returns null when the row shape is unexpected so callers
+ * can skip rather than throw.
+ */
+function readCodeField(row: unknown): string | null {
+  if (typeof row !== 'object' || row === null) return null;
+  if (!Object.prototype.hasOwnProperty.call(row, 'code')) return null;
+  const code = Reflect.get(row, 'code');
+  return typeof code === 'string' ? code : null;
+}
+
+/**
+ * Project an Evidence dict (typed) into the wire-format Record. Keeps
+ * the public schema honest without crossing the codebase's no-type-
+ * assertion rule.
+ */
+function evidenceToWire(ev: Evidence): Record<string, unknown> {
+  const out: Record<string, unknown> = {
+    window: ev.window,
+    metrics: ev.metrics,
+  };
+  if (ev['rank_metric'] !== undefined) out['rank_metric'] = ev['rank_metric'];
+  return out;
 }
 
 function parseAsof(iso: string): Date {
@@ -236,11 +264,9 @@ function parseAsof(iso: string): Date {
   const d = Number.parseInt(iso.slice(8, 10), 10);
   const ms = Date.UTC(y, m - 1, d);
   if (ms < KLINE_FLOOR_DATE_MS) {
-    throw new QuantError(
-      'DSL_INVALID',
-      `asof ${iso} precedes KLINE_FLOOR_DATE 2024-09-20`,
-      { asof: iso },
-    );
+    throw new QuantError('DSL_INVALID', `asof ${iso} precedes KLINE_FLOOR_DATE 2024-09-20`, {
+      asof: iso,
+    });
   }
   return new Date(ms);
 }
@@ -265,12 +291,12 @@ function scalarLookback(scalar: RankSpecView['metric']): number {
 }
 
 function applyRank(
-  matches: ReadonlyArray<{ code: string; evidence: Evidence }>,
+  matches: readonly { code: string; evidence: Evidence }[],
   rank: RankSpecView,
-): Array<{ code: string; evidence: Evidence }> {
-  const keyed: Array<{ key: number; entry: { code: string; evidence: Evidence } }> = [];
+): { code: string; evidence: Evidence }[] {
+  const keyed: { key: number; entry: { code: string; evidence: Evidence } }[] = [];
   for (const m of matches) {
-    const raw = m.evidence.rank_metric;
+    const raw = m.evidence['rank_metric'];
     if (raw === null || raw === undefined) continue;
     const parsed = Number.parseFloat(raw);
     if (!Number.isFinite(parsed)) continue;

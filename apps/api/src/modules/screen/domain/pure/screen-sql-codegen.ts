@@ -49,59 +49,54 @@ export function compilePushdownSql(input: CodegenInput): CodegenOutput {
   }
   const ctx = new CodegenCtx();
   const matchExpr = compilePredicate(input.predicate, ctx);
+  return { sql: assembleSql(input, ctx, matchExpr) };
+}
 
-  const rowExprs = ctx.rowExprs
-    .map((r) => `${r.expr} AS ${quoteIdent(r.alias)}`)
-    .join(',\n      ');
-
+function assembleSql(input: CodegenInput, ctx: CodegenCtx, matchExpr: string): string {
+  const rowExprs = ctx.rowExprs.map((r) => `${r.expr} AS ${quoteIdent(r.alias)}`).join(',\n      ');
   const consecutiveCtes = ctx.consecutiveBranches.map((b) => buildConsecutiveCte(b)).join(',\n');
   const consecutiveJoins = ctx.consecutiveBranches
     .map((b) => `LEFT JOIN ${b.cteName} ON ${b.cteName}.code = a.code`)
     .join('\n      ');
-
   const universeList = input.universe.map((c) => quoteLiteral(c)).join(', ');
   const klineSource = `read_parquet(${quoteLiteral(input.klineParquetGlob)})`;
-
   const consecutiveCteBlock = consecutiveCtes.length > 0 ? `,\n${consecutiveCtes}` : '';
-
-  return {
-    sql: `
-      WITH bars AS (
-        SELECT
-          code,
-          ts,
-          open_qfq,
-          high_qfq,
-          low_qfq,
-          close_qfq,
-          volume,
-          amount,
-          turnover_rate,
-          ma5,
-          ma10,
-          ma20,
-          ma60,
-          (close_qfq - LAG(close_qfq) OVER w_code) /
-            NULLIF(LAG(close_qfq) OVER w_code, 0) AS pct_chg_qfq,
-          COUNT(*) OVER w_code_unb AS bars_total,
-          -- rn_desc=1 marks the latest bar per code; the interpreter
-          -- evaluates the plan at rows[-1] regardless of asof.
-          ROW_NUMBER() OVER (PARTITION BY code ORDER BY ts DESC) AS rn_desc${rowExprs.length > 0 ? ',' : ''}
-      ${rowExprs}
-        FROM ${klineSource}
-        WHERE code IN (${universeList})
-          AND ts BETWEEN DATE ${quoteLiteral(input.start)} AND DATE ${quoteLiteral(input.asof)}
-        WINDOW
-          w_code AS (PARTITION BY code ORDER BY ts),
-          w_code_unb AS (PARTITION BY code ORDER BY ts ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
-      )${consecutiveCteBlock}
-      SELECT DISTINCT a.code
-      FROM bars AS a
-      ${consecutiveJoins}
-      WHERE a.rn_desc = 1
-        AND (${matchExpr});
-    `,
-  };
+  return `
+    WITH bars AS (
+      SELECT
+        code,
+        ts,
+        open_qfq,
+        high_qfq,
+        low_qfq,
+        close_qfq,
+        volume,
+        amount,
+        turnover_rate,
+        ma5,
+        ma10,
+        ma20,
+        ma60,
+        (close_qfq - LAG(close_qfq) OVER w_code) /
+          NULLIF(LAG(close_qfq) OVER w_code, 0) AS pct_chg_qfq,
+        COUNT(*) OVER w_code_unb AS bars_total,
+        -- rn_desc=1 marks the latest bar per code; the interpreter
+        -- evaluates the plan at rows[-1] regardless of asof.
+        ROW_NUMBER() OVER (PARTITION BY code ORDER BY ts DESC) AS rn_desc${rowExprs.length > 0 ? ',' : ''}
+    ${rowExprs}
+      FROM ${klineSource}
+      WHERE code IN (${universeList})
+        AND ts BETWEEN DATE ${quoteLiteral(input.start)} AND DATE ${quoteLiteral(input.asof)}
+      WINDOW
+        w_code AS (PARTITION BY code ORDER BY ts),
+        w_code_unb AS (PARTITION BY code ORDER BY ts ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
+    )${consecutiveCteBlock}
+    SELECT DISTINCT a.code
+    FROM bars AS a
+    ${consecutiveJoins}
+    WHERE a.rn_desc = 1
+      AND (${matchExpr});
+  `;
 }
 
 // ---------------------------------------------------------------------------
@@ -175,10 +170,7 @@ function compilePredicate(node: DslPredicate, ctx: CodegenCtx): string {
   }
 }
 
-function compileLogical(
-  node: Extract<DslPredicate, { kind: 'logical' }>,
-  ctx: CodegenCtx,
-): string {
+function compileLogical(node: Extract<DslPredicate, { kind: 'logical' }>, ctx: CodegenCtx): string {
   if (node.op === 'not') {
     const first = node.args[0];
     if (first === undefined) {
@@ -186,9 +178,9 @@ function compileLogical(
     }
     return `(NOT (${compilePredicate(first, ctx)}))`;
   }
-  const joined = node.args.map((a) => `(${compilePredicate(a, ctx)})`).join(
-    node.op === 'and' ? ' AND ' : ' OR ',
-  );
+  const joined = node.args
+    .map((a) => `(${compilePredicate(a, ctx)})`)
+    .join(node.op === 'and' ? ' AND ' : ' OR ');
   return joined.length > 0 ? joined : node.op === 'and' ? 'TRUE' : 'FALSE';
 }
 
@@ -201,10 +193,7 @@ function compileCompareAtAsof(
   return wrapCompare(lhs, node.op, rhs);
 }
 
-function compileForAll(
-  node: Extract<DslPredicate, { kind: 'for_all' }>,
-  ctx: CodegenCtx,
-): string {
+function compileForAll(node: Extract<DslPredicate, { kind: 'for_all' }>, ctx: CodegenCtx): string {
   const days = node.window.days;
   // Inner predicate is row-level (guaranteed by canPushdown). Build per-row
   // boolean as an int in the bars CTE so we can sum it over the window.
@@ -218,10 +207,7 @@ function compileForAll(
   return `(a.bars_total >= ${String(days)} AND a.${quoteIdent(sumAlias)} = ${String(days)})`;
 }
 
-function compileExists(
-  node: Extract<DslPredicate, { kind: 'exists' }>,
-  ctx: CodegenCtx,
-): string {
+function compileExists(node: Extract<DslPredicate, { kind: 'exists' }>, ctx: CodegenCtx): string {
   const days = node.window.days;
   const innerBool = compileInnerBool(node.predicate, ctx);
   const maxAlias = `exists_max_${String(ctx.nextId())}`;
@@ -271,24 +257,10 @@ function compileInnerBool(predicate: DslPredicate, ctx: CodegenCtx): string {
 
 function rowLevelBoolExpr(node: DslPredicate, ctx: CodegenCtx): string {
   switch (node.kind) {
-    case 'compare': {
-      const lhs = compileScalar(node.left, ctx, null);
-      const rhs = compileScalar(node.right, ctx, null);
-      return wrapCompare(lhs, node.op, rhs);
-    }
-    case 'logical': {
-      if (node.op === 'not') {
-        const first = node.args[0];
-        if (first === undefined) {
-          throw new QuantError('DSL_INVALID', "logical 'not' requires an arg", {});
-        }
-        return `(NOT (${rowLevelBoolExpr(first, ctx)}))`;
-      }
-      const joined = node.args
-        .map((a) => `(${rowLevelBoolExpr(a, ctx)})`)
-        .join(node.op === 'and' ? ' AND ' : ' OR ');
-      return joined.length > 0 ? joined : node.op === 'and' ? 'TRUE' : 'FALSE';
-    }
+    case 'compare':
+      return rowLevelCompareExpr(node, ctx);
+    case 'logical':
+      return rowLevelLogicalExpr(node, ctx);
     case 'for_all':
     case 'exists':
     case 'consecutive':
@@ -298,6 +270,32 @@ function rowLevelBoolExpr(node: DslPredicate, ctx: CodegenCtx): string {
         {},
       );
   }
+}
+
+function rowLevelCompareExpr(
+  node: Extract<DslPredicate, { kind: 'compare' }>,
+  ctx: CodegenCtx,
+): string {
+  const lhs = compileScalar(node.left, ctx, null);
+  const rhs = compileScalar(node.right, ctx, null);
+  return wrapCompare(lhs, node.op, rhs);
+}
+
+function rowLevelLogicalExpr(
+  node: Extract<DslPredicate, { kind: 'logical' }>,
+  ctx: CodegenCtx,
+): string {
+  if (node.op === 'not') {
+    const first = node.args[0];
+    if (first === undefined) {
+      throw new QuantError('DSL_INVALID', "logical 'not' requires an arg", {});
+    }
+    return `(NOT (${rowLevelBoolExpr(first, ctx)}))`;
+  }
+  const joined = node.args
+    .map((a) => `(${rowLevelBoolExpr(a, ctx)})`)
+    .join(node.op === 'and' ? ' AND ' : ' OR ');
+  return joined.length > 0 ? joined : node.op === 'and' ? 'TRUE' : 'FALSE';
 }
 
 /**
@@ -315,7 +313,9 @@ function compileScalar(node: DslScalar, ctx: CodegenCtx, tableAlias: string | nu
       if (!SCREEN_FIELD_SET.has(node.field)) {
         throw new QuantError('DSL_INVALID', `unknown screen field: ${node.field}`, {});
       }
-      return tableAlias === null ? quoteIdent(node.field) : `${tableAlias}.${quoteIdent(node.field)}`;
+      return tableAlias === null
+        ? quoteIdent(node.field)
+        : `${tableAlias}.${quoteIdent(node.field)}`;
     }
     case 'const':
       // Cast as DOUBLE for numeric ordering; parity tests will surface
@@ -383,11 +383,7 @@ function aggSqlFn(agg: string): string {
   }
 }
 
-function compilePeriodReturn(
-  days: number,
-  ctx: CodegenCtx,
-  tableAlias: string | null,
-): string {
+function compilePeriodReturn(days: number, ctx: CodegenCtx, tableAlias: string | null): string {
   const id = String(ctx.nextId());
   const alias = `period_return_${String(days)}_${id}`;
   // (close - close N bars ago) / close N bars ago; null if N-back bar

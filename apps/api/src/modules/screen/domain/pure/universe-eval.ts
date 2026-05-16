@@ -7,7 +7,12 @@
  * don't have to pre-normalise the meta rows.
  */
 
-import { QuantError, type StockMetaDto, type UniverseExpr, type UniversePlanAst } from '@quant/shared';
+import {
+  QuantError,
+  type StockMetaDto,
+  type UniverseExpr,
+  type UniversePlanAst,
+} from '@quant/shared';
 
 import { D } from '../../../../common/decimal.js';
 
@@ -90,7 +95,12 @@ function orderedCompare(op: 'gt' | 'lt' | 'gte' | 'lte', left: unknown, right: u
     throw new QuantError('EVALUATION_FAILED', 'ordered compare not supported on bool', {});
   }
   // Dates compare lexically as ISO strings already, or via getTime.
-  if (left instanceof Date || right instanceof Date || isIsoDateString(left) || isIsoDateString(right)) {
+  if (
+    left instanceof Date ||
+    right instanceof Date ||
+    isIsoDateString(left) ||
+    isIsoDateString(right)
+  ) {
     const l = coerceDate(left);
     const r = coerceDate(right);
     if (l === null || r === null) return false;
@@ -181,4 +191,3 @@ function coerceDate(value: unknown): Date | null {
   if (isIsoDateString(value)) return parseIsoDate(value);
   return null;
 }
-

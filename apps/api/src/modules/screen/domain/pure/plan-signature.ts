@@ -12,7 +12,13 @@
 
 import { createHash } from 'node:crypto';
 
-import { QuantError, type DslPredicate, type DslScalar, type RankSpecView, type ScreenPlanAst } from '@quant/shared';
+import {
+  QuantError,
+  type DslPredicate,
+  type DslScalar,
+  type RankSpecView,
+  type ScreenPlanAst,
+} from '@quant/shared';
 
 export function planSignature(plan: ScreenPlanAst, rank: RankSpecView | null = null): string {
   const payload: Record<string, unknown> = {

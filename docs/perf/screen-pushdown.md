@@ -11,6 +11,7 @@ Phase 2 把 screen DSL 执行从 Python 搬到 NestJS 进程内（commit `1d5f54
 - `ForAll` / `Exists` / `Consecutive` 递归对子窗口反复求值（最坏 O(days × inner)）
 
 Phase 2 已经消除了 Flight RPC hop，所以剩下的耗时主要是：
+
 1. DuckDB `read_parquet` 拿 universe 切片
 2. JS 解释器 + decimal.js 算术
 
@@ -28,6 +29,7 @@ Phase 2 已经消除了 Flight RPC hop，所以剩下的耗时主要是：
 | `consecutive 3d (volume > 1e7) + rank top-50` | 260.6  | 269.0  | 50      |
 
 观察：
+
 - 简单 row-level compare 已经 **77 ms**——大头是 DuckDB 读盘（~60 ms 估）+ 解释器（~15 ms）。
 - `Aggregate(mean, days=20)` 跳到 268 ms：解释器对每只 code 跑 20-step decimal.js 累加 × 5512 codes ≈ 110k 次 `Decimal.add`。
 - `Consecutive(min_len=3)` 是 250 ms，主要因为它对每个 i 都重算 `predicate(rows[:i+1])`——O(n²) 行为。
@@ -50,6 +52,7 @@ Phase 2 已经消除了 Flight RPC hop，所以剩下的耗时主要是：
 Codegen 量级估计 600–900 LOC TS（含递归 walker、参数绑定、子查询 CTE 组装）。
 
 **预期收益**（基于上面观察重新校准）：
+
 - 简单 compare: 77 ms → ~70 ms（基本不变，已经是读盘 bound）
 - aggregate(mean, 20): 268 ms → ~80–120 ms（**2–3× 提升**）
 - for_all 5d: 112 ms → ~80 ms（小幅）
@@ -79,8 +82,8 @@ Codegen 量级估计 600–900 LOC TS（含递归 walker、参数绑定、子查
 
 同一台机器,同一份 `data/`(5512 codes),`asof=2026-05-15`,N=10 measured + 3 warmup:
 
-| Plan                                          | baseline p50 / p95 | pushdown p50 / p95 | speedup | matches (parity) |
-| --------------------------------------------- | ------------------ | ------------------ | ------- | ---------------- |
+| Plan                                          | baseline p50 / p95 | pushdown p50 / p95 | speedup  | matches (parity) |
+| --------------------------------------------- | ------------------ | ------------------ | -------- | ---------------- |
 | `simple-compare (close_qfq > 50)`             | 77.3 / 81.3        | 39.1 / 39.6        | **2.0×** | 847 ↔ 847        |
 | `aggregate (mean(close_qfq, 20) > 30)`        | 268.3 / 268.6      | 116.9 / 134.0      | **2.3×** | 1562 ↔ 1562      |
 | `for_all 5d (close_qfq > ma5)`                | 112.5 / 112.7      | 54.0 / 55.1        | **2.1×** | 1075 ↔ 1075      |

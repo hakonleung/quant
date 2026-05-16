@@ -175,11 +175,7 @@ export class LocalStockMetaWriterService {
     const valuesSql = rows.map((r) => this.rowToValues(r)).join(',\n        ');
     // Column list for the new-metrics CTE must exactly match `rowToValues`
     // order so DuckDB binds positionally.
-    const newCols = [
-      'code',
-      'metrics_asof',
-      ...METRIC_DECIMAL_COLUMNS,
-    ];
+    const newCols = ['code', 'metrics_asof', ...METRIC_DECIMAL_COLUMNS];
     const newColList = newCols.map(quoteIdent).join(', ');
     // Build the SELECT that rewrites the parquet: keep every preserved
     // column verbatim; replace each metrics_* column with the new value
@@ -247,13 +243,12 @@ export class LocalStockMetaWriterService {
     // Inserted row → o is NULL for everything, including metric columns
     // (DuckDB FULL OUTER JOIN), so those land NULL automatically.
     const selectMeta = newCols
-      .map((c) => `CASE WHEN n.code IS NOT NULL THEN n.${quoteIdent(c)} ELSE o.${quoteIdent(c)} END AS ${quoteIdent(c)}`)
+      .map(
+        (c) =>
+          `CASE WHEN n.code IS NOT NULL THEN n.${quoteIdent(c)} ELSE o.${quoteIdent(c)} END AS ${quoteIdent(c)}`,
+      )
       .join(',\n      ');
-    const preservedMetrics = [
-      'metrics_asof',
-      'metrics_updated_at',
-      ...METRIC_DECIMAL_COLUMNS,
-    ]
+    const preservedMetrics = ['metrics_asof', 'metrics_updated_at', ...METRIC_DECIMAL_COLUMNS]
       .map((c) => `o.${quoteIdent(c)} AS ${quoteIdent(c)}`)
       .join(', ');
     return `

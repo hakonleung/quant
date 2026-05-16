@@ -7,17 +7,17 @@
 
 After three rounds of follow-on work in May 2026, the architecture is:
 
-| Resource                              | Who writes        | Who reads                                |
-| ------------------------------------- | ----------------- | ---------------------------------------- |
-| `data/kline/<prefix>.parquet`         | **NestJS only**   | NestJS + Python (read-only repo)         |
-| `data/stock_metas.parquet`            | **NestJS only**   | NestJS + Python (read-only repo)         |
-| `data/blacklist.parquet`              | NestJS            | NestJS                                   |
-| `data/public_sectors.parquet`         | NestJS            | NestJS                                   |
-| `data/sentiment_{market,stock}.parquet` | NestJS          | NestJS                                   |
-| `data/ta_cache.parquet`               | NestJS            | NestJS                                   |
-| `data/all_users.parquet`              | NestJS            | NestJS                                   |
-| `data/users/{uid}/**`                 | NestJS            | NestJS                                   |
-| `data/watch/**`                       | NestJS            | NestJS                                   |
+| Resource                                | Who writes      | Who reads                        |
+| --------------------------------------- | --------------- | -------------------------------- |
+| `data/kline/<prefix>.parquet`           | **NestJS only** | NestJS + Python (read-only repo) |
+| `data/stock_metas.parquet`              | **NestJS only** | NestJS + Python (read-only repo) |
+| `data/blacklist.parquet`                | NestJS          | NestJS                           |
+| `data/public_sectors.parquet`           | NestJS          | NestJS                           |
+| `data/sentiment_{market,stock}.parquet` | NestJS          | NestJS                           |
+| `data/ta_cache.parquet`                 | NestJS          | NestJS                           |
+| `data/all_users.parquet`                | NestJS          | NestJS                           |
+| `data/users/{uid}/**`                   | NestJS          | NestJS                           |
+| `data/watch/**`                         | NestJS          | NestJS                           |
 
 **No production code path in `services/py/` writes parquet any more.**
 Python repos (`FlatPrefixKlineRepo`, `ParquetStockMetaRepo`) are
@@ -41,6 +41,7 @@ storage right now.
 ## Phase-by-phase summary
 
 ### Phase 1 — kline read-side, snapshot composition, perf optimisations
+
 - Snapshot row assembly moved out of Python: NestJS reads meta from
   the local parquet (`LocalStockMetaAdapter`) and kline from
   `KlineReaderService`, composing `StockListRow[]` server-side.
@@ -50,6 +51,7 @@ storage right now.
   `lastNBulk` cached with a 60s SWR window keyed by `n`.
 
 ### Phase 2 — metrics-block writes
+
 - Python's `upsert_stock_metrics_for_code{,s}` Flight ops were
   renamed to `compute_*` and now return the freshly projected row
   via Arrow without persisting.
@@ -58,6 +60,7 @@ storage right now.
   cache is invalidated after every successful write.
 
 ### Phase 3 — meta-row writes
+
 - The remaining four Flight ops (`sync_stock_meta_full`,
   `enrich_stock_meta_for_code`, `bulk_sync_financials`,
   `enrich_financials_for_code`) stop persisting. Each returns the
@@ -73,6 +76,7 @@ storage right now.
   gone.
 
 ### Phase 4 — final cleanups (this commit)
+
 - `find_stale_financials` moved into NestJS's `CacheInspector` (pure
   filter logic, not a numerical algorithm) — one fewer Flight
   round-trip per cron tick.

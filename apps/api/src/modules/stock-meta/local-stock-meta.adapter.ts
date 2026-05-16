@@ -302,9 +302,7 @@ function coerceDate(value: unknown, field: string): Date {
 function parseQuarterlies(value: unknown): readonly QuarterlyFinancials[] {
   if (value === undefined || value === null || value === '') return [];
   if (typeof value !== 'string') {
-    throw new Error(
-      `local-stock-meta: quarterlies_json must be string, got ${typeof value}`,
-    );
+    throw new Error(`local-stock-meta: quarterlies_json must be string, got ${typeof value}`);
   }
   const raw: unknown = JSON.parse(value);
   if (!Array.isArray(raw)) {

@@ -116,12 +116,8 @@ export class ScreenService {
     rank: RankSpecView | null | undefined,
     traceId: string,
   ): Promise<ScreenRunResult> {
-    this.logger.log(`screen_run_start trace_id=${traceId}`);
-    const result = await this.exec.execute(
-      screenPlan,
-      universePlan ?? null,
-      rank ?? null,
-    );
+    this.logger.log(`screen_exec_start trace_id=${traceId}`);
+    const result = await this.exec.execute(screenPlan, universePlan ?? null, rank ?? null);
     // Validate to lock the public contract — same parse the Flight path used.
     return ScreenRunResultSchema.parse(result);
   }

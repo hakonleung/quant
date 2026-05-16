@@ -12,10 +12,7 @@ import {
   type ScreenRow,
 } from '../../../../../src/modules/screen/domain/pure/screen-eval.js';
 
-function row(
-  trade_date: string,
-  fields: Partial<ScreenRow> = {},
-): ScreenRow {
+function row(trade_date: string, fields: Partial<ScreenRow> = {}): ScreenRow {
   return {
     trade_date,
     open_qfq: 10,
@@ -187,8 +184,22 @@ describe('evaluateScalar — Aggregate', () => {
     expect(evaluateScalar(rows, s)?.toString()).toBe('600');
   });
   it('min / max over the window', () => {
-    expect(evaluateScalar(rows, { kind: 'agg', agg: 'min', field: 'volume', window: { days: 3 } })?.toString()).toBe('100');
-    expect(evaluateScalar(rows, { kind: 'agg', agg: 'max', field: 'volume', window: { days: 3 } })?.toString()).toBe('300');
+    expect(
+      evaluateScalar(rows, {
+        kind: 'agg',
+        agg: 'min',
+        field: 'volume',
+        window: { days: 3 },
+      })?.toString(),
+    ).toBe('100');
+    expect(
+      evaluateScalar(rows, {
+        kind: 'agg',
+        agg: 'max',
+        field: 'volume',
+        window: { days: 3 },
+      })?.toString(),
+    ).toBe('300');
   });
   it('count includes only non-null bars', () => {
     const sparse = [
@@ -197,7 +208,12 @@ describe('evaluateScalar — Aggregate', () => {
       row('2026-01-03', { ma60: 13 }),
     ];
     expect(
-      evaluateScalar(sparse, { kind: 'agg', agg: 'count', field: 'ma60', window: { days: 3 } })?.toString(),
+      evaluateScalar(sparse, {
+        kind: 'agg',
+        agg: 'count',
+        field: 'ma60',
+        window: { days: 3 },
+      })?.toString(),
     ).toBe('2');
   });
   it('insufficient rows → null', () => {

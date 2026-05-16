@@ -12,9 +12,7 @@ import { evaluateUniverse } from './domain/pure/universe-eval.js';
 
 @Injectable()
 export class UniverseFilterService {
-  constructor(
-    @Inject(LocalStockMetaAdapter) private readonly metaAdapter: LocalStockMetaAdapter,
-  ) {}
+  constructor(@Inject(LocalStockMetaAdapter) private readonly metaAdapter: LocalStockMetaAdapter) {}
 
   async filterCodes(plan: UniversePlanAst): Promise<string[]> {
     const metas = await this.metaAdapter.listAll();

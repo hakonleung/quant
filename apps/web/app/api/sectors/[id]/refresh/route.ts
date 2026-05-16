@@ -1,7 +1,8 @@
 /**
  * BFF: POST `/api/sectors/:id/refresh` → forward to NestJS.
- * Re-runs the sector's saved DSL via Python `screen_run` and returns
- * the refreshed sector (with new codes / evidence / lastScreenedAt).
+ * Re-runs the sector's saved DSL via NestJS's in-process screen
+ * executor and returns the refreshed sector (with new codes /
+ * evidence / lastScreenedAt).
  */
 
 import { TRACE_HEADER, SectorSchema } from '@quant/shared';

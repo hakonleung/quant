@@ -1,13 +1,10 @@
 /**
  * 中文 NL → 筛选 DSL 翻译 system prompt。
  *
- * 内容与 Python `services/py/quant_core/prompts/nl_to_dsl.py` 严格对齐 —
- * 同一份 LLM 行为合同，只换了宿主进程。任何更新双方同步。
- *
  * 输出 JSON 顶层字段：`screen_plan` / `universe_plan` / `rank` / `warnings`，
- * 节点格式仍然使用 op-tagged 形式（`{op: 'gt', left, right}`）；NestJS 端
- * 的 `op-to-kind` 转换器再把它翻译成 wire-format（`{kind: 'compare', ...}`）
- * 喂给 Python `screen_run` op。
+ * 节点格式使用 op-tagged 形式（`{op: 'gt', left, right}`）；NestJS 端
+ * 的 `op-to-kind` 转换器再把它翻译成 wire-format（`{kind: 'compare', ...}`），
+ * 进程内交给 `ScreenExecService` 执行。
  */
 
 const SCREEN_FIELDS = [

@@ -108,9 +108,10 @@ function toScreenRows(bars: readonly SeedBar[]): Record<string, readonly ScreenR
   for (const b of bars) {
     const bucket = out[b.code];
     const prev = bucket?.[bucket.length - 1];
-    const pctChg = prev !== undefined && prev.close_qfq > 0
-      ? (b.close_qfq - prev.close_qfq) / prev.close_qfq
-      : null;
+    const pctChg =
+      prev !== undefined && prev.close_qfq > 0
+        ? (b.close_qfq - prev.close_qfq) / prev.close_qfq
+        : null;
     const row: ScreenRow = {
       trade_date: b.trade_date,
       open_qfq: b.open_qfq,
@@ -132,7 +133,11 @@ function toScreenRows(bars: readonly SeedBar[]): Record<string, readonly ScreenR
   return out;
 }
 
-async function writeParquet(conn: DuckDBConnection, path: string, bars: readonly SeedBar[]): Promise<void> {
+async function writeParquet(
+  conn: DuckDBConnection,
+  path: string,
+  bars: readonly SeedBar[],
+): Promise<void> {
   await conn.run(`
     CREATE TABLE seed (
       code VARCHAR, ts DATE,
@@ -141,10 +146,17 @@ async function writeParquet(conn: DuckDBConnection, path: string, bars: readonly
       ma5 DOUBLE, ma10 DOUBLE, ma20 DOUBLE, ma60 DOUBLE
     );
   `);
-  const rowSqls = bars.map(
-    (b) =>
-      `('${b.code}', DATE '${b.trade_date}', ${b.open_qfq}, ${b.high_qfq}, ${b.low_qfq}, ${b.close_qfq}, ${b.volume}, ${b.amount}, ${b.turnover_rate}, ${b.ma5 === null ? 'NULL' : String(b.ma5)}, NULL, NULL, NULL)`,
-  );
+  const rowSqls = bars.map((b) => {
+    const o = String(b.open_qfq);
+    const h = String(b.high_qfq);
+    const l = String(b.low_qfq);
+    const c = String(b.close_qfq);
+    const v = String(b.volume);
+    const a = String(b.amount);
+    const t = String(b.turnover_rate);
+    const m5 = b.ma5 === null ? 'NULL' : String(b.ma5);
+    return `('${b.code}', DATE '${b.trade_date}', ${o}, ${h}, ${l}, ${c}, ${v}, ${a}, ${t}, ${m5}, NULL, NULL, NULL)`;
+  });
   await conn.run(`INSERT INTO seed VALUES ${rowSqls.join(',\n')};`);
   await conn.run(`COPY seed TO '${path}' (FORMAT PARQUET);`);
   await conn.run('DROP TABLE seed;');

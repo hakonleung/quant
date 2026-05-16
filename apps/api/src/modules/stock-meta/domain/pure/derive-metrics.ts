@@ -143,10 +143,7 @@ function peDynamicCompute(
  * periods; fewer quarters / negative prior TTM / non-positive growth
  * propagate to ``null``.
  */
-function pegCompute(
-  quarters: readonly QuarterlyFinancials[],
-  peTtm: Dec | null,
-): Dec | null {
+function pegCompute(quarters: readonly QuarterlyFinancials[], peTtm: Dec | null): Dec | null {
   if (peTtm === null || quarters.length < 8) return null;
   const recent = sumNetProfit(quarters, -4, undefined);
   const prior = sumNetProfit(quarters, -8, -4);

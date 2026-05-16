@@ -63,7 +63,9 @@ describe('compilePushdownSql', () => {
       left: { kind: 'agg', agg: 'mean', field: 'close_qfq', window: { days: 20 } },
       right: { kind: 'const', value: '30' },
     });
-    expect(sql).toMatch(/AVG\("close_qfq"\) OVER \(PARTITION BY code ORDER BY ts ROWS 19 PRECEDING\)/);
+    expect(sql).toMatch(
+      /AVG\("close_qfq"\) OVER \(PARTITION BY code ORDER BY ts ROWS 19 PRECEDING\)/,
+    );
     // Outer gate: window must hold at least `days` (=20) rows.
     expect(sql).toMatch(/COUNT\(\*\) OVER[^>]*>= 20/);
   });
@@ -104,7 +106,9 @@ describe('compilePushdownSql', () => {
         right: { kind: 'field', field: 'ma5' },
       },
     });
-    expect(sql).toMatch(/SUM\("pred_\d+"\) OVER \(PARTITION BY code ORDER BY ts ROWS 4 PRECEDING\)/);
+    expect(sql).toMatch(
+      /SUM\("pred_\d+"\) OVER \(PARTITION BY code ORDER BY ts ROWS 4 PRECEDING\)/,
+    );
     expect(sql).toContain('a.bars_total >= 5');
     expect(sql).toMatch(/a\."forall_sum_\d+" = 5/);
   });
@@ -120,7 +124,9 @@ describe('compilePushdownSql', () => {
         right: { kind: 'const', value: '10000000' },
       },
     });
-    expect(sql).toMatch(/MAX\("pred_\d+"\) OVER \(PARTITION BY code ORDER BY ts ROWS 2 PRECEDING\)/);
+    expect(sql).toMatch(
+      /MAX\("pred_\d+"\) OVER \(PARTITION BY code ORDER BY ts ROWS 2 PRECEDING\)/,
+    );
     expect(sql).toMatch(/a\."exists_max_\d+" = 1/);
   });
 

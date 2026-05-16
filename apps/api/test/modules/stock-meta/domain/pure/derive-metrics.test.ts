@@ -251,10 +251,7 @@ describe('deriveMetrics — precision regression', () => {
     // Float-inexact price (50.05) × large share count must not drift.
     // decimal.js strips trailing zeros (Py `Decimal` keeps the
     // contextual scale), so compare numerically rather than by string.
-    const d = deriveMetrics(
-      meta({ total_share: '8134600000', float_share: null }),
-      new D('50.05'),
-    );
+    const d = deriveMetrics(meta({ total_share: '8134600000', float_share: null }), new D('50.05'));
     const mktCap = d.mkt_cap;
     if (mktCap === null) throw new Error('mkt_cap unexpectedly null');
     expect(mktCap.eq(new D('407136730000.00'))).toBe(true);
