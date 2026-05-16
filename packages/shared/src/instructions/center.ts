@@ -309,7 +309,19 @@ export class InstructionCenter<
     raw: string,
     ctx: E['ctx'],
     host: E['host'],
-    options: { readonly fallbackRenderer?: (error: InstructionError) => E['output'] } = {},
+    options: {
+      readonly fallbackRenderer?: (error: InstructionError) => E['output'];
+      /**
+       * Fires after parse + handler resolve, before renderer runs. Hosts
+       * use this to trigger side effects keyed on the resolved id —
+       * e.g. the FE shell fans out manifest-declared `revalidate`
+       * scopes when `envelope.ok === true`.
+       */
+      readonly onResolved?: (
+        id: Exclude<AllInstructionIds, X>,
+        envelope: InstructionEnvelope<unknown>,
+      ) => void;
+    } = {},
   ): Promise<E['output']> {
     let id: Exclude<AllInstructionIds, X>;
     let argv: ParsedArgv;
@@ -333,14 +345,16 @@ export class InstructionCenter<
       throw err;
     }
 
+    let envelope: InstructionEnvelope<ResultOf<typeof id>>;
     try {
       const args = coerceArgs(id as AllInstructionIds, argv) as ArgsOf<typeof id>;
       const data = await this.cfg[id].handler(args, ctx);
-      return this.cfg[id].renderer({ ok: true, data }, host);
+      envelope = { ok: true, data };
     } catch (err) {
-      const error = toInstructionError(err);
-      return this.cfg[id].renderer({ ok: false, error }, host);
+      envelope = { ok: false, error: toInstructionError(err) };
     }
+    options.onResolved?.(id, envelope);
+    return this.cfg[id].renderer(envelope, host);
   }
 
   private stripPrefix(raw: string): string {

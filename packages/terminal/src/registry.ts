@@ -20,28 +20,14 @@ export interface UiStoreShim {
 }
 
 /**
- * Cross-cache invalidation scopes the bridge maps to react-query keys
- * (and any other client-side state stores). Commands and the live
- * runner call `ctx.stores.revalidate(scope)` after a successful write
- * so the rest of the UI reflects the change without a manual refresh.
- *
- *   meta       — stock metadata: list, single rows, industry tags
- *   kline      — kline series: single, bulk, derived snapshots
- *   sentiment  — analyze.one + analyze.many caches
- *   ta         — analyze.ta cache (technical analysis, beta)
- *   sectors    — sector list (zustand-backed)
- *   watch      — watch tasks (mostly SSE-driven; included for symmetry)
- *   all        — everything above
+ * Cross-cache invalidation scopes. Re-exported from `@quant/shared`
+ * so the manifest entries (where each instruction declares its
+ * `revalidate` scopes) and the runtime hosts share a single union.
+ * The FE shell fans out `ctx.stores.revalidate(scope)` after a
+ * successful `feCenter.dispatch(...)`.
  */
-export type RevalidateScope =
-  | 'meta'
-  | 'kline'
-  | 'sentiment'
-  | 'ta'
-  | 'sectors'
-  | 'watch'
-  | 'ledger'
-  | 'all';
+export type { RevalidateScope } from '@quant/shared';
+import type { RevalidateScope } from '@quant/shared';
 
 export interface CommandStores {
   readonly ui: UiStoreShim;

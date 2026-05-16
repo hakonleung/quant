@@ -99,6 +99,31 @@ export type CommandSide = 'fe' | 'be';
 
 export type CommandMode = 'sync' | 'async';
 
+/**
+ * Named FE cache scopes invalidated by an instruction's success path.
+ * Declared on the manifest entry so the FE shell (after a successful
+ * `feCenter.dispatch(...)`) can fan out one or more `revalidate(scope)`
+ * calls without each cell having to remember.
+ *
+ *   - meta       stock metadata: list, single rows, industry tags
+ *   - kline      kline series: single, bulk, derived snapshots
+ *   - sentiment  analyze.one + analyze.many caches
+ *   - ta         analyze.ta cache (technical analysis)
+ *   - sectors    sector list (zustand-backed)
+ *   - watch      watch tasks (mostly SSE-driven; included for symmetry)
+ *   - ledger     ledger entries + analysis
+ *   - all        every scope above
+ */
+export type RevalidateScope =
+  | 'meta'
+  | 'kline'
+  | 'sentiment'
+  | 'ta'
+  | 'sectors'
+  | 'watch'
+  | 'ledger'
+  | 'all';
+
 export type CommandGroup =
   | 'system'
   | 'market'
@@ -164,6 +189,15 @@ export interface CommandManifestEntry {
    * strongly-typed schema (e.g. `UsrResultSchema`).
    */
   readonly resultSchema: z.ZodTypeAny;
+  /**
+   * FE cache scopes invalidated after a successful dispatch. The FE
+   * shell fires `revalidate(scope)` for each entry once `feCenter`
+   * returns ok. BE ignores this field. Reads should leave it empty;
+   * writes list every scope whose data the instruction touches. Use
+   * `['all']` only when the change is broad enough that fine-grained
+   * scopes don't help.
+   */
+  readonly revalidate?: readonly RevalidateScope[];
   /**
    * @deprecated Mapped-type coverage on `InstructionCenter` already
    * enforces per-side cell presence at compile time. This field stays
@@ -246,6 +280,7 @@ const ENTRIES = [
     summary: 'Trigger the unified daily scan (meta + kline + blacklist + sectors)',
     aliases: ['更新'],
     doubleConfirm: 'destructive',
+    revalidate: ['all'],
     argsSchema: UpdateArgsSchema,
     resultSchema: UpdateResultSchema,
   },
@@ -291,6 +326,7 @@ const ENTRIES = [
     summary: 'Mark a sector as published',
     aliases: ['发布板块', '公开板块'],
     doubleConfirm: 'destructive',
+    revalidate: ['sectors'],
     argsSchema: SectorPublishArgsSchema,
     resultSchema: SectorAckResultSchema,
   },
@@ -302,6 +338,7 @@ const ENTRIES = [
     summary: 'Mark a sector as unpublished',
     aliases: ['取消发布板块', '下架板块'],
     doubleConfirm: 'destructive',
+    revalidate: ['sectors'],
     argsSchema: SectorUnpublishArgsSchema,
     resultSchema: SectorAckResultSchema,
   },
@@ -312,6 +349,7 @@ const ENTRIES = [
     supportedOn: ['be'],
     summary: 'Recompute a dynamic sector',
     doubleConfirm: 'llm',
+    revalidate: ['sectors'],
     argsSchema: SectorRefreshArgsSchema,
     resultSchema: LegacyOutputSchema,
   },
@@ -323,6 +361,7 @@ const ENTRIES = [
     summary: 'Delete a sector',
     aliases: ['删除板块', '移除板块'],
     doubleConfirm: 'destructive',
+    revalidate: ['sectors'],
     argsSchema: SectorRmArgsSchema,
     resultSchema: SectorAckResultSchema,
   },
@@ -345,6 +384,7 @@ const ENTRIES = [
     supportedOn: ['be'],
     summary: 'Add a watch task',
     aliases: ['添加自选', '加自选', '添加预警'],
+    revalidate: ['watch'],
     argsSchema: WatchAddArgsSchema,
     resultSchema: WatchAddResultSchema,
   },
@@ -356,6 +396,7 @@ const ENTRIES = [
     summary: 'Remove a watch task',
     aliases: ['删除自选', '移除自选', '删除预警'],
     doubleConfirm: 'destructive',
+    revalidate: ['watch'],
     argsSchema: WatchRemoveArgsSchema,
     resultSchema: WatchRemoveResultSchema,
   },
@@ -366,6 +407,7 @@ const ENTRIES = [
     supportedOn: ['be'],
     summary: 'Manage watch groups',
     aliases: ['暂停自选', '恢复自选', '盯盘开关'],
+    revalidate: ['watch'],
     argsSchema: WatchGroupArgsSchema,
     resultSchema: WatchGroupResultSchema,
   },
@@ -380,6 +422,7 @@ const ENTRIES = [
     aliases: ['情绪分析', '舆情', '分析'],
     doubleConfirm: 'llm',
     imGate: true,
+    revalidate: ['sentiment'],
     argsSchema: AnalyzeArgsSchema,
     resultSchema: SentimentSchema,
   },
@@ -390,6 +433,7 @@ const ENTRIES = [
     supportedOn: ['be'],
     summary: 'Sentiment analysis aggregated across a sector',
     doubleConfirm: 'llm',
+    revalidate: ['sentiment'],
     argsSchema: AnalyzeSectorArgsSchema,
     resultSchema: LegacyOutputSchema,
   },
@@ -402,6 +446,7 @@ const ENTRIES = [
     aliases: ['技术', '走势', '技分'],
     doubleConfirm: 'llm',
     imGate: true,
+    revalidate: ['ta'],
     argsSchema: TaArgsSchema,
     resultSchema: TaResultSchema,
   },
@@ -414,6 +459,7 @@ const ENTRIES = [
     aliases: ['板块技术', '板块走势', '板块技分'],
     doubleConfirm: 'llm',
     imGate: true,
+    revalidate: ['ta'],
     argsSchema: TaSectorArgsSchema,
     resultSchema: TaSectorResultSchema,
   },
@@ -451,6 +497,7 @@ const ENTRIES = [
     summary: 'LLM-assisted ledger analysis',
     aliases: ['复盘', '账本复盘', '账本分析'],
     doubleConfirm: 'llm',
+    revalidate: ['ledger'],
     argsSchema: LedgerAnalyzeArgsSchema,
     resultSchema: LedgerAnalyzeResultSchema,
   },
