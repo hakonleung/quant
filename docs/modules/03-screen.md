@@ -19,7 +19,7 @@
 | Universe filter | `apps/api/src/modules/screen/universe-filter.service.ts`                                             | 从 `LocalStockMetaAdapter` 拉全市场 meta，过 `evaluateUniverse`，返回排序代码列表。                                     |
 | Executor        | `apps/api/src/modules/screen/screen-exec.service.ts`                                                 | 编排：summarise → universe 解析 → `KlineReaderService.bulkRangeForScreen` → per-code 解释器 → evidence + rank。         |
 | KlineReader     | `apps/api/src/modules/kline/kline-reader.service.ts:bulkRangeForScreen`                              | DuckDB read 后合成 `pct_chg_qfq`；返回 `Record<code, ScreenRow[]>`。                                                    |
-| NL2DSL          | `apps/api/src/modules/screen/nl-to-dsl.service.ts` + `prompts/nl-to-dsl.prompt.ts` + `op-to-kind.ts` | NestJS 调 `LlmService.completeJson(scope='screen')`；op-tagged → kind-tagged 校验；单次重试。                           |
+| NL2DSL          | `apps/api/src/modules/screen/nl-to-dsl.service.ts` + `prompts/nl-to-dsl.prompt.ts` + `op-to-kind.ts` | NestJS 调 `LlmService.completeJson(scope='screen')` 强制 `response_format=json_object` + 单行 minified；op-tagged → kind-tagged 校验。**不重试**，失败抛 `NL_TRANSLATION_FAILED`。 |
 | API             | `apps/api/src/modules/screen/`（含 `@CurrentUser` 用于 LLM ledger 计费）                             | `POST /api/screen/nl2dsl`（NL→DSL）、`POST /api/screen/run`（执行 DSL）、`POST /api/screen/nl`（合并）                  |
 | Web             | `feat-scr-nl`（自然语言入口）、`feat-scr-dsl`（DSL 编辑器） + `app/api/screen/{nl2dsl,run}/route.ts` | BFF 双路代理；编辑后的 plan 重跑可跳过 LLM                                                                              |
 

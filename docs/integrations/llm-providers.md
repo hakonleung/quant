@@ -17,7 +17,7 @@ Python 进程现已**完全无 LLM**：`services/py/quant_io/llm/` + `quant_core
 
 | 文件                                   | 说明                                                                                                  |
 | -------------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| `llm.service.ts`                       | 统一入口；`chatWithTools` / `chatStreamFinalize` / `completeJson`；按 scope 解析 provider + 写 ledger |
+| `llm.service.ts`                       | 统一入口；`chatWithTools` / `chatStreamFinalize` / `completeJson` / `completeWithWebSearch` / `completeJsonWithWebSearch`；按 scope 解析 provider + 写 ledger |
 | `llm.config.ts`                        | env loader：默认 `LLM_*` + 可选 `AGENT_LLM_*` 覆盖                                                    |
 | `providers.ts`                         | 静态 catalog（Qwen / DeepSeek / Moonshot），含 `webSearchKind` + 每千 token CNY 单价                  |
 | `adapters/openai-compatible.client.ts` | `openai` SDK 包装，三种调用形式 + tool-use + 流式                                                     |
@@ -41,7 +41,7 @@ Python 进程现已**完全无 LLM**：`services/py/quant_io/llm/` + `quant_core
 
 ## 调用规约
 
-- **结构化输出**：`response_format: 'json_object'`；NestJS 端的消费者各自做 zod / 自定义解码 + 单次重试，再抛 `LLM_FAILED` / `NL_TRANSLATION_FAILED` / `DSL_INVALID`。
+- **结构化输出**：`response_format: 'json_object'`（含 `completeJsonWithWebSearch` 路径——Qwen `enable_search` + Moonshot 工具循环均透传）。所有 JSON prompt 强制 **单行 minified** 输出 + 字段字数上限；解析失败**不重试**，直接抛 `LLM_FAILED` / `NL_TRANSLATION_FAILED` / `DSL_INVALID`。
 - **工具调用**：`/agent` 走 `chatWithTools` + 注册指令暴露成 `ChatTool[]`；模型 emit `tool_calls` → `InstructionExecutor.execute`；`costsCredits` / `destructive` 工具中途暂停等待用户确认（参见 `docs/modules/15-instructions.md`）。
 - **超时**：`LLM_REQUEST_TIMEOUT_MS`（默认 60s）；Moonshot 工具循环单轮 240s 上限。
 - **token 计费**：每次调用结束写 `UserLlmLedgerEntry`，含 `provider / model / scope / usage / cnyCost / durationMs / ok / traceId`。
