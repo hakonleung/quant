@@ -19,8 +19,6 @@ import { SectorsModule } from '../sectors/sectors.module.js';
 import { StockMetaModule } from '../stock-meta/stock-meta.module.js';
 import { TA_CACHE_TABLE_SPEC, TaCacheStore, type TaCacheRow } from './ta-cache.store.js';
 import { TaController } from './ta.controller.js';
-import { TaInstructionHandler } from './instructions/ta.handler.js';
-import { TaSectorInstructionHandler } from './instructions/ta-sector.handler.js';
 import { TaService } from './ta.service.js';
 import { TA_CACHE_RECORD_STORE, TA_DATA_DIR } from './ta.token.js';
 
@@ -46,8 +44,9 @@ const DEFAULT_DATA_DIR = '../../data';
     SYSTEM_CLOCK_PROVIDER,
     TaCacheStore,
     TaService,
-    TaInstructionHandler,
-    TaSectorInstructionHandler,
+    // `ta` / `ta.sector` migrated to `BeInstructionCenter`
+    // (instruction-center/cells/ta*.cell.ts).
   ],
+  exports: [TaService],
 })
 export class TaModule {}

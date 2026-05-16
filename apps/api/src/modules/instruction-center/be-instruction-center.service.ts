@@ -35,6 +35,7 @@ import { SectorsService } from '../sectors/sectors.service.js';
 import { NewsSentimentService } from '../sentiment/news-sentiment.service.js';
 import { StockListService } from '../stock-list/stock-list.service.js';
 import { StockMetaService } from '../stock-meta/stock-meta.service.js';
+import { TaService } from '../ta/ta.service.js';
 import { WatchTaskStore } from '../watch/watch-task.store.js';
 import { WatchService } from '../watch/watch.service.js';
 
@@ -48,6 +49,8 @@ import {
 } from './cells/sector-publish.cell.js';
 import { buildSectorRmCell } from './cells/sector-rm.cell.js';
 import { buildStockCell } from './cells/stock.cell.js';
+import { buildTaCell } from './cells/ta.cell.js';
+import { buildTaSectorCell } from './cells/ta-sector.cell.js';
 import { buildUsrCell } from './cells/usr.cell.js';
 import { buildWatchCell } from './cells/watch.cell.js';
 import { buildWatchAddCell } from './cells/watch-add.cell.js';
@@ -72,7 +75,9 @@ export type MigratedIds =
   | 'watch.add'
   | 'watch.remove'
   | 'watch.group'
-  | 'analyze';
+  | 'analyze'
+  | 'ta'
+  | 'ta.sector';
 
 type Excluded = Exclude<AllInstructionIds, MigratedIds>;
 type Configured = Exclude<AllInstructionIds, Excluded>;
@@ -94,6 +99,7 @@ export class BeInstructionCenter {
     @Inject(StockListService) stockList: StockListService,
     @Inject(NewsSentimentService) sentiment: NewsSentimentService,
     @Inject(WatchTaskStore) watchTaskStore: WatchTaskStore,
+    @Inject(TaService) ta: TaService,
   ) {
     const cfg: InstructionConfig<BeEnv, Excluded> = {
       usr: buildUsrCell({ authCfg, ledger, clock }),
@@ -108,6 +114,8 @@ export class BeInstructionCenter {
       'watch.remove': buildWatchRemoveCell({ taskStore: watchTaskStore }),
       'watch.group': buildWatchGroupCell({ watch }),
       analyze: buildAnalyzeCell({ sentiment }),
+      ta: buildTaCell({ ta }),
+      'ta.sector': buildTaSectorCell({ ta, sectors }),
     };
     this.center = new InstructionCenter<BeEnv, Excluded>(cfg);
   }

@@ -30,6 +30,7 @@ import type { SectorsService } from '../../../src/modules/sectors/sectors.servic
 import type { NewsSentimentService } from '../../../src/modules/sentiment/news-sentiment.service.js';
 import type { StockListService } from '../../../src/modules/stock-list/stock-list.service.js';
 import type { StockMetaService } from '../../../src/modules/stock-meta/stock-meta.service.js';
+import type { TaService } from '../../../src/modules/ta/ta.service.js';
 import type { WatchTaskStore } from '../../../src/modules/watch/watch-task.store.js';
 import type { WatchService } from '../../../src/modules/watch/watch.service.js';
 
@@ -80,6 +81,11 @@ function build(): {
   const watchTaskStore: WatchTaskStore = {
     deleteByIdx: () => Promise.resolve(undefined),
   } as unknown as WatchTaskStore;
+  const ta: TaService = {
+    analyzeOne: () => Promise.reject(new Error('not used')),
+    getCached: () => Promise.resolve(null),
+    analyzeSector: () => Promise.reject(new Error('not used')),
+  } as unknown as TaService;
   const center = new BeInstructionCenter(
     authCfg,
     ledger,
@@ -91,6 +97,7 @@ function build(): {
     stockList,
     sentimentSvc,
     watchTaskStore,
+    ta,
   );
   const reg = new InstructionRegistry(center);
   const enqueued: InstructionAsyncJob[] = [];
@@ -163,7 +170,10 @@ describe('InstructionExecutor → BeInstructionCenter intercept', () => {
     expect(center.has('watch.remove')).toBe(true);
     expect(center.has('watch.group')).toBe(true);
     expect(center.has('analyze')).toBe(true);
-    expect(center.has('ta')).toBe(false);
+    expect(center.has('ta')).toBe(true);
+    expect(center.has('ta.sector')).toBe(true);
+    expect(center.has('analyze.sector')).toBe(false);
+    expect(center.has('screen')).toBe(false);
     expect(center.ids().slice().sort()).toEqual([
       'analyze',
       'ledger',
@@ -172,6 +182,8 @@ describe('InstructionExecutor → BeInstructionCenter intercept', () => {
       'sector.rm',
       'sector.unpublish',
       'stock',
+      'ta',
+      'ta.sector',
       'usr',
       'watch',
       'watch.add',
@@ -209,6 +221,11 @@ describe('InstructionExecutor → BeInstructionCenter intercept', () => {
       const watchTaskStore: WatchTaskStore = {
         deleteByIdx: () => Promise.resolve(undefined),
       } as unknown as WatchTaskStore;
+      const ta: TaService = {
+        analyzeOne: () => Promise.reject(new Error('not used')),
+        getCached: () => Promise.resolve(null),
+        analyzeSector: () => Promise.reject(new Error('not used')),
+      } as unknown as TaService;
       const center = new BeInstructionCenter(
         authCfg,
         ledger,
@@ -220,6 +237,7 @@ describe('InstructionExecutor → BeInstructionCenter intercept', () => {
         stockList,
         sentimentSvc,
         watchTaskStore,
+        ta,
       );
       const reg = new InstructionRegistry(center);
       const queued: InstructionAsyncJob[] = [];
@@ -284,6 +302,11 @@ describe('InstructionExecutor → BeInstructionCenter intercept', () => {
     const watchTaskStore: WatchTaskStore = {
       deleteByIdx: () => Promise.resolve(undefined),
     } as unknown as WatchTaskStore;
+    const ta: TaService = {
+      analyzeOne: () => Promise.reject(new Error('not used')),
+      getCached: () => Promise.resolve(null),
+      analyzeSector: () => Promise.reject(new Error('not used')),
+    } as unknown as TaService;
     const center = new BeInstructionCenter(
       authCfg,
       ledger,
@@ -295,6 +318,7 @@ describe('InstructionExecutor → BeInstructionCenter intercept', () => {
       stockList,
       sentimentSvc,
       watchTaskStore,
+      ta,
     );
     const reg = new InstructionRegistry(center);
     // Test the synthesised handler's peek directly — the IM gate uses

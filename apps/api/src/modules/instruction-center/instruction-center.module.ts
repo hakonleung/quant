@@ -15,6 +15,7 @@ import { SectorsModule } from '../sectors/sectors.module.js';
 import { SentimentModule } from '../sentiment/sentiment.module.js';
 import { StockListModule } from '../stock-list/stock-list.module.js';
 import { StockMetaModule } from '../stock-meta/stock-meta.module.js';
+import { TaModule } from '../ta/ta.module.js';
 import { WatchModule } from '../watch/watch.module.js';
 
 import { BeInstructionCenter } from './be-instruction-center.service.js';
@@ -36,6 +37,7 @@ import { BeInstructionCenter } from './be-instruction-center.service.js';
     forwardRef((): typeof WatchModule => WatchModule),
     forwardRef((): typeof StockListModule => StockListModule),
     forwardRef((): typeof SentimentModule => SentimentModule),
+    forwardRef((): typeof TaModule => TaModule),
   ],
   providers: [SYSTEM_CLOCK_PROVIDER, BeInstructionCenter],
   exports: [BeInstructionCenter],
