@@ -7,11 +7,22 @@
  * `payload_json`. Reads stay O(N) over the entries array; that's fine
  * because `/usr` is the only consumer.
  *
+ * **Write batching (perf)**: `append()` pushes into an in-memory buffer
+ * per user and returns immediately. A flush is triggered when either
+ *   (a) the buffer reaches `FLUSH_SIZE` (10) entries, or
+ *   (b) `FLUSH_INTERVAL_MS` (30s) has elapsed since the buffer started
+ *       accumulating.
+ * Without batching, every LLM call paid for a full parquet rewrite
+ * (5-50ms) on the hot path; the buffer takes the rewrite off the
+ * call's `finally` waitlist. Read paths (`list` / `summarize`) merge
+ * the in-memory buffer with the persisted snapshot so callers never
+ * see a stale view. `OnApplicationShutdown` drains every buffer.
+ *
  * v1 payloads are down-converted to v2 (drop `provider`, `cnyCost`) on
  * read; the next mutate rewrites the parquet in v2 form.
  */
 
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger, type OnApplicationShutdown } from '@nestjs/common';
 import { z } from 'zod';
 
 import { FileSystemUserScopedRecordStore } from '../../../common/storage/adapters/filesystem-user-scoped-record.store.js';
@@ -26,6 +37,9 @@ import {
 } from './user-llm-ledger.types.js';
 
 const SINGLETON_KEY = 'singleton' as const;
+
+const FLUSH_SIZE = 10;
+const FLUSH_INTERVAL_MS = 30_000;
 
 export interface UserLlmLedgerRow {
   readonly id: typeof SINGLETON_KEY;
@@ -71,27 +85,50 @@ export interface UserLlmLedgerSummary {
 }
 
 @Injectable()
-export class UserLlmLedgerStore {
+export class UserLlmLedgerStore implements OnApplicationShutdown {
   private readonly logger = new Logger(UserLlmLedgerStore.name);
   private readonly mutexByUser = new Map<string, Promise<unknown>>();
+  private readonly bufferByUser = new Map<string, UserLlmLedgerEntry[]>();
+  private readonly flushTimerByUser = new Map<string, NodeJS.Timeout>();
 
   constructor(
     @Inject(USER_LLM_LEDGER_USER_RECORD_STORE)
     private readonly inner: UserScopedRecordStore<UserLlmLedgerRow>,
-  ) {
-    void this.logger;
-  }
+  ) {}
 
+  /**
+   * Buffered append. Returns once the entry is in the in-memory buffer
+   * (no disk IO on the hot path). The persisted snapshot is rewritten
+   * either when the buffer hits `FLUSH_SIZE` or after
+   * `FLUSH_INTERVAL_MS` has elapsed since the first entry in the
+   * current batch.
+   */
   async append(userId: string, entry: UserLlmLedgerEntry): Promise<void> {
-    await this.mutate(userId, (current) => ({
-      schemaVersion: current.schemaVersion,
-      entries: [...current.entries, entry],
-    }));
+    const buf = this.bufferByUser.get(userId) ?? [];
+    buf.push(entry);
+    this.bufferByUser.set(userId, buf);
+    if (buf.length >= FLUSH_SIZE) {
+      await this.flushUser(userId);
+      return;
+    }
+    if (!this.flushTimerByUser.has(userId)) {
+      const timer = setTimeout(() => {
+        this.flushUser(userId).catch((err: unknown) => {
+          this.logger.warn(`llm_ledger_buffer_flush_failed user=${userId} err=${String(err)}`);
+        });
+      }, FLUSH_INTERVAL_MS);
+      // `unref()` so the timer doesn't pin the event loop during tests
+      // / graceful shutdown — `onApplicationShutdown` drains explicitly.
+      timer.unref();
+      this.flushTimerByUser.set(userId, timer);
+    }
   }
 
   async list(userId: string): Promise<readonly UserLlmLedgerEntry[]> {
     const snap = await this.loadSnap(userId);
-    return snap.entries;
+    const buf = this.bufferByUser.get(userId);
+    if (buf === undefined || buf.length === 0) return snap.entries;
+    return [...snap.entries, ...buf];
   }
 
   async summarize(userId: string, since: Date | null = null): Promise<UserLlmLedgerSummary> {
@@ -100,8 +137,46 @@ export class UserLlmLedgerStore {
     return aggregate(entries);
   }
 
+  /** Public flush — drains the buffer for `userId` and rewrites parquet. */
   async flushNow(userId: string): Promise<void> {
-    await this.inner.flush(userId);
+    await this.flushUser(userId);
+  }
+
+  /** Flush every buffered user. Called on Nest shutdown. */
+  async flushAll(): Promise<void> {
+    const userIds = [...this.bufferByUser.keys()];
+    await Promise.all(userIds.map((uid) => this.flushUser(uid)));
+  }
+
+  async onApplicationShutdown(): Promise<void> {
+    await this.flushAll();
+  }
+
+  private async flushUser(userId: string): Promise<void> {
+    const timer = this.flushTimerByUser.get(userId);
+    if (timer !== undefined) {
+      clearTimeout(timer);
+      this.flushTimerByUser.delete(userId);
+    }
+    const buf = this.bufferByUser.get(userId);
+    if (buf === undefined || buf.length === 0) {
+      this.bufferByUser.delete(userId);
+      return;
+    }
+    // Detach the batch under the lock so concurrent appends collect into
+    // a fresh buffer while we persist.
+    const batch = buf;
+    this.bufferByUser.set(userId, []);
+    await this.mutate(userId, (current) => ({
+      schemaVersion: current.schemaVersion,
+      entries: [...current.entries, ...batch],
+    }));
+    // Drop the now-empty buffer entry so the user doesn't linger in the
+    // map forever after one call.
+    const remaining = this.bufferByUser.get(userId);
+    if (remaining !== undefined && remaining.length === 0) {
+      this.bufferByUser.delete(userId);
+    }
   }
 
   private async loadSnap(userId: string): Promise<UserLlmLedger> {

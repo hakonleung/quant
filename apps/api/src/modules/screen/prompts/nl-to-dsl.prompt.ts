@@ -37,7 +37,15 @@ const UNIVERSE_FIELDS = [
   'listed_days',
 ].join(', ');
 
-export function buildNlToDslSystemPrompt(asof: string): string {
+/**
+ * The system prompt is intentionally **date-free** so the byte-prefix
+ * stays identical across days — DeepSeek / Qwen all do automatic
+ * server-side prefix caching, and a fresh `${asof}` baked into the
+ * system prompt would kill the hit-rate. The user message supplies
+ * "今天日期: YYYY-MM-DD" and the model is told to use that value as
+ * `asof` literally.
+ */
+export function buildNlToDslSystemPrompt(): string {
   return `\
 你将中文 A 股筛选自然语言指令翻译为严格的 JSON DSL。
 
@@ -51,7 +59,9 @@ export function buildNlToDslSystemPrompt(asof: string): string {
   - \`warnings\`        （可选）—— 简短中文字符串，解释模糊语义
 
 硬性规则：
-  1. \`"asof"\` 一律使用绝对日期 \`${asof}\`。**绝不**写 \`"today"\` / \`"今天"\`。
+  1. \`"asof"\` 一律使用绝对日期 —— 取用户消息开头那行 \`今天日期: YYYY-MM-DD\`
+     里的日期值，**原样**填入。**绝不**写 \`"today"\` / \`"今天"\` / \`<TODAY>\` /
+     占位符。下方示例中出现的 \`<TODAY>\` 是占位符，输出时必须替换成用户给出的真实日期。
   2. **关键** —— 所有 \`days\` 参数都以**交易日**为单位，绝不是日历天。
      A 股大约每周 5 个交易日、每月 ~20 个、每年 ~240 个。当用户提到日历
      区间（\`一年 / 一个月 / 三个月 / N 天 / N 周\`）时，**必须自行换算**
@@ -144,7 +154,7 @@ Rank 形态：
 [Q] 最近5天每天股价都高于ma5
 [A] {
   "screen_plan": {
-    "asof": "${asof}",
+    "asof": "<TODAY>",
     "expr": {
       "op": "for_all",
       "window": {"days": 5},
@@ -160,7 +170,7 @@ Rank 形态：
 [Q] 最近10天平均换手率小于10%
 [A] {
   "screen_plan": {
-    "asof": "${asof}",
+    "asof": "<TODAY>",
     "expr": {
       "op": "lt",
       "left":  {"agg": "mean", "field": "turnover_rate", "window": {"days": 10}},
@@ -172,7 +182,7 @@ Rank 形态：
 [Q] 最近20天涨幅大于30%, 剔除ST和北交所, 按近10日涨幅取前20
 [A] {
   "screen_plan": {
-    "asof": "${asof}",
+    "asof": "<TODAY>",
     "expr": {
       "op": "gt",
       "left":  {"period_return": {"days": 20}},
@@ -180,7 +190,7 @@ Rank 形态：
     }
   },
   "universe_plan": {
-    "asof": "${asof}",
+    "asof": "<TODAY>",
     "expr": {
       "op": "and",
       "args": [
@@ -201,7 +211,7 @@ Rank 形态：
 [Q] 股价高于3个月最高价的90%
 [A] {
   "screen_plan": {
-    "asof": "${asof}",
+    "asof": "<TODAY>",
     "expr": {
       "op": "gt",
       "left":  {"field": "close_qfq"},

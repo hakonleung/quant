@@ -57,8 +57,12 @@ export class NlToDslService {
         nl: args.nl,
       });
     }
-    const system = buildNlToDslSystemPrompt(args.asof);
-    const user = `User query (Chinese):\n${args.nl.trim()}`;
+    // System prompt is date-free so byte-prefix stays identical across
+    // days — DeepSeek / Qwen prefix caches stay warm. asof lives in the
+    // user message instead; the system prompt tells the model to copy
+    // that date into `asof` literally.
+    const system = buildNlToDslSystemPrompt();
+    const user = `今天日期: ${args.asof}\nUser query (Chinese):\n${args.nl.trim()}`;
     const out = await this.llm.completeJson(
       { system, user },
       { userId: args.userId, traceId: args.traceId, scope: 'screen' },

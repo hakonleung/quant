@@ -108,8 +108,11 @@ describe('UserLlmLedgerStore (v2)', () => {
     expect(list[0]).not.toHaveProperty('cnyCost');
     expect(list[0]?.model).toBe('kimi-k2.6');
 
-    // Mutate forces a rewrite — payload should be v2 now.
+    // Mutate forces a rewrite — payload should be v2 now. With write
+    // batching, append goes to the in-memory buffer; explicit flush
+    // triggers the parquet rewrite.
     await store.append(USER, baseEntry);
+    await store.flushNow(USER);
     const row = await inner.get(USER, 'singleton');
     expect(row).not.toBeNull();
     const stored = JSON.parse(row!.payload_json) as { schemaVersion: number };
@@ -158,6 +161,43 @@ describe('UserLlmLedgerStore (v2)', () => {
     await inner.upsert(USER, { id: 'singleton', payload_json: 'not json' });
     const s = await store.summarize(USER);
     expect(s.callCount).toBe(0);
+  });
+
+  it('buffers appends in memory; reads merge buffer + persisted', async () => {
+    const { store, inner } = makeStore();
+    await store.append(USER, baseEntry);
+    // Buffer should still be holding the entry — parquet not yet written.
+    expect(await inner.get(USER, 'singleton')).toBeNull();
+    // Read path must surface the buffered entry.
+    expect((await store.list(USER)).length).toBe(1);
+    expect((await store.summarize(USER)).callCount).toBe(1);
+  });
+
+  it('flushes immediately when the buffer reaches FLUSH_SIZE (10)', async () => {
+    const { store, inner } = makeStore();
+    for (let i = 0; i < 10; i += 1) {
+      await store.append(USER, {
+        ...baseEntry,
+        ts: new Date(2026, 0, 1, 0, i).toISOString(),
+        traceId: `t${String(i)}`,
+      });
+    }
+    const row = await inner.get(USER, 'singleton');
+    expect(row).not.toBeNull();
+    const stored = JSON.parse(row!.payload_json) as { entries: unknown[] };
+    expect(stored.entries.length).toBe(10);
+    expect((await store.list(USER)).length).toBe(10);
+  });
+
+  it('flushAll drains every user buffer', async () => {
+    const { store, inner } = makeStore();
+    await store.append('u1', baseEntry);
+    await store.append('u2', baseEntry);
+    expect(await inner.get('u1', 'singleton')).toBeNull();
+    expect(await inner.get('u2', 'singleton')).toBeNull();
+    await store.flushAll();
+    expect(await inner.get('u1', 'singleton')).not.toBeNull();
+    expect(await inner.get('u2', 'singleton')).not.toBeNull();
   });
 });
 

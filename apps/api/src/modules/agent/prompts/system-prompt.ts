@@ -60,8 +60,12 @@ export function buildAgentSystemPrompt(tools: readonly ChatTool[]): string {
   if (tools.length === 0) {
     return `${PERSONA}\n\n（当前没有可用的工具，请直接以中文回答用户。）`;
   }
+  // Sort by id for byte-stable prompt prefix across calls — DeepSeek /
+  // Qwen prefix caches stay warm even if NestJS module init reorders
+  // the registry.
+  const sorted = [...tools].sort((a, b) => a.id.localeCompare(b.id));
   const lines: string[] = [];
-  for (const tool of tools) {
+  for (const tool of sorted) {
     lines.push(`- ${tool.id} —— ${tool.description}`);
   }
   return `${PERSONA}\n\n${TOOL_HEADER}\n${lines.join('\n')}`;

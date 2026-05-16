@@ -37,8 +37,18 @@ import {
 
 import type { ChatStreamFinalizeArgs } from '../ports/llm-client.port.js';
 
-const MAX_SEARCHES = 4;
-const MAX_TURNS = MAX_SEARCHES * 2 + 4;
+/**
+ * `MAX_SEARCH_ROUNDS` caps the number of LLM turns that may emit
+ * `$web_search` tool calls — not the number of individual queries.
+ * Within a single round the model may emit multiple queries in one
+ * `tool_calls` array (Moonshot runs them in parallel server-side).
+ * Set to 1 so the model is forced to bundle all needed searches into
+ * the first turn; the cap collapses the typical 4-RTT loop into 3 RTT
+ * (search → tool result → finalize). The Qwen single-shot path is
+ * still preferred when both keys are configured (see providers.ts).
+ */
+const MAX_SEARCH_ROUNDS = 1;
+const MAX_TURNS = MAX_SEARCH_ROUNDS + 3;
 const TURN_TIMEOUT_MS = 240_000;
 const STREAM_CHUNK_CHARS = 64;
 
@@ -50,7 +60,7 @@ export async function* runMoonshotWebSearchStream(
 ): AsyncIterable<ChatStreamChunk> {
   const messages: ChatCompletionMessageParam[] = args.messages.map(toOpenAiMessage);
   let allowTools = true;
-  let searchesUsed = 0;
+  let searchRoundsUsed = 0;
   const usageAcc: ChatTokenUsage = { input: 0, output: 0, total: 0 };
 
   for (let turn = 0; turn < MAX_TURNS; turn++) {
@@ -108,18 +118,18 @@ export async function* runMoonshotWebSearchStream(
       })),
     });
     for (const tc of toolCalls) {
-      searchesUsed += 1;
       messages.push({
         role: 'tool',
         tool_call_id: tc.id,
         content: argsOf(tc),
       });
     }
-    if (searchesUsed >= MAX_SEARCHES) {
+    searchRoundsUsed += 1;
+    if (searchRoundsUsed >= MAX_SEARCH_ROUNDS) {
       messages.push({
         role: 'user',
         content:
-          'You have reached the web_search budget. Do not call any more tools. ' +
+          'You have used the web_search budget. Do not call any more tools. ' +
           'Produce the final answer now using only what you have retrieved so far.',
       });
       allowTools = false;
