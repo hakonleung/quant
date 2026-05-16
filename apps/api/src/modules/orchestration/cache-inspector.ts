@@ -77,8 +77,10 @@ export class CacheInspector {
   }
 
   private async findIncompleteMetaCodes(traceId: string): Promise<readonly string[]> {
-    const result = await this.flight.doGet('list_stock_meta_all', {}, { traceId });
-    const rows = arrowTableToStockMetaDtos(result.value);
+    // Read meta locally via LocalStockMetaAdapter (60s SWR cache);
+    // saves the Flight round-trip every cron tick used to pay for
+    // `list_stock_meta_all`.
+    const rows = await this.stockMeta.listAll(traceId);
     return rows
       .filter((r) => r.industries === '')
       .filter((r) => !(isAShareCode(r.code) && this.blacklist.has(r.code)))
