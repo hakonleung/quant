@@ -6,7 +6,6 @@
 
 import { agentCommand } from './agent.js';
 import { analyzeCommand } from './analyze.js';
-import { helpCommand } from './help.js';
 import { ledgerCommand } from './ledger.js';
 import { sectorCommand } from './sector.js';
 import { stockCommand } from './stock.js';
@@ -18,7 +17,6 @@ import { createRegistry, type CommandRegistry } from '../registry.js';
 export {
   agentCommand,
   analyzeCommand,
-  helpCommand,
   ledgerCommand,
   sectorCommand,
   stockCommand,
@@ -45,6 +43,6 @@ export function createDefaultRegistry(): CommandRegistry {
   //   - focus  — FE focus state + interactive picker
   //   - update — BE proxy (cron orchestrator scan)
   r.register(agentCommand);
-  r.register(helpCommand(r));
+  // `help` migrated to `apps/web/lib/instructions/cells/help.cell.ts`.
   return r;
 }
