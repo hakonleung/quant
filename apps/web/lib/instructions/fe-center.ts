@@ -23,6 +23,10 @@ import { buildCacheCell } from './cells/cache.cell.js';
 import { buildClearCell } from './cells/clear.cell.js';
 import { buildFocusCell } from './cells/focus.cell.js';
 import { buildHelpCell } from './cells/help.cell.js';
+import { buildLedgerCell } from './cells/ledger.cell.js';
+import { buildLedgerAddCell } from './cells/ledger-add.cell.js';
+import { buildLedgerAnalyzeCell } from './cells/ledger-analyze.cell.js';
+import { buildLedgerRemoveCell } from './cells/ledger-remove.cell.js';
 import { buildUpdateCell } from './cells/update.cell.js';
 import { buildUsrCell } from './cells/usr.cell.js';
 
@@ -32,7 +36,17 @@ import { buildUsrCell } from './cells/usr.cell.js';
  * (`sector.publish` / `analyze.sector` / agent.confirm / channel.send
  *  / web.search / etc.) stay excluded — they're never invoked from FE.
  */
-export type FeMigratedIds = 'usr' | 'clear' | 'cache' | 'focus' | 'update' | 'help';
+export type FeMigratedIds =
+  | 'usr'
+  | 'clear'
+  | 'cache'
+  | 'focus'
+  | 'update'
+  | 'help'
+  | 'ledger'
+  | 'ledger.add'
+  | 'ledger.remove'
+  | 'ledger.analyze';
 
 type Excluded = Exclude<AllInstructionIds, FeMigratedIds>;
 type Configured = Exclude<AllInstructionIds, Excluded>;
@@ -54,6 +68,10 @@ export function buildFeCenter(): InstructionCenter<FeEnv, Excluded> {
     focus: buildFocusCell(),
     update: buildUpdateCell(),
     help: buildHelpCell(),
+    ledger: buildLedgerCell(),
+    'ledger.add': buildLedgerAddCell(),
+    'ledger.remove': buildLedgerRemoveCell(),
+    'ledger.analyze': buildLedgerAnalyzeCell(),
   };
   return new InstructionCenter<FeEnv, Excluded>(cfg);
 }

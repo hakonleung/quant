@@ -6,7 +6,6 @@
 
 import { agentCommand } from './agent.js';
 import { analyzeCommand } from './analyze.js';
-import { ledgerCommand } from './ledger.js';
 import { sectorCommand } from './sector.js';
 import { stockCommand } from './stock.js';
 import { taCommand } from './ta.js';
@@ -17,7 +16,6 @@ import { createRegistry, type CommandRegistry } from '../registry.js';
 export {
   agentCommand,
   analyzeCommand,
-  ledgerCommand,
   sectorCommand,
   stockCommand,
   taCommand,
@@ -32,7 +30,6 @@ export function createDefaultRegistry(): CommandRegistry {
   r.register(analyzeCommand);
   r.register(taCommand);
   r.register(watchCommand);
-  r.register(ledgerCommand);
   r.register(screenCommand);
   // The following are served by the FE InstructionCenter cells in
   // `apps/web/lib/instructions/cells/*.cell.ts`. The terminal shell
