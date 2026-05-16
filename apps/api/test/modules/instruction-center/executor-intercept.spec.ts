@@ -30,6 +30,7 @@ import type { SectorsService } from '../../../src/modules/sectors/sectors.servic
 import type { NewsSentimentService } from '../../../src/modules/sentiment/news-sentiment.service.js';
 import type { StockListService } from '../../../src/modules/stock-list/stock-list.service.js';
 import type { StockMetaService } from '../../../src/modules/stock-meta/stock-meta.service.js';
+import type { WatchTaskStore } from '../../../src/modules/watch/watch-task.store.js';
 import type { WatchService } from '../../../src/modules/watch/watch.service.js';
 
 // eslint-disable-next-line no-restricted-globals
@@ -76,6 +77,9 @@ function build(): {
     analyzeOne: () => Promise.reject(new Error('not used by this suite')),
     getCachedStock: () => Promise.resolve(null),
   } as unknown as NewsSentimentService;
+  const watchTaskStore: WatchTaskStore = {
+    deleteByIdx: () => Promise.resolve(undefined),
+  } as unknown as WatchTaskStore;
   const center = new BeInstructionCenter(
     authCfg,
     ledger,
@@ -86,6 +90,7 @@ function build(): {
     watch,
     stockList,
     sentimentSvc,
+    watchTaskStore,
   );
   const reg = new InstructionRegistry(center);
   const enqueued: InstructionAsyncJob[] = [];
@@ -148,18 +153,30 @@ describe('InstructionExecutor → BeInstructionCenter intercept', () => {
     const { center } = build();
     expect(center.has('usr')).toBe(true);
     expect(center.has('sector')).toBe(true);
+    expect(center.has('sector.publish')).toBe(true);
+    expect(center.has('sector.unpublish')).toBe(true);
+    expect(center.has('sector.rm')).toBe(true);
     expect(center.has('ledger')).toBe(true);
     expect(center.has('stock')).toBe(true);
     expect(center.has('watch')).toBe(true);
+    expect(center.has('watch.add')).toBe(true);
+    expect(center.has('watch.remove')).toBe(true);
+    expect(center.has('watch.group')).toBe(true);
     expect(center.has('analyze')).toBe(true);
     expect(center.has('ta')).toBe(false);
     expect(center.ids().slice().sort()).toEqual([
       'analyze',
       'ledger',
       'sector',
+      'sector.publish',
+      'sector.rm',
+      'sector.unpublish',
       'stock',
       'usr',
       'watch',
+      'watch.add',
+      'watch.group',
+      'watch.remove',
     ]);
   });
 
@@ -189,6 +206,9 @@ describe('InstructionExecutor → BeInstructionCenter intercept', () => {
         analyzeOne: () => Promise.reject(new Error('should not be called for async path')),
         getCachedStock: () => Promise.resolve(null),
       } as unknown as NewsSentimentService;
+      const watchTaskStore: WatchTaskStore = {
+        deleteByIdx: () => Promise.resolve(undefined),
+      } as unknown as WatchTaskStore;
       const center = new BeInstructionCenter(
         authCfg,
         ledger,
@@ -199,6 +219,7 @@ describe('InstructionExecutor → BeInstructionCenter intercept', () => {
         watch,
         stockList,
         sentimentSvc,
+        watchTaskStore,
       );
       const reg = new InstructionRegistry(center);
       const queued: InstructionAsyncJob[] = [];
@@ -260,6 +281,9 @@ describe('InstructionExecutor → BeInstructionCenter intercept', () => {
       analyzeOne: () => Promise.reject(new Error('not used')),
       getCachedStock: () => Promise.resolve(cached),
     } as unknown as NewsSentimentService;
+    const watchTaskStore: WatchTaskStore = {
+      deleteByIdx: () => Promise.resolve(undefined),
+    } as unknown as WatchTaskStore;
     const center = new BeInstructionCenter(
       authCfg,
       ledger,
@@ -270,6 +294,7 @@ describe('InstructionExecutor → BeInstructionCenter intercept', () => {
       watch,
       stockList,
       sentimentSvc,
+      watchTaskStore,
     );
     const reg = new InstructionRegistry(center);
     // Test the synthesised handler's peek directly — the IM gate uses

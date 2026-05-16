@@ -28,9 +28,6 @@ import { FlightWatchAdapter, WATCH_FLIGHT_CLIENT } from './flight-watch.adapter.
 import { WatchGroupStore } from './watch-group.store.js';
 import { WatchTaskStore } from './watch-task.store.js';
 import { WatchUniverseStore } from './watch-universe.store.js';
-import { WatchAddInstructionHandler } from './instructions/watch-add.handler.js';
-import { WatchGroupInstructionHandler } from './instructions/watch-group.handler.js';
-import { WatchRemoveInstructionHandler } from './instructions/watch-remove.handler.js';
 import { WatchBroadcaster } from './watch.broadcaster.js';
 import { WatchController } from './watch.controller.js';
 import { WatchScheduler } from './watch.scheduler.js';
@@ -117,11 +114,9 @@ const US_TUNING: MarketQueueTuning = { concurrency: 1, poolBaseMs: 30_000 };
     WatchWorker,
     WatchScheduler,
     WatchBroadcaster,
-    // `watch` (list) migrated to `BeInstructionCenter` (instruction-center/cells/watch.cell.ts).
-    WatchAddInstructionHandler,
-    WatchRemoveInstructionHandler,
-    WatchGroupInstructionHandler,
+    // `watch` / `watch.add` / `watch.remove` / `watch.group` migrated to
+    // `BeInstructionCenter` (instruction-center/cells/watch*.cell.ts).
   ],
-  exports: [WatchService, WatchScheduler],
+  exports: [WatchService, WatchScheduler, WatchTaskStore],
 })
 export class WatchModule {}

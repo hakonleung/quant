@@ -35,15 +35,24 @@ import { SectorsService } from '../sectors/sectors.service.js';
 import { NewsSentimentService } from '../sentiment/news-sentiment.service.js';
 import { StockListService } from '../stock-list/stock-list.service.js';
 import { StockMetaService } from '../stock-meta/stock-meta.service.js';
+import { WatchTaskStore } from '../watch/watch-task.store.js';
 import { WatchService } from '../watch/watch.service.js';
 
 import type { BeEnv, BeCtx, ImHost, ImOutput } from './be-types.js';
 import { buildAnalyzeCell } from './cells/analyze.cell.js';
 import { buildLedgerCell } from './cells/ledger.cell.js';
 import { buildSectorCell } from './cells/sector.cell.js';
+import {
+  buildSectorPublishCell,
+  buildSectorUnpublishCell,
+} from './cells/sector-publish.cell.js';
+import { buildSectorRmCell } from './cells/sector-rm.cell.js';
 import { buildStockCell } from './cells/stock.cell.js';
 import { buildUsrCell } from './cells/usr.cell.js';
 import { buildWatchCell } from './cells/watch.cell.js';
+import { buildWatchAddCell } from './cells/watch-add.cell.js';
+import { buildWatchGroupCell } from './cells/watch-group.cell.js';
+import { buildWatchRemoveCell } from './cells/watch-remove.cell.js';
 
 /**
  * Migrated instruction ids — grow this union one entry at a time as
@@ -51,7 +60,19 @@ import { buildWatchCell } from './cells/watch.cell.js';
  * cell model. The mapped config type enforces that every id listed
  * here has a corresponding cell at compile time.
  */
-export type MigratedIds = 'usr' | 'sector' | 'ledger' | 'stock' | 'watch' | 'analyze';
+export type MigratedIds =
+  | 'usr'
+  | 'sector'
+  | 'sector.publish'
+  | 'sector.unpublish'
+  | 'sector.rm'
+  | 'ledger'
+  | 'stock'
+  | 'watch'
+  | 'watch.add'
+  | 'watch.remove'
+  | 'watch.group'
+  | 'analyze';
 
 type Excluded = Exclude<AllInstructionIds, MigratedIds>;
 type Configured = Exclude<AllInstructionIds, Excluded>;
@@ -72,13 +93,20 @@ export class BeInstructionCenter {
     @Inject(WatchService) watch: WatchService,
     @Inject(StockListService) stockList: StockListService,
     @Inject(NewsSentimentService) sentiment: NewsSentimentService,
+    @Inject(WatchTaskStore) watchTaskStore: WatchTaskStore,
   ) {
     const cfg: InstructionConfig<BeEnv, Excluded> = {
       usr: buildUsrCell({ authCfg, ledger, clock }),
       sector: buildSectorCell({ sectors }),
+      'sector.publish': buildSectorPublishCell({ sectors }),
+      'sector.unpublish': buildSectorUnpublishCell({ sectors }),
+      'sector.rm': buildSectorRmCell({ sectors }),
       ledger: buildLedgerCell({ ledger: ledgerService }),
       stock: buildStockCell({ stockMeta }),
       watch: buildWatchCell({ watch, stockList }),
+      'watch.add': buildWatchAddCell({ watch }),
+      'watch.remove': buildWatchRemoveCell({ taskStore: watchTaskStore }),
+      'watch.group': buildWatchGroupCell({ watch }),
       analyze: buildAnalyzeCell({ sentiment }),
     };
     this.center = new InstructionCenter<BeEnv, Excluded>(cfg);
