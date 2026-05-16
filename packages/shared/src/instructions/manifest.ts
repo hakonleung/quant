@@ -11,8 +11,6 @@
  *   - aliases / imAliases (Chinese voice triggers)
  *   - mode (`sync` / `async` — long-running tasks ack queued on IM)
  *   - group (used by /help to bucket commands)
- *   - supportedOn (`['fe']` | `['be']` | `['fe', 'be']` — the user's
- *     "explicit declaration of unsupported commands" requirement)
  *   - summary / summaryCn for tab completion + IM help
  *
  * Arg zod schemas live in the sibling `schemas.ts` file. Each
@@ -97,8 +95,6 @@ import {
  * this default disappears.
  */
 const LegacyOutputSchema = InstructionOutputSchema;
-
-export type CommandSide = 'fe' | 'be';
 
 export type CommandMode = 'sync' | 'async';
 
@@ -213,20 +209,6 @@ export interface CommandManifestEntry {
    * scopes don't help.
    */
   readonly revalidate?: readonly RevalidateScope[];
-  /**
-   * @deprecated Mapped-type coverage on `InstructionCenter` already
-   * enforces per-side cell presence at compile time. This field stays
-   * only so the legacy `InstructionRegistry.assertManifestCoverage`
-   * keeps working until phase-3 FE migration removes that path.
-   */
-  readonly supportedOn: readonly CommandSide[];
-  /**
-   * @deprecated Workaround for the same legacy assertion — debug-gated
-   * handlers (`ping` / `channel.echo` / `channel.send`) opt out of the
-   * "must be registered on this side" check. Disappears with
-   * `supportedOn`.
-   */
-  readonly conditionallyRegistered?: boolean;
 }
 
 const ENTRIES = [
@@ -235,7 +217,6 @@ const ENTRIES = [
     id: 'help',
     group: 'system',
     mode: 'sync',
-    supportedOn: ['fe', 'be'],
     summary: 'Show available instructions and per-id usage',
     argsSchema: HelpArgsSchema,
     resultSchema: LegacyOutputSchema,
@@ -244,9 +225,7 @@ const ENTRIES = [
     id: 'ping',
     group: 'system',
     mode: 'sync',
-    supportedOn: ['be'],
     summary: 'Round-trip health check',
-    conditionallyRegistered: true,
     argsSchema: PingArgsSchema,
     resultSchema: LegacyOutputSchema,
   },
@@ -254,7 +233,6 @@ const ENTRIES = [
     id: 'usr',
     group: 'system',
     mode: 'sync',
-    supportedOn: ['fe', 'be'],
     summary: "Show the caller's resolved userId + LLM token usage",
     aliases: ['我的', '账号', '我'],
     argsSchema: UsrArgsSchema,
@@ -264,7 +242,6 @@ const ENTRIES = [
     id: 'clear',
     group: 'ui',
     mode: 'sync',
-    supportedOn: ['fe'],
     summary: 'Clear the terminal scrollback',
     aliases: ['cls'],
     positional: ['sub', 'count'],
@@ -275,7 +252,6 @@ const ENTRIES = [
     id: 'cache',
     group: 'ui',
     mode: 'sync',
-    supportedOn: ['fe'],
     summary: 'Inspect / clear local FE caches',
     aliases: [':cache'],
     positional: ['sub'],
@@ -286,7 +262,6 @@ const ENTRIES = [
     id: 'focus',
     group: 'ui',
     mode: 'sync',
-    supportedOn: ['fe'],
     summary: 'Focus a stock or sector in the workbench',
     positional: ['id'],
     argsSchema: FocusArgsSchema,
@@ -296,7 +271,6 @@ const ENTRIES = [
     id: 'update',
     group: 'system',
     mode: 'sync',
-    supportedOn: ['fe', 'be'],
     summary: 'Trigger the unified daily scan (meta + kline + blacklist + sectors)',
     aliases: ['更新'],
     doubleConfirm: 'destructive',
@@ -310,7 +284,6 @@ const ENTRIES = [
     id: 'stock',
     group: 'market',
     mode: 'sync',
-    supportedOn: ['fe', 'be'],
     summary: 'Search A-share metadata by code, name, or pinyin',
     aliases: ['股票'],
     argsSchema: StockArgsSchema,
@@ -322,7 +295,6 @@ const ENTRIES = [
     id: 'sector',
     group: 'sector',
     mode: 'sync',
-    supportedOn: ['fe', 'be'],
     summary: 'List sectors visible to the caller',
     aliases: ['板块'],
     argsSchema: SectorArgsSchema,
@@ -332,7 +304,6 @@ const ENTRIES = [
     id: 'sector.show',
     group: 'sector',
     mode: 'sync',
-    supportedOn: ['be'],
     summary: 'Show one sector with its stock table',
     aliases: ['查看板块', '板块详情'],
     argsSchema: SectorShowArgsSchema,
@@ -342,7 +313,6 @@ const ENTRIES = [
     id: 'sector.publish',
     group: 'sector',
     mode: 'sync',
-    supportedOn: ['be'],
     summary: 'Mark a sector as published',
     aliases: ['发布板块', '公开板块'],
     doubleConfirm: 'destructive',
@@ -354,7 +324,6 @@ const ENTRIES = [
     id: 'sector.unpublish',
     group: 'sector',
     mode: 'sync',
-    supportedOn: ['be'],
     summary: 'Mark a sector as unpublished',
     aliases: ['取消发布板块', '下架板块'],
     doubleConfirm: 'destructive',
@@ -366,7 +335,6 @@ const ENTRIES = [
     id: 'sector.refresh',
     group: 'sector',
     mode: 'async',
-    supportedOn: ['be'],
     summary: 'Recompute a dynamic sector',
     doubleConfirm: 'llm',
     revalidate: ['sectors'],
@@ -377,7 +345,6 @@ const ENTRIES = [
     id: 'sector.rm',
     group: 'sector',
     mode: 'sync',
-    supportedOn: ['be'],
     summary: 'Delete a sector',
     aliases: ['删除板块', '移除板块'],
     doubleConfirm: 'destructive',
@@ -391,7 +358,6 @@ const ENTRIES = [
     id: 'watch',
     group: 'watch',
     mode: 'sync',
-    supportedOn: ['fe', 'be'],
     summary: 'List watch tasks',
     aliases: ['watch.list', '自选'],
     argsSchema: WatchArgsSchema,
@@ -401,7 +367,6 @@ const ENTRIES = [
     id: 'watch.add',
     group: 'watch',
     mode: 'sync',
-    supportedOn: ['be'],
     summary: 'Add a watch task',
     aliases: ['添加自选', '加自选', '添加预警'],
     revalidate: ['watch'],
@@ -412,7 +377,6 @@ const ENTRIES = [
     id: 'watch.remove',
     group: 'watch',
     mode: 'sync',
-    supportedOn: ['be'],
     summary: 'Remove a watch task',
     aliases: ['删除自选', '移除自选', '删除预警'],
     doubleConfirm: 'destructive',
@@ -424,7 +388,6 @@ const ENTRIES = [
     id: 'watch.group',
     group: 'watch',
     mode: 'sync',
-    supportedOn: ['be'],
     summary: 'Manage watch groups',
     aliases: ['暂停自选', '恢复自选', '盯盘开关'],
     revalidate: ['watch'],
@@ -437,7 +400,6 @@ const ENTRIES = [
     id: 'analyze',
     group: 'agent',
     mode: 'async',
-    supportedOn: ['fe', 'be'],
     summary: 'Sentiment analysis for one stock',
     aliases: ['情绪分析', '舆情', '分析'],
     doubleConfirm: 'llm',
@@ -450,7 +412,6 @@ const ENTRIES = [
     id: 'analyze.sector',
     group: 'agent',
     mode: 'async',
-    supportedOn: ['be'],
     summary: 'Sentiment analysis aggregated across a sector',
     doubleConfirm: 'llm',
     revalidate: ['sentiment'],
@@ -461,7 +422,6 @@ const ENTRIES = [
     id: 'ta',
     group: 'market',
     mode: 'async',
-    supportedOn: ['fe', 'be'],
     summary: 'Technical analysis for one stock',
     aliases: ['技术', '走势', '技分'],
     doubleConfirm: 'llm',
@@ -474,7 +434,6 @@ const ENTRIES = [
     id: 'ta.sector',
     group: 'market',
     mode: 'async',
-    supportedOn: ['be'],
     summary: 'TA aggregated across a sector',
     aliases: ['板块技术', '板块走势', '板块技分'],
     doubleConfirm: 'llm',
@@ -489,7 +448,6 @@ const ENTRIES = [
     id: 'screen',
     group: 'market',
     mode: 'async',
-    supportedOn: ['fe', 'be'],
     summary: 'Natural-language stock screen',
     aliases: ['筛选', '选股'],
     doubleConfirm: 'llm',
@@ -503,7 +461,6 @@ const ENTRIES = [
     id: 'ledger',
     group: 'ledger',
     mode: 'sync',
-    supportedOn: ['fe', 'be'],
     summary: 'Show the user trade ledger',
     aliases: ['账本'],
     argsSchema: LedgerArgsSchema,
@@ -513,7 +470,6 @@ const ENTRIES = [
     id: 'ledger.analyze',
     group: 'ledger',
     mode: 'async',
-    supportedOn: ['be'],
     summary: 'LLM-assisted ledger analysis',
     aliases: ['复盘', '账本复盘', '账本分析'],
     doubleConfirm: 'llm',
@@ -530,7 +486,6 @@ const ENTRIES = [
     // loop runs detached and streams output via `instruction.agent.delta`
     // socket frames.
     mode: 'sync',
-    supportedOn: ['fe', 'be'],
     summary: 'Open-ended agent conversation',
     aliases: ['助手'],
     doubleConfirm: 'llm',
@@ -541,7 +496,6 @@ const ENTRIES = [
     id: 'agent.confirm',
     group: 'agent',
     mode: 'sync',
-    supportedOn: ['be'],
     summary: 'Confirm a queued agent action card',
     argsSchema: AgentConfirmArgsSchema,
     resultSchema: AgentConfirmResultSchema,
@@ -550,7 +504,6 @@ const ENTRIES = [
     id: 'web.search',
     group: 'agent',
     mode: 'async',
-    supportedOn: ['be'],
     summary: 'Hosted-tool web search invoked by the agent',
     aliases: ['网搜', '联网搜索', '搜网'],
     doubleConfirm: 'llm',
@@ -563,9 +516,7 @@ const ENTRIES = [
     id: 'channel.echo',
     group: 'channel',
     mode: 'sync',
-    supportedOn: ['be'],
     summary: 'Echo a message back through the inbound channel',
-    conditionallyRegistered: true,
     argsSchema: ChannelEchoArgsSchema,
     resultSchema: LegacyOutputSchema,
   },
@@ -573,9 +524,7 @@ const ENTRIES = [
     id: 'channel.send',
     group: 'channel',
     mode: 'sync',
-    supportedOn: ['be'],
     summary: 'Send a message to a configured channel',
-    conditionallyRegistered: true,
     argsSchema: ChannelSendArgsSchema,
     resultSchema: LegacyOutputSchema,
   },
@@ -615,42 +564,6 @@ const ENTRY_BY_ID: ReadonlyMap<string, CommandManifestEntry> = new Map(
 
 export function getCommandManifestEntry(id: string): CommandManifestEntry | undefined {
   return ENTRY_BY_ID.get(id);
-}
-
-export function commandsSupportedOn(side: CommandSide): readonly CommandManifestEntry[] {
-  return ENTRIES.filter((e) => (e.supportedOn as readonly CommandSide[]).includes(side));
-}
-
-/** Throws when the registered ids don't match the manifest's `supportedOn:side` set. */
-export function assertHandlerCoverage(args: {
-  readonly side: CommandSide;
-  readonly registeredIds: readonly string[];
-}): void {
-  const expected = new Set(
-    commandsSupportedOn(args.side)
-      .filter((e) => e.conditionallyRegistered !== true)
-      .map((e) => e.id),
-  );
-  const got = new Set(args.registeredIds);
-  const missing: string[] = [];
-  for (const id of expected) if (!got.has(id)) missing.push(id);
-  const stray: string[] = [];
-  for (const id of got) {
-    const entry = ENTRY_BY_ID.get(id);
-    if (entry === undefined) {
-      stray.push(`${id} (not in manifest)`);
-      continue;
-    }
-    if (!(entry.supportedOn as readonly CommandSide[]).includes(args.side)) {
-      stray.push(`${id} (manifest says supportedOn=${entry.supportedOn.join(',')})`);
-    }
-  }
-  const errs: string[] = [];
-  if (missing.length > 0) errs.push(`missing on ${args.side}: ${missing.join(', ')}`);
-  if (stray.length > 0) errs.push(`unexpected on ${args.side}: ${stray.join(', ')}`);
-  if (errs.length > 0) {
-    throw new Error(`command manifest mismatch — ${errs.join('; ')}`);
-  }
 }
 
 void (null as InstructionId | null);

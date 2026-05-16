@@ -131,7 +131,7 @@ function build(): {
     agentHistory,
     agentPending,
   );
-  const reg = new InstructionRegistry(center);
+  const reg = new InstructionRegistry();
   const enqueued: InstructionAsyncJob[] = [];
   const asyncBus: Pick<InstructionAsyncBus, 'enqueue'> = {
     enqueue: (job) => {
@@ -310,7 +310,7 @@ describe('InstructionExecutor → BeInstructionCenter intercept', () => {
         agentHistory,
         agentPending,
       );
-      const reg = new InstructionRegistry(center);
+      const reg = new InstructionRegistry();
       const queued: InstructionAsyncJob[] = [];
       const asyncBus: Pick<InstructionAsyncBus, 'enqueue'> = {
         enqueue: (job) => {
@@ -417,17 +417,15 @@ describe('InstructionExecutor → BeInstructionCenter intercept', () => {
       agentHistory,
       agentPending,
     );
-    const reg = new InstructionRegistry(center);
     // Test the synthesised handler's peek directly — the IM gate uses
     // `entry.handler.peekImConfirmBypass`.
-    const entry = (
-      reg as unknown as { center: BeInstructionCenter | null }
-    ).center?.has('analyze')
-      ? // resolveEntry is private on the executor; we re-derive via the
-        // public knownIds path. Easier: use the center's peek directly.
-        await center.peekImConfirmBypass('analyze', { code: '600519', fresh: false }, ctx)
-      : false;
-    expect(entry).toBe(true);
+    expect(center.has('analyze')).toBe(true);
+    const bypassed = await center.peekImConfirmBypass(
+      'analyze',
+      { code: '600519', fresh: false },
+      ctx,
+    );
+    expect(bypassed).toBe(true);
   });
 
   it('center.invoke() returns typed UsrResult without going through renderer', async () => {

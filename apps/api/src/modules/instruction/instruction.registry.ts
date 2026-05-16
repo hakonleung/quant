@@ -9,19 +9,9 @@
  * users).
  */
 
-import {
-  Inject,
-  Injectable,
-  Logger,
-  Optional,
-  type OnApplicationBootstrap,
-} from '@nestjs/common';
-import { assertHandlerCoverage, instructionId, type InstructionId } from '@quant/shared';
+import { Injectable, Logger } from '@nestjs/common';
+import { instructionId, type InstructionId } from '@quant/shared';
 
-import {
-  BE_INSTRUCTION_CENTER_PORT,
-  type BeInstructionCenterPort,
-} from './ports/be-instruction-center.port.js';
 import type { AnyInstructionHandler, InstructionHandler } from './instruction.port.js';
 import type { AnyInstructionSpec, InstructionSpec } from './instruction.types.js';
 
@@ -31,19 +21,13 @@ export interface InstructionEntry {
 }
 
 @Injectable()
-export class InstructionRegistry implements OnApplicationBootstrap {
+export class InstructionRegistry {
   private readonly logger = new Logger(InstructionRegistry.name);
   private readonly byId = new Map<string, InstructionEntry>();
   /** ASCII aliases (InstructionId-validated), e.g. `watch.list → watch`. */
   private readonly aliasOf = new Map<string, string>();
   /** Free-form IM aliases (Chinese, etc.) → canonical id. */
   private readonly imAliasOf = new Map<string, string>();
-
-  constructor(
-    @Optional()
-    @Inject(BE_INSTRUCTION_CENTER_PORT)
-    private readonly center: BeInstructionCenterPort | null = null,
-  ) {}
 
   register<TArgs>(spec: InstructionSpec<TArgs>, handler: InstructionHandler<TArgs>): void {
     const id = spec.id;
@@ -101,42 +85,4 @@ export class InstructionRegistry implements OnApplicationBootstrap {
     return instructionId(real);
   }
 
-  /**
-   * Assert the registered handler set matches the shared manifest's
-   * `supportedOn: 'be'` slice. Throws on mismatch (missing handler for
-   * a manifest entry, or registered handler not in the manifest).
-   *
-   * Ids migrated to the new `BeInstructionCenter` count as registered
-   * — they live in a different surface but still satisfy the
-   * manifest's "BE must implement these" contract.
-   */
-  assertManifestCoverage(): void {
-    const centerIds = this.center?.ids() ?? [];
-    assertHandlerCoverage({
-      side: 'be',
-      registeredIds: [...this.byId.keys(), ...centerIds],
-    });
-  }
-
-  /**
-   * Runs after every feature module's `onModuleInit` has registered.
-   * Fails boot loudly if the manifest and the live handler set drift —
-   * the user's "explicit declaration of unsupported commands" rule.
-   *
-   * Contract tests boot Nest with a partial module set, so we warn
-   * instead of throwing in `NODE_ENV=test`. Production always throws.
-   */
-  onApplicationBootstrap(): void {
-    try {
-      this.assertManifestCoverage();
-      this.logger.log(`instruction_manifest_ok registered=${String(this.byId.size)}`);
-    } catch (err: unknown) {
-      if (process.env['NODE_ENV'] === 'test') {
-        this.logger.warn(`instruction_manifest_drift (test-mode warn): ${String(err)}`);
-        return;
-      }
-      this.logger.error(`instruction_manifest_drift: ${String(err)}`);
-      throw err;
-    }
-  }
 }

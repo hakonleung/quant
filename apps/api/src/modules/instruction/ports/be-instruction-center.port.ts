@@ -26,7 +26,7 @@ export const BE_INSTRUCTION_CENTER_PORT = Symbol('BE_INSTRUCTION_CENTER_PORT');
 export interface BeInstructionCenterPort {
   /** True when this center owns the instruction (legacy executor must defer). */
   has(id: string): boolean;
-  /** Ids the center has cells for — unioned into the registry's coverage assertion. */
+  /** Ids the center has cells for — used for legacy alias / completion plumbing. */
   ids(): readonly string[];
   /**
    * Args-validated invoke. The executor's `route()` zod-parses args
