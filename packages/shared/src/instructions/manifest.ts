@@ -40,10 +40,13 @@ import {
   AnalyzeArgsSchema,
   AnalyzeSectorArgsSchema,
   CacheArgsSchema,
+  CacheResultSchema,
   ChannelEchoArgsSchema,
   ChannelSendArgsSchema,
   ClearArgsSchema,
+  ClearResultSchema,
   FocusArgsSchema,
+  FocusResultSchema,
   HelpArgsSchema,
   LedgerAnalyzeArgsSchema,
   LedgerAnalyzeResultSchema,
@@ -190,6 +193,18 @@ export interface CommandManifestEntry {
    */
   readonly resultSchema: z.ZodTypeAny;
   /**
+   * Map positional tokens to named arg fields, in order. `tokenize`'s
+   * positional array is consumed left-to-right; index 0 becomes the
+   * first listed field, index 1 the second, etc. Trailing positionals
+   * are ignored (or zod errors if the field is required).
+   *
+   * Example: `positional: ['code']` lets `focus 600519` reach the
+   * handler as `{ code: '600519' }`; the user can equivalently write
+   * `focus --code=600519`. Schemas use `.coerce` where the target
+   * type is non-string.
+   */
+  readonly positional?: readonly string[];
+  /**
    * FE cache scopes invalidated after a successful dispatch. The FE
    * shell fires `revalidate(scope)` for each entry once `feCenter`
    * returns ok. BE ignores this field. Reads should leave it empty;
@@ -251,8 +266,10 @@ const ENTRIES = [
     mode: 'sync',
     supportedOn: ['fe'],
     summary: 'Clear the terminal scrollback',
+    aliases: ['cls'],
+    positional: ['sub', 'count'],
     argsSchema: ClearArgsSchema,
-    resultSchema: LegacyOutputSchema,
+    resultSchema: ClearResultSchema,
   },
   {
     id: 'cache',
@@ -260,8 +277,10 @@ const ENTRIES = [
     mode: 'sync',
     supportedOn: ['fe'],
     summary: 'Inspect / clear local FE caches',
+    aliases: [':cache'],
+    positional: ['sub'],
     argsSchema: CacheArgsSchema,
-    resultSchema: LegacyOutputSchema,
+    resultSchema: CacheResultSchema,
   },
   {
     id: 'focus',
@@ -269,8 +288,9 @@ const ENTRIES = [
     mode: 'sync',
     supportedOn: ['fe'],
     summary: 'Focus a stock or sector in the workbench',
+    positional: ['id'],
     argsSchema: FocusArgsSchema,
-    resultSchema: LegacyOutputSchema,
+    resultSchema: FocusResultSchema,
   },
   {
     id: 'update',

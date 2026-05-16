@@ -105,8 +105,60 @@ export const UsrResultSchema = z
   })
   .strict();
 export type UsrResult = z.infer<typeof UsrResultSchema>;
-export const ClearArgsSchema = z.object({}).strict();
-export const CacheArgsSchema = z.object({}).strict();
+export const ClearArgsSchema = z
+  .object({
+    /** `last` to drop a count of recent interactions; absent clears all. */
+    sub: z.enum(['last']).optional(),
+    /** Required when `sub === 'last'`. Coerced from CLI string token. */
+    count: z.coerce.number().int().positive().optional(),
+  })
+  .strict();
+
+/** `/clear` result — describes which scrollback span to drop. */
+export const ClearResultSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('all') }).strict(),
+  z.object({ kind: z.literal('last'), count: z.number().int().positive() }).strict(),
+]);
+export type ClearResult = z.infer<typeof ClearResultSchema>;
+
+/** `/cache` result — either cache stats (default `sub=stats`) or a clear ack. */
+export const CacheResultSchema = z.discriminatedUnion('kind', [
+  z
+    .object({
+      kind: z.literal('stats'),
+      entries: z.number().int().nonnegative(),
+      hits: z.number().int().nonnegative(),
+      misses: z.number().int().nonnegative(),
+    })
+    .strict(),
+  z.object({ kind: z.literal('cleared') }).strict(),
+]);
+export type CacheResult = z.infer<typeof CacheResultSchema>;
+
+/**
+ * `/focus` result — three outcomes the renderer dispatches into:
+ *   - 'pick': open the interactive stock picker (no arg given)
+ *   - 'set': set focus to a concrete code (with resolved name)
+ *   - 'cleared': drop the focus
+ */
+export const FocusResultSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('pick') }).strict(),
+  z
+    .object({
+      kind: z.literal('set'),
+      code: z.string(),
+      name: z.string(),
+    })
+    .strict(),
+  z.object({ kind: z.literal('cleared') }).strict(),
+]);
+export type FocusResult = z.infer<typeof FocusResultSchema>;
+export const CacheArgsSchema = z
+  .object({
+    /** `stats` (default) prints counters; `clear` invalidates all entries. */
+    sub: z.enum(['stats', 'clear']).optional(),
+  })
+  .strict();
 export const FocusArgsSchema = z.object({ id: z.string().min(1).optional() }).strict();
 export const UpdateArgsSchema = z.object({}).strict();
 

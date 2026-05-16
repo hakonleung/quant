@@ -145,11 +145,15 @@ export type InstructionConfig<E extends InstructionEnv, X extends AllInstruction
 
 /**
  * Convert `(positional, flags)` into the object shape the manifest's
- * `argsSchema` expects, then zod-parse it. Today every existing
- * `argsSchema` is a plain object schema keyed by flag names — positional
- * args are unused — so we feed the flag map directly. When a future
- * instruction needs positional binding (e.g. `watch.add CODE GROUP`),
- * extend this with per-entry positional metadata on the manifest.
+ * `argsSchema` expects, then zod-parse it.
+ *
+ * Positional binding: when the manifest entry declares `positional:
+ * readonly string[]`, positional tokens fill those field names in
+ * order. Flags override positionals when both are present (matches
+ * the legacy BE parser's behaviour). Trailing positionals beyond the
+ * declared array are dropped.
+ *
+ * Without `positional`, only flags reach the schema — same as before.
  */
 export function coerceArgs<I extends AllInstructionIds>(
   id: I,
@@ -170,7 +174,15 @@ export function coerceArgs<I extends AllInstructionIds>(
     }
     return {} as ArgsOf<I>;
   }
-  const raw = { ...argv.flags };
+  const raw: Record<string, string | boolean> = {};
+  const positionalFields = entry.positional ?? [];
+  for (let i = 0; i < positionalFields.length && i < argv.positional.length; i += 1) {
+    const field = positionalFields[i] as string;
+    const value = argv.positional[i] as string;
+    raw[field] = value;
+  }
+  // Flags override positionals when both present.
+  Object.assign(raw, argv.flags);
   const parsed = entry.argsSchema.safeParse(raw);
   if (!parsed.success) {
     throw new InstructionDispatchError(
