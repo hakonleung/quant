@@ -60,6 +60,8 @@ import {
   buildSectorUnpublishCell,
 } from './cells/sector-publish.cell.js';
 import { buildScreenCell } from './cells/screen.cell.js';
+import { buildSectorAddCell } from './cells/sector-add.cell.js';
+import { buildSectorRefreshCell } from './cells/sector-refresh.cell.js';
 import { buildSectorRmCell } from './cells/sector-rm.cell.js';
 import { buildSectorShowCell } from './cells/sector-show.cell.js';
 import { buildStockCell } from './cells/stock.cell.js';
@@ -85,6 +87,8 @@ export type MigratedIds =
   | 'sector.publish'
   | 'sector.unpublish'
   | 'sector.rm'
+  | 'sector.refresh'
+  | 'sector.add'
   | 'ledger'
   | 'ledger.add'
   | 'ledger.remove'
@@ -138,6 +142,8 @@ export class BeInstructionCenter implements BeInstructionCenterPort {
       'sector.publish': buildSectorPublishCell({ sectors }),
       'sector.unpublish': buildSectorUnpublishCell({ sectors }),
       'sector.rm': buildSectorRmCell({ sectors }),
+      'sector.refresh': buildSectorRefreshCell({ sectors }),
+      'sector.add': buildSectorAddCell({ sectors }),
       ledger: buildLedgerCell({ ledger: ledgerService }),
       'ledger.add': buildLedgerAddCell({ ledger: ledgerService }),
       'ledger.remove': buildLedgerRemoveCell({ ledger: ledgerService }),

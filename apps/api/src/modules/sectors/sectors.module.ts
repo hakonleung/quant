@@ -6,7 +6,6 @@ import type { RecordStore } from '../../common/storage/ports/record-store.port.j
 import { ScreenModule } from '../screen/screen.module.js';
 import { StockListModule } from '../stock-list/stock-list.module.js';
 import { StockMetaModule } from '../stock-meta/stock-meta.module.js';
-import { SectorRefreshInstructionHandler } from './instructions/sector-refresh.handler.js';
 import { SectorsController } from './sectors.controller.js';
 import { SectorsService } from './sectors.service.js';
 import {
@@ -39,9 +38,8 @@ const DEFAULT_DATA_DIR = '../../data';
     SYSTEM_CLOCK_PROVIDER,
     SectorsStore,
     SectorsService,
-    // `sector` (list/show) + `sector.publish` / `sector.unpublish` / `sector.rm`
-    // migrated to `BeInstructionCenter` (instruction-center/cells/sector*.cell.ts).
-    SectorRefreshInstructionHandler,
+    // All sector instructions migrated to `BeInstructionCenter`
+    // (instruction-center/cells/sector*.cell.ts).
   ],
   exports: [SectorsStore, SectorsService],
 })

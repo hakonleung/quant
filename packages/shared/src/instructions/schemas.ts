@@ -16,6 +16,7 @@ import { z } from 'zod';
 
 import { ChannelIdSchema } from '../types/channel.js';
 import { LedgerAnalysisSchema } from '../types/ledger.js';
+import { SectorSchema } from '../types/sectors.js';
 import { StockListRowSchema } from '../types/stock-list.js';
 import { TaAnalysisSchema, TaSectorAnalysisSchema } from '../types/ta.js';
 import { AgentHistoryEntrySchema, AGENT_HISTORY_MAX_ENTRIES } from './agent-history.js';
@@ -271,6 +272,19 @@ export const SectorAckResultSchema = z
   })
   .strict();
 export type SectorAckResult = z.infer<typeof SectorAckResultSchema>;
+
+/**
+ * `/sector.add` — upsert a sector. The legacy FE composes the sector
+ * via a multi-step form (name → kind → codes); this is the single
+ * upsert pass-through the form's submit step calls.
+ */
+export const SectorAddArgsSchema = z.object({ sector: SectorSchema }).strict();
+export const SectorAddResultSchema = SectorSchema;
+export type SectorAddResult = z.infer<typeof SectorAddResultSchema>;
+
+/** `/sector.refresh` result — the persisted sector after the rescreen. */
+export const SectorRefreshResultSchema = SectorSchema;
+export type SectorRefreshResult = z.infer<typeof SectorRefreshResultSchema>;
 
 // ── watch ───────────────────────────────────────────────────────────────
 
