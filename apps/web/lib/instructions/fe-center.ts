@@ -27,6 +27,7 @@ import { buildLedgerCell } from './cells/ledger.cell.js';
 import { buildLedgerAddCell } from './cells/ledger-add.cell.js';
 import { buildLedgerAnalyzeCell } from './cells/ledger-analyze.cell.js';
 import { buildLedgerRemoveCell } from './cells/ledger-remove.cell.js';
+import { buildScreenCell } from './cells/screen.cell.js';
 import { buildStockCell } from './cells/stock.cell.js';
 import { buildStockInfoCell } from './cells/stock-info.cell.js';
 import { buildStockKlineCell } from './cells/stock-kline.cell.js';
@@ -52,7 +53,8 @@ export type FeMigratedIds =
   | 'ledger.analyze'
   | 'stock'
   | 'stock.info'
-  | 'stock.kline';
+  | 'stock.kline'
+  | 'screen';
 
 type Excluded = Exclude<AllInstructionIds, FeMigratedIds>;
 type Configured = Exclude<AllInstructionIds, Excluded>;
@@ -81,6 +83,7 @@ export function buildFeCenter(): InstructionCenter<FeEnv, Excluded> {
     stock: buildStockCell(),
     'stock.info': buildStockInfoCell(),
     'stock.kline': buildStockKlineCell(),
+    screen: buildScreenCell(),
   };
   return new InstructionCenter<FeEnv, Excluded>(cfg);
 }

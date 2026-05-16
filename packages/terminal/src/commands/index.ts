@@ -8,18 +8,10 @@ import { agentCommand } from './agent.js';
 import { analyzeCommand } from './analyze.js';
 import { sectorCommand } from './sector.js';
 import { taCommand } from './ta.js';
-import { screenCommand } from './screen.js';
 import { watchCommand } from './watch.js';
 import { createRegistry, type CommandRegistry } from '../registry.js';
 
-export {
-  agentCommand,
-  analyzeCommand,
-  sectorCommand,
-  taCommand,
-  screenCommand,
-  watchCommand,
-};
+export { agentCommand, analyzeCommand, sectorCommand, taCommand, watchCommand };
 
 export function createDefaultRegistry(): CommandRegistry {
   const r = createRegistry();
@@ -27,9 +19,8 @@ export function createDefaultRegistry(): CommandRegistry {
   r.register(analyzeCommand);
   r.register(taCommand);
   r.register(watchCommand);
-  r.register(screenCommand);
   r.register(agentCommand);
   // Migrated to `apps/web/lib/instructions/cells/*.cell.ts`:
-  //   usr, clear, cache, focus, update, help, ledger.*, stock.*
+  //   usr, clear, cache, focus, update, help, ledger.*, stock.*, screen
   return r;
 }
