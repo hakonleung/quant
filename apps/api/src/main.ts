@@ -9,6 +9,11 @@ async function bootstrap(): Promise<void> {
   const app = await NestFactory.create(AppModule, { logger: ['log', 'warn', 'error'] });
   app.setGlobalPrefix('api');
   app.useGlobalFilters(new QuantErrorFilter());
+  // Hook SIGINT/SIGTERM so providers implementing OnApplicationShutdown
+  // (e.g. UserLlmLedgerStore drains its in-memory write buffer) run
+  // before the process exits. Without this Nest does not register the
+  // signal handlers and the shutdown sequence is skipped.
+  app.enableShutdownHooks();
   // v1 binds 127.0.0.1 by default; the dev web server runs on a separate
   // port so the browser issues cross-origin requests that need CORS.
   // Allow loopback hostnames + same-host different-port to support custom
