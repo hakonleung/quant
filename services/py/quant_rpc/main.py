@@ -37,11 +37,9 @@ from quant_core.ports.stock_meta_source import StockMetaSource
 from quant_core.services.financials_service import FinancialsService
 from quant_core.services.kline_service import KlineService
 from quant_core.services.pattern_service import PatternService
-from quant_core.services.screen_service import ScreenService
 from quant_core.services.source_chain import SourceChain
 from quant_core.services.stock_meta_service import StockMetaService
 from quant_core.services.stock_meta_sync_service import StockMetaSyncService
-from quant_core.services.universe_screen_service import UniverseScreenService
 from quant_core.services.watch_quote_service import WatchQuoteService
 from quant_io.sources.akshare_financials import (
     AKShareFinancialsBulkSource,
@@ -61,7 +59,6 @@ from quant_rpc.ops.financials import (
 )
 from quant_rpc.ops.kline import SyncKlineForCodeHandler
 from quant_rpc.ops.pattern import FindSimilarPatternsHandler
-from quant_rpc.ops.screen_ops import ScreenRunHandler
 from quant_rpc.ops.stock_meta import (
     GetStockMetaBatchHandler,
     ListAllHandler,
@@ -225,8 +222,8 @@ def main() -> int:
 
     kline_source = AKShareKlineSource()
     kline_service = KlineService(kline_source, kline_repo, clock)
-    screen_service = ScreenService(kline_repo)
-    universe_service = UniverseScreenService(meta_repo)
+    # screen + universe-screen services moved to NestJS in-process —
+    # see apps/api/src/modules/screen/screen-exec.service.ts.
     financials_service = FinancialsService(
         repo=meta_repo,
         clock=clock,
@@ -281,16 +278,9 @@ def main() -> int:
         )
     )
     registry.register(GetLatestTradeDayHandler(clock))
-    # NL→DSL lives in NestJS now (apps/api/src/modules/screen/nl-to-dsl.service.ts);
-    # only AST execution stays here. The legacy `nl_screen` + `nl_to_dsl`
-    # ops have been removed.
-    registry.register(
-        ScreenRunHandler(
-            screen_service=screen_service,
-            universe_service=universe_service,
-            meta_repo=meta_repo,
-        )
-    )
+    # NL→DSL + screen execution both live in NestJS now
+    # (apps/api/src/modules/screen/...). `screen_run` / `nl_screen` /
+    # `nl_to_dsl` Flight ops have all been removed from this process.
 
     # Visible at startup: every Flight op the gateway can call. If the
     # NestJS controller logs `unknown op: 'foo'`, scan this line first

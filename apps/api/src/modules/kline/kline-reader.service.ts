@@ -22,6 +22,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import { type KlineBar } from '@quant/shared';
 
 import type { TimeSeriesStore } from '../../common/storage/ports/time-series-store.port.js';
+import type { ScreenRow } from '../screen/domain/pure/screen-eval.js';
 import type { KlineRow } from './kline.row.js';
 import { KLINE_TIME_SERIES_STORE } from './kline.token.js';
 
@@ -103,6 +104,58 @@ export class KlineReaderService {
       } else {
         bucket.push(bar);
       }
+    }
+    return out;
+  }
+
+  /**
+   * Bulk read for the screen executor: trailing window over `codes`
+   * between `start` and `end` (both inclusive), returning rows in the
+   * raw qfq-field shape (`open_qfq`, `close_qfq`, …) plus a synthesised
+   * `pct_chg_qfq = (close_qfq - prev close_qfq) / prev close_qfq` per
+   * code. The first bar's `pct_chg_qfq` is `null`.
+   *
+   * Rows are already sorted by `(code asc, ts asc)` per the store
+   * contract; we group by code without re-sorting.
+   */
+  async bulkRangeForScreen(
+    codes: readonly string[],
+    start: Date,
+    end: Date,
+  ): Promise<Record<string, readonly ScreenRow[]>> {
+    if (codes.length === 0) return {};
+    const rows = await this.store.read({ entityKeys: codes, start, end });
+    const out: Record<string, ScreenRow[]> = {};
+    let prevCode: string | null = null;
+    let prevClose: number | null = null;
+    for (const row of rows) {
+      let pctChg: number | null = null;
+      if (row.code === prevCode && prevClose !== null && prevClose > 0) {
+        pctChg = (row.close_qfq - prevClose) / prevClose;
+      }
+      const bar = {
+        trade_date: tsToIsoDate(row.ts),
+        open_qfq: row.open_qfq,
+        high_qfq: row.high_qfq,
+        low_qfq: row.low_qfq,
+        close_qfq: row.close_qfq,
+        volume: row.volume,
+        amount: row.amount,
+        turnover_rate: row.turnover_rate,
+        ma5: row.ma5,
+        ma10: row.ma10,
+        ma20: row.ma20,
+        ma60: row.ma60,
+        pct_chg_qfq: pctChg,
+      } as ScreenRow;
+      const bucket = out[row.code];
+      if (bucket === undefined) {
+        out[row.code] = [bar];
+      } else {
+        bucket.push(bar);
+      }
+      prevCode = row.code;
+      prevClose = row.close_qfq;
     }
     return out;
   }

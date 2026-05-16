@@ -1,9 +1,9 @@
 import { Module } from '@nestjs/common';
 
-import { FlightClient } from '../../adapters/flight/flight-client.js';
 import { SYSTEM_CLOCK_PROVIDER } from '../../common/clock.js';
 import { DuckDBParquetRecordStore } from '../../common/storage/adapters/duckdb-parquet-record.store.js';
 import type { RecordStore } from '../../common/storage/ports/record-store.port.js';
+import { ScreenModule } from '../screen/screen.module.js';
 import { StockListModule } from '../stock-list/stock-list.module.js';
 import { StockMetaModule } from '../stock-meta/stock-meta.module.js';
 import {
@@ -22,13 +22,11 @@ import {
   SectorsStore,
   type SectorRow,
 } from './sectors.store.js';
-import { SECTORS_FLIGHT_CLIENT } from './sectors.token.js';
 
 const DEFAULT_DATA_DIR = '../../data';
-const DEFAULT_FLIGHT_TARGET = '127.0.0.1:8815';
 
 @Module({
-  imports: [StockMetaModule, StockListModule],
+  imports: [StockMetaModule, StockListModule, ScreenModule],
   controllers: [SectorsController],
   providers: [
     {
@@ -43,13 +41,6 @@ const DEFAULT_FLIGHT_TARGET = '127.0.0.1:8815';
           dataRoot,
           spec: SECTORS_TABLE_SPEC,
         }),
-    },
-    {
-      provide: SECTORS_FLIGHT_CLIENT,
-      useFactory: (): FlightClient => {
-        const target = process.env['QUANT_FLIGHT_TARGET'] ?? DEFAULT_FLIGHT_TARGET;
-        return new FlightClient(target);
-      },
     },
     SYSTEM_CLOCK_PROVIDER,
     SectorsStore,

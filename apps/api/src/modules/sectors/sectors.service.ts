@@ -5,24 +5,17 @@
  */
 
 import { Inject, Injectable } from '@nestjs/common';
-import {
-  QuantError,
-  ScreenRunResultSchema,
-  type ScreenRunResult,
-  type Sector,
-} from '@quant/shared';
-import type { Table } from 'apache-arrow';
+import { QuantError, type Sector } from '@quant/shared';
 
-import { FlightClient } from '../../adapters/flight/flight-client.js';
 import { CLOCK, type Clock } from '../../common/clock.js';
+import { ScreenExecService } from '../screen/screen-exec.service.js';
 import { SectorsStore } from './sectors.store.js';
-import { SECTORS_FLIGHT_CLIENT } from './sectors.token.js';
 
 @Injectable()
 export class SectorsService {
   constructor(
     @Inject(SectorsStore) private readonly store: SectorsStore,
-    @Inject(SECTORS_FLIGHT_CLIENT) private readonly flight: FlightClient,
+    @Inject(ScreenExecService) private readonly screenExec: ScreenExecService,
     @Inject(CLOCK) private readonly clock: Clock,
   ) {}
 
@@ -111,25 +104,16 @@ export class SectorsService {
     // to that snapshot and ignore subsequent updates.
     const todayIso = this.clock.now().toISOString().slice(0, 10);
     const screenPlan = { ...current.screenPlan, asof: todayIso };
-    const args: Record<string, unknown> = {
-      screen_plan: JSON.stringify(screenPlan),
-    };
-    if (current.universePlan !== undefined && current.universePlan !== null) {
-      const universePlan = { ...current.universePlan, asof: todayIso };
-      args['universe_plan'] = JSON.stringify(universePlan);
-    }
-    if (current.rank !== undefined && current.rank !== null) {
-      args['rank'] = JSON.stringify(current.rank);
-    }
-    const result = await this.flight.doGet('screen_run', args, { traceId });
-    const payload = extractFirstPayload(result.value);
-    if (payload === null) {
-      throw new QuantError('EVALUATION_FAILED', 'screen_run returned no payload', { id });
-    }
-    const parsed: ScreenRunResult = ScreenRunResultSchema.parse(payload);
-    const codes = parsed.matches.map((m) => m.code);
+    const universePlan =
+      current.universePlan !== undefined && current.universePlan !== null
+        ? { ...current.universePlan, asof: todayIso }
+        : null;
+    const rank = current.rank ?? null;
+    void traceId;
+    const result = await this.screenExec.execute(screenPlan, universePlan, rank);
+    const codes = result.matches.map((m) => m.code);
     const evidence: Record<string, Record<string, unknown>> = {};
-    for (const m of parsed.matches) evidence[m.code] = m.evidence;
+    for (const m of result.matches) evidence[m.code] = m.evidence;
     const refreshed: Sector = {
       ...current,
       codes,
@@ -170,19 +154,5 @@ export class SectorsService {
       });
     }
     return current;
-  }
-}
-
-function extractFirstPayload(table: Table): unknown {
-  if (table.numRows === 0) return null;
-  const proxy = table.get(0);
-  if (proxy === null) return null;
-  const row = proxy.toJSON() as { payload_json?: unknown };
-  const json = row.payload_json;
-  if (typeof json !== 'string' || json.length === 0) return null;
-  try {
-    return JSON.parse(json);
-  } catch {
-    return null;
   }
 }

@@ -1,5 +1,5 @@
 import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
-import type { Sector } from '@quant/shared';
+import type { RankSpecView, ScreenPlanAst, ScreenRunResult, Sector, UniversePlanAst } from '@quant/shared';
 
 import { SectorsController } from '../../../src/modules/sectors/sectors.controller.js';
 import { SectorsService } from '../../../src/modules/sectors/sectors.service.js';
@@ -10,55 +10,37 @@ import {
 } from '../../../src/modules/sectors/sectors.store.js';
 import { FrozenClock } from '../../../src/common/clock.js';
 import { InMemoryRecordStore } from '../../fakes/in-memory-record.store.js';
-import type { FlightClient } from '../../../src/adapters/flight/flight-client.js';
+import type { ScreenExecService } from '../../../src/modules/screen/screen-exec.service.js';
 import type { AuthenticatedUser } from '../../../src/modules/auth/request-with-user.js';
 import type { RequestWithTraceId } from '../../../src/common/trace.middleware.js';
 
-interface FakeProxy {
-  toJSON(): Record<string, unknown>;
-}
-
-class FakeTable {
-  constructor(private readonly rows: ReadonlyArray<Record<string, unknown>>) {}
-  get numRows(): number {
-    return this.rows.length;
-  }
-  get(i: number): FakeProxy | null {
-    const row = this.rows[i];
-    if (row === undefined) return null;
-    return { toJSON: () => row };
-  }
-}
-
-function fakeFlight(payload: unknown | null): FlightClient {
-  const rows = payload === null ? [] : [{ payload_json: JSON.stringify(payload) }];
-  const table = new FakeTable(rows);
+function fakeScreenExec(result: ScreenRunResult): ScreenExecService {
   return {
-    doGet: async (_op: string, _args: unknown, _opts: unknown): Promise<{ value: FakeTable }> => ({
-      value: table,
-    }),
-  } as unknown as FlightClient;
+    execute: async (): Promise<ScreenRunResult> => result,
+  } as unknown as ScreenExecService;
 }
 
-interface RecordingFlight {
-  client: FlightClient;
-  calls: Array<{ op: string; args: Record<string, unknown> }>;
+interface RecordingExec {
+  client: ScreenExecService;
+  calls: Array<{
+    plan: ScreenPlanAst;
+    universe: UniversePlanAst | null;
+    rank: RankSpecView | null;
+  }>;
 }
 
-function recordingFlight(payload: unknown | null): RecordingFlight {
-  const rows = payload === null ? [] : [{ payload_json: JSON.stringify(payload) }];
-  const table = new FakeTable(rows);
-  const calls: Array<{ op: string; args: Record<string, unknown> }> = [];
+function recordingScreenExec(result: ScreenRunResult): RecordingExec {
+  const calls: RecordingExec['calls'] = [];
   const client = {
-    doGet: async (
-      op: string,
-      args: Record<string, unknown>,
-      _opts: unknown,
-    ): Promise<{ value: FakeTable }> => {
-      calls.push({ op, args });
-      return { value: table };
+    execute: async (
+      plan: ScreenPlanAst,
+      universe: UniversePlanAst | null,
+      rank: RankSpecView | null,
+    ): Promise<ScreenRunResult> => {
+      calls.push({ plan, universe, rank });
+      return result;
     },
-  } as unknown as FlightClient;
+  } as unknown as ScreenExecService;
   return { client, calls };
 }
 
@@ -111,9 +93,11 @@ const aliceUser: AuthenticatedUser = {
   imBootstrap: false,
 };
 
+const EMPTY_RESULT: ScreenRunResult = { planSignature: 'sig-empty', matches: [] };
+
 async function freshController(
   initial: readonly Sector[],
-  flight: FlightClient,
+  screenExec: ScreenExecService,
 ): Promise<{ store: SectorsStore; service: SectorsService; ctrl: SectorsController }> {
   const record = new InMemoryRecordStore<SectorRow>(SECTORS_TABLE_SPEC);
   for (const s of initial) {
@@ -121,64 +105,65 @@ async function freshController(
   }
   const store = new SectorsStore(record);
   await store.load();
-  const service = new SectorsService(store, flight, new FrozenClock(FROZEN));
+  const service = new SectorsService(store, screenExec, new FrozenClock(FROZEN));
   const ctrl = new SectorsController(service);
   return { store, service, ctrl };
 }
 
 describe('SectorsController.refresh', () => {
   it('throws NotFound when the sector does not exist', async () => {
-    const { ctrl } = await freshController([baseDynamic], fakeFlight(null));
+    const { ctrl } = await freshController([baseDynamic], fakeScreenExec(EMPTY_RESULT));
     await expect(ctrl.refresh(traceReq, adminUser, 'no-such-id')).rejects.toBeInstanceOf(
       NotFoundException,
     );
   });
 
   it('throws BadRequest when the sector is not dynamic', async () => {
-    const { ctrl } = await freshController([userSector], fakeFlight(null));
+    const { ctrl } = await freshController([userSector], fakeScreenExec(EMPTY_RESULT));
     await expect(ctrl.refresh(traceReq, adminUser, userSector.id)).rejects.toThrow();
   });
 
   it('any user can refresh a published dynamic sector and codes persist', async () => {
     const published: Sector = { ...baseDynamic, published: true, createdBy: 'admin' };
-    const newPayload = { planSignature: 'sig', matches: [{ code: '688008', evidence: { s: 1 } }] };
-    const { ctrl, store } = await freshController([published], fakeFlight(newPayload));
+    const newResult: ScreenRunResult = {
+      planSignature: 'sig',
+      matches: [{ code: '688008', evidence: { s: 1 } }],
+    };
+    const { ctrl, store } = await freshController([published], fakeScreenExec(newResult));
     const out = await ctrl.refresh(traceReq, aliceUser, published.id);
     expect(out.sector.codes).toEqual(['688008']);
     expect(store.list()[0]?.codes).toEqual(['688008']);
   });
 
   it('overrides asof on both screenPlan and universePlan to clock.today', async () => {
-    // Plan stored with a stale asof; clock today is 2026-05-04. Refresh
-    // must rewrite asof on the way to screen_run so the evaluation hits
-    // the freshest kline data, not the snapshot date frozen at creation.
+    // Refresh must rewrite asof on the way to the executor so evaluation
+    // hits the freshest kline data, not the snapshot date frozen at
+    // creation.
     const staleDynamic: Sector = {
       ...baseDynamic,
       screenPlan: { asof: '2026-05-01', expr: { kind: 'logical', op: 'and', args: [] } },
       universePlan: { asof: '2026-04-20', expr: { kind: 'logical', op: 'and', args: [] } },
     };
-    const flight = recordingFlight({ planSignature: 'sig', matches: [] });
-    const { ctrl } = await freshController([staleDynamic], flight.client);
+    const rec = recordingScreenExec(EMPTY_RESULT);
+    const { ctrl } = await freshController([staleDynamic], rec.client);
 
     await ctrl.refresh(traceReq, adminUser, staleDynamic.id);
 
-    expect(flight.calls).toHaveLength(1);
-    const args = flight.calls[0]?.args ?? {};
-    const sent = JSON.parse(String(args['screen_plan'])) as { asof: string };
-    expect(sent.asof).toBe('2026-05-04');
-    const sentUniverse = JSON.parse(String(args['universe_plan'])) as { asof: string };
-    expect(sentUniverse.asof).toBe('2026-05-04');
+    expect(rec.calls).toHaveLength(1);
+    const call = rec.calls[0]!;
+    expect(call.plan.asof).toBe('2026-05-04');
+    expect(call.universe?.asof).toBe('2026-05-04');
   });
 
   it('replaces codes / evidence and stamps lastScreenedAt from the injected clock', async () => {
-    const newPayload = {
+    const newResult: ScreenRunResult = {
       planSignature: 'sig-abc',
       matches: [
         { code: '688008', evidence: { score: 0.9 } },
         { code: '301010', evidence: { score: 0.8 } },
       ],
     };
-    const { store, ctrl } = await freshController([baseDynamic], fakeFlight(newPayload));
+    const { store, ctrl } = await freshController([baseDynamic], fakeScreenExec(newResult));
 
     const out = await ctrl.refresh(traceReq, adminUser, baseDynamic.id);
 
@@ -191,7 +176,7 @@ describe('SectorsController.refresh', () => {
 
 describe('SectorsController.publish', () => {
   it('owner can toggle published', async () => {
-    const { ctrl, store } = await freshController([userSector], fakeFlight(null));
+    const { ctrl, store } = await freshController([userSector], fakeScreenExec(EMPTY_RESULT));
     const out = await ctrl.publish(adminUser, userSector.id, { published: true });
     expect(out.sector.published).toBe(true);
     expect(out.sector.publishedAt).toBeDefined();
@@ -199,14 +184,14 @@ describe('SectorsController.publish', () => {
   });
 
   it('non-owner is rejected with ForbiddenException', async () => {
-    const { ctrl } = await freshController([userSector], fakeFlight(null));
+    const { ctrl } = await freshController([userSector], fakeScreenExec(EMPTY_RESULT));
     await expect(
       ctrl.publish(aliceUser, userSector.id, { published: true }),
     ).rejects.toBeInstanceOf(ForbiddenException);
   });
 
   it('NotFound when the sector does not exist', async () => {
-    const { ctrl } = await freshController([], fakeFlight(null));
+    const { ctrl } = await freshController([], fakeScreenExec(EMPTY_RESULT));
     await expect(ctrl.publish(adminUser, 'missing', { published: true })).rejects.toBeInstanceOf(
       NotFoundException,
     );
@@ -218,7 +203,10 @@ describe('SectorsController.list', () => {
     const aliceOwn: Sector = { ...userSector, id: 's10', createdBy: 'alice' };
     const adminPub: Sector = { ...userSector, id: 's11', createdBy: 'admin', published: true };
     const adminPriv: Sector = { ...userSector, id: 's12', createdBy: 'admin' };
-    const { ctrl } = await freshController([aliceOwn, adminPub, adminPriv], fakeFlight(null));
+    const { ctrl } = await freshController(
+      [aliceOwn, adminPub, adminPriv],
+      fakeScreenExec(EMPTY_RESULT),
+    );
     const out = ctrl.list(aliceUser);
     expect(out.sectors.map((s) => s.id).sort()).toEqual(['s10', 's11']);
   });

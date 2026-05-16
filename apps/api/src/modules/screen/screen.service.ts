@@ -15,7 +15,6 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import {
   NlScreenResultSchema,
-  QuantError,
   ScreenRunResultSchema,
   type NlScreenResult,
   type NlToDslResult,
@@ -24,12 +23,10 @@ import {
   type ScreenRunResult,
   type UniversePlanAst,
 } from '@quant/shared';
-import type { Table } from 'apache-arrow';
 
 import { CLOCK, type Clock } from '../../common/clock.js';
-import { FlightClient } from '../../adapters/flight/flight-client.js';
 import { NlToDslService } from './nl-to-dsl.service.js';
-import { SCREEN_FLIGHT_CLIENT } from './screen.token.js';
+import { ScreenExecService } from './screen-exec.service.js';
 
 export interface ScreenLlmContext {
   readonly userId: string;
@@ -41,7 +38,7 @@ export class ScreenService {
   private readonly logger = new Logger(ScreenService.name);
 
   constructor(
-    @Inject(SCREEN_FLIGHT_CLIENT) private readonly flight: FlightClient,
+    @Inject(ScreenExecService) private readonly exec: ScreenExecService,
     @Inject(NlToDslService) private readonly nlToDslService: NlToDslService,
     @Inject(CLOCK) private readonly clock: Clock,
   ) {}
@@ -120,42 +117,13 @@ export class ScreenService {
     rank: RankSpecView | null | undefined,
     traceId: string,
   ): Promise<ScreenRunResult> {
-    const args: Record<string, unknown> = {
-      screen_plan: JSON.stringify(screenPlan),
-    };
-    if (universePlan !== undefined && universePlan !== null) {
-      args['universe_plan'] = JSON.stringify(universePlan);
-    }
-    if (rank !== undefined && rank !== null) {
-      args['rank'] = JSON.stringify(rank);
-    }
-    const payload = await this.callOp('screen_run', args, traceId);
-    if (payload === null) {
-      throw new QuantError('DSL_INVALID', 'screen_run returned no payload', {});
-    }
-    return ScreenRunResultSchema.parse(payload);
-  }
-
-  private async callOp(
-    op: string,
-    args: Record<string, unknown>,
-    traceId: string,
-  ): Promise<unknown> {
-    const result = await this.flight.doGet(op, args, { traceId });
-    return extractFirstPayload(result.value);
-  }
-}
-
-function extractFirstPayload(table: Table): unknown {
-  if (table.numRows === 0) return null;
-  const proxy = table.get(0);
-  if (proxy === null) return null;
-  const row: Readonly<Record<string, unknown>> = proxy.toJSON();
-  const json = row['payload_json'];
-  if (typeof json !== 'string' || json.length === 0) return null;
-  try {
-    return JSON.parse(json);
-  } catch {
-    return null;
+    this.logger.log(`screen_run_start trace_id=${traceId}`);
+    const result = await this.exec.execute(
+      screenPlan,
+      universePlan ?? null,
+      rank ?? null,
+    );
+    // Validate to lock the public contract — same parse the Flight path used.
+    return ScreenRunResultSchema.parse(result);
   }
 }

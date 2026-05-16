@@ -67,12 +67,11 @@ docs/              工程文档（本目录）
 用户输入 → web POST /api/screen/nl
   → NestJS ScreenController（zod 校验 + 生成 trace_id + @CurrentUser）
   → NestJS NlToDslService → LlmService.completeJson（OpenAI 兼容） → ScreenPlanAst
-  → Arrow Flight: screen_run
-    → quant_core.ScreenService
-       → ParquetKlineRepo（DuckDB 读取需要的列）
-       → screen_eval 在 polars 上求值
-    → 返回 RecordBatch（命中股票 + 证据）
-  → NestJS → JSON → web 渲染
+  → NestJS ScreenExecService（进程内，无 Flight）
+    → UniverseFilterService（LocalStockMetaAdapter）
+    → KlineReaderService.bulkRangeForScreen（DuckDB 列裁剪 + pct_chg_qfq 合成）
+    → screen-eval 解释器（domain/pure/screen-eval.ts，Decimal.js）
+  → 返回 matches + planSignature → JSON → web 渲染
 ```
 
 - 同步小调用（< 1MB）：HTTP/JSON。

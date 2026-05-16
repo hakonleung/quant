@@ -79,7 +79,7 @@
 | `ta.sector`        | `ta/instructions/ta-sector.handler.ts`             | **async** | `/ta.sector <id> [fresh=1]` `[$]`：板块成员 TA 扇出 + LLM 综述，对齐 term `analyze.ta.many`                                                       |
 | `web.search`       | `agent/instructions/web-search.handler.ts`         | sync      | `/web.search q="..." [n=5]`：仅给 `/agent` 工具集使用；锁定 Qwen 提供方做付费网搜，输出中文摘要                                                   |
 | `update`           | `blacklist/instructions/update.handler.ts`         | sync      | `/update target=blacklist` `[!]`：调 `BlacklistService.refresh`，回 size/asof/universe                                                            |
-| `screen`           | `screen/instructions/screen.handler.ts`            | **async** | `/screen "<NL>" [asof=YYYY-MM-DD]` `[$]`：NestJS 端 NL→DSL + Flight `screen_run`；走 async 通道                                                   |
+| `screen`           | `screen/instructions/screen.handler.ts`            | **async** | `/screen "<NL>" [asof=YYYY-MM-DD]` `[$]`：NestJS 端 NL→DSL + 进程内 `ScreenExecService` 执行（无 Flight）；走 async 通道                          |
 | `agent`            | `agent/instructions/agent.handler.ts`              | sync      | `/agent <prompt>` `[$]`：自然语言总入口，多步 tool-use 循环 + 流式收尾；首次返回 `confirm-required` 让 IM 出付费卡，term 出 confirmPrompt         |
 | `agent.confirm`    | `agent/instructions/agent-confirm.handler.ts`      | sync      | `/agent.confirm correlationId=… approve=1\|0`：续派被付费/破坏性工具暂停的循环；只接 `correlationId` 所属的同一 userId                            |
 | `usr`              | `instruction/handlers/usr.handler.ts`              | sync      | 显示用户身份 + LLM ledger 累计（今日 / 本月 / 总计 + per-scope CNY）                                                                              |

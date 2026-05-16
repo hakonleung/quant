@@ -44,7 +44,6 @@ ArrowFlightClient (apps/api/src/adapters/)  ───> quant_rpc/server.py
 | kline      | `list_stock_snapshots`                                                          | 5D OHLCV + 元信息                                                      |
 | kline      | `get_latest_trade_day`                                                          | 交易日历                                                               |
 | financials | `bulk_sync_financials` / `enrich_financials_for_code` / `find_stale_financials` | 财务字段同步 / 巡检                                                    |
-| screen     | `screen_run`                                                                    | 执行 ScreenPlan → 命中 RecordBatch（NL→DSL 在 NestJS，本 op 只接 AST） |
 | pattern    | `find_similar_patterns`                                                         | DTW + similarity rank（始终全宇宙）                                    |
 | watch      | `watch.quote_one`                                                               | 单只盘中行情（含 `amount` / `volume`）                                 |
 | watch      | `watch.universe_refresh`                                                        | 整组刷新                                                               |
