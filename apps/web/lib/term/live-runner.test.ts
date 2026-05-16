@@ -146,14 +146,19 @@ describe('LiveActionRunner — cross-cache revalidation', () => {
     fetchSpy.mockResolvedValueOnce(
       jsonResponse({
         code: '600519',
-        score: 0.7,
-        theme: 't',
-        driver: 'd',
-        target: 0,
-        rumor: '',
         cachedAt: '2026-04-30T01:00:00.000Z',
-        rawLog: [],
-        result: '',
+        brief: '',
+        score: 0.7,
+        coreDrivers: [],
+        hotThemes: [],
+        coreProducts: [],
+        priceSignals: [],
+        mAndA: [],
+        supplyDemand: [],
+        researchTargets: [],
+        competitiveLandscape: null,
+        coverageGaps: [],
+        caveats: [],
       }),
     );
     const revalidate = vi.fn<(scope: RevalidateScope) => void>();

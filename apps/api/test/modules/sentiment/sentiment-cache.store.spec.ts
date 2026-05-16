@@ -14,14 +14,19 @@ const NOW = new Date('2026-05-04T07:15:00.000Z');
 
 const STOCK: Sentiment = {
   code: '000001',
-  score: 0,
-  theme: 'neutral',
-  driver: '',
-  target: 0,
-  rumor: '',
   cachedAt: '2026-05-04T00:00:00.000Z',
-  rawLog: [],
-  result: '',
+  brief: '',
+  score: 0.5,
+  coreDrivers: [],
+  hotThemes: [],
+  coreProducts: [],
+  priceSignals: [],
+  mAndA: [],
+  supplyDemand: [],
+  researchTargets: [],
+  competitiveLandscape: null,
+  coverageGaps: [],
+  caveats: [],
 };
 
 const MARKET: MarketSentiment = {
@@ -30,8 +35,10 @@ const MARKET: MarketSentiment = {
   fetchedAt: '2026-05-04T00:00:00.000Z',
   codeHash: 'abc',
   codes: ['000001'],
+  brief: '',
   themeClusters: [],
-  marketTrendSummary: '',
+  styleSignals: [],
+  industryTrends: [],
   caveats: [],
 };
 

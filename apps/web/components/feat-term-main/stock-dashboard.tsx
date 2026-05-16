@@ -168,6 +168,8 @@ function MetricGrid({ snap, bars }: MetricGridProps): React.ReactElement {
 }
 
 function SentimentBlock({ sent }: { sent: Sentiment }): React.ReactElement {
+  const topTheme = sent.hotThemes[0]?.label ?? '—';
+  const topDriver = sent.coreDrivers[0]?.summary ?? '—';
   return (
     <Box mt="14px" pt="10px" borderTopWidth="1px" borderTopColor="term.line">
       <Flex align="center" gap="6px">
@@ -178,12 +180,12 @@ function SentimentBlock({ sent }: { sent: Sentiment }): React.ReactElement {
       </Flex>
       <Box mt="6px">
         <ScoreRow score={sent.score} />
-        <WrapRow k="theme" v={sent.theme || '—'} />
-        <WrapRow k="driver" v={sent.driver || '—'} />
-        {sent.result.length > 0 && (
+        <WrapRow k="theme" v={topTheme} />
+        <WrapRow k="driver" v={topDriver} />
+        {sent.brief.length > 0 && (
           <Box mt="6px">
             <Text color="term.ink3" fontSize="10px" letterSpacing="0.18em" mb="3px">
-              摘要
+              brief
             </Text>
             <Text
               color="term.ink"
@@ -192,7 +194,7 @@ function SentimentBlock({ sent }: { sent: Sentiment }): React.ReactElement {
               whiteSpace="pre-wrap"
               wordBreak="break-word"
             >
-              {sent.result}
+              {sent.brief}
             </Text>
           </Box>
         )}
@@ -205,10 +207,10 @@ function ScoreRow({ score }: { score: number | null }): React.ReactElement {
   if (score === null) {
     return <KvRow k="score" v="—" />;
   }
-  // Score is in [-1, 1]. Map to 0..1 for the bar.
-  const t = Math.max(0, Math.min(1, (score + 1) / 2));
+  // Score is in [0, 1] (already normalised by the gateway).
+  const t = Math.max(0, Math.min(1, score));
   const fillW = `${String(Math.round(t * 100))}%`;
-  const color = score >= 0.5 ? 'term.green' : score <= -0.5 ? 'term.red' : 'term.amber';
+  const color = t >= 0.75 ? 'term.green' : t <= 0.25 ? 'term.red' : 'term.amber';
   return (
     <Flex justify="space-between" align="center" fontSize="11px" mt="3px" gap="8px">
       <Text color="term.ink3">score</Text>

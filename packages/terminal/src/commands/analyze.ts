@@ -155,15 +155,17 @@ function guidedAnalyze(ctx: Parameters<CommandSpec['run']>[1]) {
 function formatSentiment(s: {
   code: string;
   score: number;
-  theme: string;
-  driver: string | null;
+  brief: string;
+  topTheme: string;
+  topDriver: string;
   cachedAt: string;
 }): string {
   return [
     paint(`${s.code} sentiment`, ANSI.bold, ANSI.cyan),
     `score:    ${formatScore(s.score)}`,
-    `theme:    ${s.theme}`,
-    `driver:   ${s.driver ?? '—'}`,
+    `theme:    ${s.topTheme.length > 0 ? s.topTheme : '—'}`,
+    `driver:   ${s.topDriver.length > 0 ? s.topDriver : '—'}`,
+    `brief:    ${s.brief.length > 0 ? s.brief : '—'}`,
     `cachedAt: ${s.cachedAt}`,
   ].join('\n');
 }
@@ -171,36 +173,36 @@ function formatSentiment(s: {
 function formatSentimentDetail(s: {
   code: string;
   score: number;
-  theme: string;
-  driver: string | null;
+  brief: string;
+  topTheme: string;
+  topDriver: string;
   cachedAt: string;
-  result: string;
+  detail: string;
 }): string {
   const header = [
     `# ${s.code} sentiment`,
     '',
     `score    : ${formatScore(s.score)}`,
-    `theme    : ${s.theme}`,
-    `driver   : ${s.driver ?? '—'}`,
+    `theme    : ${s.topTheme.length > 0 ? s.topTheme : '—'}`,
+    `driver   : ${s.topDriver.length > 0 ? s.topDriver : '—'}`,
     `cached   : ${s.cachedAt}`,
     '',
   ];
-  const body = s.result.trim();
+  if (s.brief.length > 0) header.push('## Brief', '', s.brief, '');
+  const body = s.detail.trim();
   if (body.length === 0) {
     return [
       ...header,
       '## detail unavailable',
       '',
-      'this cached entry predates the two-step pipeline that emits',
-      `the analyst write-up. run \`analyze ${s.code} --force\` to`,
-      'regenerate (paid).',
+      `run \`analyze ${s.code} --force\` to regenerate (paid).`,
     ].join('\n');
   }
-  return [...header, body].join('\n');
+  return [...header, '## Full', '', '```', body, '```'].join('\n');
 }
 
 function formatMarketSentiment(
-  s: { codes: readonly string[]; score: number; themes: readonly string[]; cachedAt: string },
+  s: { codes: readonly string[]; score: number; themes: readonly string[]; brief: string; cachedAt: string },
   label: string,
 ): string {
   return [
@@ -211,6 +213,7 @@ function formatMarketSentiment(
     ),
     `score:    ${formatScore(s.score)}`,
     `themes:   ${s.themes.join(', ')}`,
+    `brief:    ${s.brief.length > 0 ? s.brief : '—'}`,
     `cachedAt: ${s.cachedAt}`,
   ].join('\n');
 }
@@ -220,14 +223,9 @@ function formatMarketSentimentDetail(
     codes: readonly string[];
     score: number;
     themes: readonly string[];
+    brief: string;
     cachedAt: string;
-    marketTrendSummary: string;
-    themeClusters: readonly {
-      label: string;
-      memberCount: number;
-      heatScore: number;
-      summary: string;
-    }[];
+    detail: string;
     caveats: readonly string[];
   },
   label: string,
@@ -240,24 +238,10 @@ function formatMarketSentimentDetail(
     `cached   : ${s.cachedAt}`,
     '',
   ];
-  const trend = s.marketTrendSummary.trim();
-  if (trend.length > 0) {
-    out.push('## Trend', '', trend, '');
-  }
-  if (s.themeClusters.length > 0) {
-    out.push('## Themes');
-    for (const c of s.themeClusters) {
-      out.push(
-        '',
-        `### ${c.label}  (${String(c.memberCount)} codes, heat=${c.heatScore.toFixed(2)})`,
-      );
-      const summary = c.summary.trim();
-      if (summary.length > 0) out.push('', summary);
-    }
-    out.push('');
-  } else if (s.themes.length > 0) {
-    // Legacy payload — only labels, no narrative.
-    out.push('## Themes', ...s.themes.map((t) => `  · ${t}`), '');
+  if (s.brief.length > 0) out.push('## Brief', '', s.brief, '');
+  const body = s.detail.trim();
+  if (body.length > 0) {
+    out.push('## Full', '', '```', body, '```', '');
   }
   if (s.caveats.length > 0) {
     out.push('## Caveats', ...s.caveats.map((c) => `  ! ${c}`), '');

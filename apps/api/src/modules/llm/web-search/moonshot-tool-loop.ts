@@ -63,6 +63,9 @@ export async function* runMoonshotWebSearchStream(
     if (allowTools) {
       body['tools'] = [{ type: 'builtin_function', function: { name: '$web_search' } }];
     }
+    if (args.responseFormat === 'json_object') {
+      body['response_format'] = { type: 'json_object' };
+    }
     let response: ChatCompletion;
     try {
       response = (await client.chat.completions.create(

@@ -25,17 +25,16 @@ const SYSTEM_PROMPT = `\
 - 编造与盈亏数据无关的新闻、政策、宏观背景
 - 把 cash_flow 当成盈亏（这是出入金，不是交易结果）
 
-输出必须是单个合法 JSON 对象，结构如下，不要额外文字、不要 markdown 包裹：
+输出**单行 minified JSON**（无 markdown 包裹、无前后缀），schema：
 
 {
-  "summary": "整段时间的盈亏与仓位画像（120 字以内）",
-  "operation_style": "对操作风格的判断，如「波段为主，仓位浮动 40%~80%」",
-  "market_view": "通过盈亏曲线反推的市场环境，如「上涨/震荡/下跌段，胜率约 X%」",
-  "recommendations": [
-    "1-3 条复盘建议；不涉及具体标的"
-  ]
+  "summary":         string,   // ≤80字, 盈亏与仓位画像
+  "operation_style": string,   // ≤50字, 例「波段为主, 仓位浮动 40%~80%」
+  "market_view":     string,   // ≤60字, 例「上涨段, 胜率约 X%」
+  "recommendations": string[]  // ≤3 条, 每条 ≤30字, 不涉及具体标的
 }
-`;
+
+严格遵守字数上限（超出会被裁掉, 请自行精简）。`;
 
 export function buildLedgerSystemPrompt(): string {
   return SYSTEM_PROMPT;

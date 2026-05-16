@@ -35,11 +35,12 @@ function makeCtx(overrides: Partial<CommandCtx> = {}): CommandCtx {
 
 const fakeSentiment = {
   code: '600519',
-  score: 0.4,
-  theme: 'liquor',
-  driver: 'earnings',
+  score: 0.7,
+  brief: '白酒板块龙头，季度业绩稳健。',
   cachedAt: '2026-05-06T08:00:00.000Z',
-  result: '## 茅台\n\n白酒板块龙头，季度业绩稳健。',
+  detail: '▎ score   0.70\n▎ themes (1)\n  · liquor [r=0.90]',
+  topTheme: 'liquor',
+  topDriver: 'earnings',
 };
 
 const argv = (positional: readonly string[], flags: Record<string, string | boolean> = {}) =>

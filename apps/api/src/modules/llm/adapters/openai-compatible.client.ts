@@ -129,6 +129,9 @@ export class OpenAiCompatibleLlmClient implements LlmClient {
         messages,
         stream: true,
         stream_options: { include_usage: true },
+        ...(args.responseFormat === 'json_object'
+          ? { response_format: { type: 'json_object' } }
+          : {}),
       });
     } catch (err) {
       throw wrapProviderError(err, this.providerRow.provider);

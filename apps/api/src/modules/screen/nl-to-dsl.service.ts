@@ -1,16 +1,14 @@
 /**
  * Translate Chinese natural-language queries → screening DSL.
  *
- * Replaces the Python `quant_core.services.nl_to_dsl_service.NlToDslService`
- * (deleted as part of the LLM-on-NestJS migration). Behaviour parity:
+ * Single LLM round-trip with `response_format: json_object` enforced
+ * by `LlmService.completeJson` — there is no validation retry. If the
+ * model output fails AST validation we throw `NL_TRANSLATION_FAILED`
+ * with the offending snippet so the caller can decide whether to
+ * surface the error or let the user re-try.
  *
- *   - Single LLM round-trip with one validation retry.
- *   - System prompt is the verbatim Chinese template the Python version
- *     used (see `prompts/nl-to-dsl.prompt.ts`).
- *   - On retry, hand the validator's error + the offending JSON back to
- *     the model so it can self-correct.
- *   - All AST nodes are validated through `op-to-kind.ts` so the LLM can
- *     never sneak unsupported ops or fields past us.
+ * All AST nodes are validated through `op-to-kind.ts` so the LLM can
+ * never sneak unsupported ops or fields past us.
  *
  * Output is the wire form (`kind`-tagged) ready to feed into the
  * in-process `ScreenExecService.execute`.
@@ -60,40 +58,26 @@ export class NlToDslService {
       });
     }
     const system = buildNlToDslSystemPrompt(args.asof);
-    let user = `User query (Chinese):\n${args.nl.trim()}`;
-    let firstError: string | null = null;
-    let lastRaw = '';
-
-    for (let attempt = 0; attempt < 2; attempt++) {
-      const out = await this.llm.completeJson(
-        { system, user },
-        { userId: args.userId, traceId: args.traceId, scope: 'screen' },
-      );
-      lastRaw = out.text;
-      try {
-        return parseLlmResponse(out.text);
-      } catch (err) {
-        if (err instanceof QuantError && err.code === 'DSL_INVALID') {
-          firstError = err.message;
-          this.logger.warn(
-            `nl_to_dsl_validation_failed attempt=${String(attempt)} trace_id=${args.traceId} error=${err.message} raw_snippet=${out.text.slice(0, 500)}`,
-          );
-          // Echo the error + offending JSON back to the model.
-          user =
-            `User query (Chinese):\n${args.nl.trim()}\n\n` +
-            `Your previous JSON failed validation: ${err.message}\n` +
-            `Previous JSON was:\n${out.text}\n\n` +
-            'Emit the corrected JSON only. Do not repeat the same mistake.';
-          continue;
-        }
-        throw err;
-      }
-    }
-    throw new QuantError(
-      'NL_TRANSLATION_FAILED',
-      `could not produce a valid plan after 2 attempts: ${firstError ?? '(no error captured)'}`,
-      { nl: args.nl, last_raw: lastRaw.slice(0, 1000) },
+    const user = `User query (Chinese):\n${args.nl.trim()}`;
+    const out = await this.llm.completeJson(
+      { system, user },
+      { userId: args.userId, traceId: args.traceId, scope: 'screen' },
     );
+    try {
+      return parseLlmResponse(out.text);
+    } catch (err) {
+      if (err instanceof QuantError && err.code === 'DSL_INVALID') {
+        this.logger.warn(
+          `nl_to_dsl_validation_failed trace_id=${args.traceId} error=${err.message} raw_snippet=${out.text.slice(0, 500)}`,
+        );
+        throw new QuantError(
+          'NL_TRANSLATION_FAILED',
+          `could not produce a valid plan: ${err.message}`,
+          { nl: args.nl, last_raw: out.text.slice(0, 1000) },
+        );
+      }
+      throw err;
+    }
   }
 }
 
@@ -102,7 +86,15 @@ export class NlToDslService {
 // ---------------------------------------------------------------------------
 
 function parseLlmResponse(raw: string): NlToDslTranslation {
-  const payload = extractJsonObject(raw);
+  let payload: unknown;
+  try {
+    payload = JSON.parse(raw.trim()) as unknown;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new QuantError('DSL_INVALID', `LLM output is not valid JSON: ${msg}`, {
+      snippet: raw.slice(0, 200),
+    });
+  }
   if (!isRecord(payload)) {
     throw new QuantError('DSL_INVALID', 'LLM did not return a JSON object', {});
   }
@@ -120,22 +112,6 @@ function parseLlmResponse(raw: string): NlToDslTranslation {
     ? warningsRaw.filter((w): w is string => typeof w === 'string')
     : [];
   return { screenPlan, universePlan, rank, warnings };
-}
-
-const FENCE_RE = /^```(?:json)?\s*([\s\S]+?)```$/u;
-
-function extractJsonObject(raw: string): unknown {
-  const text = raw.trim();
-  const fenced = FENCE_RE.exec(text);
-  const stripped = fenced !== null ? (fenced[1]?.trim() ?? '') : text;
-  try {
-    return JSON.parse(stripped) as unknown;
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    throw new QuantError('DSL_INVALID', `LLM output is not valid JSON: ${msg}`, {
-      snippet: raw.slice(0, 200),
-    });
-  }
 }
 
 function isRecord(v: unknown): v is Readonly<Record<string, unknown>> {

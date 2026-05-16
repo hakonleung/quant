@@ -3,13 +3,16 @@
 /**
  * AI.EQ — Single-stock LLM sentiment.
  *
- * Cached read (useSentiment) is the default render path; the FETCH
- * button fires the LLM-backed analyze_one mutation. The collapsed
- * AI.MD pane below the stdout stream renders the verbatim analyst
- * write-up when the user expands it.
+ * Default render path is the cached `useSentiment` query; the FETCH
+ * button fires the LLM-backed `analyze_one` mutation. The stdout pane
+ * renders the multi-section "full" view assembled from the structured
+ * `Sentiment` (via `sentimentLines()`), and the collapsed AI.MD pane
+ * below renders the one-paragraph `brief` as markdown.
  */
 
 import { Box, Flex, Text } from '@chakra-ui/react';
+import { sentimentLines } from '@quant/shared';
+import { useMemo } from 'react';
 
 import { Feat } from '../../lib/eqty/feat.js';
 import {
@@ -36,29 +39,28 @@ export function FeatAiEq({ code }: Props): React.ReactElement {
   const stockLabel =
     meta.data !== null && meta.data !== undefined ? `${meta.data.name} ${code}` : code;
 
+  const lines: readonly string[] = useMemo(() => {
+    if (sentiment === null) {
+      return [`$ sentiment.analyze_one --code ${code}`, '// awaiting trigger'];
+    }
+    const head = `$ sentiment.analyze_one --code ${code} --cached ${sentiment.cachedAt.slice(0, 10)}`;
+    return [head, ...sentimentLines(sentiment)];
+  }, [sentiment, code]);
+
   const onFetch = (): void => {
     analyze.mutate();
   };
 
   const onPush = (): void => {
     if (sentiment === null) return;
-    const themeStr = sentiment.theme === null ? '' : ` · 题材[${sentiment.theme}]`;
-    const head = `[${stockLabel}] sent ${sentiment.score.toFixed(2)}${themeStr}`;
-    const body =
-      sentiment.result.trim().length > 0 ? sentiment.result : sentiment.rawLog.join('\n');
-    const composed = `${head}\n\n${body}`;
-    // Slack/webhook payload is capped — leave headroom for server framing.
+    const head = `[${stockLabel}] sent ${sentiment.score.toFixed(2)}`;
+    const briefBlock = sentiment.brief.length > 0 ? `\n\n${sentiment.brief}` : '';
+    const body = sentimentLines(sentiment).join('\n');
+    const composed = `${head}${briefBlock}\n\n${body}`;
     const payload =
       composed.length > 15800 ? `${composed.slice(0, 15800)}\n…[truncated]` : composed;
     push.mutate({ payload });
   };
-
-  const lines: readonly string[] =
-    sentiment === null
-      ? [`$ sentiment.analyze_one --code ${code}`, '// awaiting trigger']
-      : sentiment.rawLog.length > 0
-        ? sentiment.rawLog
-        : [`$ sentiment.analyze_one --code ${code}`, `▎ score   ${sentiment.score.toFixed(2)}`];
 
   const tone = analyze.isPending
     ? 'amber'
@@ -72,7 +74,7 @@ export function FeatAiEq({ code }: Props): React.ReactElement {
             ? 'idle'
             : 'green';
 
-  const markdownSource = sentiment?.result ?? '';
+  const briefMarkdown = sentiment?.brief ?? '';
 
   return (
     <FeatView
@@ -157,10 +159,9 @@ export function FeatAiEq({ code }: Props): React.ReactElement {
             </Text>
           </Flex>
         </Box>
-        {/* AI.MD: collapsed by default — header-only line under the stdout
-            stream. Click the restore (▢) control in its header to expand
-            and read the verbatim analyst write-up. */}
-        <FeatAiMd source={markdownSource} subject={stockLabel} />
+        {/* AI.MD: shows the brief paragraph (one-line "上涨核心动因分析").
+            Collapsed by default — click ▢ to expand. */}
+        <FeatAiMd source={briefMarkdown} subject={stockLabel} />
       </Flex>
     </FeatView>
   );

@@ -34,13 +34,16 @@ export async function* runQwenWebSearchStream(
   provider: string,
 ): AsyncIterable<ChatStreamChunk> {
   const messages: ChatCompletionMessageParam[] = args.messages.map(toOpenAiMessage);
-  const body = {
+  const body: Record<string, unknown> = {
     model,
     messages,
     stream: true,
     stream_options: { include_usage: true },
     extra_body: { enable_search: true },
   };
+  if (args.responseFormat === 'json_object') {
+    body['response_format'] = { type: 'json_object' };
+  }
   let stream: Stream<ChatCompletionChunk>;
   try {
     stream = (await client.chat.completions.create(

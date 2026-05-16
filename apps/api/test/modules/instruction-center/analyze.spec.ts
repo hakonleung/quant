@@ -46,14 +46,26 @@ const ctx: InstructionCtx = { traceId: 't1', source: 'im', userId: 'feishu:ou_a'
 
 const baseSentiment: Sentiment = {
   code: '600519',
-  score: 0.82,
-  theme: '白酒旺季提价预期',
-  driver: '春节前备货需求',
-  target: 1800.0,
-  rumor: '',
   cachedAt: '2026-05-06T10:00:00.000+00:00',
-  rawLog: [],
-  result: '贵州茅台近期消费旺盛，机构普遍上调目标价。',
+  brief: '贵州茅台近期消费旺盛，机构普遍上调目标价。',
+  score: 0.82,
+  coreDrivers: [
+    {
+      summary: '春节前备货需求',
+      direction: 'positive',
+      confidence: 0.8,
+      isRumor: false,
+    },
+  ],
+  hotThemes: [{ label: '白酒提价', relevance: 0.9, rationale: '旺季需求验证' }],
+  coreProducts: [],
+  priceSignals: [],
+  mAndA: [],
+  supplyDemand: [],
+  researchTargets: [],
+  competitiveLandscape: null,
+  coverageGaps: [],
+  caveats: [],
 };
 
 interface FakeSentimentOpts {
@@ -136,16 +148,16 @@ describe('renderAnalyze', () => {
     return { ok: true, data: s };
   }
 
-  it('renders score / target / asof / theme / driver in the head', () => {
+  it('renders score / asof in the head and includes brief + detail', () => {
     const out = renderAnalyze(okEnv(baseSentiment));
     expect(out.ok).toBe(true);
     if (!out.ok) return;
     expect(out.output.text).toContain('600519');
     expect(out.output.text).toContain('score=0.82');
-    expect(out.output.text).toContain('target=1800.00');
     expect(out.output.text).toContain('asof=2026-05-06');
-    expect(out.output.text).toContain('主题: 白酒旺季提价预期');
-    expect(out.output.text).toContain('驱动: 春节前备货需求');
+    expect(out.output.text).toContain('贵州茅台近期消费旺盛');
+    expect(out.output.text).toContain('▎ themes');
+    expect(out.output.text).toContain('白酒提价');
   });
 
   it('passes through error envelope verbatim', () => {
@@ -155,28 +167,15 @@ describe('renderAnalyze', () => {
     expect(out.error).toEqual({ code: 'handler', message: 'llm down' });
   });
 
-  it('does not truncate long results (analyst prompt caps body upstream)', () => {
-    const long = 'X'.repeat(2000);
-    const out = renderAnalyze(okEnv({ ...baseSentiment, result: long }));
-    expect(out.ok).toBe(true);
-    if (!out.ok) return;
-    expect(out.output.text).not.toContain('…(truncated)');
-    expect(out.output.text).toContain(long);
-  });
-
   describe('formatSentiment', () => {
-    it('omits 传闻 line when rumor is empty', () => {
-      expect(formatSentiment({ ...baseSentiment, rumor: '' })).not.toContain('传闻:');
+    it('omits brief block when brief is empty', () => {
+      const head = formatSentiment({ ...baseSentiment, brief: '' });
+      // brief block produces an empty leading paragraph; without it, only one blank line separates head from detail
+      expect(head.split('\n\n').length).toBeLessThan(3);
     });
 
-    it('includes 传闻 line when rumor is non-empty', () => {
-      expect(formatSentiment({ ...baseSentiment, rumor: '董事长辞职传言' })).toContain(
-        '传闻: 董事长辞职传言',
-      );
-    });
-
-    it('returns head only when result body is empty', () => {
-      expect(formatSentiment({ ...baseSentiment, result: '' })).not.toContain('\n\n');
+    it('includes brief block when brief is non-empty', () => {
+      expect(formatSentiment(baseSentiment)).toContain('贵州茅台近期消费旺盛');
     });
   });
 });

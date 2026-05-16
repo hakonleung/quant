@@ -1,36 +1,37 @@
 /**
- * NestJS-side news-sentiment pipeline. Replaces the 936-line Python
- * `quant_core.services.news_sentiment_service.NewsSentimentService`.
+ * NestJS-side news-sentiment pipeline.
  *
- * Per-stock pipeline (`analyzeOne`):
- *   1. meta lookup (`STOCK_NOT_FOUND` if missing)
- *   2. cache hit by (code, asof, windowDays) → return immediately
- *   3. step-1: `LlmService.completeWithWebSearch` (analyst pass, free
- *      text, scope='sentiment'). Verbatim text → `Sentiment.result`.
- *   4. step-2: `LlmService.completeJson` (flash, no web search) on the
- *      research text → rich JSON. Project to slim `Sentiment` view
- *      (the FE only ever consumes the slim shape).
+ * Per-stock pipeline (`analyzeOne`) — single LLM call:
+ *   1. meta lookup (`STOCK_NOT_FOUND` if missing).
+ *   2. cache hit by (code, asof, windowDays) → return immediately.
+ *   3. `LlmService.completeJsonWithWebSearch` — one shot, web search +
+ *      JSON output combined. No "analyst notes" intermediate, no retry
+ *      on parse failure (callers see an `LLM_FAILED` and may try
+ *      `--fresh` again).
+ *   4. Decode the compact `|`-separated string wire into a typed
+ *      `Sentiment` (see `domain/pure/parsers.ts`).
  *   5. write through cache.
  *
  * Multi-stock (`analyzeMany`):
- *   1. fan out per-stock (Promise.all, bounded by codes cap = 200)
- *   2. theme cluster pass (`LlmService.completeJson`, no web search)
- *   3. market synth pass (`LlmService.completeJson`, no web search)
- *   4. project both passes into the slim `MarketSentiment` view.
- *   5. write through market cache.
+ *   1. fan out per-stock (Promise.allSettled, bounded by codes cap = 200).
+ *   2. theme cluster pass (`LlmService.completeJson`, no web search).
+ *   3. market synth pass (`LlmService.completeJson`, no web search).
+ *   4. write through market cache.
  *
  * Failures on individual codes during `analyzeMany` collapse to caveats;
- * the call as a whole succeeds as long as ≥ 1 stock returned a payload.
+ * the call succeeds as long as ≥ 1 stock returned a payload.
  */
 
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import {
+  type IndustryTrend,
   MarketSentimentSchema,
-  QuantError,
-  SentimentSchema,
   type MarketSentiment,
+  QuantError,
   type Sentiment,
+  SentimentSchema,
   type StockMetaDto,
+  type StyleSignal,
   type ThemeClusterView,
 } from '@quant/shared';
 import { createHash } from 'node:crypto';
@@ -39,20 +40,31 @@ import { CLOCK, type Clock } from '../../common/clock.js';
 import { LlmService } from '../llm/llm.service.js';
 import { StockMetaService } from '../stock-meta/stock-meta.service.js';
 import {
+  collectStrings,
+  parseClusterObject,
+  parseCompetitive,
+  parseIndustryTrendLine,
+  parseInsightLine,
+  parseJsonObject,
+  parsePriceSignalLine,
+  parseProductLine,
+  parseResearchTargetLine,
+  parseStyleSignalLine,
+  parseThemeTagLine,
+  clamp01,
+} from './domain/pure/parsers.js';
+import {
   buildSentimentClusterSystem,
   buildSentimentClusterUser,
   buildSentimentMarketSynthSystem,
   buildSentimentMarketSynthUser,
-  buildSentimentSearchSystem,
-  buildSentimentSearchUser,
-  buildSentimentSummarizeSystem,
-  buildSentimentSummarizeUser,
+  buildSentimentSystem,
+  buildSentimentUser,
   type SentimentMeta,
 } from './prompts/sentiment.prompt.js';
 import { SentimentCacheStore } from './sentiment-cache.store.js';
 
 const DEFAULT_WINDOW_DAYS = 30;
-const FENCE_RE = /^```(?:json)?\s*([\s\S]+?)```$/u;
 
 export interface SentimentCallContext {
   readonly userId: string;
@@ -104,9 +116,6 @@ export class NewsSentimentService {
       if (cached !== null) return cached;
     }
 
-    // `asof` is still today's UTC date — it goes into the LLM prompt as
-    // "截止日期" so the analyst pass anchors on a stable timestamp. It's
-    // no longer used as a cache key (TTL is now timestamp-driven).
     const asof = this.todayAsof();
     const meta = await this.meta.get(code, ctx.traceId);
     const result = await this.runPerStock({ meta, asof, windowDays, ctx });
@@ -162,7 +171,7 @@ export class NewsSentimentService {
     }
 
     const themeClusters = await this.runClusterStep(perStock, ctx);
-    const marketTrendSummary = await this.runMarketSynthStep(perStock, themeClusters, ctx);
+    const synth = await this.runMarketSynthStep(perStock, themeClusters, ctx);
 
     const result: MarketSentiment = MarketSentimentSchema.parse({
       asof,
@@ -170,9 +179,11 @@ export class NewsSentimentService {
       fetchedAt: this.clock.now().toISOString(),
       codeHash,
       codes: canon,
+      brief: synth.brief,
       themeClusters,
-      marketTrendSummary,
-      caveats,
+      styleSignals: synth.styleSignals,
+      industryTrends: synth.industryTrends,
+      caveats: [...caveats, ...synth.caveats],
     });
     await this.cache.putMarket(result, windowDays);
     return result;
@@ -193,71 +204,39 @@ export class NewsSentimentService {
       name: args.meta.name,
       industries: industriesOf(args.meta),
     };
-    const llmCtx = {
-      userId: args.ctx.userId,
-      traceId: args.ctx.traceId,
-      scope: 'sentiment' as const,
-    };
-
-    // Step 1: web-search analyst pass — verbatim free text.
-    const search = await this.llm.completeWithWebSearch(
+    const out = await this.llm.completeJsonWithWebSearch(
       {
-        system: buildSentimentSearchSystem(),
-        user: buildSentimentSearchUser({
+        system: buildSentimentSystem(),
+        user: buildSentimentUser({
           meta: promptMeta,
           asof: args.asof,
           days: args.windowDays,
         }),
       },
-      llmCtx,
+      { userId: args.ctx.userId, traceId: args.ctx.traceId, scope: 'sentiment' },
     );
-    const researchText = search.text;
-
-    // Step 2: flash JSON extraction; up to one retry (mirrors Python).
-    let userPrompt = buildSentimentSummarizeUser({
-      meta: promptMeta,
-      asof: args.asof,
-      days: args.windowDays,
-      researchText,
+    return decodeStockSentiment({
+      rawJson: out.text,
+      code: args.meta.code,
+      fetchedAt: this.clock.now().toISOString(),
     });
-    let lastErr: string | null = null;
-    for (let attempt = 0; attempt < 2; attempt++) {
-      const out = await this.llm.completeJson(
-        { system: buildSentimentSummarizeSystem(), user: userPrompt },
-        llmCtx,
-      );
-      try {
-        return projectStockSentiment({
-          rawJson: out.text,
-          code: args.meta.code,
-          researchText,
-          fetchedAt: this.clock.now().toISOString(),
-        });
-      } catch (err) {
-        lastErr = err instanceof Error ? err.message : String(err);
-        this.logger.warn(
-          `sentiment_summarize_parse_failed attempt=${String(attempt)} code=${args.meta.code} err=${lastErr}`,
-        );
-        userPrompt =
-          `${userPrompt}\n\nYour previous JSON failed validation: ${lastErr}\n` +
-          'Emit a corrected JSON only. Do not repeat the same mistake.';
-      }
-    }
-    throw new QuantError(
-      'LLM_FAILED',
-      `could not summarise research text for ${args.meta.code}: ${lastErr ?? '(no error)'}`,
-      { code: args.meta.code, last_error: lastErr ?? '' },
-    );
   }
 
   private async runClusterStep(
     perStock: readonly Sentiment[],
     ctx: SentimentCallContext,
   ): Promise<readonly ThemeClusterView[]> {
-    // Build the cluster input from the per-stock view's `theme` field.
     const memberships = perStock
-      .filter((s) => s.theme.length > 0)
-      .map((s) => ({ code: s.code, theme_label: s.theme, rationale: s.driver, relevance: 1 }));
+      .filter((s) => s.hotThemes.length > 0)
+      .map((s) => {
+        const top = s.hotThemes[0];
+        return {
+          code: s.code,
+          theme_label: top?.label ?? '',
+          rationale: top?.rationale ?? '',
+          relevance: top?.relevance ?? 0,
+        };
+      });
     if (memberships.length === 0) return [];
 
     const out = await this.llm.completeJson(
@@ -267,59 +246,82 @@ export class NewsSentimentService {
       },
       { userId: ctx.userId, traceId: ctx.traceId, scope: 'sentiment' },
     );
-    try {
-      const payload = parseJsonObject(out.text);
-      return projectClusters(payload['clusters']);
-    } catch (err) {
-      this.logger.warn(
-        `sentiment_cluster_parse_failed err=${err instanceof Error ? err.message : String(err)}`,
-      );
+    const payload = parseJsonObject(out.text);
+    if (payload === null) {
+      this.logger.warn('sentiment_cluster_parse_failed err=invalid_json');
       return fallbackClusters(memberships);
     }
+    const raw = payload['clusters'];
+    if (!Array.isArray(raw)) return fallbackClusters(memberships);
+    const decoded: ThemeClusterView[] = [];
+    for (const entry of raw) {
+      const c = parseClusterObject(entry);
+      if (c !== null) decoded.push(c);
+    }
+    return decoded.length > 0 ? decoded : fallbackClusters(memberships);
   }
 
   private async runMarketSynthStep(
     perStock: readonly Sentiment[],
     clusters: readonly ThemeClusterView[],
     ctx: SentimentCallContext,
-  ): Promise<string> {
-    if (perStock.length === 0) return '';
+  ): Promise<{
+    readonly brief: string;
+    readonly styleSignals: StyleSignal[];
+    readonly industryTrends: IndustryTrend[];
+    readonly caveats: string[];
+  }> {
+    const empty = { brief: '', styleSignals: [], industryTrends: [], caveats: [] };
+    if (perStock.length === 0) return empty;
     const payload = {
       stocks: perStock.map((s) => ({
         code: s.code,
+        // surface back in [-1,1] so the synth pass sees the raw model output
         sentiment_score: s.score * 2 - 1,
-        top_theme: s.theme.length > 0 ? s.theme : null,
-        core_drivers: s.driver.length > 0 ? [s.driver] : [],
+        top_theme: s.hotThemes[0]?.label ?? null,
+        drivers: s.coreDrivers.slice(0, 3).map((d) => d.summary),
       })),
       clusters: clusters.map((c) => ({
         label: c.label,
-        members: [],
-        industries: [],
-        trend: 'stable',
+        members: [...c.memberCodes],
+        industries: [...c.relatedIndustries],
+        trend: c.trend,
         summary: c.summary,
       })),
     };
+    let out;
     try {
-      const out = await this.llm.completeJson(
+      out = await this.llm.completeJson(
         {
           system: buildSentimentMarketSynthSystem(),
           user: buildSentimentMarketSynthUser(payload),
         },
         { userId: ctx.userId, traceId: ctx.traceId, scope: 'sentiment' },
       );
-      const decoded = parseJsonObject(out.text);
-      const trend = decoded['market_trend'];
-      if (typeof trend === 'object' && trend !== null) {
-        const summary = (trend as Record<string, unknown>)['summary'];
-        if (typeof summary === 'string') return summary;
-      }
-      return '';
     } catch (err) {
       this.logger.warn(
         `sentiment_market_synth_failed err=${err instanceof Error ? err.message : String(err)}`,
       );
-      return '';
+      return empty;
     }
+    const decoded = parseJsonObject(out.text);
+    if (decoded === null) return empty;
+    const styleSignals: StyleSignal[] = [];
+    for (const raw of collectStrings(decoded['styleSignals'])) {
+      const s = parseStyleSignalLine(raw);
+      if (s !== null) styleSignals.push(s);
+    }
+    const industryTrends: IndustryTrend[] = [];
+    for (const raw of collectStrings(decoded['industryTrends'])) {
+      const t = parseIndustryTrendLine(raw);
+      if (t !== null) industryTrends.push(t);
+    }
+    return {
+      brief: typeof decoded['brief'] === 'string' ? decoded['brief'] : '',
+      styleSignals,
+      industryTrends,
+      caveats: collectStrings(decoded['caveats']),
+    };
   }
 
   private todayAsof(): string {
@@ -328,64 +330,49 @@ export class NewsSentimentService {
 }
 
 // ---------------------------------------------------------------------------
-// pure projectors / decoders
+// pure decoders (exported for testing)
 // ---------------------------------------------------------------------------
 
-function projectStockSentiment(args: {
+export function decodeStockSentiment(args: {
   readonly rawJson: string;
   readonly code: string;
-  readonly researchText: string;
   readonly fetchedAt: string;
 }): Sentiment {
-  const payload = parseJsonObject(args.rawJson);
-  const sentimentScore = readNumber(payload['sentiment_score']);
-  if (sentimentScore === null) {
-    throw new QuantError('LLM_FAILED', "missing or invalid 'sentiment_score'", {});
+  const obj = parseJsonObject(args.rawJson);
+  if (obj === null) {
+    throw new QuantError('LLM_FAILED', 'sentiment output is not a JSON object', {
+      snippet: args.rawJson.slice(0, 200),
+    });
   }
-  // Python service stores the [-1,1] score; the FE view expects [0,1].
-  const score = clamp01((sentimentScore + 1) / 2);
-
-  const themes = readArray(payload['hot_themes']);
-  const topTheme =
-    themes.length > 0 && isObj(themes[0]) ? readString((themes[0] as RawObj)['label']) : '';
-
-  const drivers = readArray(payload['core_drivers']);
-  const topDriver =
-    drivers.length > 0 && isObj(drivers[0]) ? readString((drivers[0] as RawObj)['summary']) : '';
-
-  const research = readArray(payload['research_targets']);
-  const targetUpside =
-    research.length > 0 && isObj(research[0])
-      ? (readNumber((research[0] as RawObj)['target_upside_pct']) ?? 0)
-      : 0;
-
-  const rumor = pickFirstRumor([[...drivers], [...readArray(payload['m_and_a'])]]);
-  const rawLog = synthesiseRawLog({ score, topTheme, topDriver, targetUpside }, payload);
+  const rawScore = typeof obj['score'] === 'number' && Number.isFinite(obj['score']) ? obj['score'] : 0;
+  // model emits [-1,1]; FE expects [0,1]
+  const score = clamp01((rawScore + 1) / 2);
+  const competitive = parseCompetitive(obj['competitive']);
 
   return SentimentSchema.parse({
     code: args.code,
-    score,
-    theme: topTheme,
-    driver: topDriver,
-    target: targetUpside,
-    rumor,
     cachedAt: ensureOffsetIso(args.fetchedAt),
-    rawLog,
-    result: args.researchText,
+    brief: typeof obj['brief'] === 'string' ? obj['brief'] : '',
+    score,
+    coreDrivers: mapPipeArray(obj['drivers'], parseInsightLine),
+    hotThemes: mapPipeArray(obj['themes'], parseThemeTagLine),
+    coreProducts: mapPipeArray(obj['products'], parseProductLine),
+    priceSignals: mapPipeArray(obj['signals'], parsePriceSignalLine),
+    mAndA: mapPipeArray(obj['mna'], parseInsightLine),
+    supplyDemand: mapPipeArray(obj['supply'], parseInsightLine),
+    researchTargets: mapPipeArray(obj['research'], parseResearchTargetLine),
+    competitiveLandscape: competitive,
+    coverageGaps: collectStrings(obj['gaps']),
+    caveats: collectStrings(obj['caveats']),
   });
 }
 
-function projectClusters(raw: unknown): readonly ThemeClusterView[] {
+function mapPipeArray<T>(raw: unknown, parse: (line: unknown) => T | null): T[] {
   if (!Array.isArray(raw)) return [];
-  const out: ThemeClusterView[] = [];
-  for (const entry of raw) {
-    if (!isObj(entry)) continue;
-    const label = readString(entry['theme_label']);
-    if (label.length === 0) continue;
-    const members = readArray(entry['member_codes']);
-    const heat = readNumber(entry['heat_score']) ?? 0;
-    const summary = readString(entry['summary']);
-    out.push({ label, memberCount: members.length, heatScore: heat, summary });
+  const out: T[] = [];
+  for (const v of raw) {
+    const parsed = parse(v);
+    if (parsed !== null) out.push(parsed);
   }
   return out;
 }
@@ -403,88 +390,12 @@ function fallbackClusters(
     .sort((a, b) => b[1].length - a[1].length)
     .map(([label, codes]) => ({
       label,
-      memberCount: codes.length,
+      memberCodes: [...codes],
+      relatedIndustries: [],
       heatScore: 0,
+      trend: 'stable' as const,
       summary: '',
     }));
-}
-
-// ---------------------------------------------------------------------------
-// raw-log + helpers
-// ---------------------------------------------------------------------------
-
-type RawObj = Readonly<Record<string, unknown>>;
-
-function synthesiseRawLog(
-  view: { score: number; topTheme: string; topDriver: string; targetUpside: number },
-  raw: RawObj,
-): readonly string[] {
-  const lines: string[] = [];
-  lines.push(`▎ source  llm.web_search · ${String(readArray(raw['core_drivers']).length)} drivers`);
-  if (view.topTheme.length > 0) lines.push(`▎ theme   ${view.topTheme}`);
-  if (view.topDriver.length > 0) lines.push(`▎ driver  ${view.topDriver}`);
-  if (view.targetUpside !== 0) lines.push(`▎ target  ${view.targetUpside.toFixed(2)}%`);
-  lines.push(`▎ score   ${view.score.toFixed(2)} / 1.0`);
-  for (const c of readArray(raw['caveats'])) {
-    const s = readString(c);
-    if (s.length > 0) lines.push(`! ${s}`);
-  }
-  return lines;
-}
-
-function pickFirstRumor(buckets: readonly (readonly unknown[])[]): string {
-  for (const list of buckets) {
-    for (const item of list) {
-      if (isObj(item) && item['is_rumor'] === true) return readString(item['summary']);
-    }
-  }
-  return '';
-}
-
-function parseJsonObject(raw: string): RawObj {
-  const trimmed = raw.trim();
-  const fenced = FENCE_RE.exec(trimmed);
-  const stripped = fenced !== null ? (fenced[1]?.trim() ?? trimmed) : trimmed;
-  let payload: unknown;
-  try {
-    payload = JSON.parse(stripped);
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    throw new QuantError('LLM_FAILED', `output is not valid JSON: ${msg}`, {
-      snippet: raw.slice(0, 200),
-    });
-  }
-  if (typeof payload !== 'object' || payload === null || Array.isArray(payload)) {
-    throw new QuantError('LLM_FAILED', 'output is not a JSON object', {});
-  }
-  return payload as RawObj;
-}
-
-function isObj(v: unknown): v is RawObj {
-  return typeof v === 'object' && v !== null && !Array.isArray(v);
-}
-
-function readArray(v: unknown): readonly unknown[] {
-  return Array.isArray(v) ? v : [];
-}
-
-function readString(v: unknown): string {
-  return typeof v === 'string' ? v : '';
-}
-
-function readNumber(v: unknown): number | null {
-  if (typeof v === 'number' && Number.isFinite(v)) return v;
-  if (typeof v === 'string') {
-    const n = Number(v);
-    return Number.isFinite(n) ? n : null;
-  }
-  return null;
-}
-
-function clamp01(n: number): number {
-  if (n < 0) return 0;
-  if (n > 1) return 1;
-  return n;
 }
 
 function ensureOffsetIso(s: string): string {

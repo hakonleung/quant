@@ -83,19 +83,21 @@ const sectorSchema = z.object({
 });
 export type Sector = z.infer<typeof sectorSchema>;
 
+/**
+ * Sentiment in the terminal layer is a slim mirror of the structured
+ * shared `Sentiment`. The pager renders the multi-section "full" view
+ * using the shared formatter; the brief view is the dedicated `brief`
+ * field. Per-stock score is [0,1].
+ */
 const sentimentSchema = z.object({
   code: codeSchema,
-  score: z.number().min(-1).max(1),
-  theme: z.string(),
-  driver: z.string().nullable(),
+  score: z.number().min(0).max(1),
+  brief: z.string().default(''),
   cachedAt: z.string(),
-  /**
-   * Verbatim LLM analyst write-up (markdown). The pager renders this
-   * in `analyze … detail` mode. Empty string when the cached sentiment
-   * predates the two-step pipeline; the formatter falls back to a
-   * skeletal summary in that case.
-   */
-  result: z.string().default(''),
+  /** Pre-rendered multi-line "full" detail (joined by '\\n'). */
+  detail: z.string().default(''),
+  topTheme: z.string().default(''),
+  topDriver: z.string().default(''),
 });
 export type Sentiment = z.infer<typeof sentimentSchema>;
 
@@ -111,10 +113,10 @@ const marketSentimentSchema = z.object({
   codes: z.array(codeSchema),
   score: z.number().min(-1).max(1),
   themes: z.array(z.string()),
+  brief: z.string().default(''),
   cachedAt: z.string(),
-  /** LLM-rendered narrative for the whole sector, used by the pager. */
-  marketTrendSummary: z.string().default(''),
-  /** Per-cluster details so detail mode can show heat-ranked themes. */
+  /** Pre-rendered multi-line "full" detail (joined by '\\n'). */
+  detail: z.string().default(''),
   themeClusters: z.array(themeClusterSchema).default([]),
   caveats: z.array(z.string()).default([]),
 });

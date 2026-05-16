@@ -35,6 +35,8 @@ export interface ChatStreamFinalizeArgs {
   readonly traceId: string;
   /** When true, route through the provider's web-search backend if it has one. */
   readonly webSearch?: boolean;
+  /** When 'json_object', force the model to emit a single JSON object. */
+  readonly responseFormat?: 'json_object';
 }
 
 export interface CompleteJsonArgs {

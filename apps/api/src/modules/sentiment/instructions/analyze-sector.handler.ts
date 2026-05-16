@@ -16,6 +16,7 @@ import {
   AnalyzeSectorArgsSchema,
   errResult,
   instructionId,
+  marketSentimentLines,
   okResult,
   QuantError,
   type InstructionResult,
@@ -103,15 +104,7 @@ export function formatMarketSentiment(
   m: MarketSentiment,
 ): string {
   const head = `${sectorId}  ${sectorName}  members=${String(m.codes.length)}  asof=${m.asof}  window=${String(m.windowDays)}d`;
-  const themes = m.themeClusters
-    .map((c, i) => {
-      const heat = c.heatScore.toFixed(2);
-      return `  ${String(i + 1)}. [${c.label}] heat=${heat}  ${c.summary}  (${String(c.memberCount)} 只)`;
-    })
-    .join('\n');
-  const themeBlock = themes.length > 0 ? `\n\n主题聚类:\n${themes}` : '';
-  const summary =
-    m.marketTrendSummary.trim().length > 0 ? `\n\n${m.marketTrendSummary.trim()}` : '';
-  const caveats = m.caveats.length > 0 ? `\n\n⚠ caveats: ${m.caveats.join('; ')}` : '';
-  return `${head}${themeBlock}${summary}${caveats}`;
+  const briefBlock = m.brief.length > 0 ? `\n\n${m.brief}` : '';
+  const detail = marketSentimentLines(m).join('\n');
+  return `${head}${briefBlock}\n\n${detail}`;
 }

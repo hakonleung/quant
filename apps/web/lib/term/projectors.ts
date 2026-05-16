@@ -7,14 +7,16 @@
  * can be unit-tested without spinning up fetch.
  */
 
-import type {
-  KlineBar as SharedKlineBar,
-  MarketSentiment as SharedMarketSentiment,
-  NlScreenResult,
-  Sentiment as SharedSentiment,
-  StockMetaDto,
-  StockSnapshotDto,
-  WatchTask as SharedWatchTask,
+import {
+  marketSentimentLines,
+  sentimentLines,
+  type KlineBar as SharedKlineBar,
+  type MarketSentiment as SharedMarketSentiment,
+  type NlScreenResult,
+  type Sentiment as SharedSentiment,
+  type StockMetaDto,
+  type StockSnapshotDto,
+  type WatchTask as SharedWatchTask,
 } from '@quant/shared';
 import type {
   KlineBar as TermKlineBar,
@@ -74,16 +76,13 @@ export function snapshotToTerm(s: StockSnapshotDto): TermStockSnapshot {
 export function sentimentToTerm(s: SharedSentiment): TermSentiment {
   return {
     code: s.code,
-    // Shared sentiment scores are in [-1, 1]; terminal schema is the
-    // same range — no rescale needed.
-    score: clamp(s.score, -1, 1),
-    theme: s.theme,
-    driver: s.driver.length === 0 ? null : s.driver,
+    // Shared `Sentiment.score` is in [0,1]; terminal schema mirrors that range.
+    score: clamp(s.score, 0, 1),
+    brief: s.brief,
     cachedAt: s.cachedAt,
-    // `result` is the LLM analyst write-up rendered by the pager in
-    // `analyze … detail` mode. Pre-pipeline cache entries have an
-    // empty string here — the detail formatter handles that case.
-    result: s.result,
+    detail: sentimentLines(s).join('\n'),
+    topTheme: s.hotThemes[0]?.label ?? '',
+    topDriver: s.coreDrivers[0]?.summary ?? '',
   };
 }
 
@@ -94,21 +93,19 @@ export function marketSentimentToTerm(
 ): TermMarketSentiment {
   // Shared MarketSentiment has no single "boardScore" — we average the
   // cluster heat scores as a stand-in so the terminal can show a single
-  // number. Cluster heat already lives in [-1, 1] per the Python pipeline.
+  // number. Cluster heat lives in [-1, 1].
   const heats = s.themeClusters.map((c) => c.heatScore).filter((n) => Number.isFinite(n));
   const avg = heats.length === 0 ? 0 : heats.reduce((a, b) => a + b, 0) / heats.length;
   return {
     codes: [...codes],
     score: clamp(avg, -1, 1),
     themes: s.themeClusters.map((t) => t.label),
+    brief: s.brief,
     cachedAt: s.fetchedAt,
-    // Carry the rich narrative + per-cluster summaries so the pager
-    // can render the sector detail view. The legacy summary projection
-    // (label-only `themes` array) stays so brief mode is unaffected.
-    marketTrendSummary: s.marketTrendSummary,
+    detail: marketSentimentLines(s).join('\n'),
     themeClusters: s.themeClusters.map((t) => ({
       label: t.label,
-      memberCount: t.memberCount,
+      memberCount: t.memberCodes.length,
       heatScore: t.heatScore,
       summary: t.summary,
     })),

@@ -4,12 +4,16 @@
  * AI.SEC — Sector sentiment.
  *
  * Mirrors AI.EQ stdout, but operates on the active sector's member codes
- * via analyze_many. Cached read (useMarketSentiment) is the default
- * render path; the FETCH button fires the LLM-backed analyze_many
- * mutation behind a confirm guard (paid call).
+ * via analyze_many. Cached read (`useMarketSentiment`) is the default
+ * render path; the FETCH button fires the LLM-backed `analyze_many`
+ * mutation behind a confirm guard (paid call). The "full" multi-section
+ * view is assembled via `marketSentimentLines()`; `brief` is the
+ * one-paragraph 市场综述.
  */
 
 import { Box, Flex, Text } from '@chakra-ui/react';
+import { marketSentimentLines } from '@quant/shared';
+import { useMemo } from 'react';
 
 import { Feat } from '../../lib/eqty/feat.js';
 import { ConfirmCancelled, useConfirm } from '../../lib/hooks/use-confirm.js';
@@ -37,6 +41,17 @@ export function FeatAiSec(): React.ReactElement | null {
 
   const sectorLabel =
     sector === null ? '-' : activeSectorId === ALL_SECTOR_ID ? 'All' : sector.name;
+
+  const lines: readonly string[] = useMemo(() => {
+    if (data === null) {
+      return [
+        `$ sentiment.analyze_many --sector ${sectorLabel} --members ${String(codes.length)}`,
+        codes.length === 0 ? '// no members' : '// awaiting trigger',
+      ];
+    }
+    const head = `$ sentiment.analyze_many --asof ${data.asof} --window ${String(data.windowDays)}d`;
+    return [head, ...marketSentimentLines(data)];
+  }, [data, codes.length, sectorLabel]);
 
   const onFetch = (): void => {
     if (codes.length === 0 || analyze.isPending || tooLarge) return;
@@ -87,48 +102,14 @@ export function FeatAiSec(): React.ReactElement | null {
 
   const onPush = (): void => {
     if (data === null) return;
-    const head = `[sector ${sectorLabel}] asof ${data.asof} · window ${String(data.windowDays)}d · members ${String(data.codes.length)} · themes ${String(data.themeClusters.length)}`;
-    const themesBlock =
-      data.themeClusters.length === 0
-        ? ''
-        : '\n\n▎ themes\n' +
-          data.themeClusters
-            .map(
-              (t) =>
-                `• ${t.label} [${String(t.memberCount)}m heat=${t.heatScore.toFixed(2)}] ${t.summary}`,
-            )
-            .join('\n');
-    const trendBlock = `\n\n▎ trend\n${data.marketTrendSummary}`;
-    const caveatsBlock =
-      data.caveats.length === 0
-        ? ''
-        : '\n\n▎ caveats\n' + data.caveats.map((c) => `! ${c}`).join('\n');
-    const composed = `${head}${themesBlock}${trendBlock}${caveatsBlock}`;
+    const head = `[sector ${sectorLabel}] asof ${data.asof} · window ${String(data.windowDays)}d · members ${String(data.codes.length)}`;
+    const briefBlock = data.brief.length > 0 ? `\n\n${data.brief}` : '';
+    const body = marketSentimentLines(data).join('\n');
+    const composed = `${head}${briefBlock}\n\n${body}`;
     const payload =
       composed.length > 15800 ? `${composed.slice(0, 15800)}\n…[truncated]` : composed;
     push.mutate({ payload });
   };
-
-  const lines: readonly string[] =
-    data === null
-      ? [
-          `$ sentiment.analyze_many --sector ${sectorLabel} --members ${String(codes.length)}`,
-          codes.length === 0 ? '// no members' : '// awaiting trigger',
-        ]
-      : [
-          `$ sentiment.analyze_many --asof ${data.asof} --window ${String(data.windowDays)}d`,
-          `▎ members ${String(data.codes.length)}  themes ${String(data.themeClusters.length)}`,
-          ...data.themeClusters.map(
-            (t) =>
-              `  · ${t.label} [${String(t.memberCount)}m heat=${t.heatScore.toFixed(2)}] ${t.summary}`,
-          ),
-          '',
-          '▎ trend',
-          `  ${data.marketTrendSummary}`,
-          ...(data.caveats.length === 0
-            ? []
-            : ['', '▎ caveats', ...data.caveats.map((c) => `  ! ${c}`)]),
-        ];
 
   return (
     <FeatView

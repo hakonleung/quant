@@ -123,7 +123,11 @@ export class LlmService {
    * provider-specific search backend.
    */
   async *chatStreamFinalize(
-    args: { readonly messages: readonly ChatMessage[]; readonly webSearch?: boolean },
+    args: {
+      readonly messages: readonly ChatMessage[];
+      readonly webSearch?: boolean;
+      readonly responseFormat?: 'json_object';
+    },
     ctx: LlmCallContext,
     opts: ResolveOptions = { scope: ctx.scope, needWebSearch: args.webSearch === true },
   ): AsyncIterable<ChatStreamChunk> {
@@ -137,6 +141,7 @@ export class LlmService {
         messages: args.messages,
         traceId: ctx.traceId,
         ...(args.webSearch === true ? { webSearch: true } : {}),
+        ...(args.responseFormat !== undefined ? { responseFormat: args.responseFormat } : {}),
       })) {
         if (chunk.usage) lastUsage = chunk.usage;
         yield chunk;
@@ -155,13 +160,46 @@ export class LlmService {
   /**
    * Synchronous web-search wrapper. Drains the streaming finalize
    * iterator into a single buffered string + cumulative usage frame.
-   * Used by the sentiment service's analyst pass — it wants a verbatim
-   * plain-text write-up, not chunks.
+   * Used by the agent's `web.search` instruction — it wants verbatim
+   * plain-text, not chunks.
    */
   async completeWithWebSearch(
     args: { readonly system: string; readonly user: string },
     ctx: LlmCallContext,
     opts: ResolveOptions = { scope: ctx.scope, needWebSearch: true },
+  ): Promise<{
+    readonly text: string;
+    readonly usage: ChatTokenUsage;
+    readonly provider: string;
+    readonly model: string;
+  }> {
+    return this.drainWebSearch(args, ctx, opts, /*json=*/ false);
+  }
+
+  /**
+   * Single-shot JSON completion routed through the provider's native
+   * web search (Qwen `enable_search` / Moonshot `$web_search` loop).
+   * Replaces the legacy two-step "analyst notes → JSON extraction"
+   * pipeline used by sentiment analysis.
+   */
+  async completeJsonWithWebSearch(
+    args: { readonly system: string; readonly user: string },
+    ctx: LlmCallContext,
+    opts: ResolveOptions = { scope: ctx.scope, needWebSearch: true },
+  ): Promise<{
+    readonly text: string;
+    readonly usage: ChatTokenUsage;
+    readonly provider: string;
+    readonly model: string;
+  }> {
+    return this.drainWebSearch(args, ctx, opts, /*json=*/ true);
+  }
+
+  private async drainWebSearch(
+    args: { readonly system: string; readonly user: string },
+    ctx: LlmCallContext,
+    opts: ResolveOptions,
+    json: boolean,
   ): Promise<{
     readonly text: string;
     readonly usage: ChatTokenUsage;
@@ -178,6 +216,7 @@ export class LlmService {
           { role: 'user', content: args.user },
         ],
         webSearch: true,
+        ...(json ? { responseFormat: 'json_object' as const } : {}),
       },
       ctx,
       opts,

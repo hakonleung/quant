@@ -150,47 +150,58 @@ describe('snapshotToTerm', () => {
 });
 
 describe('sentimentToTerm', () => {
-  it('preserves theme + driver, clamps score', () => {
+  it('surfaces top theme + top driver, renders detail text', () => {
     const out = sentimentToTerm({
       code: '600519',
-      score: 1.5, // out-of-range — should clamp to 1
-      theme: '行业景气复苏',
-      driver: '需求边际改善',
-      target: 1500,
-      rumor: '',
       cachedAt: '2026-04-30T01:00:00.000Z',
-      rawLog: [],
-      result: 'analyst writeup',
+      brief: '需求改善 + 估值修复。',
+      score: 0.78,
+      coreDrivers: [
+        { summary: '需求边际改善', direction: 'positive', confidence: 0.7, isRumor: false },
+      ],
+      hotThemes: [{ label: '行业景气复苏', relevance: 0.9, rationale: '环比改善' }],
+      coreProducts: [],
+      priceSignals: [],
+      mAndA: [],
+      supplyDemand: [],
+      researchTargets: [],
+      competitiveLandscape: null,
+      coverageGaps: [],
+      caveats: [],
     });
-    expect(out).toEqual({
-      code: '600519',
-      score: 1,
-      theme: '行业景气复苏',
-      driver: '需求边际改善',
-      cachedAt: '2026-04-30T01:00:00.000Z',
-      result: 'analyst writeup',
-    });
+    expect(out.code).toBe('600519');
+    expect(out.score).toBeCloseTo(0.78);
+    expect(out.brief).toBe('需求改善 + 估值修复。');
+    expect(out.topTheme).toBe('行业景气复苏');
+    expect(out.topDriver).toBe('需求边际改善');
+    expect(out.detail).toContain('▎ score');
+    expect(out.detail).toContain('行业景气复苏');
   });
 
-  it('empty driver becomes null', () => {
-    expect(
-      sentimentToTerm({
-        code: '600519',
-        score: 0,
-        theme: 't',
-        driver: '',
-        target: 0,
-        rumor: '',
-        cachedAt: '2026-04-30T01:00:00.000Z',
-        rawLog: [],
-        result: '',
-      }).driver,
-    ).toBeNull();
+  it('empty driver/theme produces empty top fields', () => {
+    const out = sentimentToTerm({
+      code: '600519',
+      cachedAt: '2026-04-30T01:00:00.000Z',
+      brief: '',
+      score: 0.5,
+      coreDrivers: [],
+      hotThemes: [],
+      coreProducts: [],
+      priceSignals: [],
+      mAndA: [],
+      supplyDemand: [],
+      researchTargets: [],
+      competitiveLandscape: null,
+      coverageGaps: [],
+      caveats: [],
+    });
+    expect(out.topDriver).toBe('');
+    expect(out.topTheme).toBe('');
   });
 });
 
 describe('marketSentimentToTerm', () => {
-  it('averages cluster heat scores; surfaces theme labels', () => {
+  it('averages cluster heat scores; surfaces theme labels; renders detail', () => {
     const out = marketSentimentToTerm(
       {
         asof: '2026-04-30',
@@ -198,11 +209,27 @@ describe('marketSentimentToTerm', () => {
         fetchedAt: '2026-04-30T01:00:00.000Z',
         codeHash: 'abc',
         codes: ['600519', '300750'],
+        brief: '板块温和复苏。',
         themeClusters: [
-          { label: '高景气', memberCount: 1, heatScore: 0.6, summary: 's1' },
-          { label: '困境反转', memberCount: 1, heatScore: 0.2, summary: 's2' },
+          {
+            label: '高景气',
+            memberCodes: ['600519'],
+            relatedIndustries: [],
+            heatScore: 0.6,
+            trend: 'rising',
+            summary: 's1',
+          },
+          {
+            label: '困境反转',
+            memberCodes: ['300750'],
+            relatedIndustries: [],
+            heatScore: 0.2,
+            trend: 'stable',
+            summary: 's2',
+          },
         ],
-        marketTrendSummary: '',
+        styleSignals: [],
+        industryTrends: [],
         caveats: [],
       },
       ['600519', '300750'],
@@ -210,6 +237,8 @@ describe('marketSentimentToTerm', () => {
     expect(out.codes).toEqual(['600519', '300750']);
     expect(out.themes).toEqual(['高景气', '困境反转']);
     expect(out.score).toBeCloseTo(0.4);
+    expect(out.brief).toBe('板块温和复苏。');
+    expect(out.detail).toContain('▎ themes');
   });
 
   it('empty clusters → score 0', () => {
@@ -220,8 +249,10 @@ describe('marketSentimentToTerm', () => {
         fetchedAt: '2026-04-30T01:00:00.000Z',
         codeHash: 'abc',
         codes: [],
+        brief: '',
         themeClusters: [],
-        marketTrendSummary: '',
+        styleSignals: [],
+        industryTrends: [],
         caveats: [],
       },
       [],

@@ -41,6 +41,8 @@ export function buildNlToDslSystemPrompt(asof: string): string {
   return `\
 你将中文 A 股筛选自然语言指令翻译为严格的 JSON DSL。
 
+**输出必须是单行 minified JSON, 无空格无换行无 markdown 包裹。**
+
 始终返回**一个** JSON 对象，顶层键如下：
 
   - \`screen_plan\`     （必填）—— K 线 predicate AST
