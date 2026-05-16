@@ -28,6 +28,9 @@ import {
 } from '@quant/shared';
 
 import { CLOCK, type Clock } from '../../common/clock.js';
+import { AgentHistoryStore } from '../agent/agent-history.store.js';
+import { AgentPendingStore } from '../agent/agent-pending.store.js';
+import { AgentService } from '../agent/agent.service.js';
 import { AuthConfig } from '../auth/config/auth.config.js';
 import { LedgerService } from '../ledger/ledger.service.js';
 import { LlmService } from '../llm/llm.service.js';
@@ -42,7 +45,10 @@ import { TaService } from '../ta/ta.service.js';
 import { WatchTaskStore } from '../watch/watch-task.store.js';
 import { WatchService } from '../watch/watch.service.js';
 
+import type { BeInstructionCenterPort } from '../instruction/ports/be-instruction-center.port.js';
 import type { BeEnv, BeCtx, ImHost, ImOutput } from './be-types.js';
+import { buildAgentCell } from './cells/agent.cell.js';
+import { buildAgentConfirmCell } from './cells/agent-confirm.cell.js';
 import { buildAnalyzeCell } from './cells/analyze.cell.js';
 import { buildLedgerCell } from './cells/ledger.cell.js';
 import { buildLedgerAnalyzeCell } from './cells/ledger-analyze.cell.js';
@@ -90,13 +96,15 @@ export type MigratedIds =
   | 'ledger.analyze'
   | 'web.search'
   | 'update'
-  | 'sector.show';
+  | 'sector.show'
+  | 'agent'
+  | 'agent.confirm';
 
 type Excluded = Exclude<AllInstructionIds, MigratedIds>;
 type Configured = Exclude<AllInstructionIds, Excluded>;
 
 @Injectable()
-export class BeInstructionCenter {
+export class BeInstructionCenter implements BeInstructionCenterPort {
   private readonly center: InstructionCenter<BeEnv, Excluded>;
   /** Empty host today — explicit object so renderers see a stable shape. */
   private readonly host: ImHost = {};
@@ -116,6 +124,9 @@ export class BeInstructionCenter {
     @Inject(ScreenService) screen: ScreenService,
     @Inject(LlmService) llm: LlmService,
     @Inject(CronOrchestrator) cron: CronOrchestrator,
+    @Inject(AgentService) agentSvc: AgentService,
+    @Inject(AgentHistoryStore) agentHistory: AgentHistoryStore,
+    @Inject(AgentPendingStore) agentPending: AgentPendingStore,
   ) {
     const cfg: InstructionConfig<BeEnv, Excluded> = {
       usr: buildUsrCell({ authCfg, ledger, clock }),
@@ -137,6 +148,8 @@ export class BeInstructionCenter {
       'web.search': buildWebSearchCell({ llm }),
       update: buildUpdateCell({ cron }),
       'sector.show': buildSectorShowCell({ sectors, stockList }),
+      agent: buildAgentCell({ agent: agentSvc, history: agentHistory }),
+      'agent.confirm': buildAgentConfirmCell({ agent: agentSvc, pending: agentPending }),
     };
     this.center = new InstructionCenter<BeEnv, Excluded>(cfg);
   }

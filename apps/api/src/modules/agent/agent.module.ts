@@ -22,8 +22,6 @@ import { AgentService } from './agent.service.js';
 import { AGENT_CONFIG, loadAgentConfig } from './agent.config.js';
 import { AgentStreamFinalizer } from './agent-stream-finalizer.js';
 import { AgentToolBridge } from './agent-tool-bridge.js';
-import { AgentConfirmInstructionHandler } from './instructions/agent-confirm.handler.js';
-import { AgentInstructionHandler } from './instructions/agent.handler.js';
 
 @Module({
   imports: [
@@ -44,10 +42,10 @@ import { AgentInstructionHandler } from './instructions/agent.handler.js';
     AgentPendingStore,
     AgentStreamFinalizer,
     AgentService,
-    AgentInstructionHandler,
-    AgentConfirmInstructionHandler,
-    // `web.search` migrated to `BeInstructionCenter` (instruction-center/cells/web-search.cell.ts).
+    // `agent` / `agent.confirm` / `web.search` migrated to
+    // `BeInstructionCenter` (instruction-center/cells/agent*.cell.ts,
+    // cells/web-search.cell.ts).
   ],
-  exports: [AgentService, AgentHistoryStore],
+  exports: [AgentService, AgentHistoryStore, AgentPendingStore],
 })
 export class AgentModule {}

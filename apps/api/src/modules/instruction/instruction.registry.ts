@@ -18,8 +18,10 @@ import {
 } from '@nestjs/common';
 import { assertHandlerCoverage, instructionId, type InstructionId } from '@quant/shared';
 
-import { BeInstructionCenter } from '../instruction-center/be-instruction-center.service.js';
-
+import {
+  BE_INSTRUCTION_CENTER_PORT,
+  type BeInstructionCenterPort,
+} from './ports/be-instruction-center.port.js';
 import type { AnyInstructionHandler, InstructionHandler } from './instruction.port.js';
 import type { AnyInstructionSpec, InstructionSpec } from './instruction.types.js';
 
@@ -39,8 +41,8 @@ export class InstructionRegistry implements OnApplicationBootstrap {
 
   constructor(
     @Optional()
-    @Inject(BeInstructionCenter)
-    private readonly center: BeInstructionCenter | null = null,
+    @Inject(BE_INSTRUCTION_CENTER_PORT)
+    private readonly center: BeInstructionCenterPort | null = null,
   ) {}
 
   register<TArgs>(spec: InstructionSpec<TArgs>, handler: InstructionHandler<TArgs>): void {

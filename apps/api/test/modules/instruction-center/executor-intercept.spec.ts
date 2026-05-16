@@ -17,6 +17,9 @@ import {
   InstructionAsyncBus,
   type InstructionAsyncJob,
 } from '../../../src/modules/instruction/async/instruction-async.bus.js';
+import type { AgentHistoryStore } from '../../../src/modules/agent/agent-history.store.js';
+import type { AgentPendingStore } from '../../../src/modules/agent/agent-pending.store.js';
+import type { AgentService } from '../../../src/modules/agent/agent.service.js';
 import { BeInstructionCenter } from '../../../src/modules/instruction-center/be-instruction-center.service.js';
 import { InstructionExecutor } from '../../../src/modules/instruction/instruction.executor.js';
 import type { InstructionCtx } from '../../../src/modules/instruction/instruction.port.js';
@@ -98,6 +101,17 @@ function build(): {
   const cron: CronOrchestrator = {
     fireScan: () => ({ started: true, traceId: 'fake-trace' }),
   } as unknown as CronOrchestrator;
+  const agentSvc: AgentService = {
+    resolveMaxToolCalls: () => 3,
+    runFresh: () => Promise.resolve(),
+    resume: () => Promise.resolve(),
+  } as unknown as AgentService;
+  const agentHistory: AgentHistoryStore = {
+    recent: () => [],
+  } as unknown as AgentHistoryStore;
+  const agentPending: AgentPendingStore = {
+    take: () => null,
+  } as unknown as AgentPendingStore;
   const center = new BeInstructionCenter(
     authCfg,
     ledger,
@@ -113,6 +127,9 @@ function build(): {
     screenSvc,
     llm,
     cron,
+    agentSvc,
+    agentHistory,
+    agentPending,
   );
   const reg = new InstructionRegistry(center);
   const enqueued: InstructionAsyncJob[] = [];
@@ -192,10 +209,12 @@ describe('InstructionExecutor → BeInstructionCenter intercept', () => {
     expect(center.has('web.search')).toBe(true);
     expect(center.has('update')).toBe(true);
     expect(center.has('sector.show')).toBe(true);
-    expect(center.has('agent')).toBe(false);
-    expect(center.has('agent.confirm')).toBe(false);
+    expect(center.has('agent')).toBe(true);
+    expect(center.has('agent.confirm')).toBe(true);
     expect(center.has('analyze.sector')).toBe(false);
     expect(center.ids().slice().sort()).toEqual([
+      'agent',
+      'agent.confirm',
       'analyze',
       'ledger',
       'ledger.analyze',
@@ -261,6 +280,17 @@ describe('InstructionExecutor → BeInstructionCenter intercept', () => {
       const cron: CronOrchestrator = {
         fireScan: () => ({ started: true, traceId: 'fake-trace' }),
       } as unknown as CronOrchestrator;
+      const agentSvc: AgentService = {
+        resolveMaxToolCalls: () => 3,
+        runFresh: () => Promise.resolve(),
+        resume: () => Promise.resolve(),
+      } as unknown as AgentService;
+      const agentHistory: AgentHistoryStore = {
+        recent: () => [],
+      } as unknown as AgentHistoryStore;
+      const agentPending: AgentPendingStore = {
+        take: () => null,
+      } as unknown as AgentPendingStore;
       const center = new BeInstructionCenter(
         authCfg,
         ledger,
@@ -276,6 +306,9 @@ describe('InstructionExecutor → BeInstructionCenter intercept', () => {
         screenSvc,
         llm,
         cron,
+        agentSvc,
+        agentHistory,
+        agentPending,
       );
       const reg = new InstructionRegistry(center);
       const queued: InstructionAsyncJob[] = [];
@@ -354,6 +387,17 @@ describe('InstructionExecutor → BeInstructionCenter intercept', () => {
     const cron: CronOrchestrator = {
       fireScan: () => ({ started: true, traceId: 'fake-trace' }),
     } as unknown as CronOrchestrator;
+    const agentSvc: AgentService = {
+      resolveMaxToolCalls: () => 3,
+      runFresh: () => Promise.resolve(),
+      resume: () => Promise.resolve(),
+    } as unknown as AgentService;
+    const agentHistory: AgentHistoryStore = {
+      recent: () => [],
+    } as unknown as AgentHistoryStore;
+    const agentPending: AgentPendingStore = {
+      take: () => null,
+    } as unknown as AgentPendingStore;
     const center = new BeInstructionCenter(
       authCfg,
       ledger,
@@ -369,6 +413,9 @@ describe('InstructionExecutor → BeInstructionCenter intercept', () => {
       screenSvc,
       llm,
       cron,
+      agentSvc,
+      agentHistory,
+      agentPending,
     );
     const reg = new InstructionRegistry(center);
     // Test the synthesised handler's peek directly — the IM gate uses

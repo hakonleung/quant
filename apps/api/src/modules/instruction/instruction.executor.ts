@@ -35,12 +35,15 @@ import {
 import { randomUUID } from 'node:crypto';
 
 import { CLOCK, type Clock } from '../../common/clock.js';
-import { BeInstructionCenter } from '../instruction-center/be-instruction-center.service.js';
 import {
   InstructionAsyncBus,
   type InstructionAsyncJob,
   type InstructionImHints,
 } from './async/instruction-async.bus.js';
+import {
+  BE_INSTRUCTION_CENTER_PORT,
+  type BeInstructionCenterPort,
+} from './ports/be-instruction-center.port.js';
 import { InstructionRegistry, type InstructionEntry } from './instruction.registry.js';
 import type { AnyInstructionHandler, InstructionCtx } from './instruction.port.js';
 import { ArgvParseError, parseArgvToObject } from './parse-argv.js';
@@ -63,8 +66,8 @@ export class InstructionExecutor {
     @Inject(InstructionAsyncBus) private readonly asyncBus: InstructionAsyncBus,
     @Inject(CLOCK) private readonly clock: Clock,
     @Optional()
-    @Inject(BeInstructionCenter)
-    private readonly center: BeInstructionCenter | null = null,
+    @Inject(BE_INSTRUCTION_CENTER_PORT)
+    private readonly center: BeInstructionCenterPort | null = null,
   ) {}
 
   /** Structured entry — id + already-decoded args. Used by socket/http. */
@@ -265,21 +268,11 @@ export class InstructionExecutor {
       ...(manifestEntry.imGate === true ? { requiresImConfirm: true as const } : {}),
     } as unknown as InstructionEntry['spec'];
     const handler: AnyInstructionHandler = {
-      execute: (args, ctx) =>
-        center.executeMigrated(
-          id as Parameters<BeInstructionCenter['executeMigrated']>[0],
-          args,
-          ctx,
-        ),
+      execute: (args, ctx) => center.executeMigrated(id, args, ctx),
       // Forward the IM listener's confirm-bypass probe into the cell's
       // optional `peek` hook. The cell layer treats "no peek defined" as
       // `false` (always show the card); centre returns the same.
-      peekImConfirmBypass: (rawArgs, ctx) =>
-        center.peekImConfirmBypass(
-          id as Parameters<BeInstructionCenter['peekImConfirmBypass']>[0],
-          rawArgs,
-          ctx,
-        ),
+      peekImConfirmBypass: (rawArgs, ctx) => center.peekImConfirmBypass(id, rawArgs, ctx),
     };
     return { spec, handler };
   }

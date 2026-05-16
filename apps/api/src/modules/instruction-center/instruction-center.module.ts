@@ -10,6 +10,7 @@
 import { Global, Module, forwardRef } from '@nestjs/common';
 
 import { SYSTEM_CLOCK_PROVIDER } from '../../common/clock.js';
+import { AgentModule } from '../agent/agent.module.js';
 import { LedgerModule } from '../ledger/ledger.module.js';
 import { OrchestrationModule } from '../orchestration/orchestration.module.js';
 import { ScreenModule } from '../screen/screen.module.js';
@@ -20,6 +21,7 @@ import { StockMetaModule } from '../stock-meta/stock-meta.module.js';
 import { TaModule } from '../ta/ta.module.js';
 import { WatchModule } from '../watch/watch.module.js';
 
+import { BE_INSTRUCTION_CENTER_PORT } from '../instruction/ports/be-instruction-center.port.js';
 import { BeInstructionCenter } from './be-instruction-center.service.js';
 
 /**
@@ -42,8 +44,16 @@ import { BeInstructionCenter } from './be-instruction-center.service.js';
     forwardRef((): typeof TaModule => TaModule),
     forwardRef((): typeof ScreenModule => ScreenModule),
     forwardRef((): typeof OrchestrationModule => OrchestrationModule),
+    forwardRef((): typeof AgentModule => AgentModule),
   ],
-  providers: [SYSTEM_CLOCK_PROVIDER, BeInstructionCenter],
-  exports: [BeInstructionCenter],
+  providers: [
+    SYSTEM_CLOCK_PROVIDER,
+    BeInstructionCenter,
+    // Bind the port token to the concrete singleton so registry +
+    // executor can inject by interface without importing the class —
+    // breaks the import cycle once agent cells move into the center.
+    { provide: BE_INSTRUCTION_CENTER_PORT, useExisting: BeInstructionCenter },
+  ],
+  exports: [BeInstructionCenter, BE_INSTRUCTION_CENTER_PORT],
 })
 export class InstructionCenterModule {}
