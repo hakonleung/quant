@@ -13,7 +13,7 @@
  *     never sneak unsupported ops or fields past us.
  *
  * Output is the wire form (`kind`-tagged) ready to feed into the
- * existing Python `screen_run` Flight op.
+ * in-process `ScreenExecService.execute`.
  */
 
 import { Inject, Injectable, Logger } from '@nestjs/common';

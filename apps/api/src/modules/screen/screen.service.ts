@@ -2,9 +2,8 @@
  * Facade over the screening pipeline:
  *
  *   - `runNl(nl, ctx)` — full NL → DSL → execute. Calls `NlToDslService`
- *     (NestJS-side LLM, replaces the deleted Python `nl_to_dsl_service`)
- *     to translate, then dispatches the resulting AST through the existing
- *     Python `screen_run` Flight op.
+ *     (NestJS-side LLM) to translate, then evaluates the resulting AST
+ *     via the in-process `ScreenExecService`.
  *   - `nlToDsl(nl, ctx)` — translation only, no execution. Used by the
  *     "AST editor" UI.
  *   - `runDsl(plan, universe, rank, traceId)` — execute an already-built
@@ -44,9 +43,9 @@ export class ScreenService {
   ) {}
 
   /**
-   * Full NL → matches pipeline. Translates the natural-language query in
-   * NestJS (LLM call), then executes the resulting AST via the Python
-   * `screen_run` Flight op.
+   * Full NL → matches pipeline. Translates the natural-language query
+   * (LLM call) then evaluates the resulting AST in-process via
+   * `ScreenExecService`.
    */
   async runNl(
     nl: string,

@@ -1,12 +1,12 @@
 /**
  * LLM-output (`op`-tagged) → wire-format (`kind`-tagged) DSL converter.
  *
- * The NL→DSL prompt (mirroring the Python version) instructs the model to
- * emit nodes in `op`-tagged form (`{op: 'gt', left, right}`); the existing
- * Python `screen_run` Flight op consumes the `kind`-tagged wire form
- * (`{kind: 'compare', op: 'gt', left, right}`). This module is the
- * single point of translation, ported from `quant_core.domain.rules.
- * screen_parse` + `universe_parse`.
+ * The NL→DSL prompt instructs the model to emit nodes in `op`-tagged
+ * form (`{op: 'gt', left, right}`); the in-process screen executor
+ * consumes the `kind`-tagged wire form (`{kind: 'compare', op: 'gt',
+ * left, right}`). This module is the single point of translation,
+ * ported from the retired `quant_core.domain.rules.screen_parse` +
+ * `universe_parse`.
  *
  * Pure: no IO, no logging, no globals. Throws `QuantError("DSL_INVALID")`
  * with a JSON-pointer `path` field on every structural problem so the

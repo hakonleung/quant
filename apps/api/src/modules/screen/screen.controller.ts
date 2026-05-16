@@ -11,12 +11,12 @@
  * Why three: `nl2dsl` and `run` are the truly decoupled APIs. The combined
  * `/nl` op is retained so existing callers that want a one-round-trip
  * `NL → matches` pipeline don't pay an extra hop. The NL→DSL translation
- * runs in NestJS via `LlmService`; the executable AST is then dispatched
- * through the Python `screen_run` Flight op (computation only, no LLM).
+ * runs in NestJS via `LlmService`; the executable AST is then evaluated
+ * in-process by `ScreenExecService` (no LLM, no Flight hop).
  *
  * Why POST: the underlying `nl2dsl` op invokes a paid LLM call; the
- * `run` op mutates a Polars compute pool. Both need POST per the
- * cache-mutating-must-be-POST rule.
+ * `run` op exercises the DuckDB read path + interpreter. Both need POST
+ * per the cache-mutating-must-be-POST rule.
  */
 
 import { BadRequestException, Body, Controller, Inject, Post, Req } from '@nestjs/common';
