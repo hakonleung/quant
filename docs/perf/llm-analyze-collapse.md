@@ -100,4 +100,37 @@ LLM schema 顶层新增 `brief: string`（≤120字，"上涨核心动因分析"
 
 - 上线后补真实 p50/p95 + token 用量直方图回填本文表格。
 - 评测 sentiment "维度完整度"（structured fields per stock 平均数）是否较旧版有显著回退。
-- Moonshot 工具循环 `MAX_SEARCHES=4` 暂未收紧——下一轮再做。
+
+## P1 跟进（已完成）
+
+提交：`perf(llm): prefix-cache + tighter Moonshot loop + batched ledger writes`
+
+### Prefix-cache 命中
+
+DeepSeek / Qwen 自动 server-side prefix cache。两处改动：
+
+1. `nl-to-dsl.prompt.ts` 的 `${asof}` 从 system prompt 抠出 → 用户消息首行 `今天日期: YYYY-MM-DD` 提供，system prompt 改为静态。examples 用 `<TODAY>` 占位符（system 规则里说明：原样替换成用户消息里的真实日期）。
+2. `agent/prompts/system-prompt.ts` 渲染工具目录前按 id 字典序排序，避免 Nest 模块初始化顺序扰动 prompt prefix。
+
+预期 TTFB 第二次起 **-50~80%**，缓存命中部分的 input 计费 -90%。
+
+### Moonshot loop 收口
+
+`web-search/moonshot-tool-loop.ts`：
+
+- 计数从"queries used"改为 **search rounds**（一轮 = 一次 `tool_calls` 数组，可含多个 query）。
+- `MAX_SEARCH_ROUNDS = 1`（旧 = 4 queries）。模型必须把所有需要的搜索 query 打包到第 1 轮 `tool_calls` 里。
+- `MAX_TURNS = 4`（旧 = 12）：search → tool result → finalize + 1 buffer。
+
+最坏 12 RTT → 4 RTT；典型 case 8-16s → 3-6s。Qwen 单次 `enable_search` 仍是 web-search 首选 provider（providers.ts 顺序保持）。
+
+### Ledger 批量写
+
+`UserLlmLedgerStore.append` 之前同步 rewrite 整段 parquet（5-50ms / call），还套上 per-user mutex；LLM 主路径 `finally` 等这一步。改造后：
+
+- 每用户一个 in-memory `UserLlmLedgerEntry[]` 缓冲。
+- 触发 flush：缓冲达 **10 条** 或 **30s** 计时器到点（`setTimeout` `unref()` 不阻塞事件循环）。
+- `list()` / `summarize()` 合并 buffer + 持久化快照，读路径永远拿最新。
+- 实现 `OnApplicationShutdown`，进程退出前 `flushAll()` 不丢数据。
+
+每次调用直接省 5-50ms IO；多用户高并发下还能合批，parquet rewrite QPS 大幅下降。
