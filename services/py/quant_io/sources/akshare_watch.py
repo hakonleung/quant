@@ -19,7 +19,7 @@ from __future__ import annotations
 import random
 import time
 from datetime import UTC, date, datetime, timedelta
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal
 from typing import TYPE_CHECKING, Final, Protocol, cast, runtime_checkable
 from zoneinfo import ZoneInfo
 
@@ -27,6 +27,24 @@ from quant_core.domain.types.watch import SpotQuote, StockBasic, WatchMarket
 from quant_core.errors import QuantError
 
 from quant_io.sources._common import lazy_import
+from quant_io.sources._watch_common import (
+    _classify_exc as _classify_exc_common,
+)
+from quant_io.sources._watch_common import (
+    _decimal_or_zero as _decimal_or_zero_common,
+)
+from quant_io.sources._watch_common import (
+    _strip_us_prefix as _strip_us_prefix_common,
+)
+from quant_io.sources._watch_common import (
+    _to_decimal as _to_decimal_common,
+)
+from quant_io.sources._watch_common import (
+    _to_records as _to_records_common,
+)
+from quant_io.sources._watch_common import (
+    call_with_transport_retry,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable
@@ -42,49 +60,24 @@ _BJT: Final[ZoneInfo] = ZoneInfo("Asia/Shanghai")
 # for early-tick delays; 10 min is plenty and minimises both the upstream
 # payload size and the surface area for `Connection aborted` mid-stream.
 _US_WINDOW_MINUTES: Final[int] = 10
-# One quick retry for transient transport failures (Connection aborted /
-# ProxyError / ChunkedEncodingError). Timeouts are NOT retried — they
-# already burnt the per-tick budget; the next 3s tick will retry.
-_TRANSPORT_RETRY_DELAY_MS: Final[int] = 1000
-_TRANSPORT_RETRY_JITTER_MS: Final[int] = 100
-
-# Exception-class-name allowlists. We match by `__name__` walking the MRO
-# so we don't have to hard-depend on `requests` (akshare's HTTP layer is
-# an implementation detail). Names cover the requests / urllib3 families
-# we have actually seen in production.
-_TRANSPORT_EXC_NAMES: Final[frozenset[str]] = frozenset(
-    {
-        "ConnectionError",
-        "ConnectionResetError",
-        "ConnectionAbortedError",
-        "ProxyError",
-        "ChunkedEncodingError",
-        "ProtocolError",
-        "RemoteDisconnected",
-        "IncompleteRead",
-        "ContentDecodingError",
-    }
-)
-_TIMEOUT_EXC_NAMES: Final[frozenset[str]] = frozenset(
-    {"Timeout", "ReadTimeout", "ConnectTimeout", "ReadTimeoutError"}
-)
 
 
-def _classify_exc(exc: BaseException) -> str:
-    """Return one of ``"transport" | "timeout" | "other"`` for routing.
+# Re-exports kept for backward compat with existing tests that reach into
+# ``akshare_watch._classify_exc`` / ``_strip_us_prefix`` etc.
+_classify_exc = _classify_exc_common
+_strip_us_prefix = _strip_us_prefix_common
 
-    Walks the MRO so subclasses (e.g. ``requests.exceptions.ProxyError``
-    → ``ConnectionError``) still match. ``transport`` is the only class
-    we retry inline; the NestJS scheduler trips its per-market cooldown
-    on the same flag.
-    """
-    for cls in type(exc).__mro__:
-        name = cls.__name__
-        if name in _TRANSPORT_EXC_NAMES:
-            return "transport"
-        if name in _TIMEOUT_EXC_NAMES:
-            return "timeout"
-    return "other"
+
+def _to_records(raw: object, *, label: str) -> list[dict[str, object]]:
+    return _to_records_common(raw, label=label, backend=_NAME)
+
+
+def _to_decimal(v: object, *, label: str) -> Decimal:
+    return _to_decimal_common(v, label=label, backend=_NAME)
+
+
+def _decimal_or_zero(v: object, *, label: str) -> Decimal:
+    return _decimal_or_zero_common(v)
 
 
 @runtime_checkable
@@ -105,64 +98,6 @@ class _AkshareGateway(Protocol):
     def stock_us_spot_em(self) -> object: ...
 
 
-def _to_records(raw: object, *, label: str) -> list[dict[str, object]]:
-    """Normalise pandas-DataFrame / list-of-dict to a list of records."""
-    to_dict = getattr(raw, "to_dict", None)
-    if callable(to_dict):
-        records = to_dict("records")
-        if isinstance(records, list):
-            return [cast("dict[str, object]", r) for r in records if isinstance(r, dict)]
-    if isinstance(raw, list):
-        return [cast("dict[str, object]", r) for r in raw if isinstance(r, dict)]
-    raise QuantError(
-        "WATCH_QUOTE_UPSTREAM_FAIL",
-        f"{_NAME}: {label} returned unsupported container: {type(raw).__name__}",
-        {"label": label},
-    )
-
-
-def _strip_us_prefix(code: str) -> str:
-    """``"105.AAPL"`` -> ``"AAPL"``; bare tickers pass through unchanged."""
-    head, sep, tail = code.partition(".")
-    if sep == "" or not head.isdigit():
-        return code
-    return tail
-
-
-def _to_decimal(v: object, *, label: str) -> Decimal:
-    """Coerce a Python/pandas scalar to ``Decimal`` or raise upstream-fail."""
-    try:
-        if v is None:
-            raise ValueError("None")
-        return Decimal(str(v))
-    except (InvalidOperation, ValueError) as exc:
-        raise QuantError(
-            "WATCH_QUOTE_UPSTREAM_FAIL",
-            f"{_NAME}: bad {label}: {v!r}",
-            {"field": label},
-        ) from exc
-
-
-def _decimal_or_zero(v: object, *, label: str) -> Decimal:
-    """``_to_decimal`` that defaults missing / unparseable values to 0.
-
-    Pre-open auction rows, holiday placeholders, and partial responses
-    can lack ``成交额`` / ``成交量``. Treat those as 0 so the wire-format
-    contract (positive-or-zero decimals) is still satisfied; the NestJS
-    evaluator already guards against zero volume before computing vwap.
-    """
-    if v is None:
-        return Decimal(0)
-    try:
-        s = str(v).strip()
-        if s == "" or s.lower() in {"nan", "none"}:
-            return Decimal(0)
-        d = Decimal(s)
-        return d if d >= 0 else Decimal(0)
-    except (InvalidOperation, ValueError):
-        return Decimal(0)
-
-
 class AKShareWatchSource:
     """Implements both :class:`WatchQuoteSource` and :class:`UniverseSource`."""
 
@@ -176,7 +111,7 @@ class AKShareWatchSource:
     ) -> None:
         self._ak: object = lazy_import("akshare")
         self._prev_close_cache: dict[tuple[str, str], tuple[date, Decimal]] = {}
-        # Injected for testability — `_call_with_transport_retry` sleeps
+        # Injected for testability — the shared retry helper sleeps
         # between attempts, and tests want to assert delays without
         # actually waiting.
         self._sleep: Callable[[float], None] = sleep if sleep is not None else time.sleep
@@ -192,49 +127,22 @@ class AKShareWatchSource:
         code: str,
         label: str,
     ) -> object:
-        """Run ``fn`` and retry once on transport-class failures.
-
-        On non-transport errors raises immediately; on transport errors
-        sleeps ``_TRANSPORT_RETRY_DELAY_MS`` ± jitter and retries one
-        time. The raised :class:`QuantError` always carries a
-        ``reason ∈ {"transport","timeout","other"}`` in ``details`` so
-        the NestJS scheduler can trip its per-market cooldown.
-        """
-        try:
-            return fn()
-        except Exception as exc:
-            reason = _classify_exc(exc)
-            if reason != "transport":
-                raise QuantError(
-                    "WATCH_QUOTE_UPSTREAM_FAIL",
-                    f"{_NAME}: {label}({code}) failed: {exc!r}",
-                    {"market": market, "code": code, "reason": reason},
-                ) from exc
-            delay_s = max(
-                0.0,
-                (
-                    _TRANSPORT_RETRY_DELAY_MS
-                    + self._jitter(-_TRANSPORT_RETRY_JITTER_MS, _TRANSPORT_RETRY_JITTER_MS)
-                )
-                / 1000.0,
-            )
-            self._sleep(delay_s)
-        try:
-            return fn()
-        except Exception as exc2:
-            reason2 = _classify_exc(exc2)
-            raise QuantError(
-                "WATCH_QUOTE_UPSTREAM_FAIL",
-                f"{_NAME}: {label}({code}) failed after retry: {exc2!r}",
-                {"market": market, "code": code, "reason": reason2, "retried": True},
-            ) from exc2
+        return call_with_transport_retry(
+            fn,
+            market=market,
+            code=code,
+            label=label,
+            backend=_NAME,
+            sleep=self._sleep,
+            jitter=self._jitter,
+        )
 
     def _require_ak(self) -> _AkshareGateway:
         if self._ak is None:
             raise QuantError(
                 "WATCH_QUOTE_UPSTREAM_FAIL",
                 f"{_NAME}: akshare not installed",
-                {"reason": "import_failed"},
+                {"reason": "import_failed", "backend": _NAME},
             )
         return cast("_AkshareGateway", self._ak)
 
@@ -370,7 +278,7 @@ class AKShareWatchSource:
             raise QuantError(
                 "WATCH_QUOTE_UPSTREAM_FAIL",
                 f"{_NAME}: empty daily frame for {key}",
-                {"market": key[0], "code": key[1]},
+                {"market": key[0], "code": key[1], "backend": _NAME},
             )
         # `stock_{hk,us}_daily` returns completed sessions only — the running
         # intraday bar is not appended. So the last row is the previous
@@ -417,7 +325,7 @@ def _bid_ask_to_kv(raw: object) -> dict[str, object]:
         raise QuantError(
             "WATCH_QUOTE_UPSTREAM_FAIL",
             f"{_NAME}: empty bid/ask response",
-            {},
+            {"backend": _NAME},
         )
     # ``stock_bid_ask_em`` returns rows like {"item": "最新", "value": 12.34}.
     if all("item" in r and "value" in r for r in records):
@@ -440,7 +348,7 @@ def _minute_session_summary(
         raise QuantError(
             "WATCH_QUOTE_UPSTREAM_FAIL",
             f"{_NAME}: empty minute frame for {label}",
-            {"label": label},
+            {"label": label, "backend": _NAME},
         )
     last_row = records[-1]
     last = _to_decimal(last_row.get("收盘", last_row.get("close")), label="last")
@@ -452,7 +360,7 @@ def _minute_session_summary(
         raise QuantError(
             "WATCH_QUOTE_UPSTREAM_FAIL",
             f"{_NAME}: missing high/low columns in {label}",
-            {"label": label},
+            {"label": label, "backend": _NAME},
         )
     amount_total = Decimal(0)
     for r in records:

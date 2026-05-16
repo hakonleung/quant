@@ -51,6 +51,8 @@ from quant_io.sources.akshare_financials import (
 from quant_io.sources.akshare_kline import AKShareKlineSource
 from quant_io.sources.akshare_stock_meta import AKShareStockMetaSource
 from quant_io.sources.akshare_watch import AKShareWatchSource
+from quant_io.sources.routed_watch import MarketRoutedWatchSource
+from quant_io.sources.yfinance_watch import YFinanceWatchSource
 
 from quant_rpc.handlers import HandlerRegistry
 from quant_rpc.ops.blacklist import ComputeAshareBlacklistHandler
@@ -263,8 +265,17 @@ def main() -> int:
     registry.register(SyncKlineForCodeHandler(kline_service))
     registry.register(UpsertStockMetricsForCodeHandler(meta_repo, kline_repo, clock))
     registry.register(UpsertStockMetricsForCodesHandler(meta_repo, kline_repo, clock))
-    watch_source = AKShareWatchSource()
-    watch_service = WatchQuoteService(quotes=watch_source, universe=watch_source)
+    # Watch quotes route per market. yfinance is the default US backend
+    # because East Money / Sina (AKShare's US upstreams) have been
+    # IP-throttling us; Yahoo's IPs sit on a separate family. Override
+    # via `US_WATCH_SOURCE=akshare` to fall back. Universe refresh
+    # stays on AKShare since yfinance has no native US universe call.
+    ak_watch = AKShareWatchSource()
+    us_backend_choice = os.environ.get("US_WATCH_SOURCE", "yfinance").strip().lower()
+    us_watch_source = YFinanceWatchSource() if us_backend_choice == "yfinance" else ak_watch
+    watch_source = MarketRoutedWatchSource({"a": ak_watch, "hk": ak_watch, "us": us_watch_source})
+    log.info("watch.us_backend=%s", us_backend_choice)
+    watch_service = WatchQuoteService(quotes=watch_source, universe=ak_watch)
     registry.register(WatchQuoteOneHandler(watch_service))
     registry.register(WatchUniverseRefreshHandler(watch_service))
 

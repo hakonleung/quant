@@ -41,10 +41,32 @@ import { WATCH_QUEUE_A, WATCH_QUEUE_HK, WATCH_QUEUE_US } from './watch-tokens.js
 
 const DEFAULT_FLIGHT_TARGET = '127.0.0.1:8815';
 
-const makeMarketQueue = (name: string): InMemoryQueue<WatchJob> =>
+type MarketQueueTuning = {
+  /**
+   * Max simultaneously in-flight quote fetches for this market.
+   *
+   * Yahoo (yfinance backend, US) aggressively rate-limits parallel
+   * connections from the same IP regardless of TLS impersonation — 1
+   * serialised request per tick keeps us inside the limit. East Money
+   * (akshare, A/HK) handles 8-way fan-out fine.
+   */
+  concurrency: number;
+  /**
+   * Base cooldown when the queue trips a pool-class error. Yahoo's
+   * rate-limit window is minutes, so US bumps this from the default
+   * 3s to 30s; A/HK keep 3s because their failures are typically
+   * transient proxy hiccups.
+   */
+  poolBaseMs: number;
+};
+
+const makeMarketQueue = (
+  name: string,
+  tuning: MarketQueueTuning,
+): InMemoryQueue<WatchJob> =>
   new InMemoryQueue<WatchJob>({
     name,
-    concurrency: 8,
+    concurrency: tuning.concurrency,
     maxRetry: 3,
     taskBackoff: {
       baseMs: 1_000,
@@ -53,13 +75,16 @@ const makeMarketQueue = (name: string): InMemoryQueue<WatchJob> =>
       jitterRatio: 0.2,
     },
     poolBackoff: {
-      baseMs: 3_000,
+      baseMs: tuning.poolBaseMs,
       factor: 2,
-      maxMs: 30_000,
+      maxMs: 60_000,
       jitterRatio: 0.2,
       isPoolError: isPoolLevelError,
     },
   });
+
+const A_HK_TUNING: MarketQueueTuning = { concurrency: 8, poolBaseMs: 3_000 };
+const US_TUNING: MarketQueueTuning = { concurrency: 1, poolBaseMs: 30_000 };
 
 @Module({
   imports: [StockMetaModule, StockListModule, ChannelModule, KlineModule],
@@ -76,15 +101,15 @@ const makeMarketQueue = (name: string): InMemoryQueue<WatchJob> =>
     { provide: WATCH_KLINE_REF_PORT, useClass: LocalKlineRefAdapter },
     {
       provide: WATCH_QUEUE_A,
-      useFactory: (): InMemoryQueue<WatchJob> => makeMarketQueue('watch-a'),
+      useFactory: (): InMemoryQueue<WatchJob> => makeMarketQueue('watch-a', A_HK_TUNING),
     },
     {
       provide: WATCH_QUEUE_HK,
-      useFactory: (): InMemoryQueue<WatchJob> => makeMarketQueue('watch-hk'),
+      useFactory: (): InMemoryQueue<WatchJob> => makeMarketQueue('watch-hk', A_HK_TUNING),
     },
     {
       provide: WATCH_QUEUE_US,
-      useFactory: (): InMemoryQueue<WatchJob> => makeMarketQueue('watch-us'),
+      useFactory: (): InMemoryQueue<WatchJob> => makeMarketQueue('watch-us', US_TUNING),
     },
     WatchTaskStore,
     WatchGroupStore,

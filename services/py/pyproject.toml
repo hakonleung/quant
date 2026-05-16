@@ -16,6 +16,14 @@ dependencies = [
     "polars>=1.40.1",
     "duckdb>=1.5.2",
     "openai>=2.33.0",
+    # Watch (W-0) US realtime quotes fallback. East Money / Sina (the
+    # backends akshare proxies for US tickers) have been IP-blocking
+    # the Flight server host; Yahoo sits on a separate IP family.
+    "yfinance>=0.2.50",
+    # Chrome TLS-fingerprint impersonation for the yfinance session.
+    # Without this, Yahoo aggressively rate-limits the default
+    # `requests` UA + fingerprint and returns YFRateLimitError.
+    "curl-cffi>=0.7",
 ]
 
 [build-system]

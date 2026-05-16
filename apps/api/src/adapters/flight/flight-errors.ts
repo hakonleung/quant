@@ -57,10 +57,21 @@ export function isTransportError(err: unknown): boolean {
 }
 
 /**
+ * `true` when the upstream surfaced a rate-limit. Yahoo's window is
+ * minutes, not seconds, so the entire pool must back off — retrying a
+ * single task would just consume cooldown headroom from sibling tasks.
+ * The queue's `poolBackoff.baseMs` should be set higher for queues that
+ * can trip this (e.g. the US watch queue with yfinance backend).
+ */
+export function isRateLimitError(err: unknown): boolean {
+  return err instanceof QuantError && err.details['reason'] === 'rate_limited';
+}
+
+/**
  * Either pool-class signal — flight channel down OR python-tunnelled
- * transport-class failure. Used as the default `poolBackoff.isPoolError`
- * for queues that talk to python via Flight.
+ * transport / rate-limit failure. Used as the default
+ * `poolBackoff.isPoolError` for queues that talk to python via Flight.
  */
 export function isPoolLevelError(err: unknown): boolean {
-  return isPyFlightDown(err) || isTransportError(err);
+  return isPyFlightDown(err) || isTransportError(err) || isRateLimitError(err);
 }

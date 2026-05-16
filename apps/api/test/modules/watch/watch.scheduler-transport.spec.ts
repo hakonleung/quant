@@ -12,6 +12,7 @@ import { QuantError } from '@quant/shared';
 import {
   isPoolLevelError,
   isPyFlightDown,
+  isRateLimitError,
   isTransportError,
 } from '../../../src/adapters/flight/flight-errors.js';
 import { InMemoryQueue } from '../../../src/modules/orchestration/domain/in-memory-queue.js';
@@ -58,18 +59,33 @@ function transportErr(): QuantError {
   });
 }
 
+function rateLimitErr(): QuantError {
+  return new QuantError('WATCH_QUOTE_UPSTREAM_FAIL', 'rate-limited by Yahoo', {
+    market: 'us',
+    code: 'AAPL',
+    reason: 'rate_limited',
+    backend: 'yfinance_watch',
+  });
+}
+
 describe('flight error classifiers', () => {
   it('isTransportError recognises tunneled transport reason', () => {
     expect(isTransportError(transportErr())).toBe(true);
     expect(isTransportError(new Error('generic'))).toBe(false);
+  });
+  it('isRateLimitError recognises tunneled rate-limit reason', () => {
+    expect(isRateLimitError(rateLimitErr())).toBe(true);
+    expect(isRateLimitError(transportErr())).toBe(false);
+    expect(isRateLimitError(new Error('generic'))).toBe(false);
   });
   it('isPyFlightDown matches ECONNRESET / ECONNREFUSED', () => {
     expect(isPyFlightDown(new Error('connect ECONNREFUSED 127.0.0.1:8815'))).toBe(true);
     expect(isPyFlightDown(new Error('socket hang up'))).toBe(true);
     expect(isPyFlightDown(new Error('generic'))).toBe(false);
   });
-  it('isPoolLevelError is the union', () => {
+  it('isPoolLevelError is the union of py-down, transport, and rate-limit', () => {
     expect(isPoolLevelError(transportErr())).toBe(true);
+    expect(isPoolLevelError(rateLimitErr())).toBe(true);
     expect(isPoolLevelError(new Error('ECONNRESET'))).toBe(true);
     expect(isPoolLevelError(new Error('boom'))).toBe(false);
   });
