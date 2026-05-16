@@ -20,7 +20,6 @@ import { SYSTEM_CLOCK_PROVIDER } from '../../common/clock.js';
 import { STOCK_META_PORT } from './domain/stock-meta-port.js';
 import { LocalStockMetaAdapter, STOCK_META_DATA_DIR } from './local-stock-meta.adapter.js';
 import { LocalStockMetaWriterService } from './local-stock-meta-writer.service.js';
-import { StockInstructionHandler } from './instructions/stock.handler.js';
 import { StockMetaController } from './stock-meta.controller.js';
 import { StockMetaService } from './stock-meta.service.js';
 
@@ -38,7 +37,7 @@ const DEFAULT_DATA_DIR = '../../data';
     LocalStockMetaWriterService,
     SYSTEM_CLOCK_PROVIDER,
     StockMetaService,
-    StockInstructionHandler,
+    // `stock` (search) migrated to `BeInstructionCenter` (instruction-center/cells/stock.cell.ts).
   ],
   exports: [StockMetaService, LocalStockMetaWriterService],
 })

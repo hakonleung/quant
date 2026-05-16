@@ -4,7 +4,6 @@ import { SYSTEM_CLOCK_PROVIDER } from '../../common/clock.js';
 import type { UserScopedRecordStore } from '../../common/storage/ports/user-scoped-record-store.port.js';
 import { AUTH_CONFIG, type AuthConfigShape } from '../auth/config/auth.config.js';
 import { LedgerAnalyzeInstructionHandler } from './instructions/ledger-analyze.handler.js';
-import { LedgerInstructionHandler } from './instructions/ledger.handler.js';
 import {
   buildLedgerCacheUserScopedStore,
   LedgerCacheStore,
@@ -28,7 +27,7 @@ import { LedgerStore } from './ledger.store.js';
     LedgerStore,
     LedgerCacheStore,
     LedgerService,
-    LedgerInstructionHandler,
+    // `ledger` (list) migrated to `BeInstructionCenter` (instruction-center/cells/ledger.cell.ts).
     LedgerAnalyzeInstructionHandler,
   ],
   exports: [LedgerStore, LedgerService],

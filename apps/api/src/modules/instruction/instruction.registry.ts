@@ -9,8 +9,16 @@
  * users).
  */
 
-import { Injectable, Logger, type OnApplicationBootstrap } from '@nestjs/common';
+import {
+  Inject,
+  Injectable,
+  Logger,
+  Optional,
+  type OnApplicationBootstrap,
+} from '@nestjs/common';
 import { assertHandlerCoverage, instructionId, type InstructionId } from '@quant/shared';
+
+import { BeInstructionCenter } from '../instruction-center/be-instruction-center.service.js';
 
 import type { AnyInstructionHandler, InstructionHandler } from './instruction.port.js';
 import type { AnyInstructionSpec, InstructionSpec } from './instruction.types.js';
@@ -28,6 +36,12 @@ export class InstructionRegistry implements OnApplicationBootstrap {
   private readonly aliasOf = new Map<string, string>();
   /** Free-form IM aliases (Chinese, etc.) → canonical id. */
   private readonly imAliasOf = new Map<string, string>();
+
+  constructor(
+    @Optional()
+    @Inject(BeInstructionCenter)
+    private readonly center: BeInstructionCenter | null = null,
+  ) {}
 
   register<TArgs>(spec: InstructionSpec<TArgs>, handler: InstructionHandler<TArgs>): void {
     const id = spec.id;
@@ -89,11 +103,16 @@ export class InstructionRegistry implements OnApplicationBootstrap {
    * Assert the registered handler set matches the shared manifest's
    * `supportedOn: 'be'` slice. Throws on mismatch (missing handler for
    * a manifest entry, or registered handler not in the manifest).
+   *
+   * Ids migrated to the new `BeInstructionCenter` count as registered
+   * — they live in a different surface but still satisfy the
+   * manifest's "BE must implement these" contract.
    */
   assertManifestCoverage(): void {
+    const centerIds = this.center?.ids() ?? [];
     assertHandlerCoverage({
       side: 'be',
-      registeredIds: [...this.byId.keys()],
+      registeredIds: [...this.byId.keys(), ...centerIds],
     });
   }
 

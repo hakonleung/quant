@@ -23,11 +23,19 @@
  *     Completion comes back through `InstructionAsyncBus.emitCompleted`.
  */
 
-import { Inject, Injectable, Logger } from '@nestjs/common';
-import { errResult, okResult, parseInstructionLine, type InstructionResult } from '@quant/shared';
+import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
+import {
+  errResult,
+  okResult,
+  parseInstructionLine,
+  INSTRUCTION_MANIFEST,
+  type CommandManifestEntry,
+  type InstructionResult,
+} from '@quant/shared';
 import { randomUUID } from 'node:crypto';
 
 import { CLOCK, type Clock } from '../../common/clock.js';
+import { BeInstructionCenter } from '../instruction-center/be-instruction-center.service.js';
 import {
   InstructionAsyncBus,
   type InstructionAsyncJob,
@@ -54,6 +62,9 @@ export class InstructionExecutor {
     @Inject(InstructionRegistry) private readonly registry: InstructionRegistry,
     @Inject(InstructionAsyncBus) private readonly asyncBus: InstructionAsyncBus,
     @Inject(CLOCK) private readonly clock: Clock,
+    @Optional()
+    @Inject(BeInstructionCenter)
+    private readonly center: BeInstructionCenter | null = null,
   ) {}
 
   /** Structured entry — id + already-decoded args. Used by socket/http. */
@@ -78,7 +89,7 @@ export class InstructionExecutor {
     ctx: InstructionCtx,
     imHints?: InstructionImHints,
   ): Promise<ExecutionDispatch> {
-    const entry = this.registry.get(id);
+    const entry = this.resolveEntry(id);
     if (entry === undefined) {
       return { kind: 'sync', result: errResult('not-found', `unknown instruction: ${id}`) };
     }
@@ -107,7 +118,7 @@ export class InstructionExecutor {
     args: Record<string, unknown>,
     ctx: InstructionCtx,
   ): Promise<InstructionResult> {
-    const entry = this.registry.get(id);
+    const entry = this.resolveEntry(id);
     if (entry === undefined) {
       return errResult('not-found', `unknown instruction: ${id}`);
     }
@@ -135,11 +146,11 @@ export class InstructionExecutor {
    * IM listener (and any future text-driven entry point).
    */
   async executeLine(line: string, ctx: InstructionCtx): Promise<InstructionResult> {
-    const parsed = parseInstructionLine(line, this.registry.knownIds(), { requirePrefix: false });
+    const parsed = parseInstructionLine(line, this.knownIds(), { requirePrefix: false });
     if (!parsed.ok) {
       return errResult('parse', parsed.reason);
     }
-    const entry = this.registry.get(parsed.id);
+    const entry = this.resolveEntry(parsed.id);
     if (entry === undefined) {
       return errResult('not-found', `unknown instruction: ${String(parsed.id)}`);
     }
@@ -185,6 +196,88 @@ export class InstructionExecutor {
     }
   }
 
+  /**
+   * Look up an instruction by id, checking the migrated-cell center
+   * first then the legacy registry. Migrated ids materialise a
+   * synthetic `InstructionEntry` whose handler delegates to
+   * `BeInstructionCenter.executeMigrated` — that way the existing
+   * `route()` flow (with its sync/async split, argsSchema validation,
+   * and async enqueue logic) works uniformly.
+   */
+  private resolveEntry(id: string): InstructionEntry | undefined {
+    if (this.center !== null && this.center.has(id)) {
+      return this.synthesiseCenterEntry(id);
+    }
+    return this.registry.get(id);
+  }
+
+  /**
+   * Merge legacy registry tokens with center-owned ids so
+   * `parseInstructionLine` accepts both. Migrated ids don't carry
+   * extra aliases in the manifest today (the few that do — e.g. `usr`
+   * with `['我的', '账号', '我']` — are added here from the shared
+   * manifest).
+   */
+  private knownIds(): ReadonlyMap<string, string> {
+    const out = new Map(this.registry.knownIds());
+    if (this.center !== null) {
+      for (const id of this.center.ids()) {
+        out.set(id, id);
+        const entry = manifestEntryOf(id);
+        if (entry !== undefined) {
+          for (const a of entry.aliases ?? []) out.set(a, id);
+          for (const a of entry.imAliases ?? []) out.set(a, id);
+        }
+      }
+    }
+    return out;
+  }
+
+  private synthesiseCenterEntry(id: string): InstructionEntry {
+    const manifestEntry = manifestEntryOf(id);
+    if (manifestEntry === undefined) {
+      throw new Error(`center has id "${id}" but it is missing from the manifest`);
+    }
+    const center = this.center;
+    if (center === null) {
+      throw new Error('synthesiseCenterEntry called without a center');
+    }
+    const spec = {
+      id: id as InstructionEntry['spec']['id'],
+      summary: manifestEntry.summary,
+      summaryCn: manifestEntry.summaryCn ?? manifestEntry.summary,
+      group: 'system' as InstructionEntry['spec']['group'],
+      argsSchema:
+        manifestEntry.argsSchema ??
+        ({
+          safeParse: () => ({ success: true, data: {} }),
+        } as unknown as InstructionEntry['spec']['argsSchema']),
+      ...(manifestEntry.mode !== undefined ? { mode: manifestEntry.mode } : {}),
+      ...(manifestEntry.imAliases !== undefined ? { imAliases: manifestEntry.imAliases } : {}),
+      ...(manifestEntry.costsCredits === true ? { costsCredits: true as const } : {}),
+      ...(manifestEntry.destructive === true ? { destructive: true as const } : {}),
+      ...(manifestEntry.requiresImConfirm === true ? { requiresImConfirm: true as const } : {}),
+    } as unknown as InstructionEntry['spec'];
+    const handler: AnyInstructionHandler = {
+      execute: (args, ctx) =>
+        center.executeMigrated(
+          id as Parameters<BeInstructionCenter['executeMigrated']>[0],
+          args,
+          ctx,
+        ),
+      // Forward the IM listener's confirm-bypass probe into the cell's
+      // optional `peek` hook. The cell layer treats "no peek defined" as
+      // `false` (always show the card); centre returns the same.
+      peekImConfirmBypass: (rawArgs, ctx) =>
+        center.peekImConfirmBypass(
+          id as Parameters<BeInstructionCenter['peekImConfirmBypass']>[0],
+          rawArgs,
+          ctx,
+        ),
+    };
+    return { spec, handler };
+  }
+
   private async enqueueAsync(
     entry: InstructionEntry,
     rawArgs: Record<string, unknown>,
@@ -220,4 +313,14 @@ export class InstructionExecutor {
       result: okResult(startedText),
     };
   }
+}
+
+/**
+ * Manifest entry lookup widened to the base `CommandManifestEntry`
+ * shape so optional fields (`aliases`, `imAliases`, `summaryCn`, …)
+ * are accessible without per-entry literal narrowing.
+ */
+function manifestEntryOf(id: string): CommandManifestEntry | undefined {
+  const entry = (INSTRUCTION_MANIFEST as Record<string, CommandManifestEntry | undefined>)[id];
+  return entry;
 }

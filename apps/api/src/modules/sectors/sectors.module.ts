@@ -6,7 +6,6 @@ import { DuckDBParquetRecordStore } from '../../common/storage/adapters/duckdb-p
 import type { RecordStore } from '../../common/storage/ports/record-store.port.js';
 import { StockListModule } from '../stock-list/stock-list.module.js';
 import { StockMetaModule } from '../stock-meta/stock-meta.module.js';
-import { SectorInstructionHandler } from './instructions/sector.handler.js';
 import {
   SectorPublishInstructionHandler,
   SectorUnpublishInstructionHandler,
@@ -55,7 +54,7 @@ const DEFAULT_FLIGHT_TARGET = '127.0.0.1:8815';
     SYSTEM_CLOCK_PROVIDER,
     SectorsStore,
     SectorsService,
-    SectorInstructionHandler,
+    // `sector` (list) migrated to `BeInstructionCenter` (instruction-center/cells/sector.cell.ts).
     SectorPublishInstructionHandler,
     SectorUnpublishInstructionHandler,
     SectorRefreshInstructionHandler,

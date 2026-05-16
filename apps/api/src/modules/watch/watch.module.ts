@@ -30,7 +30,6 @@ import { WatchTaskStore } from './watch-task.store.js';
 import { WatchUniverseStore } from './watch-universe.store.js';
 import { WatchAddInstructionHandler } from './instructions/watch-add.handler.js';
 import { WatchGroupInstructionHandler } from './instructions/watch-group.handler.js';
-import { WatchInstructionHandler } from './instructions/watch.handler.js';
 import { WatchRemoveInstructionHandler } from './instructions/watch-remove.handler.js';
 import { WatchBroadcaster } from './watch.broadcaster.js';
 import { WatchController } from './watch.controller.js';
@@ -118,7 +117,7 @@ const US_TUNING: MarketQueueTuning = { concurrency: 1, poolBaseMs: 30_000 };
     WatchWorker,
     WatchScheduler,
     WatchBroadcaster,
-    WatchInstructionHandler,
+    // `watch` (list) migrated to `BeInstructionCenter` (instruction-center/cells/watch.cell.ts).
     WatchAddInstructionHandler,
     WatchRemoveInstructionHandler,
     WatchGroupInstructionHandler,

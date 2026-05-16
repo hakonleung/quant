@@ -13,13 +13,13 @@ import { Global, Module, forwardRef } from '@nestjs/common';
 
 import { SYSTEM_CLOCK_PROVIDER } from '../../common/clock.js';
 import { ChannelModule } from '../channel/channel.module.js';
+import { InstructionCenterModule } from '../instruction-center/instruction-center.module.js';
 
 import { INSTRUCTION_ASYNC_QUEUE, InstructionAsyncBus } from './async/instruction-async.bus.js';
 import { InstructionAsyncProcessor } from './async/instruction-async.processor.js';
 import { ChannelEchoHandler } from './handlers/channel-echo.handler.js';
 import { HelpHandler } from './handlers/help.handler.js';
 import { PingHandler } from './handlers/ping.handler.js';
-import { UsrHandler } from './handlers/usr.handler.js';
 import { INSTRUCTION_CONFIG, loadInstructionConfig } from './instruction.config.js';
 import { InstructionExecutor } from './instruction.executor.js';
 import { InstructionImListener } from './instruction.im.listener.js';
@@ -30,6 +30,7 @@ import { SocketInstructionAdapter } from './socket-instruction.adapter.js';
 @Module({
   imports: [
     forwardRef((): typeof ChannelModule => ChannelModule),
+    InstructionCenterModule,
     BullModule.registerQueue({ name: INSTRUCTION_ASYNC_QUEUE }),
   ],
   providers: [
@@ -47,7 +48,7 @@ import { SocketInstructionAdapter } from './socket-instruction.adapter.js';
     HelpHandler,
     PingHandler,
     ChannelEchoHandler,
-    UsrHandler,
+    // `usr` migrated to `BeInstructionCenter` (apps/api/src/modules/instruction-center/cells/usr.cell.ts).
   ],
   exports: [
     INSTRUCTION_CONFIG,

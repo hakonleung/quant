@@ -16,7 +16,6 @@ import type { RecordStore } from '../../common/storage/ports/record-store.port.j
 import { LlmModule } from '../llm/llm.module.js';
 import { SectorsModule } from '../sectors/sectors.module.js';
 import { StockMetaModule } from '../stock-meta/stock-meta.module.js';
-import { AnalyzeInstructionHandler } from './instructions/analyze.handler.js';
 import { AnalyzeSectorInstructionHandler } from './instructions/analyze-sector.handler.js';
 import { NewsSentimentService } from './news-sentiment.service.js';
 import {
@@ -64,8 +63,9 @@ const DEFAULT_DATA_DIR = '../../data';
     SYSTEM_CLOCK_PROVIDER,
     SentimentCacheStore,
     NewsSentimentService,
-    AnalyzeInstructionHandler,
+    // `analyze` migrated to `BeInstructionCenter` (instruction-center/cells/analyze.cell.ts).
     AnalyzeSectorInstructionHandler,
   ],
+  exports: [NewsSentimentService],
 })
 export class SentimentModule {}
