@@ -110,6 +110,20 @@ export const CacheArgsSchema = z.object({}).strict();
 export const FocusArgsSchema = z.object({ id: z.string().min(1).optional() }).strict();
 export const UpdateArgsSchema = z.object({}).strict();
 
+/**
+ * `/update` result — daily-scan accept ticket. `started=true` means
+ * we kicked off a new run; `started=false` means an in-flight scan
+ * coalesced this request. Either way `traceId` is the run the client
+ * should subscribe to via the `queue.snapshot` socket topic.
+ */
+export const UpdateResultSchema = z
+  .object({
+    started: z.boolean(),
+    traceId: z.string().min(1),
+  })
+  .strict();
+export type UpdateResult = z.infer<typeof UpdateResultSchema>;
+
 // ── market ──────────────────────────────────────────────────────────────
 
 export const StockArgsSchema = z
@@ -162,6 +176,35 @@ export const SectorPublishArgsSchema = sectorIdShape.strict();
 export const SectorUnpublishArgsSchema = sectorIdShape.strict();
 export const SectorRefreshArgsSchema = sectorIdShape.strict();
 export const SectorRmArgsSchema = sectorIdShape.strict();
+
+/**
+ * `/sector.show` result — resolved sector identity + the displayed
+ * slice of member codes + assembled stock rows (degradable).
+ *
+ * `evidenceKeys` / `evidenceByCode` are populated only for dynamic
+ * sectors; user sectors emit them empty. Renderer joins evidence
+ * columns onto each stock row at display time.
+ */
+export const SectorShowResultSchema = z
+  .object({
+    id: z.string().min(1),
+    name: z.string().min(1),
+    kind: z.enum(['user', 'dynamic']),
+    createdBy: z.string().min(1),
+    isOwn: z.boolean(),
+    published: z.boolean(),
+    totalCount: z.number().int().nonnegative(),
+    /** Sliced display set (handler caps at MAX_TABLE_ROWS). */
+    codes: z.array(z.string()),
+    /** Pre-assembled stock rows for `codes`; null when assembly failed. */
+    stockRows: StockListRowSchema.array().nullable(),
+    /** Sorted evidence column names; empty for user sectors. */
+    evidenceKeys: z.array(z.string()),
+    /** `{ code: { evidenceKey: formattedString } }` — empty when no evidence. */
+    evidenceByCode: z.record(z.string(), z.record(z.string(), z.string())),
+  })
+  .strict();
+export type SectorShowResult = z.infer<typeof SectorShowResultSchema>;
 
 /**
  * Sync-ack result shared by `/sector.publish`, `/sector.unpublish`,

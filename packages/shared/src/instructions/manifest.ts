@@ -58,6 +58,7 @@ import {
   SectorShowArgsSchema,
   SectorUnpublishArgsSchema,
   SectorListResultSchema,
+  SectorShowResultSchema,
   StockArgsSchema,
   StockSearchResultSchema,
   TaArgsSchema,
@@ -65,6 +66,7 @@ import {
   TaSectorArgsSchema,
   TaSectorResultSchema,
   UpdateArgsSchema,
+  UpdateResultSchema,
   UsrArgsSchema,
   UsrResultSchema,
   WatchAddArgsSchema,
@@ -222,8 +224,10 @@ const ENTRIES = [
     mode: 'sync',
     supportedOn: ['fe', 'be'],
     summary: 'Trigger the unified daily scan (meta + kline + blacklist + sectors)',
+    imAliases: ['更新'],
+    destructive: true,
     argsSchema: UpdateArgsSchema,
-    resultSchema: LegacyOutputSchema,
+    resultSchema: UpdateResultSchema,
   },
 
   // ── market data ─────────────────────────────────────────────────────
@@ -257,7 +261,7 @@ const ENTRIES = [
     summary: 'Show one sector with its stock table',
     imAliases: ['查看板块', '板块详情'],
     argsSchema: SectorShowArgsSchema,
-    resultSchema: LegacyOutputSchema,
+    resultSchema: SectorShowResultSchema,
   },
   {
     id: 'sector.publish',

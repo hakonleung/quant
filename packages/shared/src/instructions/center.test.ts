@@ -255,7 +255,19 @@ describe('InstructionCenter', () => {
   it('dispatch() resolves dotted subcommands (sector show → sector.show)', async () => {
     const stub = {
       async handler() {
-        return { text: 'ok' } as ResultOf<'sector.show'>;
+        return {
+          id: 's1',
+          name: 'tech',
+          kind: 'user',
+          createdBy: 'me',
+          isOwn: true,
+          published: false,
+          totalCount: 0,
+          codes: [],
+          stockRows: null,
+          evidenceKeys: [],
+          evidenceByCode: {},
+        } as ResultOf<'sector.show'>;
       },
       renderer(env: InstructionEnvelope<ResultOf<'sector.show'>>) {
         return { rendered: env.ok ? 'show' : `err:${env.error.code}` };
