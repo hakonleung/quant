@@ -29,7 +29,9 @@
 
 import type { z } from 'zod';
 
+import { SentimentSchema } from '../types/eqty.js';
 import type { InstructionId } from './id.js';
+import { InstructionOutputSchema } from './result.js';
 import {
   AgentArgsSchema,
   AgentConfirmArgsSchema,
@@ -43,6 +45,7 @@ import {
   HelpArgsSchema,
   LedgerAnalyzeArgsSchema,
   LedgerArgsSchema,
+  LedgerListResultSchema,
   PingArgsSchema,
   ScreenArgsSchema,
   SectorArgsSchema,
@@ -51,17 +54,33 @@ import {
   SectorRmArgsSchema,
   SectorShowArgsSchema,
   SectorUnpublishArgsSchema,
+  SectorListResultSchema,
   StockArgsSchema,
+  StockSearchResultSchema,
   TaArgsSchema,
   TaSectorArgsSchema,
   UpdateArgsSchema,
   UsrArgsSchema,
+  UsrResultSchema,
   WatchAddArgsSchema,
   WatchArgsSchema,
   WatchGroupArgsSchema,
+  WatchListResultSchema,
   WatchRemoveArgsSchema,
   WebSearchArgsSchema,
 } from './schemas.js';
+
+/**
+ * Default result schema for instructions still on the legacy
+ * `okResultWithMeta(text, meta)` shape. New / migrated instructions
+ * override this with a strongly-typed payload schema (e.g.
+ * `UsrResultSchema`) so the InstructionCenter can derive per-id
+ * result types and enforce FE/BE renderer parity at compile time.
+ *
+ * Phase-2 migration goal: every entry has a real `resultSchema` and
+ * this default disappears.
+ */
+const LegacyOutputSchema = InstructionOutputSchema;
 
 export type CommandSide = 'fe' | 'be';
 
@@ -97,6 +116,15 @@ export interface CommandManifestEntry {
   /** True when an irreversible side effect needs explicit IM confirmation. */
   readonly destructive?: boolean;
   /**
+   * True when the IM listener should render a paid-confirm card before
+   * invoking the handler. Mirror of the legacy `InstructionSpec.requiresImConfirm`
+   * — required by the IM gate to know which instructions intercept the
+   * first call. Independent of `costsCredits` (a help-only tag); a paid
+   * instruction may skip the generic gate when it has its own internal
+   * confirm flow (e.g. `/agent`).
+   */
+  readonly requiresImConfirm?: boolean;
+  /**
    * True for handlers that are conditionally registered (e.g. gated on
    * `INSTRUCTION_DEBUG_ENABLED`). The coverage assertion treats them as
    * optional — present-or-absent is fine, but if registered the
@@ -110,6 +138,15 @@ export interface CommandManifestEntry {
    * binding the manifest references — guaranteed in lockstep.
    */
   readonly argsSchema?: z.ZodTypeAny;
+  /**
+   * Single source of truth for the handler's return payload — consumed
+   * by the new `InstructionCenter` (see `center.ts`) to derive
+   * `ResultOf<I>` and force FE/BE handlers + renderers into structural
+   * lockstep. Entries still using the legacy `{text, meta?}` envelope
+   * point at `LegacyOutputSchema`; migrated entries point at their own
+   * strongly-typed schema (e.g. `UsrResultSchema`).
+   */
+  readonly resultSchema: z.ZodTypeAny;
 }
 
 const ENTRIES = [
@@ -121,6 +158,7 @@ const ENTRIES = [
     supportedOn: ['fe', 'be'],
     summary: 'Show available instructions and per-id usage',
     argsSchema: HelpArgsSchema,
+    resultSchema: LegacyOutputSchema,
   },
   {
     id: 'ping',
@@ -130,6 +168,7 @@ const ENTRIES = [
     summary: 'Round-trip health check',
     conditionallyRegistered: true,
     argsSchema: PingArgsSchema,
+    resultSchema: LegacyOutputSchema,
   },
   {
     id: 'usr',
@@ -139,6 +178,7 @@ const ENTRIES = [
     summary: "Show the caller's resolved userId + LLM token usage",
     imAliases: ['我的', '账号', '我'],
     argsSchema: UsrArgsSchema,
+    resultSchema: UsrResultSchema,
   },
   {
     id: 'clear',
@@ -147,6 +187,7 @@ const ENTRIES = [
     supportedOn: ['fe'],
     summary: 'Clear the terminal scrollback',
     argsSchema: ClearArgsSchema,
+    resultSchema: LegacyOutputSchema,
   },
   {
     id: 'cache',
@@ -155,6 +196,7 @@ const ENTRIES = [
     supportedOn: ['fe'],
     summary: 'Inspect / clear local FE caches',
     argsSchema: CacheArgsSchema,
+    resultSchema: LegacyOutputSchema,
   },
   {
     id: 'focus',
@@ -163,6 +205,7 @@ const ENTRIES = [
     supportedOn: ['fe'],
     summary: 'Focus a stock or sector in the workbench',
     argsSchema: FocusArgsSchema,
+    resultSchema: LegacyOutputSchema,
   },
   {
     id: 'update',
@@ -171,6 +214,7 @@ const ENTRIES = [
     supportedOn: ['fe', 'be'],
     summary: 'Trigger the unified daily scan (meta + kline + blacklist + sectors)',
     argsSchema: UpdateArgsSchema,
+    resultSchema: LegacyOutputSchema,
   },
 
   // ── market data ─────────────────────────────────────────────────────
@@ -182,6 +226,7 @@ const ENTRIES = [
     summary: 'Search A-share metadata by code, name, or pinyin',
     imAliases: ['股票'],
     argsSchema: StockArgsSchema,
+    resultSchema: StockSearchResultSchema,
   },
 
   // ── sectors ─────────────────────────────────────────────────────────
@@ -193,6 +238,7 @@ const ENTRIES = [
     summary: 'List sectors visible to the caller',
     imAliases: ['板块'],
     argsSchema: SectorArgsSchema,
+    resultSchema: SectorListResultSchema,
   },
   {
     id: 'sector.show',
@@ -202,6 +248,7 @@ const ENTRIES = [
     summary: 'Show one sector with its stock table',
     imAliases: ['查看板块', '板块详情'],
     argsSchema: SectorShowArgsSchema,
+    resultSchema: LegacyOutputSchema,
   },
   {
     id: 'sector.publish',
@@ -210,6 +257,7 @@ const ENTRIES = [
     supportedOn: ['be'],
     summary: 'Mark a sector as published',
     argsSchema: SectorPublishArgsSchema,
+    resultSchema: LegacyOutputSchema,
   },
   {
     id: 'sector.unpublish',
@@ -218,6 +266,7 @@ const ENTRIES = [
     supportedOn: ['be'],
     summary: 'Mark a sector as unpublished',
     argsSchema: SectorUnpublishArgsSchema,
+    resultSchema: LegacyOutputSchema,
   },
   {
     id: 'sector.refresh',
@@ -227,6 +276,7 @@ const ENTRIES = [
     summary: 'Recompute a dynamic sector',
     costsCredits: true,
     argsSchema: SectorRefreshArgsSchema,
+    resultSchema: LegacyOutputSchema,
   },
   {
     id: 'sector.rm',
@@ -236,6 +286,7 @@ const ENTRIES = [
     summary: 'Delete a sector',
     destructive: true,
     argsSchema: SectorRmArgsSchema,
+    resultSchema: LegacyOutputSchema,
   },
 
   // ── watch ───────────────────────────────────────────────────────────
@@ -248,6 +299,7 @@ const ENTRIES = [
     aliases: ['watch.list'],
     imAliases: ['自选'],
     argsSchema: WatchArgsSchema,
+    resultSchema: WatchListResultSchema,
   },
   {
     id: 'watch.add',
@@ -256,6 +308,7 @@ const ENTRIES = [
     supportedOn: ['be'],
     summary: 'Add a watch task',
     argsSchema: WatchAddArgsSchema,
+    resultSchema: LegacyOutputSchema,
   },
   {
     id: 'watch.remove',
@@ -265,6 +318,7 @@ const ENTRIES = [
     summary: 'Remove a watch task',
     destructive: true,
     argsSchema: WatchRemoveArgsSchema,
+    resultSchema: LegacyOutputSchema,
   },
   {
     id: 'watch.group',
@@ -273,6 +327,7 @@ const ENTRIES = [
     supportedOn: ['be'],
     summary: 'Manage watch groups',
     argsSchema: WatchGroupArgsSchema,
+    resultSchema: LegacyOutputSchema,
   },
 
   // ── analysis ────────────────────────────────────────────────────────
@@ -283,8 +338,10 @@ const ENTRIES = [
     supportedOn: ['fe', 'be'],
     summary: 'Sentiment analysis for one stock',
     costsCredits: true,
-    imAliases: ['情绪分析'],
+    requiresImConfirm: true,
+    imAliases: ['情绪分析', '舆情', '分析'],
     argsSchema: AnalyzeArgsSchema,
+    resultSchema: SentimentSchema,
   },
   {
     id: 'analyze.sector',
@@ -294,6 +351,7 @@ const ENTRIES = [
     summary: 'Sentiment analysis aggregated across a sector',
     costsCredits: true,
     argsSchema: AnalyzeSectorArgsSchema,
+    resultSchema: LegacyOutputSchema,
   },
   {
     id: 'ta',
@@ -303,6 +361,7 @@ const ENTRIES = [
     summary: 'Technical analysis for one stock',
     costsCredits: true,
     argsSchema: TaArgsSchema,
+    resultSchema: LegacyOutputSchema,
   },
   {
     id: 'ta.sector',
@@ -312,6 +371,7 @@ const ENTRIES = [
     summary: 'TA aggregated across a sector',
     costsCredits: true,
     argsSchema: TaSectorArgsSchema,
+    resultSchema: LegacyOutputSchema,
   },
 
   // ── screening ───────────────────────────────────────────────────────
@@ -324,6 +384,7 @@ const ENTRIES = [
     costsCredits: true,
     imAliases: ['筛选', '选股'],
     argsSchema: ScreenArgsSchema,
+    resultSchema: LegacyOutputSchema,
   },
 
   // ── ledger ──────────────────────────────────────────────────────────
@@ -335,6 +396,7 @@ const ENTRIES = [
     summary: 'Show the user trade ledger',
     imAliases: ['账本'],
     argsSchema: LedgerArgsSchema,
+    resultSchema: LedgerListResultSchema,
   },
   {
     id: 'ledger.analyze',
@@ -344,6 +406,7 @@ const ENTRIES = [
     summary: 'LLM-assisted ledger analysis',
     costsCredits: true,
     argsSchema: LedgerAnalyzeArgsSchema,
+    resultSchema: LegacyOutputSchema,
   },
 
   // ── agent ───────────────────────────────────────────────────────────
@@ -355,6 +418,7 @@ const ENTRIES = [
     summary: 'Open-ended agent conversation',
     costsCredits: true,
     argsSchema: AgentArgsSchema,
+    resultSchema: LegacyOutputSchema,
   },
   {
     id: 'agent.confirm',
@@ -363,6 +427,7 @@ const ENTRIES = [
     supportedOn: ['be'],
     summary: 'Confirm a queued agent action card',
     argsSchema: AgentConfirmArgsSchema,
+    resultSchema: LegacyOutputSchema,
   },
   {
     id: 'web.search',
@@ -372,6 +437,7 @@ const ENTRIES = [
     summary: 'Hosted-tool web search invoked by the agent',
     costsCredits: true,
     argsSchema: WebSearchArgsSchema,
+    resultSchema: LegacyOutputSchema,
   },
 
   // ── channel ─────────────────────────────────────────────────────────
@@ -383,6 +449,7 @@ const ENTRIES = [
     summary: 'Echo a message back through the inbound channel',
     conditionallyRegistered: true,
     argsSchema: ChannelEchoArgsSchema,
+    resultSchema: LegacyOutputSchema,
   },
   {
     id: 'channel.send',
@@ -392,12 +459,37 @@ const ENTRIES = [
     summary: 'Send a message to a configured channel',
     conditionallyRegistered: true,
     argsSchema: ChannelSendArgsSchema,
+    resultSchema: LegacyOutputSchema,
   },
 ] as const satisfies readonly CommandManifestEntry[];
 
 export const COMMAND_MANIFEST: readonly CommandManifestEntry[] = ENTRIES;
 
 export type CommandId = (typeof ENTRIES)[number]['id'];
+
+/**
+ * Indexed manifest — id → entry, with each entry retaining its literal
+ * argsSchema / resultSchema types via the source tuple. This is the
+ * surface `InstructionCenter` consumes to derive `ArgsOf<I>` and
+ * `ResultOf<I>` per id at compile time.
+ *
+ * We build it via reduce (typed cast on the result) because
+ * `Object.fromEntries` widens the value type back to the base entry,
+ * losing per-id schema specificity.
+ */
+type EntriesById<T extends readonly { readonly id: string }[]> = {
+  readonly [E in T[number] as E['id']]: E;
+};
+
+export type ManifestById = EntriesById<typeof ENTRIES>;
+
+export const INSTRUCTION_MANIFEST: ManifestById = ENTRIES.reduce(
+  (acc, entry) => {
+    (acc as Record<string, CommandManifestEntry>)[entry.id] = entry;
+    return acc;
+  },
+  {} as Record<string, CommandManifestEntry>,
+) as ManifestById;
 
 const ENTRY_BY_ID: ReadonlyMap<string, CommandManifestEntry> = new Map(
   ENTRIES.map((e) => [e.id, e]),

@@ -15,6 +15,7 @@
 import { z } from 'zod';
 
 import { ChannelIdSchema } from '../types/channel.js';
+import { StockListRowSchema } from '../types/stock-list.js';
 import { AgentHistoryEntrySchema, AGENT_HISTORY_MAX_ENTRIES } from './agent-history.js';
 
 const TRUTHY = new Set(['1', 'true', 'TRUE', 'yes', 'on']);
@@ -49,6 +50,59 @@ export const InstructionOptionalBoolFlagSchema = z
 export const HelpArgsSchema = z.object({ id: z.string().optional() }).strict();
 export const PingArgsSchema = z.record(z.string()).default({});
 export const UsrArgsSchema = z.object({}).strict();
+
+/**
+ * `usr` result — caller identity + LLM ledger snapshot.
+ *
+ * Strongly-typed data payload (no pre-rendered strings). Per-side renderers
+ * (term widget on FE, Feishu card on BE) turn this into the user-facing
+ * surface. First instruction to migrate to the new InstructionCenter
+ * model where the manifest declares the data contract and renderers are
+ * the only side-specific code.
+ */
+export const UsrIdentitySchema = z
+  .object({
+    userId: z.string().min(1),
+    role: z.enum(['admin', 'user']),
+    source: z.string().min(1),
+    displayName: z.string().optional(),
+    channel: z.string().optional(),
+    imId: z.string().optional(),
+    mappedFromUserId: z.string().optional(),
+    imBootstrap: z.boolean().optional(),
+  })
+  .strict();
+export type UsrIdentity = z.infer<typeof UsrIdentitySchema>;
+
+export const UsrLedgerAggSchema = z
+  .object({
+    label: z.string().min(1),
+    callCount: z.number().int().nonnegative(),
+    input: z.number().int().nonnegative(),
+    output: z.number().int().nonnegative(),
+    total: z.number().int().nonnegative(),
+  })
+  .strict();
+export type UsrLedgerAgg = z.infer<typeof UsrLedgerAggSchema>;
+
+export const UsrLedgerSnapshotSchema = z
+  .object({
+    today: UsrLedgerAggSchema,
+    month: UsrLedgerAggSchema,
+    total: UsrLedgerAggSchema,
+    byScope: UsrLedgerAggSchema.array(),
+    byModel: UsrLedgerAggSchema.array(),
+  })
+  .strict();
+export type UsrLedgerSnapshot = z.infer<typeof UsrLedgerSnapshotSchema>;
+
+export const UsrResultSchema = z
+  .object({
+    identity: UsrIdentitySchema,
+    ledger: UsrLedgerSnapshotSchema.nullable(),
+  })
+  .strict();
+export type UsrResult = z.infer<typeof UsrResultSchema>;
 export const ClearArgsSchema = z.object({}).strict();
 export const CacheArgsSchema = z.object({}).strict();
 export const FocusArgsSchema = z.object({ id: z.string().min(1).optional() }).strict();
@@ -63,9 +117,41 @@ export const StockArgsSchema = z
   })
   .strict();
 
+/**
+ * `/stock` search result — typed rows + the original query so the
+ * renderer can echo "no match for X" without re-parsing args.
+ */
+export const StockSearchResultSchema = z
+  .object({
+    query: z.string(),
+    rows: StockListRowSchema.array(),
+  })
+  .strict();
+export type StockSearchResult = z.infer<typeof StockSearchResultSchema>;
+
 // ── sectors ─────────────────────────────────────────────────────────────
 
 export const SectorArgsSchema = z.object({}).strict();
+
+/** One row in the `/sector` list — visible to the caller (own + published). */
+export const SectorListRowSchema = z
+  .object({
+    id: z.string().min(1),
+    name: z.string().min(1),
+    published: z.boolean(),
+    codeCount: z.number().int().nonnegative(),
+    createdBy: z.string().min(1),
+    isOwn: z.boolean(),
+  })
+  .strict();
+export type SectorListRow = z.infer<typeof SectorListRowSchema>;
+
+export const SectorListResultSchema = z
+  .object({
+    rows: SectorListRowSchema.array(),
+  })
+  .strict();
+export type SectorListResult = z.infer<typeof SectorListResultSchema>;
 const sectorIdShape = z.object({
   id: z.string().min(1).describe('Sector id (e.g. s1) or sector name'),
 });
@@ -78,6 +164,38 @@ export const SectorRmArgsSchema = sectorIdShape.strict();
 // ── watch ───────────────────────────────────────────────────────────────
 
 export const WatchArgsSchema = z.object({ sub: z.enum(['list']).default('list') }).strict();
+
+/**
+ * One row in the `/watch` task list — projected to the columns the IM
+ * subheader and term widget both render. Decoupled from the canonical
+ * `WatchTask` (which carries scheduling internals like intervalSec)
+ * because the instruction surface doesn't expose those.
+ */
+export const WatchListTaskSchema = z
+  .object({
+    idx: z.number().int().positive(),
+    market: z.enum(['a', 'hk', 'us']),
+    code: z.string().min(1),
+    name: z.string(),
+    groupName: z.string().min(1),
+    enabled: z.boolean(),
+    hitCount: z.number().int().nonnegative(),
+  })
+  .strict();
+export type WatchListTask = z.infer<typeof WatchListTaskSchema>;
+
+export const WatchListResultSchema = z
+  .object({
+    tasks: WatchListTaskSchema.array(),
+    /**
+     * A-share stock rows assembled for the tasks' codes — `null` when
+     * the upstream snapshot fetch failed or no A-share tasks exist.
+     * Renderer falls back to the task-list-only view when null.
+     */
+    stockRows: StockListRowSchema.array().nullable(),
+  })
+  .strict();
+export type WatchListResult = z.infer<typeof WatchListResultSchema>;
 
 export const WatchAddArgsSchema = z
   .object({
@@ -178,6 +296,34 @@ export const LedgerArgsSchema = z
     limit: z.coerce.number().int().min(1).max(50).default(5),
   })
   .strict();
+
+/**
+ * One row in the `/ledger` list — pre-projected to the columns the IM
+ * and term surfaces both render. Strings (rather than `Decimal`) so the
+ * data layer stays serialisable across the FE/BE boundary; the handler
+ * is responsible for formatting Decimal → string with consistent
+ * precision before returning.
+ */
+export const LedgerListEntrySchema = z
+  .object({
+    date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/u, 'date must be YYYY-MM-DD'),
+    pnlAmount: z.string().min(1),
+    closingPosition: z.string().min(1),
+    /** Pre-formatted percent like "+1.23%" / "-0.45%" / "0.00%". */
+    dailyPctDisplay: z.string().min(1),
+  })
+  .strict();
+export type LedgerListEntry = z.infer<typeof LedgerListEntrySchema>;
+
+export const LedgerListResultSchema = z
+  .object({
+    /** Total entries in the underlying snapshot (before limit slice). */
+    totalCount: z.number().int().nonnegative(),
+    /** Rows actually rendered — most-recent first, length ≤ totalCount. */
+    entries: LedgerListEntrySchema.array(),
+  })
+  .strict();
+export type LedgerListResult = z.infer<typeof LedgerListResultSchema>;
 
 export const LedgerAnalyzeArgsSchema = z
   .object({
