@@ -51,7 +51,9 @@ import { buildAgentCell } from './cells/agent.cell.js';
 import { buildAgentConfirmCell } from './cells/agent-confirm.cell.js';
 import { buildAnalyzeCell } from './cells/analyze.cell.js';
 import { buildLedgerCell } from './cells/ledger.cell.js';
+import { buildLedgerAddCell } from './cells/ledger-add.cell.js';
 import { buildLedgerAnalyzeCell } from './cells/ledger-analyze.cell.js';
+import { buildLedgerRemoveCell } from './cells/ledger-remove.cell.js';
 import { buildSectorCell } from './cells/sector.cell.js';
 import {
   buildSectorPublishCell,
@@ -84,6 +86,8 @@ export type MigratedIds =
   | 'sector.unpublish'
   | 'sector.rm'
   | 'ledger'
+  | 'ledger.add'
+  | 'ledger.remove'
   | 'stock'
   | 'watch'
   | 'watch.add'
@@ -135,6 +139,8 @@ export class BeInstructionCenter implements BeInstructionCenterPort {
       'sector.unpublish': buildSectorUnpublishCell({ sectors }),
       'sector.rm': buildSectorRmCell({ sectors }),
       ledger: buildLedgerCell({ ledger: ledgerService }),
+      'ledger.add': buildLedgerAddCell({ ledger: ledgerService }),
+      'ledger.remove': buildLedgerRemoveCell({ ledger: ledgerService }),
       stock: buildStockCell({ stockMeta }),
       watch: buildWatchCell({ watch, stockList }),
       'watch.add': buildWatchAddCell({ watch }),

@@ -519,6 +519,36 @@ export const LedgerAnalyzeArgsSchema = z
 export const LedgerAnalyzeResultSchema = LedgerAnalysisSchema;
 export type LedgerAnalyzeResult = z.infer<typeof LedgerAnalyzeResultSchema>;
 
+/** `/ledger.add` — upsert one entry. */
+export const LedgerAddArgsSchema = z
+  .object({
+    date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/u, 'date must be YYYY-MM-DD'),
+    pnlAmount: z.string().min(1),
+    closingPosition: z.string().min(1).optional(),
+  })
+  .strict();
+export const LedgerAddResultSchema = z
+  .object({
+    date: z.string(),
+    pnlAmount: z.string(),
+    closingPosition: z.string().nullable(),
+  })
+  .strict();
+export type LedgerAddResult = z.infer<typeof LedgerAddResultSchema>;
+
+/** `/ledger.remove` — drop one entry by date. */
+export const LedgerRemoveArgsSchema = z
+  .object({
+    date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/u, 'date must be YYYY-MM-DD'),
+  })
+  .strict();
+export const LedgerRemoveResultSchema = z
+  .object({
+    date: z.string(),
+  })
+  .strict();
+export type LedgerRemoveResult = z.infer<typeof LedgerRemoveResultSchema>;
+
 // ── agent ───────────────────────────────────────────────────────────────
 
 export const AgentArgsSchema = z
