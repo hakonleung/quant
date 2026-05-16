@@ -9,18 +9,34 @@ shared via `packages/shared/src/instructions/`.
 - **Phase 1 — manifest as source of truth.** Every instruction has a
   typed `argsSchema` + `resultSchema`. Aliases / mode / IM gate /
   double-confirm / revalidate / positional binding are declared once.
-- **Phase 2 — BE migration.** 21 of 25 ids are configured on
-  `BeInstructionCenter`. The legacy `InstructionRegistry` still hosts
-  `help` (IM-only, returns LegacyOutput), `ping`, `channel.echo`,
-  `channel.send`.
-- **Phase 3 partial — FE cells for cell-shaped commands.** `usr`,
-  `clear`, `cache`, `focus`, `update`, `help` migrated to
-  `apps/web/lib/instructions/cells/`. Each is a thin handler + a
-  side-specific renderer.
+- **Phase 2 — BE migration.** 27 of 31 ids on `BeInstructionCenter`.
+  Legacy `InstructionRegistry` still hosts `help` (IM-only,
+  LegacyOutput), `ping`, `channel.echo`, `channel.send`.
+  - Recent additions: `ledger.add`, `ledger.remove`, `sector.add`,
+    `sector.refresh` (migrated from legacy `SectorRefreshInstructionHandler`),
+    `stock.info`, `stock.kline`. Each wraps an existing service —
+    no new endpoints, just typed access through the manifest.
+- **Phase 3 partial — FE cells.** `usr`, `clear`, `cache`, `focus`,
+  `update`, `help` migrated to `apps/web/lib/instructions/cells/`.
 - **Phase 4 cleanup.** Dropped `supportedOn`,
   `conditionallyRegistered`, `assertHandlerCoverage`, and the
   `OnApplicationBootstrap` coverage check now that mapped-type config
   enforces per-side cell presence at compile time.
+
+## Manifest ids now available for FE thin-proxy use
+
+Every subcommand the legacy FE `runCommand` dispatches to has a typed
+BE cell:
+
+- `stock` (search), `stock.info`, `stock.kline`
+- `ledger` (list), `ledger.add`, `ledger.remove`, `ledger.analyze`
+- `sector` (list), `sector.show`, `sector.add`, `sector.publish`,
+  `sector.unpublish`, `sector.refresh`, `sector.rm`
+- `watch` (list), `watch.add`, `watch.remove`, `watch.group`
+- `screen` (NL screen)
+- `analyze`, `analyze.sector`
+- `ta`, `ta.sector`
+- `agent`, `agent.confirm`
 
 ## Still on the legacy `CommandRegistry`
 
@@ -29,33 +45,36 @@ shared via `packages/shared/src/instructions/`.
 the FE shell falls through to that path when `feCenterCanDispatch`
 returns false.
 
-## Why they aren't migrated yet
+## Remaining FE-side blockers
 
-Each command has a structural blocker that makes a "thin proxy"
-migration fail in a different way:
+The BE manifest now covers every legacy subcommand. The FE side
+still defers for these reasons:
 
 | Command | Blocker |
 |---------|---------|
 | `analyze`, `ta` | Renderer reads `Sentiment` fields (`topTheme`, `topDriver`, `cachedAt`) that the in-progress `SentimentSchema` refactor is removing. Migrating now commits code against a moving target. |
-| `screen` | Legacy FE uses `screenNlAction` REST → `{ matches, dslSummary }`. Manifest `screen` cell returns `{ nl, asof, codes, stockRows }`. Different payload, different widget. Migration = UI rewrite, not relocation. |
-| `ledger` | 4 subcommands; `ledger.add` / `ledger.remove` aren't manifest ids. `rm` is a two-stage confirm flow. |
-| `watch` | 4 subcommands; `add` is an interactive form (not a one-shot invoke). |
-| `sector` | 7 subcommands; `add` is a multi-step interactive form. `sector.add` and `sector.refresh` aren't manifest ids. |
-| `stock` | 3 modes (picker / info / kline). `stock.info` / `stock.kline` aren't manifest ids; picker is pure-FE state and needs `host.stockIndex` access. |
-| `agent` | Streaming subscription + event dispatcher. The current `InstructionCell` shape is request/response — agent needs either a separate streaming variant or stays out of the center. |
+| `screen` | Legacy renderer expects `{ matches, dslSummary }`; manifest result is `{ nl, asof, codes, stockRows }`. Cell renderer needs to be rewritten against the new payload shape. |
+| `ledger` | Multi-stage `rm` confirm + four subcommand ids; cell renderer needs to host the confirm widget for `ledger.remove`. |
+| `watch` | `watch.add` is a multi-field interactive form, not a one-shot invoke. |
+| `sector` | `sector.add` is a multi-step form (name → kind → codes). Cell handler is one-shot; the form lives in the FE renderer. |
+| `stock` | Picker is pure-FE state, not a BE invoke; cell renderer needs to drive the picker via `host.stockIndex`. |
+| `agent` | Streaming subscription + event dispatcher. The `InstructionCell` shape is request/response — agent needs either a `StreamingInstructionCell<E, I>` variant or stays out of the center. |
 
 ## Recommended order to finish
 
+BE foundation is in place; remaining work is FE.
+
 1. **Wait for the `SentimentSchema` refactor to land**, then migrate
-   `analyze` / `ta` against the settled shape.
-2. **Add the 6 missing BE manifest entries + cells:**
-   `stock.info`, `stock.kline`, `ledger.add`, `ledger.remove`,
-   `sector.add`, `sector.refresh`. Each is a small standalone commit
-   that touches `schemas.ts`, `manifest.ts`, and one new BE cell file.
-3. **FE cells become thin proxies** for those ids once the BE side
-   exists. The cell renderer still hosts the widget (picker / confirm
-   / pager) — only the data fetch goes through `ctx.api.invoke`.
-4. **Decide `agent`'s shape separately.** Options: introduce
+   `analyze` / `ta` cells against the settled shape.
+2. **Rewrite the legacy widget code as cell renderers** for `screen`,
+   `ledger`, `stock`, `watch`, `sector`. Pattern per command:
+   - One cell per manifest id (`ledger`, `ledger.add`, `ledger.remove`,
+     `ledger.analyze` = 4 cells for the legacy `ledger` command).
+   - Cell handler is one `ctx.api.invoke(id, args)` call.
+   - Cell renderer hosts the widget (confirm / picker / pager / form).
+   - The FE shell's dotted-subcommand dispatch routes
+     `ledger add 2026-01-01 100` to the `ledger.add` cell automatically.
+3. **Decide `agent`'s shape separately.** Options: introduce
    `StreamingInstructionCell<E, I>` with a different return contract,
    or keep `/agent` on the legacy registry indefinitely (it's the
    only command with a long-lived BE subscription).
