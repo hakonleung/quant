@@ -19,12 +19,22 @@ shared via `packages/shared/src/instructions/`.
 - **Phase 3 — FE cells.** Migrated to
   `apps/web/lib/instructions/cells/`: `usr`, `clear`, `cache`,
   `focus`, `update`, `help`, `ledger` + 3 subs, `stock` + 2 subs,
-  `screen`. Legacy `help.ts`, `ledger.ts`, `stock.ts`, `screen.ts`
-  removed from `packages/terminal/src/commands/`.
-  - `screen` migration changed syntax: the redundant `nl` keyword is
-    gone (`screen <query>` is enough). Confirm flow now uses the
+  `screen`, `analyze` + sector sub, `ta` + sector sub, `sector` + 6
+  subs, `watch` + 3 subs. Only `agent` remains on the legacy
+  `CommandRegistry`. Legacy command files for everything else have
+  been removed from `packages/terminal/src/commands/`.
+  - `screen` syntax change: dropped the redundant `nl` keyword
+    (`screen <query>` is enough). Force-confirm flow uses the
     `confirm-required` envelope code — handler throws it, renderer
     surfaces the confirm widget.
+  - `analyze` / `ta` follow the same `confirm-required` pattern for
+    `fresh=1` paths.
+  - `sector add` multi-step form is gone; callers pass
+    `sector.add sector=<json>` directly.
+  - `watch add` guided form (conditions / intervals) gone; users
+    invoke `watch.add code=... market=... group=...` against the
+    manifest's narrower schema.
+  - `watch rm <market> <code>` replaced by `watch.remove id=wN`.
 - **Phase 4 cleanup.** Dropped `supportedOn`,
   `conditionallyRegistered`, `assertHandlerCoverage`, and the
   `OnApplicationBootstrap` coverage check now that mapped-type config
@@ -47,37 +57,27 @@ BE cell:
 
 ## Still on the legacy `CommandRegistry`
 
-`watch`, `sector`, `analyze`, `ta`, `agent`. These work today
-through `runCommand(line, ctx, registry)`; the FE shell falls
-through to that path when `feCenterCanDispatch` returns false.
+Only `agent`. Its streaming subscription + event dispatcher doesn't
+fit the request/response `InstructionCell` shape — it needs either
+a `StreamingInstructionCell<E, I>` variant (handler returns void +
+emits frames through a sink on `ctx`) or stays out of the center.
+The FE shell falls through to legacy for `agent`; everything else
+is intercepted by `feCenter` first.
 
-## Why those four remain
+## Remaining work
 
-| Command | Blocker |
-|---------|---------|
-| `analyze`, `ta` | Renderer reads `Sentiment` fields that the in-progress `SentimentSchema` refactor is removing. Migrate after that lands. |
-| `watch` | Legacy `watch add` is a guided multi-field form whose submit calls `watchUpsertAction` (full WatchTask shape — conditions, intervals). Manifest `watch.add` takes only `{ code, market, group, name? }`. Migration requires either expanding the manifest schema or accepting a reduced FE UX. |
-| `sector` | Legacy `sector add` is a multi-step form (name → kind → codes); reproducing it as a cell renderer means dispatching a follow-up `sector.add sector=<json>` line on form-submit. Doable but heavier than the other migrations. |
-| `agent` | Streaming subscription + event dispatcher. The `InstructionCell` shape is request/response — agent needs either a `StreamingInstructionCell<E, I>` variant or stays out of the center. |
-
-## Recommended order to finish
-
-BE foundation is in place; remaining work is FE.
-
-1. **Wait for the `SentimentSchema` refactor to land**, then migrate
-   `analyze` / `ta` cells against the settled shape.
-2. **Rewrite the legacy widget code as cell renderers** for `screen`,
-   `ledger`, `stock`, `watch`, `sector`. Pattern per command:
-   - One cell per manifest id (`ledger`, `ledger.add`, `ledger.remove`,
-     `ledger.analyze` = 4 cells for the legacy `ledger` command).
-   - Cell handler is one `ctx.api.invoke(id, args)` call.
-   - Cell renderer hosts the widget (confirm / picker / pager / form).
-   - The FE shell's dotted-subcommand dispatch routes
-     `ledger add 2026-01-01 100` to the `ledger.add` cell automatically.
-3. **Decide `agent`'s shape separately.** Options: introduce
-   `StreamingInstructionCell<E, I>` with a different return contract,
-   or keep `/agent` on the legacy registry indefinitely (it's the
-   only command with a long-lived BE subscription).
+1. **Decide `agent`'s shape.** Options: introduce
+   `StreamingInstructionCell<E, I>` in `packages/shared/src/instructions/center.ts`
+   with a different return contract (handler emits frames via a sink
+   on `ctx`), or keep `/agent` on the legacy registry indefinitely.
+2. **Optional widening of `WatchAddArgsSchema`** if the
+   conditions / intervals form needs to come back as a cell renderer.
+   No correctness issue with the current narrower shape.
+3. **Optional re-introduction of multi-step forms** (e.g. `sector.add`
+   name → kind → codes flow) as cell renderers that emit follow-up
+   command lines on submit. Same pattern as the existing
+   `confirm-required` envelope flow, just with form data threaded
+   through the line.
 
 ## Pattern for a new FE cell
 
