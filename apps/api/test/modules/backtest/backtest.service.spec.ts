@@ -13,6 +13,7 @@ import type { FlightClient } from '../../../src/adapters/flight/flight-client.js
 import type { KlineReaderService } from '../../../src/modules/kline/kline-reader.service.js';
 import type { ScreenExecService } from '../../../src/modules/screen/screen-exec.service.js';
 import { BacktestService } from '../../../src/modules/backtest/backtest.service.js';
+import type { BacktestCacheStore } from '../../../src/modules/backtest/backtest-cache.store.js';
 import type {
   BacktestEvaluateScreenRequest,
   BacktestEvaluateSignalsRequest,
@@ -197,10 +198,28 @@ function makeService(
   reader: KlineReaderService,
   exec: ScreenExecService,
 ): BacktestService {
-  const svc = new BacktestService(client, reader, exec, '/tmp/quant-test-data');
-  // Replace the protected baseline computation with a no-op so the
-  // suite stays purely in-memory. The "baselines" arg shipped to the
-  // Flight stub will always be an empty object.
+  // Fake cache: always misses on read, accepts every write. Keeps the
+  // suite purely in-memory (no parquet IO).
+  const cache: BacktestCacheStore = {
+    getScreen: () => Promise.resolve(null),
+    setScreen: () => Promise.resolve(),
+    getBaseline: () => Promise.resolve(null),
+    setBaselineMany: () => Promise.resolve(),
+    flush: () => Promise.resolve(),
+  } as unknown as BacktestCacheStore;
+  const svc = new BacktestService(client, reader, exec, '/tmp/quant-test-data', cache);
+  // Stub the two methods that would otherwise hit DuckDB:
+  //  - latestKlineTradeDay: tests don't have a real kline parquet
+  //  - universeBaselines: shipped as empty so Flight args stay simple
+  // eslint-disable-next-line no-restricted-globals -- fixed stamp, no clock read
+  const stampMs = Date.UTC(2024, 0, 15);
+  (
+    svc as unknown as {
+      latestKlineTradeDay: () => Promise<Date>;
+      universeBaselines: () => Promise<Record<string, Record<string, [number, number]>>>;
+    }
+    // eslint-disable-next-line no-restricted-globals -- fixed stamp, no clock read
+  ).latestKlineTradeDay = (): Promise<Date> => Promise.resolve(new Date(stampMs));
   (
     svc as unknown as {
       universeBaselines: () => Promise<Record<string, Record<string, [number, number]>>>;

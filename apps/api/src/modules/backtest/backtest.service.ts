@@ -37,6 +37,7 @@ import { FlightClient } from '../../adapters/flight/flight-client.js';
 import { KlineReaderService } from '../kline/kline-reader.service.js';
 import { KLINE_DATA_DIR } from '../kline/kline.token.js';
 import { ScreenExecService } from '../screen/screen-exec.service.js';
+import { BacktestCacheStore, screenBaseKey } from './backtest-cache.store.js';
 import { BACKTEST_FLIGHT_CLIENT } from './backtest.token.js';
 
 /* eslint-disable no-restricted-globals --
@@ -80,6 +81,7 @@ export class BacktestService {
     @Inject(KlineReaderService) private readonly klineReader: KlineReaderService,
     @Inject(ScreenExecService) private readonly screenExec: ScreenExecService,
     @Inject(KLINE_DATA_DIR) klineDataRoot: string,
+    @Inject(BacktestCacheStore) private readonly cache: BacktestCacheStore,
   ) {
     this.klineParquetGlob = join(klineDataRoot, 'kline', '*.parquet');
   }
@@ -92,11 +94,31 @@ export class BacktestService {
     return this.connPromise;
   }
 
+  /**
+   * Latest trade day represented in the kline parquet (max ts). The
+   * value is the single source of truth for cache invalidation: a row
+   * is fresh iff its stamped `last_trade_day` equals the current value.
+   * Cached per request-batch (resolved once per evaluate call so the
+   * 250-day loop only pays one DuckDB roundtrip).
+   */
+  private async latestKlineTradeDay(): Promise<Date> {
+    const conn = await this.connection();
+    const sql = `SELECT MAX(ts) AS max_ts FROM read_parquet('${this.klineParquetGlob}')`;
+    const result = await conn.runAndReadAll(sql);
+    const rows = result.getRowObjects();
+    const raw = rows[0]?.['max_ts'];
+    if (raw === null || raw === undefined) {
+      throw new Error('kline parquet has no rows; cannot derive latest_trade_day');
+    }
+    return new Date(String(raw));
+  }
+
   async evaluateSignals(
     req: BacktestEvaluateSignalsRequest,
     traceId: string,
   ): Promise<BacktestEvaluateResponse> {
-    return this.runEvaluate(req.signals, req.holdings, traceId);
+    const currentTradeDay = await this.latestKlineTradeDay();
+    return this.runEvaluate(req.signals, req.holdings, traceId, currentTradeDay);
   }
 
   async evaluateScreen(
@@ -109,12 +131,16 @@ export class BacktestService {
     if (startMs > endMs) {
       throw new Error(`startDate (${req.startDate}) must be <= endDate (${req.endDate})`);
     }
+    // Resolve once. Used as the freshness stamp for every cache hit/set
+    // in this call, so we never race the kline cron mid-loop.
+    const currentTradeDay = await this.latestKlineTradeDay();
     const totalDays = countWeekdays(startMs, endMs);
-    const signals = await this.collectSignals(req, totalDays, onProgress);
+    const signals = await this.collectSignals(req, totalDays, currentTradeDay, onProgress);
 
     this.logger.log(
       `evaluate_screen signals=${String(signals.length)} ` +
-        `totalDays=${String(totalDays)} trace_id=${traceId}`,
+        `totalDays=${String(totalDays)} ` +
+        `lastTradeDay=${currentTradeDay.toISOString().slice(0, 10)} trace_id=${traceId}`,
     );
     onProgress?.({
       phase: 'flight',
@@ -126,33 +152,33 @@ export class BacktestService {
     });
 
     if (signals.length === 0) return emptyResponse(req.holdings);
-    return this.runEvaluate(signals, req.holdings, traceId);
+    return this.runEvaluate(signals, req.holdings, traceId, currentTradeDay);
   }
 
   private async collectSignals(
     req: BacktestEvaluateScreenRequest,
     totalDays: number,
+    currentTradeDay: Date,
     onProgress: ScreenProgressCallback | undefined,
   ): Promise<BacktestSignal[]> {
     const startMs = isoDateToMs(req.startDate);
     const endMs = isoDateToMs(req.endDate);
+    const planBaseKey = screenBaseKey(req);
     const signals: BacktestSignal[] = [];
     let runDays = 0;
     let matchedDays = 0;
+    let cacheHits = 0;
     for (let ms = startMs; ms <= endMs; ms += 86_400_000) {
       const dow = new Date(ms).getUTCDay();
       if (dow === 0 || dow === 6) continue;
       runDays += 1;
       const asof = msToIsoDate(ms);
-      const planForDay: ScreenPlanAst = { ...req.screenPlan, asof };
-      const res = await this.screenExec.execute(
-        planForDay,
-        req.universePlan ?? null,
-        req.rank ?? null,
-      );
-      if (res.matches.length > 0) {
+      const codes = await this.screenForDay(planBaseKey, req, asof, currentTradeDay, () => {
+        cacheHits += 1;
+      });
+      if (codes.length > 0) {
         matchedDays += 1;
-        for (const m of res.matches) signals.push({ signalDate: asof, code: m.code });
+        for (const code of codes) signals.push({ signalDate: asof, code });
       }
       onProgress?.({
         phase: 'screen',
@@ -163,7 +189,37 @@ export class BacktestService {
         signals: signals.length,
       });
     }
+    if (cacheHits > 0) {
+      this.logger.log(
+        `screen_cache_hit hits=${String(cacheHits)}/${String(runDays)} ` +
+          `plan_base_key=${planBaseKey.slice(0, 12)}`,
+      );
+    }
+    await this.cache.flush();
     return signals;
+  }
+
+  private async screenForDay(
+    planBaseKey: string,
+    req: BacktestEvaluateScreenRequest,
+    asof: string,
+    currentTradeDay: Date,
+    onHit: () => void,
+  ): Promise<readonly string[]> {
+    const cached = await this.cache.getScreen(planBaseKey, asof, currentTradeDay);
+    if (cached !== null) {
+      onHit();
+      return cached;
+    }
+    const planForDay: ScreenPlanAst = { ...req.screenPlan, asof };
+    const res = await this.screenExec.execute(
+      planForDay,
+      req.universePlan ?? null,
+      req.rank ?? null,
+    );
+    const codes = res.matches.map((m) => m.code);
+    await this.cache.setScreen(planBaseKey, asof, codes, currentTradeDay);
+    return codes;
   }
 
   // ---- internals ----
@@ -172,6 +228,7 @@ export class BacktestService {
     signals: readonly BacktestSignal[],
     holdings: readonly number[],
     traceId: string,
+    currentTradeDay: Date,
   ): Promise<BacktestEvaluateResponse> {
     const codes = uniqueCodes(signals);
     const { kStart, kEnd } = klineWindow(signals, holdings);
@@ -190,7 +247,8 @@ export class BacktestService {
       klinesArg[code] = { trade_date, open_qfq };
     }
 
-    const baselines = await this.universeBaselines(signals, holdings);
+    const baselines = await this.universeBaselines(signals, holdings, currentTradeDay);
+    await this.cache.flush();
 
     const args: Record<string, unknown> = {
       signals: signals.map((s) => ({ signal_date: s.signalDate, code: s.code })),
@@ -225,6 +283,7 @@ export class BacktestService {
   protected async universeBaselines(
     signals: readonly BacktestSignal[],
     holdings: readonly number[],
+    currentTradeDay: Date,
   ): Promise<Record<string, Record<string, [number, number]>>> {
     const window = klineWindow(signals, holdings);
     const start = isoFromDate(window.kStart);
@@ -233,13 +292,54 @@ export class BacktestService {
 
     const out: Record<string, Record<string, [number, number]>> = {};
     for (const h of new Set(holdings)) {
-      const series = await this.universeBaselineForHolding(conn, h, start, end);
+      const series = await this.universeBaselineForHolding(conn, h, start, end, currentTradeDay);
       out[String(h)] = series;
     }
     return out;
   }
 
   private async universeBaselineForHolding(
+    conn: DuckDBConnection,
+    holding: number,
+    startIso: string,
+    endIso: string,
+    currentTradeDay: Date,
+  ): Promise<Record<string, [number, number]>> {
+    const fromCache: Record<string, [number, number]> = {};
+    let needAny = false;
+    const startMs = isoDateToMs(startIso);
+    const endMs = isoDateToMs(endIso);
+    // Walk every weekday in [start, end]; classify cached vs missing
+    // using the persistent store + same-day freshness check.
+    for (let ms = startMs; ms <= endMs; ms += 86_400_000) {
+      const dow = new Date(ms).getUTCDay();
+      if (dow === 0 || dow === 6) continue;
+      const day = msToIsoDate(ms);
+      const cached = await this.cache.getBaseline(holding, day, currentTradeDay);
+      if (cached !== null) {
+        fromCache[day] = cached;
+      } else {
+        needAny = true;
+      }
+    }
+    if (!needAny) return fromCache;
+
+    // Recompute the whole window in one query (cheaper than per-day SQL).
+    // Persist only the freshly computed days; rows already present and
+    // fresh remain unchanged on disk.
+    const fresh = await this.queryUniverseBaseline(conn, holding, startIso, endIso);
+    const toPersist: { entryDay: string; mean: number; std: number }[] = [];
+    for (const [day, pair] of Object.entries(fresh)) {
+      if (fromCache[day] === undefined) {
+        toPersist.push({ entryDay: day, mean: pair[0], std: pair[1] });
+      }
+      fromCache[day] = pair;
+    }
+    await this.cache.setBaselineMany(holding, toPersist, currentTradeDay);
+    return fromCache;
+  }
+
+  private async queryUniverseBaseline(
     conn: DuckDBConnection,
     holding: number,
     startIso: string,
@@ -274,6 +374,7 @@ export class BacktestService {
     }
     return out;
   }
+
 }
 
 // -- helpers ----------------------------------------------------------------
