@@ -49,6 +49,10 @@ const METRIC_DECIMAL_COLUMNS = [
   'pb',
   'peg',
   'gross_margin_ttm',
+  // `wcmi` — Weighted Composite Momentum Index. Composite of the
+  // `ret_*` block; derived inside `computeMetrics` and written here
+  // so the FE can sort/filter on it without re-deriving per request.
+  'wcmi',
 ] as const;
 
 export type MetricDecimalColumn = (typeof METRIC_DECIMAL_COLUMNS)[number];
@@ -95,6 +99,7 @@ export interface StockMetricsRow {
   readonly pb: string | null;
   readonly peg: string | null;
   readonly gross_margin_ttm: string | null;
+  readonly wcmi: string | null;
 }
 
 @Injectable()
@@ -104,6 +109,10 @@ export class LocalStockMetaWriterService {
   private connPromise: Promise<DuckDBConnection> | null = null;
   /** In-process serialisation — every upsert flows through this chain. */
   private writeChain: Promise<void> = Promise.resolve();
+  /** One-shot per-process backfill of any missing metric/DDE columns
+   *  on a legacy parquet file. Resolves once the file's column set
+   *  covers everything the writer expects. */
+  private schemaMigrated: Promise<void> | null = null;
 
   constructor(
     @Inject(STOCK_META_DATA_DIR) dataRoot: string,
@@ -179,6 +188,7 @@ export class LocalStockMetaWriterService {
       );
       return;
     }
+    await this.ensureSchema();
     const conn = await this.connection();
     const updatedAt = this.clock.now();
     const tmp = `${this.filePath}.tmp-${process.pid}-${Date.now()}`;
@@ -200,6 +210,7 @@ export class LocalStockMetaWriterService {
       );
       return;
     }
+    await this.ensureSchema();
     const conn = await this.connection();
     const updatedAt = this.clock.now();
     const tmp = `${this.filePath}.tmp-${process.pid}-${Date.now()}`;
@@ -221,6 +232,7 @@ export class LocalStockMetaWriterService {
       );
       return;
     }
+    await this.ensureSchema();
     const conn = await this.connection();
     const tmp = `${this.filePath}.tmp-${process.pid}-${Date.now()}`;
     try {
@@ -451,8 +463,53 @@ export class LocalStockMetaWriterService {
       quoteOptionalString(row.pb),
       quoteOptionalString(row.peg),
       quoteOptionalString(row.gross_margin_ttm),
+      quoteOptionalString(row.wcmi),
     ];
     return `(${parts.join(', ')})`;
+  }
+
+  /**
+   * Once per process, rewrite the parquet to add any METRIC/DDE
+   * columns that the writer expects but the on-disk schema is missing.
+   * Lets us evolve the metric set (e.g. adding `wcmi`) without an
+   * out-of-band migration script.
+   */
+  private async ensureSchema(): Promise<void> {
+    if (this.schemaMigrated !== null) return this.schemaMigrated;
+    this.schemaMigrated = this.runEnsureSchema();
+    try {
+      await this.schemaMigrated;
+    } catch (err) {
+      // Reset so a transient failure can be retried by the next caller.
+      this.schemaMigrated = null;
+      throw err;
+    }
+  }
+
+  private async runEnsureSchema(): Promise<void> {
+    const conn = await this.connection();
+    const describeSql = `DESCRIBE SELECT * FROM read_parquet(${quoteLiteral(this.filePath)});`;
+    const result = await conn.runAndReadAll(describeSql);
+    const present = new Set<string>();
+    for (const row of result.getRowObjects() as readonly Record<string, unknown>[]) {
+      const name = row['column_name'];
+      if (typeof name === 'string') present.add(name);
+    }
+    const expected: readonly string[] = [...METRIC_DECIMAL_COLUMNS, ...DDE_DECIMAL_COLUMNS];
+    const missing = expected.filter((c) => !present.has(c));
+    if (missing.length === 0) return;
+    const tmp = `${this.filePath}.tmp-schema-${process.pid}-${Date.now()}`;
+    const addList = missing.map((c) => `CAST(NULL AS VARCHAR) AS ${quoteIdent(c)}`).join(', ');
+    const sql = `COPY (SELECT *, ${addList} FROM read_parquet(${quoteLiteral(this.filePath)})) TO ${quoteLiteral(tmp)} (FORMAT PARQUET);`;
+    try {
+      await conn.run(sql);
+      await rename(tmp, this.filePath);
+      this.adapter.invalidate();
+      this.logger.log(`stock_metas_schema_migrated added=${missing.join(',')}`);
+    } catch (err) {
+      await rm(tmp, { force: true });
+      throw err;
+    }
   }
 
   private connection(): Promise<DuckDBConnection> {

@@ -105,6 +105,7 @@ describe('snapshotToTerm', () => {
         pb: null,
         peg: null,
         gross_margin_ttm: null,
+        wcmi: null,
       },
       returns: {
         ret_1d: null,
@@ -136,6 +137,7 @@ describe('snapshotToTerm', () => {
         pb: null,
         peg: null,
         gross_margin_ttm: null,
+        wcmi: null,
       },
       returns: {
         ret_1d: null,

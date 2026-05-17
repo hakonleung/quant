@@ -57,6 +57,29 @@ export function ChgPctCell({ value }: ValueCellProps): React.ReactElement {
   );
 }
 
+/**
+ * Plain signed number cell (2 dp). Like {@link ChgPctCell} but without
+ * the ×100 / % suffix — for unit-less scores (e.g. WCMI) whose
+ * magnitudes can sit in double digits and aren't fractional returns.
+ */
+export function ScoreCell({ value }: ValueCellProps): React.ReactElement {
+  if (value === null) {
+    return (
+      <Text fontFamily="mono" fontSize="11px" color="ink3">
+        —
+      </Text>
+    );
+  }
+  const color = value > 0 ? 'up' : value < 0 ? 'down' : 'ink3';
+  const sign = value > 0 ? '+' : '';
+  return (
+    <Text fontFamily="mono" fontSize="11px" color={color} fontWeight="600">
+      {sign}
+      {value.toFixed(2)}
+    </Text>
+  );
+}
+
 export function PctCell({ value }: ValueCellProps): React.ReactElement {
   return (
     <Text fontFamily="mono" fontSize="11px" color={value === null ? 'ink3' : 'ink2'}>

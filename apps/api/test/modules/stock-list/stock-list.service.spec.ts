@@ -41,6 +41,7 @@ const SNAP_A: StockSnapshotDto = {
     pb: null,
     peg: null,
     gross_margin_ttm: null,
+    wcmi: null,
   },
   returns: {
     ret_1d: '0.0123',
@@ -118,7 +119,7 @@ function svc(meta: FakeMeta, kline: FakeKline): StockListService {
 }
 
 describe('StockListService.assembleRows', () => {
-  it('returns the canonical column set + dynamic-sector default sort (chgPct desc)', async () => {
+  it('returns the canonical column set + dynamic-sector default sort (wcmi desc)', async () => {
     const meta = new FakeMeta([SNAP_A, SNAP_B]);
     const kline = new FakeKline({
       '600519': [bar('2026-05-14', 1680, 100, 0.01), bar('2026-05-15', 1700, 200, 0.02)],
@@ -132,14 +133,15 @@ describe('StockListService.assembleRows', () => {
 
     expect(out.kind).toBe('dynamic-sector');
     expect(out.columns).toEqual([...DEFAULT_APPLIED_STOCK_LIST_COLUMNS]);
-    expect(out.sort).toEqual({ key: 'chgPct', dir: 'desc' });
+    expect(out.sort).toEqual({ key: 'wcmi', dir: 'desc' });
+    // Both fixtures have null wcmi → stable sort preserves input code order.
     expect(out.rows.map((r) => r.code)).toEqual(['600519', '000001']);
     expect(out.rows[0]?.chgPct).toBeCloseTo(0.0123);
     expect(out.rows[0]?.turnoverRate).toBeCloseTo(0.02);
     expect(out.rows[0]?.turnover).toBe(200);
   });
 
-  it('applies user-sector default sort (name asc)', async () => {
+  it('applies user-sector default sort (wcmi desc)', async () => {
     const meta = new FakeMeta([SNAP_A, SNAP_B]);
     const kline = new FakeKline({});
     const out = await svc(meta, kline).assembleRows({
@@ -147,8 +149,9 @@ describe('StockListService.assembleRows', () => {
       codes: ['600519', '000001'],
       traceId: TRACE,
     });
-    expect(out.sort).toEqual({ key: 'name', dir: 'asc' });
-    expect(out.rows.map((r) => r.name)).toEqual(['平安银行', '贵州茅台']);
+    expect(out.sort).toEqual({ key: 'wcmi', dir: 'desc' });
+    // Both null wcmi → stable sort keeps the requested code order.
+    expect(out.rows.map((r) => r.code)).toEqual(['600519', '000001']);
   });
 
   it('honors explicit columns + sort overrides', async () => {

@@ -164,6 +164,7 @@ export function ScrollGrid({
               <RowItem
                 key={vi.key}
                 row={row}
+                rowIndex={vi.index}
                 columns={columns}
                 top={vi.start}
                 h={vi.size}
@@ -213,14 +214,16 @@ function ColumnHeader({
           zIndex={4}
         />
       )}
-      {columns.map((c) => {
-        const active = sort?.key === c.key;
+      {columns.map((c, i) => {
+        const sortable = c.sortable !== false;
+        const active = sortable && sort?.key === c.key;
         const arrow = !active ? '' : sort.dir === 'asc' ? ' ▲' : ' ▼';
         return (
           <Box
             as="button"
             key={c.key}
             onClick={(): void => {
+              if (!sortable) return;
               if (!active) {
                 setSort({ key: c.key, dir: 'asc' });
               } else if (sort.dir === 'asc') {
@@ -240,10 +243,14 @@ function ColumnHeader({
             textTransform="uppercase"
             fontWeight="700"
             bg="panel3"
-            cursor="pointer"
-            _hover={{ color: 'accent' }}
+            cursor={sortable ? 'pointer' : 'default'}
+            _hover={sortable ? { color: 'accent' } : {}}
             position={c.sticky === true ? 'sticky' : 'static'}
-            left={c.sticky === true ? (removable ? `${String(DELETE_COL_W)}px` : 0) : undefined}
+            left={
+              c.sticky === true
+                ? `${String(stickyLeftFor(columns, i, removable))}px`
+                : undefined
+            }
             zIndex={c.sticky === true ? 4 : 3}
             borderColor="line"
             flexShrink={0}
@@ -259,6 +266,7 @@ function ColumnHeader({
 
 interface RowItemProps {
   readonly row: ListRow;
+  readonly rowIndex: number;
   readonly columns: readonly ColumnDef[];
   readonly top: number;
   readonly h: number;
@@ -271,6 +279,7 @@ interface RowItemProps {
 
 const RowItem = memo(function RowItem({
   row,
+  rowIndex,
   columns,
   top,
   h,
@@ -328,7 +337,7 @@ const RowItem = memo(function RowItem({
           />
         </Box>
       )}
-      {columns.map((c) => (
+      {columns.map((c, i) => (
         <Box
           key={c.key}
           w={`${String(c.w)}px`}
@@ -341,16 +350,35 @@ const RowItem = memo(function RowItem({
           alignItems="center"
           justifyContent={c.align === 'right' ? 'flex-end' : 'flex-start'}
           position={c.sticky === true ? 'sticky' : 'static'}
-          left={c.sticky === true ? (hasRemove ? `${String(DELETE_COL_W)}px` : 0) : undefined}
+          left={
+            c.sticky === true
+              ? `${String(stickyLeftFor(columns, i, hasRemove))}px`
+              : undefined
+          }
           bg={c.sticky === true ? (focused ? 'accentBg' : 'panel') : 'transparent'}
           zIndex={c.sticky === true ? 1 : 0}
           borderBottomWidth={c.sticky === true ? '1px' : 0}
           borderColor="line2"
           flexShrink={0}
         >
-          {c.render(row)}
+          {c.render(row, rowIndex)}
         </Box>
       ))}
     </Box>
   );
 });
+
+/** Pixel offset for a sticky cell at `i`, summing the delete-column gutter
+ *  (when shown) plus the widths of every sticky column before it. */
+function stickyLeftFor(
+  columns: readonly ColumnDef[],
+  i: number,
+  hasRemove: boolean,
+): number {
+  let left = hasRemove ? DELETE_COL_W : 0;
+  for (let j = 0; j < i; j += 1) {
+    const col = columns[j];
+    if (col !== undefined && col.sticky === true) left += col.w;
+  }
+  return left;
+}

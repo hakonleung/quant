@@ -23,6 +23,7 @@ export const STOCK_LIST_COLUMN_KEYS = [
   'ret20d',
   'ret90d',
   'ret250d',
+  'wcmi',
   'mktCap',
   'floatMktCap',
   'peTtm',
@@ -76,6 +77,7 @@ export const STOCK_LIST_COLUMN_CATALOG: readonly StockListColumnSpec[] = [
   { key: 'ret20d', label: '20D%', group: 'derived', defaultApplied: false, source: 'snapshot' },
   { key: 'ret90d', label: '90D%', group: 'derived', defaultApplied: false, source: 'snapshot' },
   { key: 'ret250d', label: '250D%', group: 'derived', defaultApplied: false, source: 'snapshot' },
+  { key: 'wcmi', label: 'WCMI', group: 'derived', defaultApplied: true, source: 'snapshot' },
   { key: 'mktCap', label: '总市值', group: 'derived', defaultApplied: false, source: 'snapshot' },
   {
     key: 'floatMktCap',
@@ -198,10 +200,10 @@ export interface StockListSort {
  * agree on the unsorted-but-still-deterministic baseline.
  */
 export const DEFAULT_SORT_BY_KIND: Readonly<Record<StockListKind, StockListSort>> = {
-  'user-sector': { key: 'name', dir: 'asc' },
-  'dynamic-sector': { key: 'chgPct', dir: 'desc' },
-  watch: { key: 'name', dir: 'asc' },
-  screen: { key: 'chgPct', dir: 'desc' },
+  'user-sector': { key: 'wcmi', dir: 'desc' },
+  'dynamic-sector': { key: 'wcmi', dir: 'desc' },
+  watch: { key: 'wcmi', dir: 'desc' },
+  screen: { key: 'wcmi', dir: 'desc' },
 };
 
 // ── row DTO ──────────────────────────────────────────────────────────────
@@ -226,6 +228,7 @@ export const StockListRowSchema = z
     ret20d: z.number().nullable(),
     ret90d: z.number().nullable(),
     ret250d: z.number().nullable(),
+    wcmi: z.number().nullable(),
     mktCap: z.number().nullable(),
     floatMktCap: z.number().nullable(),
     peTtm: z.number().nullable(),
@@ -282,6 +285,7 @@ export function emptyStockListRow(code: string, name: string | null = null): Sto
     ret20d: null,
     ret90d: null,
     ret250d: null,
+    wcmi: null,
     mktCap: null,
     floatMktCap: null,
     peTtm: null,

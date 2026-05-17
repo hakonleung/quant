@@ -69,6 +69,7 @@ function toRow(m: StockMetrics): StockMetricsRow {
     pb: decStr(m.pb),
     peg: decStr(m.peg),
     gross_margin_ttm: decStr(m.gross_margin_ttm),
+    wcmi: decStr(m.wcmi),
   };
 }
 

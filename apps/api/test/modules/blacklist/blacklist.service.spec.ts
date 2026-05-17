@@ -1,145 +1,213 @@
-import {
-  BlacklistService,
-  decodeDateCell,
-} from '../../../src/modules/blacklist/blacklist.service.js';
+import type { StockSnapshotDto } from '@quant/shared';
+
+import { FrozenClock } from '../../../src/common/clock.js';
+import { BlacklistService } from '../../../src/modules/blacklist/blacklist.service.js';
 import {
   BLACKLIST_TABLE_SPEC,
   BlacklistStore,
   type BlacklistRow,
 } from '../../../src/modules/blacklist/blacklist.store.js';
-import { FrozenClock } from '../../../src/common/clock.js';
-import type { FlightClient } from '../../../src/adapters/flight/flight-client.js';
+import type { StockMetaService } from '../../../src/modules/stock-meta/stock-meta.service.js';
 import { InMemoryRecordStore } from '../../fakes/in-memory-record.store.js';
 
-function makeBlacklistStore(): BlacklistStore {
+function makeStore(): BlacklistStore {
   return new BlacklistStore(new InMemoryRecordStore<BlacklistRow>(BLACKLIST_TABLE_SPEC));
 }
 
-interface FakeProxy {
-  toJSON(): Record<string, unknown>;
-}
-
-class FakeTable {
-  constructor(private readonly rows: ReadonlyArray<Record<string, unknown>>) {}
-  get numRows(): number {
-    return this.rows.length;
-  }
-  get(i: number): FakeProxy | null {
-    const row = this.rows[i];
-    if (row === undefined) return null;
-    return { toJSON: () => row };
-  }
-}
-
-function fakeFlight(rows: ReadonlyArray<Record<string, unknown>>): FlightClient {
-  const table = new FakeTable(rows);
+function snap(
+  code: string,
+  returns: {
+    ret_20d?: string | null;
+    ret_90d?: string | null;
+    ret_250d?: string | null;
+  },
+  asof: string | null = '2026-05-15',
+): StockSnapshotDto {
   return {
-    doGet: async (_op: string, _args: unknown, _opts: unknown): Promise<{ value: FakeTable }> => ({
-      value: table,
-    }),
-  } as unknown as FlightClient;
+    meta: {
+      code,
+      name: code,
+      name_pinyin: code,
+      industries: '银行',
+      list_date: '2001-01-01',
+      float_pct: '1',
+      updated_at: '2026-05-01T00:00:00+00:00',
+      total_share: null,
+      float_share: null,
+      net_assets: null,
+      net_assets_period: null,
+      quarterlies: [],
+      financials_updated_at: null,
+    },
+    price: null,
+    asof,
+    derived: {
+      mkt_cap: null,
+      float_mkt_cap: null,
+      pe_ttm: null,
+      pe_dynamic: null,
+      pb: null,
+      peg: null,
+      gross_margin_ttm: null,
+      wcmi: null,
+    },
+    returns: {
+      ret_1d: null,
+      ret_5d: null,
+      ret_10d: null,
+      ret_20d: returns.ret_20d ?? null,
+      ret_90d: returns.ret_90d ?? null,
+      ret_250d: returns.ret_250d ?? null,
+    },
+    dde: null,
+  };
 }
 
-const FROZEN = new Date('2026-05-04T07:15:00.000Z');
+function fakeMeta(snapshots: readonly StockSnapshotDto[]): StockMetaService {
+  return { snapshotAll: async () => snapshots } as unknown as StockMetaService;
+}
 
-describe('decodeDateCell', () => {
-  it('decodes a Date instance', () => {
-    expect(decodeDateCell(new Date('2026-05-04T00:00:00Z'))).toBe('2026-05-04');
-  });
-  it('returns the leading 10 chars of an ISO string', () => {
-    expect(decodeDateCell('2026-05-04T13:30:00Z')).toBe('2026-05-04');
-  });
-  it('treats a number > 1e8 as ms since epoch', () => {
-    const ms = Date.UTC(2026, 4, 4); // 1779494400000 (months are 0-indexed)
-    expect(decodeDateCell(ms)).toBe('2026-05-04');
-  });
-  it('treats a small number as days since epoch', () => {
-    const days = Math.floor(Date.UTC(2026, 4, 4) / 86_400_000); // 20577
-    expect(decodeDateCell(days)).toBe('2026-05-04');
-  });
-  it('handles bigint via the number branch', () => {
-    const ms = BigInt(Date.UTC(2026, 4, 4));
-    expect(decodeDateCell(ms)).toBe('2026-05-04');
-  });
-  it('returns null for null / undefined', () => {
-    expect(decodeDateCell(null)).toBeNull();
-    expect(decodeDateCell(undefined)).toBeNull();
-  });
-  it('returns null for unsupported types', () => {
-    expect(decodeDateCell({})).toBeNull();
-    expect(decodeDateCell(true)).toBeNull();
-  });
-});
+const FROZEN = new Date('2026-05-16T07:15:00.000Z');
 
 describe('BlacklistService.refresh', () => {
-  it('writes EMPTY_BLACKLIST codes when the Flight table is empty', async () => {
-    const store = makeBlacklistStore();
+  it('blacklists A-share codes whose every stage return is at or below threshold', async () => {
+    const store = makeStore();
     await store.load();
-    const svc = new BlacklistService(store, fakeFlight([]), new FrozenClock(FROZEN));
+    const svc = new BlacklistService(
+      store,
+      fakeMeta([
+        snap('000001', { ret_20d: '0.05', ret_90d: '0.10', ret_250d: '0.50' }),
+      ]),
+      new FrozenClock(FROZEN),
+    );
 
-    const snap = await svc.refresh('trace-1');
+    const result = await svc.refresh('t-1');
 
-    expect(snap.codes).toEqual([]);
-    expect(snap.computedAt).toBe(FROZEN.toISOString());
-    expect(store.snapshot()).toEqual(snap);
-  });
-
-  it('parses code/asof/universe_size from a populated table', async () => {
-    const store = makeBlacklistStore();
-    await store.load();
-    const rows = [
-      { code: '000001', asof: '2026-05-04', universe_size: 5500 },
-      { code: '600519', asof: '2026-05-04', universe_size: 5500 },
-    ];
-    const svc = new BlacklistService(store, fakeFlight(rows), new FrozenClock(FROZEN));
-
-    const snap = await svc.refresh('trace-2');
-
-    expect(snap.codes).toEqual(['000001', '600519']);
-    expect(snap.asof).toBe('2026-05-04');
-    expect(snap.universeSize).toBe(5500);
-    expect(snap.computedAt).toBe(FROZEN.toISOString());
+    expect(result.codes).toEqual(['000001']);
+    expect(result.asof).toBe('2026-05-15');
+    expect(result.universeSize).toBe(1);
+    expect(result.computedAt).toBe(FROZEN.toISOString());
     expect(store.has('000001')).toBe(true);
   });
 
-  it('skips rows whose code is not a string', async () => {
-    const store = makeBlacklistStore();
+  it('keeps codes whose any stage return exceeds its threshold', async () => {
+    const store = makeStore();
     await store.load();
-    const rows = [
-      { code: 12345, asof: '2026-05-04', universe_size: 1 },
-      { code: '000002', asof: '2026-05-04', universe_size: 1 },
-    ];
-    const svc = new BlacklistService(store, fakeFlight(rows), new FrozenClock(FROZEN));
+    const svc = new BlacklistService(
+      store,
+      fakeMeta([
+        snap('600519', { ret_20d: '0.40' }),
+        snap('600520', { ret_90d: '0.70' }),
+        snap('600521', { ret_250d: '2.00' }),
+      ]),
+      new FrozenClock(FROZEN),
+    );
 
-    const snap = await svc.refresh('trace-3');
+    const result = await svc.refresh('t-2');
 
-    expect(snap.codes).toEqual(['000002']);
+    expect(result.codes).toEqual([]);
   });
 
-  it('falls back to EMPTY_BLACKLIST.asof when the first row carries an unparseable asof', async () => {
-    const store = makeBlacklistStore();
+  it('keeps codes whose stage returns are all null (insufficient history)', async () => {
+    const store = makeStore();
     await store.load();
-    const rows = [{ code: '000001', asof: { weird: 'object' }, universe_size: 1 }];
-    const svc = new BlacklistService(store, fakeFlight(rows), new FrozenClock(FROZEN));
+    const svc = new BlacklistService(
+      store,
+      fakeMeta([snap('301999', {})]),
+      new FrozenClock(FROZEN),
+    );
 
-    const snap = await svc.refresh('trace-4');
+    const result = await svc.refresh('t-3');
 
-    expect(snap.asof).toBe('1970-01-01');
-    expect(snap.codes).toEqual(['000001']);
+    expect(result.codes).toEqual([]);
+    expect(result.universeSize).toBe(1);
   });
 
-  it('uses the injected clock for computedAt — never `new Date()`', async () => {
-    const store = makeBlacklistStore();
+  it('excludes non-A-share codes from both the universe and the result', async () => {
+    const store = makeStore();
+    await store.load();
+    const svc = new BlacklistService(
+      store,
+      fakeMeta([
+        snap('000001', { ret_20d: '0.05', ret_90d: '0.10', ret_250d: '0.50' }),
+        snap('00700', { ret_20d: '0.05' }), // HK code
+        snap('AAPL', { ret_20d: '0.05' }), // US ticker
+      ]),
+      new FrozenClock(FROZEN),
+    );
+
+    const result = await svc.refresh('t-4');
+
+    expect(result.codes).toEqual(['000001']);
+    expect(result.universeSize).toBe(1);
+  });
+
+  it('sorts the output codes lexicographically', async () => {
+    const store = makeStore();
+    await store.load();
+    const svc = new BlacklistService(
+      store,
+      fakeMeta([
+        snap('600519', { ret_20d: '0.05' }),
+        snap('000001', { ret_20d: '0.05' }),
+        snap('300999', { ret_20d: '0.05' }),
+      ]),
+      new FrozenClock(FROZEN),
+    );
+
+    const result = await svc.refresh('t-5');
+
+    expect(result.codes).toEqual(['000001', '300999', '600519']);
+  });
+
+  it('uses the max snapshot.asof as the result asof; falls back to clock today when none', async () => {
+    const store = makeStore();
+    await store.load();
+    const svc = new BlacklistService(
+      store,
+      fakeMeta([
+        snap('000001', { ret_20d: '0.05' }, '2026-05-14'),
+        snap('600519', { ret_20d: '0.05' }, '2026-05-15'),
+      ]),
+      new FrozenClock(FROZEN),
+    );
+
+    const result = await svc.refresh('t-6');
+    expect(result.asof).toBe('2026-05-15');
+
+    const svcFallback = new BlacklistService(
+      store,
+      fakeMeta([snap('000001', { ret_20d: '0.05' }, null)]),
+      new FrozenClock(FROZEN),
+    );
+    const fallback = await svcFallback.refresh('t-6b');
+    expect(fallback.asof).toBe('2026-05-16');
+  });
+
+  it('skips returns that fail to parse as finite numbers', async () => {
+    const store = makeStore();
+    await store.load();
+    const svc = new BlacklistService(
+      store,
+      fakeMeta([snap('000001', { ret_20d: 'NaN', ret_90d: '0.05' })]),
+      new FrozenClock(FROZEN),
+    );
+
+    const result = await svc.refresh('t-7');
+
+    // ret_20d unparseable → ignored; ret_90d below threshold → blacklist.
+    expect(result.codes).toEqual(['000001']);
+  });
+
+  it('uses the injected clock for computedAt', async () => {
+    const store = makeStore();
     await store.load();
     const a = new Date('2026-01-01T00:00:00Z');
     const b = new Date('2026-12-31T23:59:59Z');
-    const svcA = new BlacklistService(store, fakeFlight([]), new FrozenClock(a));
-    const svcB = new BlacklistService(store, fakeFlight([]), new FrozenClock(b));
+    const svcA = new BlacklistService(store, fakeMeta([]), new FrozenClock(a));
+    const svcB = new BlacklistService(store, fakeMeta([]), new FrozenClock(b));
 
-    const snapA = await svcA.refresh('t-a');
-    const snapB = await svcB.refresh('t-b');
-
-    expect(snapA.computedAt).toBe(a.toISOString());
-    expect(snapB.computedAt).toBe(b.toISOString());
+    expect((await svcA.refresh('t-a')).computedAt).toBe(a.toISOString());
+    expect((await svcB.refresh('t-b')).computedAt).toBe(b.toISOString());
   });
 });

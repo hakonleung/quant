@@ -136,6 +136,7 @@ export function listRowFromStockListRow(
     ret20d: row.ret20d,
     ret90d: row.ret90d,
     ret250d: row.ret250d,
+    wcmi: row.wcmi,
     mktCap: row.mktCap,
     floatMktCap: row.floatMktCap,
     peTtm: row.peTtm,

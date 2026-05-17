@@ -139,6 +139,7 @@ function buildRow(
     ret20d: parseDecimal(returns?.ret_20d),
     ret90d: parseDecimal(returns?.ret_90d),
     ret250d: parseDecimal(returns?.ret_250d),
+    wcmi: parseDecimal(derived?.wcmi),
     mktCap: parseDecimal(derived?.mkt_cap),
     floatMktCap: parseDecimal(derived?.float_mkt_cap),
     peTtm: parseDecimal(derived?.pe_ttm),
@@ -172,6 +173,7 @@ function metasToSnapshotShells(metas: readonly StockMetaDto[]): readonly StockSn
       pb: null,
       peg: null,
       gross_margin_ttm: null,
+      wcmi: null,
     },
     returns: {
       ret_1d: null,
@@ -256,6 +258,8 @@ function pickSortValue(row: StockListRow, key: StockListColumnKey): number | str
       return row.ret90d;
     case 'ret250d':
       return row.ret250d;
+    case 'wcmi':
+      return row.wcmi;
     case 'mktCap':
       return row.mktCap;
     case 'floatMktCap':

@@ -232,6 +232,7 @@ function rowToSnapshot(meta: StockMetaDto, row: Record<string, unknown>): StockS
       pb: optionalString(row['pb']),
       peg: optionalString(row['peg']),
       gross_margin_ttm: optionalString(row['gross_margin_ttm']),
+      wcmi: optionalString(row['wcmi']),
     },
     returns: {
       ret_1d: optionalString(row['ret_1d']),

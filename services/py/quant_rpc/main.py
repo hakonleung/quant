@@ -54,7 +54,6 @@ from quant_io.sources.routed_watch import MarketRoutedWatchSource
 from quant_io.sources.yfinance_watch import YFinanceWatchSource
 
 from quant_rpc.handlers import HandlerRegistry
-from quant_rpc.ops.blacklist import ComputeAshareBlacklistHandler
 from quant_rpc.ops.financials import (
     BulkSyncFinancialsHandler,
     EnrichFinancialsForCodeHandler,
@@ -290,13 +289,6 @@ def main() -> int:
     pattern_engine = DTWPatternEngine(kline_repo)
     pattern_service = PatternService(kline_repo, pattern_engine)
     registry.register(FindSimilarPatternsHandler(pattern_service, meta_repo, clock))
-    registry.register(
-        ComputeAshareBlacklistHandler(
-            meta_repo=meta_repo,
-            kline_repo=kline_repo,
-            clock=clock,
-        )
-    )
     registry.register(GetLatestTradeDayHandler(clock))
     registry.register(EvaluateSignalHandler())
     # NL→DSL + screen execution both live in NestJS now

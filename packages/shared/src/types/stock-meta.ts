@@ -126,6 +126,13 @@ export const StockDerivedMetricsSchema = z
     pb: decimalStringOrNull,
     peg: decimalStringOrNull,
     gross_margin_ttm: decimalStringOrNull,
+    /**
+     * Weighted Composite Momentum Index — `(4·ret_5d + 3·ret_10d +
+     * 2·ret_20d + 1·ret_90d) / 10`. Decimal string in the same scale
+     * as the `ret_*` inputs (fractional). `null` when any of the four
+     * stage returns is missing.
+     */
+    wcmi: decimalStringOrNull,
   })
   .strict();
 

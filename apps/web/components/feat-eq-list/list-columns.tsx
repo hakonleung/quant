@@ -21,14 +21,17 @@ import {
   type ListRow,
 } from '../../lib/fp/eq-list-fp.js';
 
-import { ChgPctCell, CnyCell, CnyDeltaCell, PctCell, PriceCell } from './list-cells.js';
-import { STICKY_COL_WIDTH, type ColumnDef } from './list-types.js';
+import { ChgPctCell, CnyCell, CnyDeltaCell, PctCell, PriceCell, ScoreCell } from './list-cells.js';
+import { INDEX_COL_WIDTH, STICKY_COL_WIDTH, type ColumnDef } from './list-types.js';
 
 export function buildColumns(
   applied: readonly ColumnKey[],
   evidenceKeys: readonly string[],
 ): readonly ColumnDef[] {
   const out: ColumnDef[] = [];
+  // Visual ordinal column — always first + sticky, follows the
+  // rendered (post-sort) row order.
+  out.push(makeIndexColumn());
   // CODE is always first + sticky regardless of user preference; the
   // dialog hides the toggle for it. We still render it from the
   // catalog entry so styling stays single-sourced.
@@ -50,6 +53,23 @@ export function buildColumns(
     });
   }
   return out;
+}
+
+function makeIndexColumn(): ColumnDef {
+  return {
+    key: '__index',
+    label: '#',
+    w: INDEX_COL_WIDTH,
+    align: 'right',
+    sticky: true,
+    sortable: false,
+    render: (_r, i) => (
+      <Text fontFamily="mono" fontSize="10px" color="ink3">
+        {i + 1}
+      </Text>
+    ),
+    sortValue: () => null,
+  };
 }
 
 function makeCodeColumn(): ColumnDef {
@@ -148,6 +168,15 @@ function makeAppliedColumn(key: ColumnKey): ColumnDef | null {
       return returnColumn('ret90d', '90D%');
     case 'ret250d':
       return returnColumn('ret250d', '250D%');
+    case 'wcmi':
+      return {
+        key: 'wcmi',
+        label: 'WCMI',
+        w: 90,
+        align: 'right',
+        render: (r) => <ScoreCell value={readNumber(r, 'wcmi')} />,
+        sortValue: (r) => readNumber(r, 'wcmi'),
+      };
     case 'mktCap':
       return derivedColumn('mktCap', '总市值', 110, 'cny');
     case 'floatMktCap':

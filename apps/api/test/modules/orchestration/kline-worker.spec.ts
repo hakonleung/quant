@@ -118,6 +118,7 @@ const SAMPLE_METRICS_ROW: StockMetricsRow = {
   pb: '7.8',
   peg: '0.6',
   gross_margin_ttm: '0.916',
+  wcmi: '0.04',
 };
 
 const SYNC_BARS_TABLE = new FakeTable(

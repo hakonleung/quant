@@ -25,6 +25,7 @@ const sample: StockListRow = {
   ret20d: -0.0456,
   ret90d: 0.15,
   ret250d: null,
+  wcmi: null,
   mktCap: null,
   floatMktCap: null,
   peTtm: null,
@@ -131,6 +132,7 @@ describe('stockTableMetaRows', () => {
       ret20d: null,
       ret90d: null,
       ret250d: null,
+      wcmi: null,
     };
     const rows = stockTableMetaRows([allNull]);
     const row = rows[0]!;

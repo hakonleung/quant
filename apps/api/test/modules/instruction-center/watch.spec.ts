@@ -80,6 +80,7 @@ const emptyRow = (code: string): StockListRow => ({
   ret20d: null,
   ret90d: null,
   ret250d: null,
+  wcmi: null,
   mktCap: null,
   floatMktCap: null,
   peTtm: null,

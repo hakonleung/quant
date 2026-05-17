@@ -147,6 +147,7 @@ describe('StockSnapshotDtoSchema', () => {
     pb: null,
     peg: null,
     gross_margin_ttm: null,
+    wcmi: null,
   };
 
   const baseReturns = {

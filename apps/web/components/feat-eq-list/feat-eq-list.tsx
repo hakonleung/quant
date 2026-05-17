@@ -104,14 +104,16 @@ function FeatEqListInner({ bare }: FeatEqListProps = {}): React.ReactElement {
     return sector.codes;
   }, [isAll, sector, ready, blacklistSet]);
   // Single BE-assembled fetch — replaces the legacy meta + kline +
-  // snapshot stitch. Empty `codes` means "full universe" on the BE
-  // (StockListService.assembleRows enumerates from snapshot results),
-  // so the synthetic All sector rides the same code path.
+  // snapshot stitch. For the synthetic All sector we send the
+  // blacklist-filtered code list explicitly: sending `[]` would tell
+  // the BE to expand to the full universe, which re-includes the
+  // blacklisted codes the FE just filtered out. Real sectors send
+  // their own member list verbatim.
   const listKind: StockListKind = isDynamic ? 'dynamic-sector' : 'user-sector';
   const stockListQuery = useStockListRows({
     kind: listKind,
-    codes: isAll ? [] : codes,
-    enabled: isAll || codes.length > 0,
+    codes,
+    enabled: codes.length > 0,
   });
   const stockListRows = stockListQuery.data?.rows ?? [];
 
@@ -196,15 +198,20 @@ function FeatEqListInner({ bare }: FeatEqListProps = {}): React.ReactElement {
   }, [filteredRows, filterEntries, isDynamic]);
 
   // Default sort: dynamic sectors with a rank metric sort by rank_metric
-  // (using the rank's order); otherwise descending by chgPct so winners
-  // surface first. `null` is reserved for the "use sector-defined order"
-  // mode (kept accessible by clicking the active sort header twice).
+  // (using the rank's order); otherwise mirror the BE's response sort
+  // (currently `wcmi desc` — see shared `DEFAULT_SORT_BY_KIND`). Falling
+  // back to `chgPct desc` keeps the panel useful before the first BE
+  // response lands. `null` is reserved for the "use sector-defined
+  // order" mode (kept accessible by clicking the active sort header
+  // twice).
+  const beSort = stockListQuery.data?.sort;
   const defaultSort: SortState = useMemo(() => {
     if (isDynamic && sector !== null && sector.rank !== undefined && sector.rank !== null) {
       return { key: 'ev:rank_metric', dir: sector.rank.order === 'asc' ? 'asc' : 'desc' };
     }
+    if (beSort !== undefined) return { key: beSort.key, dir: beSort.dir };
     return { key: 'chgPct', dir: 'desc' };
-  }, [isDynamic, sector]);
+  }, [isDynamic, sector, beSort]);
   const [sort, setSort] = useState<SortState | null>(defaultSort);
   const lastSectorIdRef = useRef<string | null>(null);
   useEffect(() => {
@@ -213,6 +220,18 @@ function FeatEqListInner({ bare }: FeatEqListProps = {}): React.ReactElement {
     lastSectorIdRef.current = id;
     setSort(defaultSort);
   }, [sector?.id, defaultSort]);
+  // Adopt the BE sort once it arrives on initial mount — `useState`
+  // initialised before the first query landed, so the panel would
+  // otherwise stay on the `chgPct desc` fallback even though the BE
+  // told us `wcmi desc`. Only runs the first time; later user clicks
+  // (or sector switches) keep their own setSort flow.
+  const adoptedBeSortRef = useRef(false);
+  useEffect(() => {
+    if (adoptedBeSortRef.current) return;
+    if (beSort === undefined) return;
+    adoptedBeSortRef.current = true;
+    setSort({ key: beSort.key, dir: beSort.dir });
+  }, [beSort]);
   const columnsByKey = useMemo(() => {
     const m = new Map<string, ColumnDef>();
     for (const c of columns) m.set(c.key, c);

@@ -37,6 +37,7 @@ const HEADER_OVERRIDES: Partial<Record<StockListColumnKey, string>> = {
   ret20d: '20d%',
   ret90d: '90d%',
   ret250d: '250d%',
+  wcmi: 'wcmi',
   ddeMainInflow3d: '3d净流入',
   ddeMainInflow5d: '5d净流入',
   ddeMainInflow10d: '10d净流入',
@@ -61,6 +62,7 @@ const COLUMN_DEFAULTS: Readonly<
   ret20d: { align: 'right', width: 80, min: 7 },
   ret90d: { align: 'right', width: 80, min: 7 },
   ret250d: { align: 'right', width: 80, min: 7 },
+  wcmi: { align: 'right', width: 80, min: 7 },
   mktCap: { align: 'right', width: 100, min: 10 },
   floatMktCap: { align: 'right', width: 100, min: 10 },
   peTtm: { align: 'right', width: 80, min: 7 },
@@ -207,6 +209,7 @@ function formatCell(row: StockListRow, col: StockListColumnKey): string | null {
     case 'ret20d':
     case 'ret90d':
     case 'ret250d':
+    case 'wcmi':
     case 'grossMargin':
     case 'ddeMainInflowRatio3d':
     case 'ddeMainInflowRatio5d':

@@ -141,6 +141,7 @@ describe('LocalStockMetaWriterService', () => {
     pb: '7.8',
     peg: '0.6',
     gross_margin_ttm: '0.916',
+    wcmi: '0.1',
   });
 
   it('populates metrics columns for the targeted code', async () => {

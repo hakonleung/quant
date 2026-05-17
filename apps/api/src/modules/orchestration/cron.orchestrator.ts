@@ -29,6 +29,7 @@ import { Inject, Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nest
 import { ServerConfigCenter } from '@quant/config/server';
 import { newTraceId, type ScanAccepted, type ScanResult } from '@quant/shared';
 import { isPyFlightDown } from '../../adapters/flight/flight-errors.js';
+import { StockMetricsBackfillService } from '../stock-meta/stock-metrics-backfill.service.js';
 import { BatchSettler } from './batch-settler.js';
 import { CacheInspector } from './cache-inspector.js';
 import { KLINE_QUEUE, META_QUEUE } from './flight.token.js';
@@ -64,6 +65,8 @@ export class CronOrchestrator implements OnModuleInit, OnModuleDestroy {
     @Inject(KLINE_QUEUE) private readonly klineQueue: InMemoryQueue<KlineJob>,
     @Inject(CacheInspector) private readonly inspector: CacheInspector,
     @Inject(BatchSettler) private readonly settler: BatchSettler,
+    @Inject(StockMetricsBackfillService)
+    private readonly metricsBackfill: StockMetricsBackfillService,
   ) {}
 
   onModuleInit(): void {
@@ -143,6 +146,13 @@ export class CronOrchestrator implements OnModuleInit, OnModuleDestroy {
       klineCount: klineEnqueued,
       traceId,
     });
+    try {
+      await this.metricsBackfill.run(traceId);
+    } catch (err) {
+      this.logger.warn(
+        `metrics_backfill_failed traceId=${traceId} err=${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
     const elapsedMs = Date.now() - t0;
     this.logger.log(
       `cron_scan_done traceId=${traceId} meta_enqueued=${String(metaEnqueued)} kline_enqueued=${String(klineEnqueued)} elapsedMs=${String(elapsedMs)}`,

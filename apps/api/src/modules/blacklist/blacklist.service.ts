@@ -1,19 +1,45 @@
 /**
- * Calls the Python `compute_ashare_blacklist` Flight op and persists
- * the result through {@link BlacklistStore}.
+ * A-share noise-reduction blacklist (`docs/modules/12-blacklist.md`).
  *
- * Owned by the cron orchestrator's `blacklist` scan kind. Workers and
+ * Computes from the local `stock_metas.parquet` snapshot — the
+ * `ret_20d / ret_90d / ret_250d` columns are the same forward-adjusted
+ * stage returns the old Python `compute_ashare_blacklist` Flight op
+ * used to derive on-the-fly from kline. `StockMetricsComputeService`
+ * (kline-worker + nightly backfill) keeps them fresh.
+ *
+ * Criteria: a code is blacklisted iff every available stage return is
+ * **≤** its threshold and at least one stage return is computable:
+ *
+ *     ret_20d  > 30 %   → keep
+ *     ret_90d  > 60 %   → keep
+ *     ret_250d > 150 %  → keep
+ *
+ * A code whose three returns are all null (fewer than 21 cached daily
+ * rows, or non-positive baseline) is **not** blacklisted — mirrors the
+ * Python `checked_any` guard so brand-new IPOs are revisited once
+ * enough history accumulates.
+ *
+ * Owned by the cron orchestrator's blacklist scan kind. Workers and
  * the controller never call this directly — they read the cached
  * snapshot via the store.
  */
 
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import { EMPTY_BLACKLIST, type BlacklistSnapshot } from '@quant/shared';
+import { isAShareCode, type BlacklistSnapshot, type StockSnapshotDto } from '@quant/shared';
 
-import { FlightClient } from '../../adapters/flight/flight-client.js';
 import { CLOCK, type Clock } from '../../common/clock.js';
+import { StockMetaService } from '../stock-meta/stock-meta.service.js';
 import { BlacklistStore } from './blacklist.store.js';
-import { BLACKLIST_FLIGHT_CLIENT } from './blacklist.token.js';
+
+/** (ret_* column on snapshot, threshold as fractional return). */
+const THRESHOLDS: readonly (readonly [
+  keyof StockSnapshotDto['returns'],
+  number,
+])[] = [
+  ['ret_20d', 0.3],
+  ['ret_90d', 0.6],
+  ['ret_250d', 1.5],
+];
 
 @Injectable()
 export class BlacklistService {
@@ -21,63 +47,64 @@ export class BlacklistService {
 
   constructor(
     @Inject(BlacklistStore) private readonly store: BlacklistStore,
-    @Inject(BLACKLIST_FLIGHT_CLIENT) private readonly flight: FlightClient,
+    @Inject(StockMetaService) private readonly meta: StockMetaService,
     @Inject(CLOCK) private readonly clock: Clock,
   ) {}
 
   /**
-   * Run the Python compute op and replace the persisted snapshot.
-   * Returns the new snapshot. Errors propagate so the cron can log
-   * them through its own scan-failure path.
+   * Walk the A-share universe via the snapshot, derive the blacklist,
+   * replace the persisted snapshot, return the new value. Errors
+   * propagate so the cron can log them.
    */
   async refresh(traceId: string): Promise<BlacklistSnapshot> {
-    const result = await this.flight.doGet('compute_ashare_blacklist', {}, { traceId });
-    const table = result.value;
+    const snapshots = await this.meta.snapshotAll(traceId);
+    const aShareSnapshots = snapshots.filter((s) => isAShareCode(s.meta.code));
     const codes: string[] = [];
-    let asof = EMPTY_BLACKLIST.asof;
-    let universeSize = EMPTY_BLACKLIST.universeSize;
-    for (let i = 0; i < table.numRows; i++) {
-      const proxy = table.get(i);
-      if (proxy === null) continue;
-      const row = proxy.toJSON() as {
-        code?: unknown;
-        asof?: unknown;
-        universe_size?: unknown;
-      };
-      if (typeof row.code === 'string') codes.push(row.code);
-      if (i === 0) {
-        const a = decodeDateCell(row.asof);
-        if (a !== null) asof = a;
-        if (typeof row.universe_size === 'number') universeSize = row.universe_size;
+    let latestAsof: string | null = null;
+    for (const snap of aShareSnapshots) {
+      if (isBlacklisted(snap)) codes.push(snap.meta.code);
+      const asof = snap.asof;
+      if (asof !== null && (latestAsof === null || asof > latestAsof)) {
+        latestAsof = asof;
       }
     }
+    codes.sort();
+    const now = this.clock.now();
     const snap: BlacklistSnapshot = {
       codes: Object.freeze([...codes]),
-      asof,
-      universeSize,
-      computedAt: this.clock.now().toISOString(),
+      asof: latestAsof ?? toIsoDate(now),
+      universeSize: aShareSnapshots.length,
+      computedAt: now.toISOString(),
     };
     await this.store.replace(snap);
     this.logger.log(
-      `blacklist_refreshed size=${String(codes.length)} asof=${asof} universe=${String(universeSize)} traceId=${traceId}`,
+      `blacklist_refreshed size=${String(codes.length)} asof=${snap.asof} universe=${String(snap.universeSize)} traceId=${traceId}`,
     );
     return snap;
   }
 }
 
-export function decodeDateCell(value: unknown): string | null {
-  if (value === null || value === undefined) return null;
-  if (value instanceof Date) {
-    const y = value.getUTCFullYear();
-    const m = String(value.getUTCMonth() + 1).padStart(2, '0');
-    const d = String(value.getUTCDate()).padStart(2, '0');
-    return `${String(y)}-${m}-${d}`;
+/**
+ * True iff the snapshot's stage returns are all weak. Mirrors
+ * `_is_blacklisted` in the now-removed Python service: at least one
+ * threshold must be evaluable, and none may exceed its cutoff.
+ */
+function isBlacklisted(snap: StockSnapshotDto): boolean {
+  let checkedAny = false;
+  for (const [field, threshold] of THRESHOLDS) {
+    const raw = snap.returns[field];
+    if (raw === null) continue;
+    const v = Number(raw);
+    if (!Number.isFinite(v)) continue;
+    checkedAny = true;
+    if (v > threshold) return false;
   }
-  if (typeof value === 'string' && value.length >= 10) return value.slice(0, 10);
-  if (typeof value === 'number') {
-    const ms = value > 1e8 ? value : value * 86_400_000;
-    return decodeDateCell(new Date(ms));
-  }
-  if (typeof value === 'bigint') return decodeDateCell(Number(value));
-  return null;
+  return checkedAny;
+}
+
+function toIsoDate(d: Date): string {
+  const y = String(d.getUTCFullYear()).padStart(4, '0');
+  const m = String(d.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(d.getUTCDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
 }

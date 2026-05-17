@@ -28,6 +28,7 @@ import {
 } from './stock-fund-flow.sync.service.js';
 import { StockMetaController } from './stock-meta.controller.js';
 import { StockMetaService } from './stock-meta.service.js';
+import { StockMetricsBackfillService } from './stock-metrics-backfill.service.js';
 import { StockMetricsComputeService } from './stock-metrics-compute.service.js';
 
 const DEFAULT_DATA_DIR = '../../data';
@@ -45,6 +46,7 @@ const DEFAULT_FLIGHT_TARGET = '127.0.0.1:8815';
     { provide: STOCK_META_PORT, useExisting: LocalStockMetaAdapter },
     LocalStockMetaWriterService,
     StockMetricsComputeService,
+    StockMetricsBackfillService,
     SYSTEM_CLOCK_PROVIDER,
     StockMetaService,
     {
@@ -64,6 +66,7 @@ const DEFAULT_FLIGHT_TARGET = '127.0.0.1:8815';
     StockMetaService,
     LocalStockMetaWriterService,
     StockMetricsComputeService,
+    StockMetricsBackfillService,
     StockFundFlowSyncService,
     // ScreenModule's UniverseFilterService injects the adapter directly.
     LocalStockMetaAdapter,
