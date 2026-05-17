@@ -87,8 +87,12 @@ export class HelpHandler extends InstructionRegistrarBase<Args> {
 // ── list ──────────────────────────────────────────────────────────────────
 
 function replyList(): InstructionResult {
+  // Feishu rejects cards with more than a handful of `table` elements
+  // (ErrCode 11310: "card table number over limit"). Emit one combined
+  // table with a `group` column instead of one table per group — also
+  // makes Ctrl+F search easier for users.
   const byGroup = bucketByGroup();
-  const tableSections: Record<string, unknown>[] = [];
+  const allRows: (HelpRow & { readonly group: string })[] = [];
   const textSections: string[] = [];
 
   for (const group of GROUP_ORDER) {
@@ -96,27 +100,33 @@ function replyList(): InstructionResult {
     if (bucket === undefined || bucket.length === 0) continue;
     const sorted = [...bucket].sort((a, b) => a.id.localeCompare(b.id));
     const rows = sorted.map(buildHelpRow);
-    tableSections.push({
-      title: GROUP_LABEL[group],
-      columns: [
-        { name: 'id', displayName: 'id', horizontalAlign: 'left', width: '160px' },
-        { name: 'tags', displayName: 'tag', horizontalAlign: 'left', width: '80px' },
-        { name: 'cn', displayName: '中文', horizontalAlign: 'left' },
-        { name: 'example', displayName: '示例', horizontalAlign: 'left', width: '240px' },
-      ],
-      rows: rows.map((r) => ({ id: r.id, tags: r.tags, cn: r.cn, example: r.example })),
-      // Feishu native `table` defaults to page_size=10. Each group can
-      // exceed that (e.g. market has stock / stock.info / stock.kline / ta
-      // / ta.sector / screen / update); without this hint the tail rows
-      // get hidden on page 2 and look "deleted".
-      pageSize: Math.max(10, rows.length),
-      rowHeight: 'auto',
-    });
+    for (const r of rows) allRows.push({ ...r, group: GROUP_LABEL[group] });
     textSections.push(`【${GROUP_LABEL[group]}】\n${renderHelpTable(rows)}`);
   }
 
+  const tableSection = {
+    title: '全部指令 / All Instructions',
+    columns: [
+      { name: 'group', displayName: '类别', horizontalAlign: 'left', width: '120px' },
+      { name: 'id', displayName: 'id', horizontalAlign: 'left', width: '160px' },
+      { name: 'tags', displayName: 'tag', horizontalAlign: 'left', width: '70px' },
+      { name: 'cn', displayName: '中文', horizontalAlign: 'left' },
+      { name: 'example', displayName: '示例', horizontalAlign: 'left', width: '240px' },
+    ],
+    rows: allRows.map((r) => ({
+      group: r.group,
+      id: r.id,
+      tags: r.tags,
+      cn: r.cn,
+      example: r.example,
+    })),
+    // Default page_size=10 hides the long tail. Show every row.
+    pageSize: Math.max(10, allRows.length),
+    rowHeight: 'auto',
+  };
+
   return okResultWithMeta(textSections.join('\n\n'), {
-    tableSections,
+    tableSections: [tableSection],
     tablesSubheader: '使用 `help <id>` 查看单条指令详情',
   });
 }
