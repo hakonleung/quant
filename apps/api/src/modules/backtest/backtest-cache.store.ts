@@ -24,12 +24,17 @@
  */
 
 import { Inject, Injectable } from '@nestjs/common';
+import {
+  BacktestEvaluateResponseSchema,
+  type BacktestEvaluateResponse,
+} from '@quant/shared';
 import { z } from 'zod';
 
 import type { RecordStore, RecordTableSpec } from '../../common/storage/ports/record-store.port.js';
 
 export const BACKTEST_SCREEN_CACHE_STORE = Symbol('BACKTEST_SCREEN_CACHE_STORE');
 export const BACKTEST_BASELINE_CACHE_STORE = Symbol('BACKTEST_BASELINE_CACHE_STORE');
+export const BACKTEST_RESPONSE_CACHE_STORE = Symbol('BACKTEST_RESPONSE_CACHE_STORE');
 
 // ---------------------------------------------------------------------------
 // row shapes + table specs (referenced by the module providers)
@@ -74,6 +79,30 @@ const BaselineCacheRowSchema = z.object({
   std: z.number(),
 });
 
+export interface ResponseCacheRow {
+  readonly key: string;
+  readonly last_trade_day: Date;
+  /** Serialised BacktestEvaluateResponse. */
+  readonly payload_json: string;
+}
+
+const ResponseCacheRowSchema = z.object({
+  key: z.string(),
+  last_trade_day: z.date(),
+  payload_json: z.string(),
+});
+
+export const BACKTEST_RESPONSE_CACHE_SPEC: RecordTableSpec<ResponseCacheRow> = {
+  table: 'backtest_response_cache',
+  schema: ResponseCacheRowSchema,
+  pk: (row) => row.key,
+  columns: [
+    { name: 'key', type: 'VARCHAR', nullable: false, primaryKey: true },
+    { name: 'last_trade_day', type: 'DATE', nullable: false },
+    { name: 'payload_json', type: 'VARCHAR', nullable: false },
+  ],
+};
+
 export const BACKTEST_BASELINE_CACHE_SPEC: RecordTableSpec<BaselineCacheRow> = {
   table: 'backtest_baseline_cache',
   schema: BaselineCacheRowSchema,
@@ -97,7 +126,38 @@ export class BacktestCacheStore {
     private readonly screenStore: RecordStore<ScreenCacheRow>,
     @Inject(BACKTEST_BASELINE_CACHE_STORE)
     private readonly baselineStore: RecordStore<BaselineCacheRow>,
+    @Inject(BACKTEST_RESPONSE_CACHE_STORE)
+    private readonly responseStore: RecordStore<ResponseCacheRow>,
   ) {}
+
+  // ---- response ------------------------------------------------------
+
+  async getResponse(
+    responseKey: string,
+    currentLastTradeDay: Date,
+  ): Promise<BacktestEvaluateResponse | null> {
+    const row = await this.responseStore.get(responseKey);
+    if (row === null) return null;
+    if (!sameDay(row.last_trade_day, currentLastTradeDay)) return null;
+    try {
+      const parsed: unknown = JSON.parse(row.payload_json);
+      return BacktestEvaluateResponseSchema.parse(parsed);
+    } catch {
+      return null;
+    }
+  }
+
+  async setResponse(
+    responseKey: string,
+    payload: BacktestEvaluateResponse,
+    currentLastTradeDay: Date,
+  ): Promise<void> {
+    await this.responseStore.upsert({
+      key: responseKey,
+      last_trade_day: currentLastTradeDay,
+      payload_json: JSON.stringify(payload),
+    });
+  }
 
   // ---- screen --------------------------------------------------------
 
@@ -153,9 +213,13 @@ export class BacktestCacheStore {
     await this.baselineStore.upsertMany(rows);
   }
 
-  /** Flush both stores; called by tests + admin endpoints. */
+  /** Flush all three stores; called after each evaluate call. */
   async flush(): Promise<void> {
-    await Promise.all([this.screenStore.flush(), this.baselineStore.flush()]);
+    await Promise.all([
+      this.screenStore.flush(),
+      this.baselineStore.flush(),
+      this.responseStore.flush(),
+    ]);
   }
 }
 
@@ -197,6 +261,24 @@ function parseCodes(json: string): readonly string[] {
  * Uses sorted-key JSON so two semantically equal plans hash to the same
  * key regardless of object-literal property order.
  */
+/**
+ * Identity for a full `evaluateScreen` response cache. Extends the
+ * plan-base identity with the date window + the ordered holdings list,
+ * which are the remaining inputs that change the assembled response.
+ */
+export function responseKey(req: {
+  readonly screenPlan: Readonly<Record<string, unknown>>;
+  readonly universePlan?: Readonly<Record<string, unknown>> | null | undefined;
+  readonly rank?: unknown;
+  readonly startDate: string;
+  readonly endDate: string;
+  readonly holdings: readonly number[];
+}): string {
+  const planKey = screenBaseKey(req);
+  const sortedHoldings = [...new Set(req.holdings)].sort((a, b) => a - b).join(',');
+  return `${planKey}|${req.startDate}|${req.endDate}|${sortedHoldings}`;
+}
+
 export function screenBaseKey(req: {
   readonly screenPlan: Readonly<Record<string, unknown>>;
   readonly universePlan?: Readonly<Record<string, unknown>> | null | undefined;

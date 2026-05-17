@@ -205,6 +205,8 @@ function makeService(
     setScreen: () => Promise.resolve(),
     getBaseline: () => Promise.resolve(null),
     setBaselineMany: () => Promise.resolve(),
+    getResponse: () => Promise.resolve(null),
+    setResponse: () => Promise.resolve(),
     flush: () => Promise.resolve(),
   } as unknown as BacktestCacheStore;
   const svc = new BacktestService(client, reader, exec, '/tmp/quant-test-data', cache);

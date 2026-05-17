@@ -37,7 +37,7 @@ import { FlightClient } from '../../adapters/flight/flight-client.js';
 import { KlineReaderService } from '../kline/kline-reader.service.js';
 import { KLINE_DATA_DIR } from '../kline/kline.token.js';
 import { ScreenExecService } from '../screen/screen-exec.service.js';
-import { BacktestCacheStore, screenBaseKey } from './backtest-cache.store.js';
+import { BacktestCacheStore, responseKey, screenBaseKey } from './backtest-cache.store.js';
 import { BACKTEST_FLIGHT_CLIENT } from './backtest.token.js';
 
 /* eslint-disable no-restricted-globals --
@@ -121,6 +121,19 @@ export class BacktestService {
     return this.runEvaluate(req.signals, req.holdings, traceId, currentTradeDay);
   }
 
+  /**
+   * Cache-only read. Returns the fully-assembled response if a prior
+   * `evaluateScreen` for the same (plan, window, holdings) finished
+   * within the current trading day; `null` otherwise. The controller
+   * surfaces `null` as HTTP 404 (mirrors `GET /api/sentiment/analyze_one`).
+   */
+  async getCachedScreen(
+    req: BacktestEvaluateScreenRequest,
+  ): Promise<BacktestEvaluateResponse | null> {
+    const currentTradeDay = await this.latestKlineTradeDay();
+    return this.cache.getResponse(responseKey(req), currentTradeDay);
+  }
+
   async evaluateScreen(
     req: BacktestEvaluateScreenRequest,
     traceId: string,
@@ -134,6 +147,20 @@ export class BacktestService {
     // Resolve once. Used as the freshness stamp for every cache hit/set
     // in this call, so we never race the kline cron mid-loop.
     const currentTradeDay = await this.latestKlineTradeDay();
+
+    // Response-level cache hit: skip the screen loop AND the Flight
+    // round-trip entirely. Stream callers don't get progress events on
+    // a full hit, which is fine — it returns in <50 ms anyway.
+    const resKey = responseKey(req);
+    const cached = await this.cache.getResponse(resKey, currentTradeDay);
+    if (cached !== null) {
+      this.logger.log(
+        `evaluate_screen response_cache_hit lastTradeDay=` +
+          `${currentTradeDay.toISOString().slice(0, 10)} trace_id=${traceId}`,
+      );
+      return cached;
+    }
+
     const totalDays = countWeekdays(startMs, endMs);
     const signals = await this.collectSignals(req, totalDays, currentTradeDay, onProgress);
 
@@ -151,8 +178,13 @@ export class BacktestService {
       signals: signals.length,
     });
 
-    if (signals.length === 0) return emptyResponse(req.holdings);
-    return this.runEvaluate(signals, req.holdings, traceId, currentTradeDay);
+    const response =
+      signals.length === 0
+        ? emptyResponse(req.holdings)
+        : await this.runEvaluate(signals, req.holdings, traceId, currentTradeDay);
+    await this.cache.setResponse(resKey, response, currentTradeDay);
+    await this.cache.flush();
+    return response;
   }
 
   private async collectSignals(

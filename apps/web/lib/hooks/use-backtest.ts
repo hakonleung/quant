@@ -1,11 +1,12 @@
 'use client';
 
-import type {
-  BacktestEvaluateResponse,
-  BacktestEvaluateScreenRequest,
-  BacktestEvaluateSignalsRequest,
+import {
+  BacktestEvaluateResponseSchema,
+  type BacktestEvaluateResponse,
+  type BacktestEvaluateScreenRequest,
+  type BacktestEvaluateSignalsRequest,
 } from '@quant/shared';
-import { useMutation, type UseMutationResult } from '@tanstack/react-query';
+import { useMutation, useQuery, type UseMutationResult, type UseQueryResult } from '@tanstack/react-query';
 import { useCallback, useRef, useState } from 'react';
 
 import {
@@ -60,6 +61,41 @@ export function useBacktestScreen(): UseBacktestScreenResult {
   }, []);
 
   return { mutation, progress, cancel };
+}
+
+/**
+ * Cache-only read of `POST /api/backtest/evaluate-screen/cached`. The
+ * pane calls this on mount + whenever the request inputs change, so a
+ * previously computed (plan, window, holdings) shows up instantly. A
+ * 404 resolves to `null` (no error) — the pane treats it as the "press
+ * RUN to compute" empty state.
+ *
+ * `enabled` lets the caller skip the fetch entirely until the
+ * sector / inputs are valid.
+ */
+export function useBacktestScreenCached(
+  req: BacktestEvaluateScreenRequest | null,
+  enabled: boolean,
+): UseQueryResult<BacktestEvaluateResponse | null> {
+  return useQuery({
+    queryKey: ['backtest.screen.cached', req],
+    enabled: enabled && req !== null,
+    staleTime: 60_000,
+    queryFn: async (): Promise<BacktestEvaluateResponse | null> => {
+      if (req === null) throw new Error('queryFn called with null req');
+      const res = await fetch('/api/backtest/evaluate-screen/cached', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(req),
+      });
+      if (res.status === 404) return null;
+      if (!res.ok) {
+        throw new Error(`/api/backtest/evaluate-screen/cached → ${String(res.status)}`);
+      }
+      const raw: unknown = await res.json();
+      return BacktestEvaluateResponseSchema.parse(raw);
+    },
+  });
 }
 
 /**

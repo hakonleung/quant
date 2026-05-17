@@ -13,17 +13,22 @@
  * screenPlan — there is nothing to backtest otherwise.
  */
 
-import { Box, Button, Flex, Input, Text } from '@chakra-ui/react';
-import type { BacktestEvaluateResponse, BacktestSpreadSummary } from '@quant/shared';
+import { Box, Flex, Text } from '@chakra-ui/react';
+import type {
+  BacktestEvaluateResponse,
+  BacktestEvaluateScreenRequest,
+  BacktestSpreadSummary,
+} from '@quant/shared';
 import { useMemo, useState } from 'react';
 
 import type { ScreenProgressEvent } from '../../lib/api/backtest-stream.js';
 import { Feat } from '../../lib/eqty/feat.js';
-import { useBacktestScreen } from '../../lib/hooks/use-backtest.js';
+import { useBacktestScreen, useBacktestScreenCached } from '../../lib/hooks/use-backtest.js';
 import { useSectorsStore, type Sector } from '../../lib/stores/sectors.store.js';
 import { useUiStore } from '../../lib/stores/ui.store.js';
 import { FeatView } from '../feat-view/feat-view.js';
 import { Cell } from './cell.js';
+import { Controls } from './controls.js';
 import { ObservationsPanel } from './observations-panel.js';
 import { ReturnBoxplot } from './return-boxplot.js';
 
@@ -55,20 +60,14 @@ function Runner({ sector }: { sector: Sector }): React.ReactElement {
 
   const holdings = parseHoldings(holdingsText);
   const validation = validate(holdings, startDate, endDate);
-  const disabled = mutation.isPending || validation !== null || sector.screenPlan === undefined;
+  const req = useScreenRequest(sector, validation, startDate, endDate, holdings);
+  const cached = useBacktestScreenCached(req, !mutation.isPending);
 
   const onRun = (): void => {
-    if (disabled || sector.screenPlan === undefined) return;
-    mutation.mutate({
-      screenPlan: sector.screenPlan,
-      universePlan: sector.universePlan ?? null,
-      rank: sector.rank ?? null,
-      startDate,
-      endDate,
-      holdings,
-    });
+    if (req !== null && !mutation.isPending) mutation.mutate(req);
   };
-  const errorMsg = validation ?? (mutation.isError ? mutation.error.message : null);
+  const display = pickDisplay(mutation, cached);
+  const errorMsg = pickError(validation, mutation, cached);
 
   return (
     <Flex direction="column" gap="8px">
@@ -81,14 +80,82 @@ function Runner({ sector }: { sector: Sector }): React.ReactElement {
         onHoldings={setHoldingsText}
         onRun={onRun}
         onCancel={mutation.isPending ? cancel : null}
-        disabled={disabled}
+        disabled={mutation.isPending || req === null}
         pending={mutation.isPending}
+        cacheState={cacheStateLabel(cached, mutation, display)}
       />
       {mutation.isPending && progress !== null && <ProgressBar progress={progress} />}
       {errorMsg !== null && <Err msg={errorMsg} />}
-      {mutation.data !== undefined && <Results data={mutation.data} />}
+      {display !== null && <Results data={display} />}
     </Flex>
   );
+}
+
+function pickDisplay(
+  mutation: { readonly data?: BacktestEvaluateResponse | undefined },
+  cached: { readonly data?: BacktestEvaluateResponse | null | undefined },
+): BacktestEvaluateResponse | null {
+  return mutation.data ?? cached.data ?? null;
+}
+
+function pickError(
+  validation: string | null,
+  mutation: { readonly isError: boolean; readonly error: Error | null },
+  cached: { readonly isError: boolean; readonly error: Error | null },
+): string | null {
+  if (validation !== null) return validation;
+  if (mutation.isError && mutation.error !== null) return mutation.error.message;
+  if (cached.isError && cached.error !== null) return cached.error.message;
+  return null;
+}
+
+/** Build the shared request identity once per input change. */
+function useScreenRequest(
+  sector: Sector,
+  validation: string | null,
+  startDate: string,
+  endDate: string,
+  holdings: readonly number[],
+): BacktestEvaluateScreenRequest | null {
+  return useMemo(() => {
+    if (validation !== null || sector.screenPlan === undefined) return null;
+    return {
+      screenPlan: sector.screenPlan,
+      universePlan: sector.universePlan ?? null,
+      rank: sector.rank ?? null,
+      startDate,
+      endDate,
+      holdings: [...holdings],
+    };
+  }, [
+    sector.screenPlan,
+    sector.universePlan,
+    sector.rank,
+    startDate,
+    endDate,
+    holdings,
+    validation,
+  ]);
+}
+
+/**
+ * Status chip text shown next to RUN so users know whether the numbers
+ * come from cache or a fresh run. "live" after a RUN completes,
+ * "cache" when the on-mount lookup hit, "no cache" on 404, "…" while
+ * the lookup is still in flight.
+ */
+function cacheStateLabel(
+  cached: {
+    readonly data?: BacktestEvaluateResponse | null | undefined;
+    readonly isFetching: boolean;
+  },
+  mutation: { readonly data?: BacktestEvaluateResponse | undefined },
+  display: BacktestEvaluateResponse | null,
+): string {
+  if (mutation.data !== undefined && display === mutation.data) return 'live';
+  if (cached.isFetching) return '…';
+  if (cached.data === null || cached.data === undefined) return 'no cache';
+  return 'cache';
 }
 
 function ProgressBar({ progress }: { readonly progress: ScreenProgressEvent }): React.ReactElement {
@@ -112,107 +179,6 @@ function validate(holdings: readonly number[], start: string, end: string): stri
   if (holdings.length === 0) return 'enter ≥ 1 positive integer';
   if (start.length === 10 && end.length === 10 && start > end) return 'start must be ≤ end';
   return null;
-}
-
-interface ControlsProps {
-  readonly startDate: string;
-  readonly endDate: string;
-  readonly holdingsText: string;
-  readonly onStart: (v: string) => void;
-  readonly onEnd: (v: string) => void;
-  readonly onHoldings: (v: string) => void;
-  readonly onRun: () => void;
-  readonly onCancel: (() => void) | null;
-  readonly disabled: boolean;
-  readonly pending: boolean;
-}
-
-function Controls(p: ControlsProps): React.ReactElement {
-  return (
-    <Flex gap="8px" align="center" wrap="wrap">
-      <Field label="start" value={p.startDate} onChange={p.onStart} width="120px" />
-      <Field label="end" value={p.endDate} onChange={p.onEnd} width="120px" />
-      <Field
-        label="holds"
-        value={p.holdingsText}
-        onChange={p.onHoldings}
-        width="160px"
-        placeholder="5,10,20,60,90"
-      />
-      <Button
-        h="22px"
-        px="10px"
-        bg="accent"
-        color="panel"
-        borderRadius="0"
-        fontFamily="mono"
-        fontSize="10px"
-        letterSpacing="0.14em"
-        fontWeight="700"
-        loading={p.pending}
-        disabled={p.disabled}
-        onClick={p.onRun}
-      >
-        RUN
-      </Button>
-      {p.onCancel !== null && (
-        <Button
-          h="22px"
-          px="10px"
-          bg="panel"
-          color="ink2"
-          borderWidth="1px"
-          borderColor="line"
-          borderRadius="0"
-          fontFamily="mono"
-          fontSize="10px"
-          letterSpacing="0.14em"
-          onClick={p.onCancel}
-        >
-          CANCEL
-        </Button>
-      )}
-    </Flex>
-  );
-}
-
-function Field({
-  label,
-  value,
-  onChange,
-  width,
-  placeholder,
-}: {
-  readonly label: string;
-  readonly value: string;
-  readonly onChange: (v: string) => void;
-  readonly width: string;
-  readonly placeholder?: string;
-}): React.ReactElement {
-  return (
-    <Flex align="center" gap="4px">
-      <Text fontFamily="mono" fontSize="10px" color="ink3" letterSpacing="0.14em">
-        {label}
-      </Text>
-      <Input
-        value={value}
-        onChange={(e): void => {
-          onChange(e.target.value);
-        }}
-        placeholder={placeholder}
-        h="22px"
-        w={width}
-        bg="panel"
-        borderWidth="1px"
-        borderColor="line"
-        borderRadius="0"
-        fontFamily="mono"
-        fontSize="11px"
-        color="ink"
-        px="6px"
-      />
-    </Flex>
-  );
 }
 
 function Results({ data }: { readonly data: BacktestEvaluateResponse }): React.ReactElement {

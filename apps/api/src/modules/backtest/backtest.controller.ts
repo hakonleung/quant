@@ -15,7 +15,7 @@
  * string. We bypass passthrough so we own the Response writes directly.
  */
 
-import { Body, Controller, Inject, Post, Req, Res } from '@nestjs/common';
+import { Body, Controller, Inject, NotFoundException, Post, Req, Res } from '@nestjs/common';
 import {
   BacktestEvaluateScreenRequestSchema,
   BacktestEvaluateSignalsRequestSchema,
@@ -51,6 +51,28 @@ export class BacktestController {
   ): Promise<BacktestEvaluateResponse> {
     const traceId = (req as Request & { traceId?: string }).traceId ?? '';
     return this.backtest.evaluateScreen(body, traceId);
+  }
+
+  /**
+   * Cache-only read (mirrors `GET /api/sentiment/analyze_one`). 200 +
+   * response on hit, 404 on miss. The FE calls this on mount to show
+   * the prior run instantly; on 404 it falls back to `/stream`.
+   *
+   * POST + body rather than GET + query because the request carries a
+   * full screen AST that doesn't fit in a URL.
+   */
+  @Post('evaluate-screen/cached')
+  async getCachedScreen(
+    @Body(screenPipe) body: BacktestEvaluateScreenRequest,
+  ): Promise<BacktestEvaluateResponse> {
+    const cached = await this.backtest.getCachedScreen(body);
+    if (cached === null) {
+      throw new NotFoundException({
+        code: 'NOT_FOUND',
+        message: 'no cached backtest result for this (plan, window, holdings)',
+      });
+    }
+    return cached;
   }
 
   @Post('evaluate-screen/stream')

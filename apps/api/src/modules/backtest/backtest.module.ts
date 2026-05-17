@@ -19,10 +19,13 @@ import { ScreenModule } from '../screen/screen.module.js';
 import {
   BACKTEST_BASELINE_CACHE_SPEC,
   BACKTEST_BASELINE_CACHE_STORE,
+  BACKTEST_RESPONSE_CACHE_SPEC,
+  BACKTEST_RESPONSE_CACHE_STORE,
   BACKTEST_SCREEN_CACHE_SPEC,
   BACKTEST_SCREEN_CACHE_STORE,
   BacktestCacheStore,
   type BaselineCacheRow,
+  type ResponseCacheRow,
   type ScreenCacheRow,
 } from './backtest-cache.store.js';
 import { BacktestController } from './backtest.controller.js';
@@ -60,6 +63,15 @@ const DEFAULT_FLIGHT_TARGET = '127.0.0.1:8815';
         new DuckDBParquetRecordStore<BaselineCacheRow>({
           dataRoot: cacheDataRoot(klineDataRoot),
           spec: BACKTEST_BASELINE_CACHE_SPEC,
+        }),
+    },
+    {
+      provide: BACKTEST_RESPONSE_CACHE_STORE,
+      inject: [KLINE_DATA_DIR],
+      useFactory: (klineDataRoot: string): RecordStore<ResponseCacheRow> =>
+        new DuckDBParquetRecordStore<ResponseCacheRow>({
+          dataRoot: cacheDataRoot(klineDataRoot),
+          spec: BACKTEST_RESPONSE_CACHE_SPEC,
         }),
     },
   ],
