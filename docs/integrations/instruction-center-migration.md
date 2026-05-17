@@ -57,27 +57,28 @@ BE cell:
 
 ## Still on the legacy `CommandRegistry`
 
-Only `agent`. Its streaming subscription + event dispatcher doesn't
-fit the request/response `InstructionCell` shape — it needs either
-a `StreamingInstructionCell<E, I>` variant (handler returns void +
-emits frames through a sink on `ctx`) or stays out of the center.
-The FE shell falls through to legacy for `agent`; everything else
-is intercepted by `feCenter` first.
+Nothing. Every instruction is on `feCenter`. The legacy
+`CommandRegistry` stays as a no-op anchor for any future
+host-specific commands that don't belong in the cross-side manifest.
+The `/agent` streaming case is handled inside the cell handler — it
+opens a stream entry via `ctx.dispatchEvent` and subscribes to
+`ctx.actions.subscribeAgentDelta` after the typed BE invoke
+resolves; the cell handler returns immediately after subscription
+set-up.
 
 ## Remaining work
 
-1. **Decide `agent`'s shape.** Options: introduce
-   `StreamingInstructionCell<E, I>` in `packages/shared/src/instructions/center.ts`
-   with a different return contract (handler emits frames via a sink
-   on `ctx`), or keep `/agent` on the legacy registry indefinitely.
-2. **Optional widening of `WatchAddArgsSchema`** if the
-   conditions / intervals form needs to come back as a cell renderer.
-   No correctness issue with the current narrower shape.
-3. **Optional re-introduction of multi-step forms** (e.g. `sector.add`
-   name → kind → codes flow) as cell renderers that emit follow-up
-   command lines on submit. Same pattern as the existing
+Nothing structural. Optional polish:
+
+1. **Re-introduce multi-step forms** as cell renderers that emit
+   follow-up command lines on submit — same pattern as the existing
    `confirm-required` envelope flow, just with form data threaded
-   through the line.
+   through the dispatched line. Applies if you want to bring back
+   the legacy `sector add` (name → kind → codes) or `watch add`
+   (multi-condition) guided flows. The cell shape supports it today.
+2. **Widen `WatchAddArgsSchema`** if the conditions / intervals form
+   comes back — needs additional schema fields. No correctness issue
+   with the current narrower shape; just a UX richness call.
 
 ## Pattern for a new FE cell
 
