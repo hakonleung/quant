@@ -91,8 +91,12 @@ function replyList(): InstructionResult {
   // (ErrCode 11310: "card table number over limit"). Emit one combined
   // table with a `group` column instead of one table per group — also
   // makes Ctrl+F search easier for users.
+  // Single combined table — Feishu rejects cards with more than a
+  // handful of `table` elements (ErrCode 11310). Groups are still used
+  // to order the rows and to section the plain-text fallback, but the
+  // card itself doesn't show a group column.
   const byGroup = bucketByGroup();
-  const allRows: (HelpRow & { readonly group: string })[] = [];
+  const allRows: HelpRow[] = [];
   const textSections: string[] = [];
 
   for (const group of GROUP_ORDER) {
@@ -100,21 +104,19 @@ function replyList(): InstructionResult {
     if (bucket === undefined || bucket.length === 0) continue;
     const sorted = [...bucket].sort((a, b) => a.id.localeCompare(b.id));
     const rows = sorted.map(buildHelpRow);
-    for (const r of rows) allRows.push({ ...r, group: GROUP_LABEL[group] });
+    for (const r of rows) allRows.push(r);
     textSections.push(`【${GROUP_LABEL[group]}】\n${renderHelpTable(rows)}`);
   }
 
   const tableSection = {
     title: '全部指令 / All Instructions',
     columns: [
-      { name: 'group', displayName: '类别', horizontalAlign: 'left', width: '120px' },
       { name: 'id', displayName: 'id', horizontalAlign: 'left', width: '160px' },
       { name: 'tags', displayName: 'tag', horizontalAlign: 'left', width: '70px' },
       { name: 'cn', displayName: '中文', horizontalAlign: 'left' },
       { name: 'example', displayName: '示例', horizontalAlign: 'left', width: '240px' },
     ],
     rows: allRows.map((r) => ({
-      group: r.group,
       id: r.id,
       tags: r.tags,
       cn: r.cn,
