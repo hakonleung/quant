@@ -29,6 +29,19 @@ import { buildLedgerAnalyzeCell } from './cells/ledger-analyze.cell.js';
 import { buildLedgerRemoveCell } from './cells/ledger-remove.cell.js';
 import { buildAnalyzeCell } from './cells/analyze.cell.js';
 import { buildAnalyzeSectorCell } from './cells/analyze-sector.cell.js';
+import { buildSectorCell } from './cells/sector.cell.js';
+import { buildSectorAddCell } from './cells/sector-add.cell.js';
+import {
+  buildSectorPublishCell,
+  buildSectorUnpublishCell,
+  buildSectorRmCell,
+} from './cells/sector-ack.cell.js';
+import { buildSectorRefreshCell } from './cells/sector-refresh.cell.js';
+import { buildSectorShowCell } from './cells/sector-show.cell.js';
+import { buildWatchCell } from './cells/watch.cell.js';
+import { buildWatchAddCell } from './cells/watch-add.cell.js';
+import { buildWatchGroupCell } from './cells/watch-group.cell.js';
+import { buildWatchRemoveCell } from './cells/watch-remove.cell.js';
 import { buildScreenCell } from './cells/screen.cell.js';
 import { buildStockCell } from './cells/stock.cell.js';
 import { buildStockInfoCell } from './cells/stock-info.cell.js';
@@ -62,7 +75,18 @@ export type FeMigratedIds =
   | 'analyze'
   | 'analyze.sector'
   | 'ta'
-  | 'ta.sector';
+  | 'ta.sector'
+  | 'sector'
+  | 'sector.show'
+  | 'sector.add'
+  | 'sector.publish'
+  | 'sector.unpublish'
+  | 'sector.rm'
+  | 'sector.refresh'
+  | 'watch'
+  | 'watch.add'
+  | 'watch.remove'
+  | 'watch.group';
 
 type Excluded = Exclude<AllInstructionIds, FeMigratedIds>;
 type Configured = Exclude<AllInstructionIds, Excluded>;
@@ -96,6 +120,17 @@ export function buildFeCenter(): InstructionCenter<FeEnv, Excluded> {
     'analyze.sector': buildAnalyzeSectorCell(),
     ta: buildTaCell(),
     'ta.sector': buildTaSectorCell(),
+    sector: buildSectorCell(),
+    'sector.show': buildSectorShowCell(),
+    'sector.add': buildSectorAddCell(),
+    'sector.publish': buildSectorPublishCell(),
+    'sector.unpublish': buildSectorUnpublishCell(),
+    'sector.rm': buildSectorRmCell(),
+    'sector.refresh': buildSectorRefreshCell(),
+    watch: buildWatchCell(),
+    'watch.add': buildWatchAddCell(),
+    'watch.remove': buildWatchRemoveCell(),
+    'watch.group': buildWatchGroupCell(),
   };
   return new InstructionCenter<FeEnv, Excluded>(cfg);
 }

@@ -5,19 +5,17 @@
  */
 
 import { agentCommand } from './agent.js';
-import { sectorCommand } from './sector.js';
-import { watchCommand } from './watch.js';
 import { createRegistry, type CommandRegistry } from '../registry.js';
 
-export { agentCommand, sectorCommand, watchCommand };
+export { agentCommand };
 
 export function createDefaultRegistry(): CommandRegistry {
   const r = createRegistry();
-  r.register(sectorCommand);
-  r.register(watchCommand);
   r.register(agentCommand);
-  // Migrated to `apps/web/lib/instructions/cells/*.cell.ts`:
-  //   usr, clear, cache, focus, update, help, ledger.*, stock.*,
-  //   screen, analyze.*, ta.*
+  // All other instructions live on `feCenter`
+  // (apps/web/lib/instructions/cells/*.cell.ts). The terminal shell
+  // checks feCenter first; only `/agent` falls through here because
+  // its streaming subscription doesn't fit the request/response cell
+  // shape yet.
   return r;
 }
