@@ -1,9 +1,13 @@
 /**
  * Browser-safe ConfigCenter access.
  *
- * Next.js inlines literal `process.env.NEXT_PUBLIC_*` reads at build
- * time, so the same code resolves on both server and client. Only
- * writes fields env actually provides — defaults come from
+ * Each `process.env['NEXT_PUBLIC_*']` access MUST be a literal subscript
+ * so Next.js / webpack DefinePlugin inlines the string at build time.
+ * Aliasing `process.env` to a local variable defeats the substitution
+ * and leaves a bare `process` reference that ReferenceErrors in the
+ * browser bundle.
+ *
+ * Only writes fields env actually provides; defaults live in
  * `@quant/config`.
  */
 
@@ -13,21 +17,22 @@ export function getClientConfig(): ClientConfig {
   try {
     return ClientConfigCenter.get().snapshot();
   } catch {
-    const e = process.env;
     return ClientConfigCenter.init({
       auth: {
-        ...(e['NEXT_PUBLIC_AUTH_MODE'] === 'oauth' && { mode: 'oauth' }),
+        ...(process.env['NEXT_PUBLIC_AUTH_MODE'] === 'oauth' && { mode: 'oauth' }),
       },
       socket: {
-        ...(e['NEXT_PUBLIC_QUANT_SOCKET_URL'] && {
-          url: e['NEXT_PUBLIC_QUANT_SOCKET_URL'],
+        ...(process.env['NEXT_PUBLIC_QUANT_SOCKET_URL'] && {
+          url: process.env['NEXT_PUBLIC_QUANT_SOCKET_URL'],
         }),
-        ...(e['NEXT_PUBLIC_QUANT_API_PORT'] && {
-          apiPort: e['NEXT_PUBLIC_QUANT_API_PORT'],
+        ...(process.env['NEXT_PUBLIC_QUANT_API_PORT'] && {
+          apiPort: process.env['NEXT_PUBLIC_QUANT_API_PORT'],
         }),
       },
       terminal: {
-        ...(e['NEXT_PUBLIC_TM_RUNNER'] === 'mock' && { defaultRunner: 'mock' }),
+        ...(process.env['NEXT_PUBLIC_TM_RUNNER'] === 'mock' && {
+          defaultRunner: 'mock',
+        }),
       },
     }).snapshot();
   }
