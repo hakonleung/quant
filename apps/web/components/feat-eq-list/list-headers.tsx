@@ -20,6 +20,7 @@ import { formatRelativeTime } from '../../lib/fp/eq-list-fp.js';
 import { refreshSector } from '../../lib/api/sectors.js';
 import { useLayoutStore } from '../../lib/stores/layout.store.js';
 import { useSectorsStore, type Sector } from '../../lib/stores/sectors.store.js';
+import { FeatBtEval } from '../feat-bt-eval/feat-bt-eval.js';
 import { FeatScrDsl } from '../feat-scr-dsl/feat-scr-dsl.js';
 import { FeatScrNl } from '../feat-scr-nl/feat-scr-nl.js';
 import { MonoButton } from '../ui/mono-button.js';
@@ -175,6 +176,11 @@ export function DynamicHeader({ sector }: { sector: Sector }): React.ReactElemen
   // body's internal scroll from engaging on long plans.
   const mode = useLayoutStore((s) => s.featViewMode[Feat.ScreenDsl]);
   const isMinimized = mode === 'minimized';
+  const btMode = useLayoutStore((s) => s.featViewMode[Feat.BtEval]);
+  // BT.EVAL defaults to minimized (see FEAT_CONFIG_MAP); only allocate
+  // body height when the user has restored it. Tall enough to fit the
+  // box plot + summary table without an inner scroll on first render.
+  const btIsMinimized = btMode !== 'normal';
   return (
     <>
       <DynamicRefreshBar sector={sector} />
@@ -186,6 +192,15 @@ export function DynamicHeader({ sector }: { sector: Sector }): React.ReactElemen
         flexShrink={0}
       >
         <FeatScrDsl />
+      </Box>
+      <Box
+        h={btIsMinimized ? 'auto' : '360px'}
+        display="flex"
+        flexDirection="column"
+        minH={0}
+        flexShrink={0}
+      >
+        <FeatBtEval />
       </Box>
     </>
   );

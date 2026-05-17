@@ -8,6 +8,7 @@
  */
 
 import {
+  BacktestEvaluateResponseSchema,
   KlineBarSchema,
   LedgerAnalysisSchema,
   LedgerEntrySchema,
@@ -23,6 +24,9 @@ import {
   StockSnapshotDtoSchema,
   TaAnalysisSchema,
   TaSectorAnalysisSchema,
+  type BacktestEvaluateResponse,
+  type BacktestEvaluateScreenRequest,
+  type BacktestEvaluateSignalsRequest,
   type KlineBar,
   type LedgerAnalysis,
   type LedgerEntry,
@@ -187,6 +191,28 @@ export async function runScreen(args: {
     body['rank'] = args.rank;
   }
   return apiPost(`/api/screen/run`, body, (raw) => ScreenRunResultSchema.parse(raw));
+}
+
+/**
+ * Run an event-study backtest over a screen DSL across a date window.
+ * Iterates trading days, runs the screen for each, and returns the
+ * realised return distribution per holding period.
+ */
+export async function evaluateBacktestScreen(
+  req: BacktestEvaluateScreenRequest,
+): Promise<BacktestEvaluateResponse> {
+  return apiPost(`/api/backtest/evaluate-screen`, req, (raw) =>
+    BacktestEvaluateResponseSchema.parse(raw),
+  );
+}
+
+/** Backtest from a pre-built list of (date, code) signals. */
+export async function evaluateBacktestSignals(
+  req: BacktestEvaluateSignalsRequest,
+): Promise<BacktestEvaluateResponse> {
+  return apiPost(`/api/backtest/evaluate-signals`, req, (raw) =>
+    BacktestEvaluateResponseSchema.parse(raw),
+  );
 }
 
 export async function findSimilarPatterns(

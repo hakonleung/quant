@@ -28,6 +28,9 @@ export const Feat = {
   ScreenPattern: 'PAT',
   ScreenDsl: 'SCR.DSL',
 
+  // BT — backtest (event-study return distribution for a screen)
+  BtEval: 'BT.EVAL',
+
   // AI — LLM surface (AI.SEC = sector aggregate, AI.EQ = single stock)
   AIEq: 'AI.EQ',
   AISec: 'AI.SEC',
@@ -74,6 +77,7 @@ export const FEAT_CONFIG_MAP: Readonly<Record<Feat, FeatConfig>> = {
   [Feat.ScreenNL]: { cyber: true },
   [Feat.ScreenPattern]: { defaultMinimized: true },
   [Feat.ScreenDsl]: {},
+  [Feat.BtEval]: { defaultMinimized: true },
 
   [Feat.AIEq]: { cyber: true, gridArea: 'CBOT' },
   [Feat.AISec]: { cyber: true, gridArea: 'R1' },
