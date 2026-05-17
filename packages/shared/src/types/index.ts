@@ -4,6 +4,7 @@
 export * from './stock-meta.js';
 export * from './queue-status.js';
 export * from './nl-screen.js';
+export * from './backtest.js';
 export * from './eqty.js';
 export * from './stock-list.js';
 export * from './pattern.js';

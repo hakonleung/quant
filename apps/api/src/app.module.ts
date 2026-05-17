@@ -3,6 +3,7 @@ import { HealthController } from './common/health.controller.js';
 import { UserBlobModule } from './common/storage/user-blob.module.js';
 import { TraceMiddleware } from './common/trace.middleware.js';
 import { AuthModule } from './modules/auth/auth.module.js';
+import { BacktestModule } from './modules/backtest/backtest.module.js';
 import { BlacklistModule } from './modules/blacklist/blacklist.module.js';
 import { ChannelModule } from './modules/channel/channel.module.js';
 import { InstructionModule } from './modules/instruction/instruction.module.js';
@@ -56,6 +57,7 @@ import { WatchModule } from './modules/watch/watch.module.js';
     LedgerModule,
     SentimentModule,
     ScreenModule,
+    BacktestModule,
     PatternModule,
     WatchModule,
     SectorsModule,

@@ -59,6 +59,7 @@ from quant_rpc.ops.financials import (
 )
 from quant_rpc.ops.kline import SyncKlineForCodeHandler
 from quant_rpc.ops.pattern import FindSimilarPatternsHandler
+from quant_rpc.ops.signal_eval import EvaluateSignalHandler
 from quant_rpc.ops.stock_meta import (
     GetStockMetaBatchHandler,
     ListAllHandler,
@@ -278,6 +279,7 @@ def main() -> int:
         )
     )
     registry.register(GetLatestTradeDayHandler(clock))
+    registry.register(EvaluateSignalHandler())
     # NL→DSL + screen execution both live in NestJS now
     # (apps/api/src/modules/screen/...). `screen_run` / `nl_screen` /
     # `nl_to_dsl` Flight ops have all been removed from this process.
