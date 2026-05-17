@@ -2,58 +2,85 @@
  * Pure evaluator for the universe-screen DSL. Port of
  * `services/py/quant_core/domain/rules/universe_eval.py`.
  *
- * Operates on the canonical {@link StockMetaDto} shape. Derived fields
- * (`is_st`, `exchange`, `listed_days`) are computed inline so callers
- * don't have to pre-normalise the meta rows.
+ * Operates on the canonical {@link StockMetaDto} shape, plus an optional
+ * `snapshotByCode` map that unlocks the snapshot-derived fields
+ * (`mkt_cap`, `pe_ttm`, `ret_*`, `dde_*` …). Callers that don't pass a
+ * snapshot map get the legacy meta-only behaviour: any comparison
+ * against a snapshot field resolves to `null` left-hand-side and
+ * therefore evaluates to `false`, excluding the row.
  */
 
 import {
   QuantError,
   type StockMetaDto,
+  type StockSnapshotDto,
   type UniverseExpr,
   type UniversePlanAst,
 } from '@quant/shared';
 
 import { D } from '../../../../common/decimal.js';
+import { UNIVERSE_SNAPSHOT_FIELD_SET } from './screen-fields.js';
 
 const ST_PREFIXES = ['ST', '*ST', 'S*ST', 'SST'] as const;
+
+/**
+ * Map from code → snapshot. The evaluator only reads from it; we type
+ * the input as a plain `Map` (not `ReadonlyMap`) for ergonomic callers
+ * but never mutate.
+ */
+export type SnapshotByCode = ReadonlyMap<string, StockSnapshotDto>;
 
 export function evaluateUniverse(
   plan: UniversePlanAst,
   metas: readonly StockMetaDto[],
+  snapshotByCode?: SnapshotByCode,
 ): StockMetaDto[] {
   const asof = parseIsoDate(plan.asof);
-  return metas.filter((m) => evalExpr(plan.expr, m, asof));
+  const snaps = snapshotByCode ?? EMPTY_SNAPSHOT_MAP;
+  return metas.filter((m) => evalExpr(plan.expr, m, asof, snaps.get(m.code) ?? null));
 }
 
-function evalExpr(expr: UniverseExpr, meta: StockMetaDto, asof: Date): boolean {
+const EMPTY_SNAPSHOT_MAP: SnapshotByCode = new Map<string, StockSnapshotDto>();
+
+function evalExpr(
+  expr: UniverseExpr,
+  meta: StockMetaDto,
+  asof: Date,
+  snap: StockSnapshotDto | null,
+): boolean {
   if (expr.kind === 'logical') {
     if (expr.op === 'not') {
       const first = expr.args[0];
       if (first === undefined) {
         throw new QuantError('EVALUATION_FAILED', "universe 'not' requires an arg", {});
       }
-      return !evalExpr(first, meta, asof);
+      return !evalExpr(first, meta, asof, snap);
     }
     if (expr.op === 'and') {
-      for (const a of expr.args) if (!evalExpr(a, meta, asof)) return false;
+      for (const a of expr.args) if (!evalExpr(a, meta, asof, snap)) return false;
       return true;
     }
-    for (const a of expr.args) if (evalExpr(a, meta, asof)) return true;
+    for (const a of expr.args) if (evalExpr(a, meta, asof, snap)) return true;
     return false;
   }
   // expr.kind === 'compare'
-  return evalCompare(expr, meta, asof);
+  return evalCompare(expr, meta, asof, snap);
 }
 
 function evalCompare(
   node: Extract<UniverseExpr, { kind: 'compare' }>,
   meta: StockMetaDto,
   asof: Date,
+  snap: StockSnapshotDto | null,
 ): boolean {
-  const left = resolveField(node.left.field, meta, asof);
+  const left = resolveField(node.left.field, meta, asof, snap);
   const right = node.right.value;
   const op = node.op;
+  // Missing snapshot fields surface as null/undefined. Any comparison
+  // against a null LHS evaluates false — semantically "exclude this row"
+  // rather than "throw" — which matches the storage-layer convention
+  // that null = "no data" everywhere else in the pipeline.
+  if (left === null || left === undefined) return false;
   if (op === 'contains') {
     return typeof left === 'string' && typeof right === 'string' && left.includes(right);
   }
@@ -137,7 +164,12 @@ function orderedCompare(op: 'gt' | 'lt' | 'gte' | 'lte', left: unknown, right: u
   }
 }
 
-function resolveField(name: string, meta: StockMetaDto, asof: Date): unknown {
+function resolveField(
+  name: string,
+  meta: StockMetaDto,
+  asof: Date,
+  snap: StockSnapshotDto | null,
+): unknown {
   switch (name) {
     case 'code':
       return meta.code;
@@ -156,7 +188,68 @@ function resolveField(name: string, meta: StockMetaDto, asof: Date): unknown {
     case 'listed_days':
       return Math.floor((asof.getTime() - parseIsoDate(meta.list_date).getTime()) / 86_400_000);
     default:
+      if (UNIVERSE_SNAPSHOT_FIELD_SET.has(name)) {
+        return resolveSnapshotField(name, snap);
+      }
       throw new QuantError('EVALUATION_FAILED', `unhandled universe field: ${name}`, {});
+  }
+}
+
+/**
+ * Snapshot-side field accessor. Returns the decimal-string value (the
+ * `orderedCompare`/`scalarEq` helpers parse it via `Decimal`), or
+ * `null` when the row's snapshot block is missing or the specific
+ * field hasn't been populated yet.
+ */
+function resolveSnapshotField(name: string, snap: StockSnapshotDto | null): string | null {
+  if (snap === null) return null;
+  switch (name) {
+    case 'price':
+      return snap.price;
+    case 'mkt_cap':
+      return snap.derived.mkt_cap;
+    case 'float_mkt_cap':
+      return snap.derived.float_mkt_cap;
+    case 'pe_ttm':
+      return snap.derived.pe_ttm;
+    case 'pe_dynamic':
+      return snap.derived.pe_dynamic;
+    case 'pb':
+      return snap.derived.pb;
+    case 'peg':
+      return snap.derived.peg;
+    case 'gross_margin_ttm':
+      return snap.derived.gross_margin_ttm;
+    case 'ret_1d':
+      return snap.returns.ret_1d;
+    case 'ret_5d':
+      return snap.returns.ret_5d;
+    case 'ret_10d':
+      return snap.returns.ret_10d;
+    case 'ret_20d':
+      return snap.returns.ret_20d;
+    case 'ret_90d':
+      return snap.returns.ret_90d;
+    case 'ret_250d':
+      return snap.returns.ret_250d;
+    case 'dde_main_net_inflow_3d':
+      return snap.dde?.main_net_inflow_3d ?? null;
+    case 'dde_main_net_inflow_5d':
+      return snap.dde?.main_net_inflow_5d ?? null;
+    case 'dde_main_net_inflow_10d':
+      return snap.dde?.main_net_inflow_10d ?? null;
+    case 'dde_main_net_inflow_20d':
+      return snap.dde?.main_net_inflow_20d ?? null;
+    case 'dde_main_inflow_ratio_3d':
+      return snap.dde?.main_inflow_ratio_3d ?? null;
+    case 'dde_main_inflow_ratio_5d':
+      return snap.dde?.main_inflow_ratio_5d ?? null;
+    case 'dde_main_inflow_ratio_10d':
+      return snap.dde?.main_inflow_ratio_10d ?? null;
+    case 'dde_main_inflow_ratio_20d':
+      return snap.dde?.main_inflow_ratio_20d ?? null;
+    default:
+      return null;
   }
 }
 

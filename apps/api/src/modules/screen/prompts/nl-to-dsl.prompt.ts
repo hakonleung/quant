@@ -27,6 +27,7 @@ const SCREEN_FIELDS = [
 ].join(', ');
 
 const UNIVERSE_FIELDS = [
+  // meta
   'code',
   'name',
   'industries',
@@ -35,6 +36,31 @@ const UNIVERSE_FIELDS = [
   'is_st',
   'exchange',
   'listed_days',
+  // snapshot scalars + derived（每日 post-kline-sync 投影）
+  'price',
+  'mkt_cap',
+  'float_mkt_cap',
+  'pe_ttm',
+  'pe_dynamic',
+  'pb',
+  'peg',
+  'gross_margin_ttm',
+  // 阶段收益（小数：0.05 = +5%）
+  'ret_1d',
+  'ret_5d',
+  'ret_10d',
+  'ret_20d',
+  'ret_90d',
+  'ret_250d',
+  // DDE 主力（超大单+大单）阶段资金面
+  'dde_main_net_inflow_3d',
+  'dde_main_net_inflow_5d',
+  'dde_main_net_inflow_10d',
+  'dde_main_net_inflow_20d',
+  'dde_main_inflow_ratio_3d',
+  'dde_main_inflow_ratio_5d',
+  'dde_main_inflow_ratio_10d',
+  'dde_main_inflow_ratio_20d',
 ].join(', ');
 
 /**
@@ -113,9 +139,20 @@ export function buildNlToDslSystemPrompt(): string {
        * \`股价高于 N 月最高价的 K%\`  → \`gt(close_qfq, scale(max-agg(high_qfq, N*20d), K/100))\`
      **只有**在确实没有合法 DSL 形式时才丢弃；以下场景**必须**丢弃 + 在
      \`warnings\` 中说明（且也只有这些场景，其它情况都要再想想）：
-       * \`流通市值 / 总市值 / 市值\`    —— 没有市值字段
-       * \`市盈率 / PE / PB / ROE\`      —— 没有基本面字段
+       * \`ROE / ROA\`                   —— 没有这些基本面字段
        * \`RSI / MACD / KDJ / BOLL\`     —— 只有 ma5/ma10/ma20/ma60
+     市值 / 市盈率 / PE / PB / PEG / 毛利率 / 阶段涨幅 / 主力资金已经
+     落到 universe，**必须**放进 \`universe_plan\`，**不要**丢弃。映射：
+       * \`流通市值 X 亿\`               → \`float_mkt_cap >= X * 1e8\`（单位元）
+       * \`总市值 X-Y 亿\`               → \`and(gte mkt_cap X*1e8, lte mkt_cap Y*1e8)\`
+       * \`市盈率 / PE TTM < N\`         → \`pe_ttm lt N\`（同理 pe_dynamic / pb / peg）
+       * \`毛利率 > N%\`                 → \`gross_margin_ttm gt N/100\`（小数）
+       * \`近 N 日涨幅 > X%\`            → 优先 \`universe_plan: ret_Nd gt X/100\`
+         （N ∈ {1,5,10,20,90,250}；其它窗口仍走 \`screen_plan: period_return\`）
+       * \`近 N 日主力净流入 > X 亿\`    → \`dde_main_net_inflow_Nd gt X*1e8\`
+         （N ∈ {3,5,10,20}；金额单位元；净流出用 \`lt\` + 负数）
+       * \`近 N 日主力净流入占比 > X%\`  → \`dde_main_inflow_ratio_Nd gt X/100\`
+         （占同期成交额比例，小数；可负）
      正确翻译永远好过丢弃。
   9. \`实际换手率\` 与 \`turnover_rate\` 是同一列，**不要**捏造另一字段。
  9a. 行业术语在 \`universe_plan\` 中的标准映射（除非用户给出自己的阈值，
@@ -205,6 +242,30 @@ Rank 形态：
     "metric": {"period_return": {"days": 10}},
     "order": "desc",
     "top_n": 20
+  }
+}
+
+[Q] 总市值在 100-500 亿之间, 近 5 日主力净流入占比超过 5%, 且 PE-TTM 小于 30
+[A] {
+  "screen_plan": {
+    "asof": "<TODAY>",
+    "expr": {
+      "op": "gt",
+      "left":  {"field": "close_qfq"},
+      "right": {"const": 0}
+    }
+  },
+  "universe_plan": {
+    "asof": "<TODAY>",
+    "expr": {
+      "op": "and",
+      "args": [
+        {"op": "gte", "left": {"field": "mkt_cap"},                  "right": {"const": 10000000000}},
+        {"op": "lte", "left": {"field": "mkt_cap"},                  "right": {"const": 50000000000}},
+        {"op": "gt",  "left": {"field": "dde_main_inflow_ratio_5d"}, "right": {"const": 0.05}},
+        {"op": "lt",  "left": {"field": "pe_ttm"},                   "right": {"const": 30}}
+      ]
+    }
   }
 }
 

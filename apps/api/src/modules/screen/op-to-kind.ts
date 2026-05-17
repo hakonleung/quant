@@ -23,6 +23,12 @@ import {
   type UniversePlanAst,
 } from '@quant/shared';
 
+import { UNIVERSE_FIELD_SET } from './domain/pure/screen-fields.js';
+
+// Screen (K-line) DSL fields stay local — they reference the unprefixed
+// `open` / `high` / `low` / `close` aliases the parser accepts in
+// addition to the canonical qfq names, so the prompt's looser surface
+// must round-trip through this module.
 const SCREEN_FIELD_NAMES: ReadonlySet<string> = new Set([
   'open',
   'high',
@@ -42,16 +48,9 @@ const SCREEN_FIELD_NAMES: ReadonlySet<string> = new Set([
   'pct_chg_qfq',
 ]);
 
-const UNIVERSE_FIELDS: ReadonlySet<string> = new Set([
-  'code',
-  'name',
-  'industries',
-  'list_date',
-  'float_pct',
-  'is_st',
-  'exchange',
-  'listed_days',
-]);
+// Universe fields come straight from the canonical list — both the
+// evaluator and this parser stay in lock-step automatically.
+const UNIVERSE_FIELDS: ReadonlySet<string> = UNIVERSE_FIELD_SET;
 
 const COMPARE_OPS: ReadonlySet<string> = new Set(['gt', 'lt', 'gte', 'lte', 'eq', 'neq']);
 const LOGICAL_OPS: ReadonlySet<string> = new Set(['and', 'or', 'not']);
