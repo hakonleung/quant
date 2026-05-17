@@ -15,12 +15,11 @@ import {
   type OnModuleDestroy,
   type OnModuleInit,
 } from '@nestjs/common';
+import { ServerConfigCenter } from '@quant/config/server';
 
 import { UserStore } from '../auth/user.store.js';
 import { SocketBus } from '../socket/socket-bus.service.js';
 import { WatchService } from './watch.service.js';
-
-const TICK_MS = 1_000;
 
 @Injectable()
 export class WatchBroadcaster implements OnModuleInit, OnModuleDestroy {
@@ -34,10 +33,11 @@ export class WatchBroadcaster implements OnModuleInit, OnModuleDestroy {
   ) {}
 
   onModuleInit(): void {
+    const tickMs = ServerConfigCenter.get().watch.broadcasterTickMs;
     this.timer = setInterval(() => {
       void this.broadcast();
-    }, TICK_MS);
-    this.logger.log(`watch broadcaster armed — tick=${String(TICK_MS)}ms`);
+    }, tickMs);
+    this.logger.log(`watch broadcaster armed — tick=${String(tickMs)}ms`);
   }
 
   onModuleDestroy(): void {

@@ -29,6 +29,7 @@ import pyarrow as pa
 import pyarrow.compute as pc
 import pyarrow.parquet as pq
 from filelock import FileLock, Timeout
+from quant_core.config import get_settings
 from quant_core.domain.types.query import And, Eq, In, Like, Or, Predicate, QuerySpec, Range
 
 from quant_cache.errors import CacheBackendUnavailable, CacheCorrupted
@@ -42,8 +43,6 @@ T = TypeVar("T")
 # Pyarrow stubs do not export `pyarrow.compute.Expression`; alias to Any so
 # the per-module override (disallow_any_explicit = false) covers our usage.
 _Expr = Any
-
-_DEFAULT_LOCK_TIMEOUT: Final[float] = 5.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -86,7 +85,7 @@ class ParquetRecordRepo(Generic[T]):
         schema: pa.Schema,
         key_field: str,
         codec: Codec[T],
-        lock_timeout_sec: float = _DEFAULT_LOCK_TIMEOUT,
+        lock_timeout_sec: float | None = None,
     ) -> None:
         if key_field not in schema.names:
             raise CacheBackendUnavailable(
@@ -103,7 +102,11 @@ class ParquetRecordRepo(Generic[T]):
         self._schema = schema
         self._key_field = key_field
         self._codec = codec
-        self._lock_timeout = lock_timeout_sec
+        self._lock_timeout = (
+            lock_timeout_sec
+            if lock_timeout_sec is not None
+            else get_settings().parquet_lock_timeout_sec
+        )
 
     # -- internal helpers ------------------------------------------------
 

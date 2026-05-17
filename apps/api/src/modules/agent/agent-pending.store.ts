@@ -13,13 +13,11 @@
  */
 
 import { Injectable, Logger } from '@nestjs/common';
+import { ServerConfigCenter } from '@quant/config/server';
 import type { ChatMessage, ChatTokenUsage, ChatToolCall } from '@quant/shared';
 import { randomUUID } from 'node:crypto';
 
 import type { AgentDeliveryTarget } from './agent.types.js';
-
-const DEFAULT_TTL_MS = 5 * 60 * 1000;
-const SWEEP_INTERVAL_MS = 30 * 1000;
 
 export interface AgentPendingSnapshot {
   readonly userId: string;
@@ -51,17 +49,21 @@ export class AgentPendingStore {
   private readonly logger = new Logger(AgentPendingStore.name);
   private readonly slots = new Map<string, Slot>();
   private readonly sweepTimer: NodeJS.Timeout;
+  private readonly defaultTtlMs: number;
 
   constructor() {
-    this.sweepTimer = setInterval(() => this.sweep(), SWEEP_INTERVAL_MS);
+    const cfg = ServerConfigCenter.get().cache.agentPending;
+    this.defaultTtlMs = cfg.defaultTtlMs;
+    this.sweepTimer = setInterval(() => this.sweep(), cfg.sweepIntervalMs);
     // Don't keep the process alive solely to sweep an empty map.
     this.sweepTimer.unref?.();
   }
 
   /** Park `snapshot` under a fresh `correlationId`. Returns the id. */
-  put(snapshot: AgentPendingSnapshot, ttlMs = DEFAULT_TTL_MS): string {
+  put(snapshot: AgentPendingSnapshot, ttlMs?: number): string {
+    const effectiveTtl = ttlMs ?? this.defaultTtlMs;
     const correlationId = randomUUID();
-    this.slots.set(correlationId, { snapshot, expiresAt: Date.now() + ttlMs });
+    this.slots.set(correlationId, { snapshot, expiresAt: Date.now() + effectiveTtl });
     return correlationId;
   }
 

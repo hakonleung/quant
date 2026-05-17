@@ -29,7 +29,7 @@ import {
   convertScreenPlanFromOpTagged,
   convertUniversePlanFromOpTagged,
 } from './op-to-kind.js';
-import { buildNlToDslSystemPrompt } from './prompts/nl-to-dsl.prompt.js';
+import { buildNlToDslSystemPrompt } from '@quant/config/prompts';
 
 export interface NlToDslTranslation {
   readonly screenPlan: ScreenPlanAst;

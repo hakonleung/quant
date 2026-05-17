@@ -23,7 +23,7 @@
  * backoff would just stack identical paid calls.
  */
 
-import { Processor, WorkerHost } from '@nestjs/bullmq';
+import { OnWorkerEvent, Processor, WorkerHost } from '@nestjs/bullmq';
 import { Inject, Logger } from '@nestjs/common';
 import {
   errResult,
@@ -62,6 +62,9 @@ export class InstructionAsyncProcessor extends WorkerHost {
   async process(job: Job<InstructionAsyncJob>): Promise<{ ok: boolean }> {
     const data = job.data;
     const startInstant = this.clock.now();
+    this.logger.log(
+      `dbg_async_process_enter id=${data.instructionId} jobId=${data.jobId} bullId=${String(job.id)} userId=${data.ctx.userId} hasIm=${String(data.im !== undefined)} traceId=${data.ctx.traceId}`,
+    );
 
     const startedPayload: InstructionAsyncStartedPayload = {
       jobId: data.jobId,
@@ -100,12 +103,55 @@ export class InstructionAsyncProcessor extends WorkerHost {
     };
     this.sockets.emitTo(data.ctx.userId, 'instruction.async.completed', completedPayload);
     this.bus.emitCompleted(completedPayload);
+    this.logger.log(
+      `dbg_async_handler_done id=${data.instructionId} jobId=${data.jobId} bullId=${String(job.id)} ok=${String(result.ok)} duration_ms=${String(completedPayload.durationMs)} hasIm=${String(data.im !== undefined)}`,
+    );
 
     if (data.im !== undefined) {
       await this.deliverImReply(data.im, completedPayload, data.ctx.traceId);
     }
 
     return { ok: result.ok };
+  }
+
+  // ── BullMQ worker lifecycle taps ──────────────────────────────────────────
+  // Each fires on the worker (not the queue) so we get the bullId of the job
+  // this process actually held the lock for. The pair `process_enter` →
+  // `wevent_completed`/`wevent_failed` should both fire for any job that
+  // produced a result; `wevent_stalled` firing alone means BullMQ reclaimed
+  // the job mid-handler (lock expired) and the user will get silence.
+  @OnWorkerEvent('active')
+  onActive(job: Job<InstructionAsyncJob>): void {
+    this.logger.log(
+      `dbg_wevent_active bullId=${String(job.id)} jobId=${job.data.jobId} id=${job.data.instructionId}`,
+    );
+  }
+
+  @OnWorkerEvent('completed')
+  onCompleted(job: Job<InstructionAsyncJob>): void {
+    this.logger.log(
+      `dbg_wevent_completed bullId=${String(job.id)} jobId=${job.data.jobId} id=${job.data.instructionId}`,
+    );
+  }
+
+  @OnWorkerEvent('failed')
+  onFailed(job: Job<InstructionAsyncJob> | undefined, err: Error): void {
+    const bullId = job === undefined ? '-' : String(job.id);
+    const jobId = job === undefined ? '-' : job.data.jobId;
+    const id = job === undefined ? '-' : job.data.instructionId;
+    this.logger.error(
+      `dbg_wevent_failed bullId=${bullId} jobId=${jobId} id=${id} err=${err.message}`,
+    );
+  }
+
+  @OnWorkerEvent('stalled')
+  onStalled(jobId: string): void {
+    this.logger.warn(`dbg_wevent_stalled bullId=${jobId}`);
+  }
+
+  @OnWorkerEvent('error')
+  onError(err: Error): void {
+    this.logger.error(`dbg_wevent_error err=${err.message}`);
   }
 
   private async deliverImReply(
@@ -120,6 +166,9 @@ export class InstructionAsyncProcessor extends WorkerHost {
       payload.result.ok && payload.result.output.meta !== undefined
         ? payload.result.output.meta
         : undefined;
+    this.logger.log(
+      `dbg_async_im_send_begin channel=${im.channel} target=${im.target} jobId=${payload.jobId} id=${payload.instructionId} ok=${String(payload.result.ok)}`,
+    );
     try {
       await this.channels.send(
         im.channel,
@@ -137,6 +186,9 @@ export class InstructionAsyncProcessor extends WorkerHost {
           },
         },
         { traceId, source: 'system' },
+      );
+      this.logger.log(
+        `dbg_async_im_send_ok channel=${im.channel} jobId=${payload.jobId} id=${payload.instructionId}`,
       );
     } catch (err) {
       this.logger.warn(

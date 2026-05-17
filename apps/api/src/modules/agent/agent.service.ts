@@ -45,7 +45,7 @@ import { AgentImDelivery } from './agent-im-delivery.js';
 import { AgentPendingStore, type AgentPendingSnapshot } from './agent-pending.store.js';
 import { AgentStreamFinalizer, type FrameEmitter } from './agent-stream-finalizer.js';
 import { AgentToolBridge } from './agent-tool-bridge.js';
-import { buildAgentSystemPrompt } from './prompts/system-prompt.js';
+import { buildAgentSystemPrompt } from '@quant/config/prompts';
 import type { AgentDeliveryTarget } from './agent.types.js';
 
 export interface AgentRunOptions {

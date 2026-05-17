@@ -32,8 +32,11 @@ import { KlineReaderService } from '../kline/kline-reader.service.js';
 import { LlmService } from '../llm/llm.service.js';
 import { StockMetaService } from '../stock-meta/stock-meta.service.js';
 import { decodeTaAnalysis } from './domain/decode-ta.js';
-import { buildSectorSummaryPrompt } from './prompts/sector-summary.prompt.js';
-import { buildTaSystemPrompt, buildTaUserPrompt } from './prompts/ta-analyze.prompt.js';
+import {
+  buildSectorSummaryPrompt,
+  buildTaSystemPrompt,
+  buildTaUserPrompt,
+} from '@quant/config/prompts';
 import { TaCacheStore } from './ta-cache.store.js';
 
 const BARS_WINDOW = 90;

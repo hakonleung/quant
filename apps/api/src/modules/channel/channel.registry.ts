@@ -20,7 +20,8 @@ import {
 import { type ChannelActivity, type ChannelId, type ChannelStatus } from '@quant/shared';
 import { randomUUID } from 'node:crypto';
 
-import { CHANNEL_CONFIG, type ChannelConfig } from './config/channel.config.js';
+import type { ChannelConfig } from '@quant/config';
+import { CHANNEL_CONFIG } from './channel.tokens.js';
 import { FeishuChannelAdapter } from './adapters/feishu.adapter.js';
 import { SlackChannelAdapter } from './adapters/slack.adapter.js';
 import { ChannelBus } from './bus/channel-bus.service.js';

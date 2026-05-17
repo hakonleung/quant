@@ -24,6 +24,7 @@
     "@nestjs/platform-express": "^10.4.15",
     "@nestjs/platform-socket.io": "^10.4.22",
     "@nestjs/websockets": "^10.4.22",
+    "@quant/config": "workspace:*",
     "@quant/shared": "workspace:*",
     "@slack/socket-mode": "^2.0.7",
     "@slack/web-api": "^7.15.2",

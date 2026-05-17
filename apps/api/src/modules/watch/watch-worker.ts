@@ -17,6 +17,7 @@
 
 /* eslint-disable no-restricted-globals -- real-time tick: Date is the input (market wall clock, quote ts, hit-batch debounce), not hidden state. */
 import { Inject, Injectable, Logger } from '@nestjs/common';
+import { ServerConfigCenter } from '@quant/config/server';
 import { WATCH_TREND_WINDOW_MAX_SEC, newTraceId, type WatchTask } from '@quant/shared';
 import { Decimal } from 'decimal.js';
 import { ChannelService } from '../channel/channel.service.js';
@@ -34,14 +35,9 @@ import type { WatchJob } from './domain/watch-job.js';
 import type { JobEnvelope, JobProcessor, ReQueue } from '../orchestration/domain/types.js';
 import { WatchTaskStore } from './watch-task.store.js';
 
-/** Stale quote — bump cadence without evaluating, do not pollute samples. */
-const STALE_QUOTE_MAX_MS = 30 * 60 * 1000;
-
-/** Min ±% drift of `last` from `lastHitPrice` to count as a hit. */
-const HIT_PRICE_DELTA_PCT = new Decimal('2');
-
-/** Hit flush debounce. */
-const HIT_BATCH_WINDOW_MS = 3_000;
+// Watch hit gating numbers come from `ServerConfigCenter.watch` so ops
+// can tune drift / debounce without redeploying. Cached at construction
+// since the values are read on every tick.
 
 interface IntradayBuffer {
   readonly day: string;
@@ -64,13 +60,21 @@ export class WatchWorker implements JobProcessor<WatchJob> {
   /** Per-user pending hits. */
   private readonly hitBuffer = new Map<string, HitArgs[]>();
   private readonly flushTimers = new Map<string, NodeJS.Timeout>();
+  private readonly staleQuoteMaxMs: number;
+  private readonly hitPriceDeltaPct: Decimal;
+  private readonly hitBatchWindowMs: number;
 
   constructor(
     @Inject(WATCH_QUOTE_PORT) private readonly port: WatchQuotePort,
     @Inject(WATCH_KLINE_REF_PORT) private readonly klineRefPort: WatchKlineRefPort,
     @Inject(ChannelService) private readonly channels: ChannelService,
     @Inject(WatchTaskStore) private readonly store: WatchTaskStore,
-  ) {}
+  ) {
+    const watch = ServerConfigCenter.get().watch;
+    this.staleQuoteMaxMs = watch.staleQuoteMaxMs;
+    this.hitPriceDeltaPct = new Decimal(watch.hitPriceDeltaPct);
+    this.hitBatchWindowMs = watch.hitBatchWindowMs;
+  }
 
   async process(job: JobEnvelope<WatchJob>, _queue: ReQueue<WatchJob>): Promise<void> {
     const { userId, market, code } = job.data;
@@ -151,7 +155,7 @@ export class WatchWorker implements JobProcessor<WatchJob> {
     quoteTsMs: number,
   ): Promise<boolean> {
     const ageMs = Number.isNaN(quoteTsMs) ? Number.POSITIVE_INFINITY : Math.abs(nowMs - quoteTsMs);
-    if (ageMs <= STALE_QUOTE_MAX_MS) return false;
+    if (ageMs <= this.staleQuoteMaxMs) return false;
     this.logger.warn(
       `watch_quote_stale user=${userId} market=${market} code=${code} ts=${ts} age_ms=${String(ageMs)} trace_id=${traceId}`,
     );
@@ -270,7 +274,7 @@ export class WatchWorker implements JobProcessor<WatchJob> {
     const prev = new Decimal(task.lastHitPrice);
     if (prev.lte(0)) return true;
     const driftPct = last.minus(prev).abs().div(prev).mul(100);
-    return driftPct.gte(HIT_PRICE_DELTA_PCT);
+    return driftPct.gte(this.hitPriceDeltaPct);
   }
 
   private timeTriggersHit(task: WatchTask, nowMs: number): boolean {
@@ -287,7 +291,7 @@ export class WatchWorker implements JobProcessor<WatchJob> {
     if (!this.flushTimers.has(userId)) {
       const timer = setTimeout(() => {
         void this.flushHits(userId);
-      }, HIT_BATCH_WINDOW_MS);
+      }, this.hitBatchWindowMs);
       this.flushTimers.set(userId, timer);
     }
   }

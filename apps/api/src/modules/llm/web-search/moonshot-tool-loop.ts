@@ -28,6 +28,7 @@ import type {
   ChatCompletionMessageToolCall,
 } from 'openai/resources/chat/completions';
 
+import { ServerConfigCenter } from '@quant/config/server';
 import {
   type ChatMessage,
   type ChatStreamChunk,
@@ -38,19 +39,15 @@ import {
 import type { ChatStreamFinalizeArgs } from '../ports/llm-client.port.js';
 
 /**
- * `MAX_SEARCH_ROUNDS` caps the number of LLM turns that may emit
+ * `maxSearchRounds` caps the number of LLM turns that may emit
  * `$web_search` tool calls — not the number of individual queries.
  * Within a single round the model may emit multiple queries in one
  * `tool_calls` array (Moonshot runs them in parallel server-side).
- * Set to 1 so the model is forced to bundle all needed searches into
- * the first turn; the cap collapses the typical 4-RTT loop into 3 RTT
- * (search → tool result → finalize). The Qwen single-shot path is
- * still preferred when both keys are configured (see providers.ts).
+ * Default 1 so the model is forced to bundle all needed searches into
+ * the first turn; the cap collapses the typical 4-RTT loop into 3 RTT.
+ * Sourced from `ServerConfigCenter.llm.webSearch` so the curve is
+ * env-tunable.
  */
-const MAX_SEARCH_ROUNDS = 1;
-const MAX_TURNS = MAX_SEARCH_ROUNDS + 3;
-const TURN_TIMEOUT_MS = 240_000;
-const STREAM_CHUNK_CHARS = 64;
 
 export async function* runMoonshotWebSearchStream(
   client: OpenAI,
@@ -58,12 +55,18 @@ export async function* runMoonshotWebSearchStream(
   args: ChatStreamFinalizeArgs,
   provider: string,
 ): AsyncIterable<ChatStreamChunk> {
+  const webSearch = ServerConfigCenter.get().llm.webSearch;
+  const maxSearchRounds = webSearch.maxRounds;
+  const maxTurns = maxSearchRounds + 3;
+  const turnTimeoutMs = webSearch.turnTimeoutMs;
+  const streamChunkChars = webSearch.streamChunkChars;
+
   const messages: ChatCompletionMessageParam[] = args.messages.map(toOpenAiMessage);
   let allowTools = true;
   let searchRoundsUsed = 0;
   const usageAcc: ChatTokenUsage = { input: 0, output: 0, total: 0 };
 
-  for (let turn = 0; turn < MAX_TURNS; turn++) {
+  for (let turn = 0; turn < maxTurns; turn++) {
     const body: Record<string, unknown> = {
       model,
       temperature: 0.6,
@@ -82,7 +85,7 @@ export async function* runMoonshotWebSearchStream(
         // The OpenAI TS types don't model `extra_body` / `builtin_function`
         // tools — Moonshot accepts both. Cast through unknown to bypass.
         body as unknown as Parameters<typeof client.chat.completions.create>[0],
-        { timeout: TURN_TIMEOUT_MS },
+        { timeout: turnTimeoutMs },
       )) as unknown as ChatCompletion;
     } catch (err) {
       throw wrapProviderError(err, provider);
@@ -99,8 +102,8 @@ export async function* runMoonshotWebSearchStream(
 
     if (toolCalls.length === 0) {
       const final = typeof message.content === 'string' ? message.content : '';
-      for (let i = 0; i < final.length; i += STREAM_CHUNK_CHARS) {
-        yield { delta: final.slice(i, i + STREAM_CHUNK_CHARS), done: false };
+      for (let i = 0; i < final.length; i += streamChunkChars) {
+        yield { delta: final.slice(i, i + streamChunkChars), done: false };
       }
       yield { delta: '', done: true, usage: usageAcc };
       return;
@@ -125,7 +128,7 @@ export async function* runMoonshotWebSearchStream(
       });
     }
     searchRoundsUsed += 1;
-    if (searchRoundsUsed >= MAX_SEARCH_ROUNDS) {
+    if (searchRoundsUsed >= maxSearchRounds) {
       messages.push({
         role: 'user',
         content:
@@ -135,9 +138,9 @@ export async function* runMoonshotWebSearchStream(
       allowTools = false;
     }
   }
-  throw new QuantError('LLM_FAILED', `${provider}: web_search loop exceeded ${MAX_TURNS} turns`, {
+  throw new QuantError('LLM_FAILED', `${provider}: web_search loop exceeded ${maxTurns} turns`, {
     source: provider,
-    max_turns: MAX_TURNS,
+    max_turns: maxTurns,
   });
 }
 

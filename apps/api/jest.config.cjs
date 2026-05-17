@@ -9,8 +9,15 @@ module.exports = {
   moduleFileExtensions: ['ts', 'js', 'json'],
   // NodeNext requires `.js` import suffix for TS sources; strip it for Jest resolver.
   moduleNameMapper: {
+    '^@quant/config/server$': '<rootDir>/../../packages/config/src/server/index.ts',
+    '^@quant/config/client$': '<rootDir>/../../packages/config/src/client/index.ts',
+    '^@quant/config/prompts$': '<rootDir>/../../packages/config/src/prompts/index.ts',
+    '^@quant/config$': '<rootDir>/../../packages/config/src/index.ts',
     '^(\\.{1,2}/.*)\\.js$': '$1',
   },
+  // Initialise ServerConfigCenter with defaults so tests instantiating
+  // services that read through ConfigCenter don't have to do it manually.
+  setupFiles: ['<rootDir>/test/setup-config-center.ts'],
   collectCoverageFrom: ['src/**/*.ts', '!src/**/*.module.ts', '!src/main.ts'],
   coverageDirectory: 'coverage',
   coverageReporters: ['text', 'text-summary', 'lcov'],

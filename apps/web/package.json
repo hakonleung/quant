@@ -16,6 +16,7 @@
     "@chakra-ui/react": "^3.35.0",
     "@emotion/react": "^11.14.0",
     "@hookform/resolvers": "^3.10.0",
+    "@quant/config": "workspace:*",
     "@quant/shared": "workspace:*",
     "@quant/terminal": "workspace:*",
     "@tanstack/react-query": "^5.100.8",

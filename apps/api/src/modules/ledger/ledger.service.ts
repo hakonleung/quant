@@ -28,7 +28,7 @@ import { LlmService } from '../llm/llm.service.js';
 import type { LedgerPatchBody } from './dto/ledger.dto.js';
 import { LedgerCacheStore } from './ledger-cache.store.js';
 import { LedgerStore } from './ledger.store.js';
-import { buildLedgerSystemPrompt, buildLedgerUserPrompt } from './prompts/analyze.prompt.js';
+import { buildLedgerSystemPrompt, buildLedgerUserPrompt } from '@quant/config/prompts';
 
 const MAX_AI_WINDOW = 30;
 const MAX_RECOMMENDATIONS = 5;

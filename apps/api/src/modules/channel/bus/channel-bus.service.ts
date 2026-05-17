@@ -21,6 +21,7 @@
 import { InjectQueue } from '@nestjs/bullmq';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
+import { ServerConfigCenter } from '@quant/config/server';
 import { type ChannelActivity, type ChannelId, type ChannelMessageSource } from '@quant/shared';
 import { Queue } from 'bullmq';
 
@@ -50,12 +51,13 @@ export class ChannelBus {
   ) {}
 
   async enqueueOutbound(job: OutboundJob): Promise<void> {
+    const bus = ServerConfigCenter.get().channel.bus;
     await this.outboundQueue.add(job.kind, job, {
       jobId: job.id,
-      attempts: 5,
-      backoff: { type: 'exponential', delay: 2_000 },
-      removeOnComplete: 100,
-      removeOnFail: 200,
+      attempts: bus.attempts,
+      backoff: { type: 'exponential', delay: bus.backoffDelayMs },
+      removeOnComplete: bus.removeOnComplete,
+      removeOnFail: bus.removeOnFail,
     });
   }
 

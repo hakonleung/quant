@@ -4,9 +4,9 @@
  *
  * - One Flight client (separate channel from stock-meta's, same target)
  *   used by inspector + workers.
- * - Two `InMemoryQueue` instances:
- *   - meta:  concurrency 8, maxRetry 3, taskBackoff 1s→5min, poolBackoff 5s→5min
- *   - kline: concurrency 8, maxRetry 3, taskBackoff 5s→15min, poolBackoff 5s→5min
+ * - Two `InMemoryQueue` instances: meta + kline, parametrised by
+ *   `ServerConfigCenter.orchestration.queues.*` so the curves are
+ *   env-tunable in prod without redeploying.
  * - `BatchSettler` subscribes to both queues' terminal events to run
  *   blacklist + dynamic-sectors recompute as the 16:00 tail-off.
  * - Workers attach to their queue via `OnModuleInit` — wiring after DI
@@ -15,6 +15,7 @@
  */
 
 import { Inject, Module, type OnModuleInit } from '@nestjs/common';
+import { ServerConfigCenter } from '@quant/config/server';
 import { FlightClient } from '../../adapters/flight/flight-client.js';
 import { isPoolLevelError } from '../../adapters/flight/flight-errors.js';
 import { BlacklistModule } from '../blacklist/blacklist.module.js';
@@ -32,8 +33,6 @@ import { QueueBroadcaster } from './queue.broadcaster.js';
 import { QueueStatusController } from './queue-status.controller.js';
 import type { KlineJob, MetaJob } from './domain/types.js';
 
-const DEFAULT_FLIGHT_TARGET = '127.0.0.1:8815';
-
 @Module({
   imports: [BlacklistModule, KlineModule, SectorsModule, StockMetaModule],
   controllers: [QueueStatusController],
@@ -41,53 +40,41 @@ const DEFAULT_FLIGHT_TARGET = '127.0.0.1:8815';
     {
       provide: ORCH_FLIGHT_CLIENT,
       useFactory: (): FlightClient => {
-        const target = process.env['QUANT_FLIGHT_TARGET'] ?? DEFAULT_FLIGHT_TARGET;
+        const target = ServerConfigCenter.get().flight.target;
         return new FlightClient(target);
       },
     },
     {
       provide: META_QUEUE,
-      useFactory: (): InMemoryQueue<MetaJob> =>
-        new InMemoryQueue<MetaJob>({
+      useFactory: (): InMemoryQueue<MetaJob> => {
+        const meta = ServerConfigCenter.get().orchestration.queues.meta;
+        return new InMemoryQueue<MetaJob>({
           name: 'meta',
-          concurrency: 8,
-          maxRetry: 3,
-          taskBackoff: {
-            baseMs: 1_000,
-            factor: 2,
-            maxMs: 5 * 60_000,
-            jitterRatio: 0.2,
-          },
+          concurrency: meta.concurrency,
+          maxRetry: meta.maxRetry,
+          taskBackoff: { ...meta.taskBackoff },
           poolBackoff: {
-            baseMs: 5_000,
-            factor: 2,
-            maxMs: 5 * 60_000,
-            jitterRatio: 0.2,
+            ...meta.poolBackoff,
             isPoolError: isPoolLevelError,
           },
-        }),
+        });
+      },
     },
     {
       provide: KLINE_QUEUE,
-      useFactory: (): InMemoryQueue<KlineJob> =>
-        new InMemoryQueue<KlineJob>({
+      useFactory: (): InMemoryQueue<KlineJob> => {
+        const kline = ServerConfigCenter.get().orchestration.queues.kline;
+        return new InMemoryQueue<KlineJob>({
           name: 'kline',
-          concurrency: 8,
-          maxRetry: 3,
-          taskBackoff: {
-            baseMs: 5_000,
-            factor: 2,
-            maxMs: 15 * 60_000,
-            jitterRatio: 0.2,
-          },
+          concurrency: kline.concurrency,
+          maxRetry: kline.maxRetry,
+          taskBackoff: { ...kline.taskBackoff },
           poolBackoff: {
-            baseMs: 5_000,
-            factor: 2,
-            maxMs: 5 * 60_000,
-            jitterRatio: 0.2,
+            ...kline.poolBackoff,
             isPoolError: isPoolLevelError,
           },
-        }),
+        });
+      },
     },
     CacheInspector,
     MetaWorker,
@@ -111,8 +98,6 @@ export class OrchestrationModule implements OnModuleInit {
   onModuleInit(): void {
     this.metaQueue.setProcessor(this.metaWorker);
     this.klineQueue.setProcessor(this.klineWorker);
-    // Touch the settler so Nest instantiates it eagerly — its
-    // constructor wires terminal listeners onto both queues.
     void this._settler;
   }
 }

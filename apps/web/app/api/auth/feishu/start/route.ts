@@ -16,21 +16,21 @@ import { randomBytes } from 'node:crypto';
 
 import { NextResponse } from 'next/server.js';
 
-import { getAuthConfig } from '../../../../../lib/auth/config.js';
+import { getServerConfig } from '../../../../../lib/config/config-center-next-server-getter.js';
 import { buildAuthorizeUrl } from '../../../../../lib/auth/feishu-provider.js';
 
 const STATE_COOKIE = 'next-auth.feishu-state';
 
 export async function GET(req: Request): Promise<Response> {
-  const cfg = getAuthConfig();
-  if (cfg.mode === 'disabled') {
+  const { auth, channel } = getServerConfig();
+  if (auth.mode === 'disabled' || channel.feishu === null) {
     return NextResponse.redirect(new URL('/', req.url));
   }
   const state = randomBytes(16).toString('hex');
   const origin = new URL(req.url).origin;
   const redirectUri = `${origin}/api/auth/callback/feishu`;
   const authorize = buildAuthorizeUrl({
-    appId: cfg.feishuAppId,
+    appId: channel.feishu.appId,
     redirectUri,
     state,
   });
@@ -38,9 +38,9 @@ export async function GET(req: Request): Promise<Response> {
   res.cookies.set(STATE_COOKIE, state, {
     httpOnly: true,
     sameSite: 'lax',
-    // Mirror the request's scheme rather than `cfg.cookieSecure` (which
-    // is derived from NEXTAUTH_URL) so a misconfigured NEXTAUTH_URL
-    // can't drop the state cookie on a plain-HTTP loopback dev session.
+    // Mirror the request's scheme rather than NEXTAUTH_URL so a
+    // misconfigured base URL can't drop the state cookie on a plain
+    // HTTP loopback dev session.
     secure: origin.startsWith('https://'),
     path: '/',
     maxAge: 600,

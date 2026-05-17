@@ -1,17 +1,10 @@
 /**
  * TA (technical analysis) system + user prompts.
  *
- * Port of `services/py/quant_core/prompts/ta_prompts.py`. The system
- * prompt pins the JSON output shape; the user prompt embeds a compact
- * CSV of up to 90 daily bars (qfq OHLCV + pre-computed MAs).
- *
  * The shared `KlineBar` schema's `open`/`high`/`low`/`close` fields
- * already carry **front-adjusted (qfq)** prices (see
- * `apps/api/src/modules/kline/domain/arrow-mapper.ts:1` — the mapper
- * surfaces qfq columns under the canonical OHLC names because the chart
- * needs a continuous series across splits). So the CSV here passes the
- * same column names through; the prompt's "前复权" disclaimer remains
- * accurate.
+ * already carry **front-adjusted (qfq)** prices, so the CSV here passes
+ * the canonical OHLC column names through; the prompt's "前复权"
+ * disclaimer remains accurate.
  */
 
 import type { KlineBar } from '@quant/shared';

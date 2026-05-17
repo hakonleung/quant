@@ -61,7 +61,7 @@ import {
   buildSentimentSystem,
   buildSentimentUser,
   type SentimentMeta,
-} from './prompts/sentiment.prompt.js';
+} from '@quant/config/prompts';
 import { SentimentCacheStore } from './sentiment-cache.store.js';
 
 const DEFAULT_WINDOW_DAYS = 30;

@@ -10,15 +10,15 @@
 
 import { NextRequest, NextResponse } from 'next/server.js';
 
-import { getAuthConfig } from '../../../../../lib/auth/config.js';
+import { getServerConfig } from '../../../../../lib/config/config-center-next-server-getter.js';
 import { exchangeCodeForProfile } from '../../../../../lib/auth/feishu-provider.js';
-import { mintSession, SESSION_COOKIE_MAX_AGE_SEC } from '../../../../../lib/auth/session.js';
+import { mintSession } from '../../../../../lib/auth/session.js';
 
 const STATE_COOKIE = 'next-auth.feishu-state';
 
 export async function GET(req: NextRequest): Promise<Response> {
-  const cfg = getAuthConfig();
-  if (cfg.mode === 'disabled') {
+  const { auth, channel } = getServerConfig();
+  if (auth.mode === 'disabled' || channel.feishu === null) {
     return NextResponse.redirect(new URL('/', req.url));
   }
   const url = new URL(req.url);
@@ -44,8 +44,8 @@ export async function GET(req: NextRequest): Promise<Response> {
   let profile;
   try {
     profile = await exchangeCodeForProfile({
-      appId: cfg.feishuAppId,
-      appSecret: cfg.feishuAppSecret,
+      appId: channel.feishu.appId,
+      appSecret: channel.feishu.appSecret,
       code,
     });
   } catch (err) {
@@ -60,7 +60,6 @@ export async function GET(req: NextRequest): Promise<Response> {
       : `feishu:${profile.tenantKey}:${profile.openId}`;
 
   const { token } = mintSession({
-    cfg,
     userId,
     displayName: profile.displayName,
     tenantKey: profile.tenantKey,
@@ -92,12 +91,12 @@ export async function GET(req: NextRequest): Promise<Response> {
   }
 
   const res = NextResponse.redirect(new URL('/', req.url));
-  res.cookies.set(cfg.cookieName, token, {
+  res.cookies.set(auth.cookieName, token, {
     httpOnly: true,
     sameSite: 'lax',
-    secure: cfg.cookieSecure,
+    secure: auth.nextauthUrl.startsWith('https://'),
     path: '/',
-    maxAge: SESSION_COOKIE_MAX_AGE_SEC,
+    maxAge: auth.jwtSessionTtlSec,
   });
   res.cookies.delete(STATE_COOKIE);
   return res;

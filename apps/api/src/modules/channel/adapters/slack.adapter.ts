@@ -16,7 +16,7 @@ import { Logger } from '@nestjs/common';
 import { SocketModeClient } from '@slack/socket-mode';
 import { WebClient } from '@slack/web-api';
 
-import type { SlackConfig } from '../config/channel.config.js';
+import type { SlackConfig } from '@quant/config';
 import type {
   ChannelAdapter,
   InboundHandler,

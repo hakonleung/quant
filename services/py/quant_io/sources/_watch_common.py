@@ -10,17 +10,21 @@ from __future__ import annotations
 from decimal import Decimal, InvalidOperation
 from typing import TYPE_CHECKING, Final, cast
 
+from quant_core.config import get_settings
 from quant_core.errors import QuantError
 
 if TYPE_CHECKING:
     from collections.abc import Callable
 
 
-# One quick retry for transient transport failures (Connection aborted /
-# ProxyError / ChunkedEncodingError). Timeouts are NOT retried — they
-# already burnt the per-tick budget; the next 3s tick will retry.
-TRANSPORT_RETRY_DELAY_MS: Final[int] = 1000
-TRANSPORT_RETRY_JITTER_MS: Final[int] = 100
+# Transport retry curve is read from ConfigCenter at call time so the
+# env override propagates without a process restart.
+def _transport_retry_delay_ms() -> int:
+    return get_settings().transport_retry_delay_ms
+
+
+def _transport_retry_jitter_ms() -> int:
+    return get_settings().transport_retry_jitter_ms
 
 # Exception-class-name allowlists. We match by ``__name__`` walking the
 # MRO so we don't have to hard-depend on ``requests`` (the HTTP layer is
@@ -89,13 +93,11 @@ def call_with_transport_retry(
                 f"{backend}: {label}({code}) failed: {exc!r}",
                 {"market": market, "code": code, "reason": reason, "backend": backend},
             ) from exc
+        delay_ms = _transport_retry_delay_ms()
+        jitter_ms = _transport_retry_jitter_ms()
         delay_s = max(
             0.0,
-            (
-                TRANSPORT_RETRY_DELAY_MS
-                + jitter(-TRANSPORT_RETRY_JITTER_MS, TRANSPORT_RETRY_JITTER_MS)
-            )
-            / 1000.0,
+            (delay_ms + jitter(-jitter_ms, jitter_ms)) / 1000.0,
         )
         sleep(delay_s)
     try:

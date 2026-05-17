@@ -6,7 +6,7 @@
 
 import { cookies } from 'next/headers.js';
 
-import { ADMIN_USER_ID, getAuthConfig, type AuthConfig } from './config.js';
+import { getServerConfig } from '../config/config-center-next-server-getter.js';
 import { signSession, verifySession, type SessionPayload } from './jwt.js';
 
 export interface Session {
@@ -19,19 +19,18 @@ export interface Session {
   readonly token: string | null;
 }
 
-const ADMIN_SESSION: Session = {
-  user: { id: ADMIN_USER_ID, name: 'admin', imBootstrap: false },
-  token: null,
-};
-
 /** Server component / server-side fetch helper. */
 export async function getSession(): Promise<Session | null> {
-  const cfg = getAuthConfig();
-  if (cfg.mode === 'disabled') return ADMIN_SESSION;
-  const jar = await cookies();
-  const raw = jar.get(cfg.cookieName)?.value;
+  const auth = getServerConfig().auth;
+  if (auth.mode === 'disabled') {
+    return {
+      user: { id: auth.adminUserId, name: 'admin', imBootstrap: false },
+      token: null,
+    };
+  }
+  const raw = (await cookies()).get(auth.cookieName)?.value;
   if (raw === undefined || raw.length === 0) return null;
-  const payload = verifySession(raw, cfg.nextauthSecret);
+  const payload = verifySession(raw, auth.nextauthSecret ?? '');
   if (payload === null) return null;
   return {
     user: {
@@ -45,15 +44,15 @@ export async function getSession(): Promise<Session | null> {
 
 /** Encodes a fresh session into a signed JWT, returns `(token, payload)`. */
 export function mintSession(input: {
-  cfg: AuthConfig;
   userId: string;
   displayName: string;
   tenantKey: string | null;
   imBootstrap: boolean;
   ttlSec?: number;
 }): { token: string; payload: SessionPayload } {
+  const auth = getServerConfig().auth;
   const now = Math.floor(Date.now() / 1000);
-  const ttl = input.ttlSec ?? 60 * 60 * 24 * 7;
+  const ttl = input.ttlSec ?? auth.jwtSessionTtlSec;
   const payload: SessionPayload = {
     userId: input.userId,
     displayName: input.displayName,
@@ -62,7 +61,8 @@ export function mintSession(input: {
     iat: now,
     exp: now + ttl,
   };
-  return { token: signSession(payload, input.cfg.nextauthSecret), payload };
+  return {
+    token: signSession(payload, auth.nextauthSecret ?? ''),
+    payload,
+  };
 }
-
-export const SESSION_COOKIE_MAX_AGE_SEC = 60 * 60 * 24 * 7;

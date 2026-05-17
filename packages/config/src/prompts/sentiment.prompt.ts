@@ -19,10 +19,6 @@ export interface SentimentMeta {
   readonly industries: string;
 }
 
-// ---------------------------------------------------------------------------
-// Single-stock: combined web-search + JSON output
-// ---------------------------------------------------------------------------
-
 const STOCK_SCHEMA_DOC = `\
 {
   "brief":   string,   // ≤120字「上涨核心动因分析」一段话，紧凑不寒暄
@@ -83,10 +79,6 @@ export function buildSentimentUser(args: {
   ].join('\n');
 }
 
-// ---------------------------------------------------------------------------
-// Multi-stock: cluster
-// ---------------------------------------------------------------------------
-
 const CLUSTER_SCHEMA_DOC = `\
 {
   "clusters": [
@@ -117,10 +109,6 @@ ${CLUSTER_SCHEMA_DOC}
 export function buildSentimentClusterUser(payload: unknown): string {
   return `输入（code/theme/rationale/relevance）：\n${JSON.stringify(payload)}`;
 }
-
-// ---------------------------------------------------------------------------
-// Multi-stock: market synthesis
-// ---------------------------------------------------------------------------
 
 const SYNTH_SCHEMA_DOC = `\
 {

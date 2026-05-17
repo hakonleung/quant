@@ -161,6 +161,17 @@ disallow_any_explicit = false
 disallow_subclassing_any = false
 disable_error_code = ["attr-defined", "name-defined", "import-untyped"]
 
+# pydantic / pydantic-settings rely heavily on metaclass magic that mypy
+# under `disallow_any_explicit + disallow_subclassing_any` can't model.
+# Relax the strict-mode checks just for the config module.
+[[tool.mypy.overrides]]
+module = ["quant_core.config.*"]
+disallow_any_explicit = false
+disallow_subclassing_any = false
+disallow_untyped_calls = false
+disallow_any_unimported = false
+disable_error_code = ["attr-defined", "import-untyped"]
+
 # ---- pytest ----
 [tool.pytest.ini_options]
 minversion = "8.3"

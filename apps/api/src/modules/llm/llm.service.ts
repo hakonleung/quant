@@ -42,7 +42,8 @@ import {
 
 import { OpenAiCompatibleLlmClient } from './adapters/openai-compatible.client.js';
 import { LlmLedgerRecorder } from './ledger/llm-ledger.recorder.js';
-import { LLM_CONFIG, type LlmConfig, type LlmProviderOverride } from './llm.config.js';
+import type { LlmConfig, LlmProviderOverride } from '@quant/config';
+import { LLM_CONFIG } from './llm.tokens.js';
 import { findProviderRow, LLM_PROVIDERS, type LlmProviderRow } from './providers.js';
 
 const ZERO_USAGE: ChatTokenUsage = { input: 0, output: 0, total: 0 };
@@ -134,6 +135,9 @@ export class LlmService {
     const resolved = this.resolve(opts);
     const client = this.getClient(resolved);
     const startedAt = Date.now();
+    this.logger.log(
+      `dbg_llm_call_begin kind=stream provider=${resolved.row.provider} model=${resolved.model} scope=${ctx.scope} webSearch=${String(args.webSearch === true)} trace_id=${ctx.traceId}`,
+    );
     let lastUsage: ChatTokenUsage | undefined;
     let failed = false;
     try {
@@ -246,6 +250,9 @@ export class LlmService {
     const resolved = this.resolve(opts);
     const client = this.getClient(resolved);
     const startedAt = Date.now();
+    this.logger.log(
+      `dbg_llm_call_begin kind=json provider=${resolved.row.provider} model=${resolved.model} scope=${ctx.scope} trace_id=${ctx.traceId}`,
+    );
     let usage: ChatTokenUsage | null = null;
     try {
       const out = await client.completeJson({
@@ -287,6 +294,18 @@ export class LlmService {
           ? this.cfg.agent
           : this.cfg.default;
     const row = pickRow(override, opts);
+    // Diagnostic — single line per resolve() so we can audit why a given
+    // call landed on (or skipped) a provider. Includes env-key presence
+    // for every catalog row so missing QWEN_API_KEY / MOONSHOT_API_KEY is
+    // immediately visible without dumping the whole environment.
+    const envSummary = LLM_PROVIDERS.map((p) => {
+      const v = process.env[p.apiKeyEnv];
+      const has = typeof v === 'string' && v.length > 0;
+      return `${p.provider}=${has ? '1' : '0'}`;
+    }).join(',');
+    this.logger.log(
+      `dbg_llm_resolve scope=${opts.scope} needWebSearch=${String(opts.needWebSearch === true)} overrideProvider=${override.provider ?? '-'} pickedProvider=${row.provider} pickedModel=${override.model ?? row.modelPro} webSearchKind=${row.webSearchKind ?? '-'} keys=${envSummary}`,
+    );
     const apiKey = process.env[row.apiKeyEnv];
     if (apiKey === undefined || apiKey === '') {
       throw new QuantError(

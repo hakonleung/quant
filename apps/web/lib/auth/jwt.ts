@@ -11,6 +11,8 @@
 
 import { createHmac, timingSafeEqual } from 'node:crypto';
 
+import { getServerConfig } from '../config/config-center-next-server-getter.js';
+
 const HEADER_B64 = base64UrlEncode(Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })));
 
 export interface SessionPayload {
@@ -53,7 +55,7 @@ export function newSession(input: {
   ttlSec?: number;
 }): SessionPayload {
   const now = Math.floor(Date.now() / 1000);
-  const ttl = input.ttlSec ?? 60 * 60 * 24 * 7;
+  const ttl = input.ttlSec ?? getServerConfig().auth.jwtSessionTtlSec;
   return {
     userId: input.userId,
     displayName: input.displayName,

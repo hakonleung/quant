@@ -11,6 +11,7 @@ import type { WatchGroup } from '@quant/shared';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback } from 'react';
 
+import { getClientConfig } from '../../lib/config/config-center-next-client-getter.js';
 import { fetchGroups } from './watch-add-api.js';
 
 export const WATCH_GROUPS_KEY = ['watch', 'groups'] as const;
@@ -25,7 +26,7 @@ export function useWatchGroups(): UseWatchGroupsResult {
   const q = useQuery<readonly WatchGroup[]>({
     queryKey: WATCH_GROUPS_KEY,
     queryFn: fetchGroups,
-    staleTime: 60_000,
+    staleTime: getClientConfig().ui.reactQuery.watchGroupsStaleTimeMs,
     placeholderData: EMPTY_GROUPS,
   });
   const refresh = useCallback((): void => {

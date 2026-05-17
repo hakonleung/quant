@@ -3,9 +3,14 @@ import { NestFactory } from '@nestjs/core';
 import { Logger } from '@nestjs/common';
 import { AppModule } from './app.module.js';
 import { QuantErrorFilter } from './common/quant-error.filter.js';
+import { bootstrapConfigCenter } from './config/config-center-nest-bootstrap.js';
 import { corsOriginCallback } from './modules/socket/cors-origin.js';
 
 async function bootstrap(): Promise<void> {
+  // Parse env once at bootstrap so misconfiguration fails fast rather
+  // than surfacing as a per-request surprise. Every consumer reads
+  // through ServerConfigCenter from here on; never `process.env` again.
+  const configCenter = bootstrapConfigCenter();
   const app = await NestFactory.create(AppModule, { logger: ['log', 'warn', 'error'] });
   app.setGlobalPrefix('api');
   app.useGlobalFilters(new QuantErrorFilter());
@@ -25,12 +30,7 @@ async function bootstrap(): Promise<void> {
     allowedHeaders: ['content-type', 'x-trace-id', 'authorization', 'cookie'],
     exposedHeaders: ['x-trace-id'],
   });
-  const host = process.env['API_HOST'] ?? '127.0.0.1';
-  const portRaw = process.env['API_PORT'] ?? '3001';
-  const port = Number.parseInt(portRaw, 10);
-  if (Number.isNaN(port)) {
-    throw new Error(`Invalid API_PORT: ${portRaw}`);
-  }
+  const { host, port } = configCenter.server;
   await app.listen(port, host);
   Logger.log(`API listening on http://${host}:${String(port)}`, 'Bootstrap');
 }

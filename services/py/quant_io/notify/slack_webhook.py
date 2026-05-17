@@ -16,13 +16,13 @@ from typing import TYPE_CHECKING, Final, Protocol
 from urllib import error as urlerror
 from urllib import request as urlrequest
 
+from quant_core.config import get_settings
 from quant_core.domain.types.notification import NotifierResult
 
 if TYPE_CHECKING:
     from quant_core.domain.types.notification import Notification
 
 
-_DEFAULT_TIMEOUT_SEC: Final[float] = 10.0
 _BODY_HARD_LIMIT: Final[int] = 2900  # mrkdwn section block cap is 3000.
 
 
@@ -61,7 +61,7 @@ class SlackWebhookNotifier:
         default_username: str | None = None,
         default_icon_emoji: str | None = None,
         http: HttpPoster | None = None,
-        timeout: float = _DEFAULT_TIMEOUT_SEC,
+        timeout: float | None = None,
     ) -> None:
         if not webhook_url:
             raise ValueError("SlackWebhookNotifier requires a non-empty webhook URL")
@@ -69,7 +69,7 @@ class SlackWebhookNotifier:
         self._default_username = default_username
         self._default_icon_emoji = default_icon_emoji
         self._http = http or _UrllibPoster()
-        self._timeout = timeout
+        self._timeout = timeout if timeout is not None else get_settings().slack_http_timeout_sec
 
     def send(self, n: Notification) -> NotifierResult:
         body = n.body if len(n.body) <= _BODY_HARD_LIMIT else n.body[:_BODY_HARD_LIMIT] + "…"

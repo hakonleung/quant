@@ -22,6 +22,7 @@
 import { InjectQueue } from '@nestjs/bullmq';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
+import { ServerConfigCenter } from '@quant/config/server';
 import {
   type ChannelId,
   type InstructionAsyncCompletedPayload,
@@ -55,12 +56,6 @@ export interface InstructionAsyncJob {
   readonly enqueuedAt: string;
 }
 
-const JOB_OPTS: JobsOptions = {
-  attempts: 1, // long-running LLM ops own their own retry/timeout
-  removeOnComplete: 50,
-  removeOnFail: 100,
-};
-
 @Injectable()
 export class InstructionAsyncBus {
   private readonly logger = new Logger(InstructionAsyncBus.name);
@@ -71,7 +66,14 @@ export class InstructionAsyncBus {
   ) {}
 
   async enqueue(job: InstructionAsyncJob): Promise<void> {
-    await this.queue.add(job.instructionId, job, { ...JOB_OPTS, jobId: job.jobId });
+    const cfg = ServerConfigCenter.get().instruction.async;
+    const opts: JobsOptions = {
+      attempts: cfg.attempts,
+      removeOnComplete: cfg.removeOnComplete,
+      removeOnFail: cfg.removeOnFail,
+      jobId: job.jobId,
+    };
+    await this.queue.add(job.instructionId, job, opts);
     this.logger.log(
       `instruction_async_enqueued id=${job.instructionId} jobId=${job.jobId} userId=${job.ctx.userId}`,
     );

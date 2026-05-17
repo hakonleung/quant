@@ -22,6 +22,7 @@
  */
 
 import { Logger, Module, type OnModuleDestroy } from '@nestjs/common';
+import { ServerConfigCenter } from '@quant/config/server';
 import { Redis } from 'ioredis';
 
 import { RedisKeyValueStore } from './adapters/redis-kv.store.js';
@@ -38,8 +39,6 @@ export interface InvalidationBus {
   subscribe(topic: string, fn: (keys: readonly string[]) => void): Promise<() => Promise<void>>;
 }
 
-const DEFAULT_REDIS_URL = 'redis://127.0.0.1:6379/1';
-const DEFAULT_KEY_PREFIX = 'quant:cache:';
 const INVALIDATION_CHANNEL_PREFIX = 'quant:invalidate:';
 
 class RedisInvalidationBus implements InvalidationBus, OnModuleDestroy {
@@ -139,8 +138,11 @@ class RedisLifecycle implements OnModuleDestroy {
     {
       provide: REDIS_CACHE_CLIENT,
       useFactory: (): Redis => {
-        const url = process.env['CACHE_REDIS_URL'] ?? DEFAULT_REDIS_URL;
-        return new Redis(url, { lazyConnect: true, maxRetriesPerRequest: 1 });
+        const cfg = ServerConfigCenter.get().cache.redis;
+        return new Redis(cfg.url, {
+          lazyConnect: true,
+          maxRetriesPerRequest: cfg.maxRetriesPerRequest,
+        });
       },
     },
     {
@@ -149,14 +151,14 @@ class RedisLifecycle implements OnModuleDestroy {
       useFactory: (client: Redis): KeyValueStore =>
         new RedisKeyValueStore({
           client,
-          keyPrefix: process.env['CACHE_REDIS_KEY_PREFIX'] ?? DEFAULT_KEY_PREFIX,
+          keyPrefix: ServerConfigCenter.get().cache.redis.keyPrefix,
         }),
     },
     {
       provide: REDIS_INVALIDATION_BUS,
       inject: [REDIS_CACHE_CLIENT],
       useFactory: (client: Redis): InvalidationBus => {
-        const url = process.env['CACHE_REDIS_URL'] ?? DEFAULT_REDIS_URL;
+        const url = ServerConfigCenter.get().cache.redis.url;
         return new RedisInvalidationBus(client, url);
       },
     },

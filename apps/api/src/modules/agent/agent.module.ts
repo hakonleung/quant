@@ -15,6 +15,7 @@
  */
 
 import { Module, forwardRef } from '@nestjs/common';
+import { ServerConfigCenter } from '@quant/config/server';
 
 import { SYSTEM_CLOCK_PROVIDER } from '../../common/clock.js';
 import { AuthModule } from '../auth/auth.module.js';
@@ -25,7 +26,7 @@ import { AgentHistoryStore } from './agent-history.store.js';
 import { AgentImDelivery } from './agent-im-delivery.js';
 import { AgentPendingStore } from './agent-pending.store.js';
 import { AgentService } from './agent.service.js';
-import { AGENT_CONFIG, loadAgentConfig } from './agent.config.js';
+import { AGENT_CONFIG, type AgentConfig } from './agent.config.js';
 import { AgentStreamFinalizer } from './agent-stream-finalizer.js';
 import { AgentToolBridge } from './agent-tool-bridge.js';
 
@@ -41,7 +42,9 @@ import { AgentToolBridge } from './agent-tool-bridge.js';
   providers: [
     {
       provide: AGENT_CONFIG,
-      useFactory: () => loadAgentConfig(),
+      useFactory: (): AgentConfig => ({
+        defaultMaxToolCalls: ServerConfigCenter.get().llm.agentLoop.defaultMaxToolCalls,
+      }),
     },
     SYSTEM_CLOCK_PROVIDER,
     AgentToolBridge,

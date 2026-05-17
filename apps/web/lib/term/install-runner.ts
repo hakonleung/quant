@@ -21,6 +21,7 @@
 import { _setRunner, MockActionRunner } from '@quant/terminal';
 import type { QueryClient } from '@tanstack/react-query';
 
+import { getClientConfig } from '../config/config-center-next-client-getter.js';
 import { LiveActionRunner, type LiveRunnerDeps } from './live-runner.js';
 import { createRevalidate } from './revalidate.js';
 
@@ -29,11 +30,12 @@ export type RunnerKind = 'live' | 'mock';
 const STORAGE_KEY = 'tm.runner';
 
 /**
- * Read the configured runner kind. Safe to call on the server — falls
- * back to `'live'` if `localStorage` is unavailable.
+ * Read the configured runner kind. `localStorage` wins over the
+ * ConfigCenter default so per-user dev console toggles persist across
+ * reloads; the ConfigCenter slot already encodes the env-driven (or
+ * hardcoded) fallback, so no extra default lives here.
  */
 export function readRunnerKind(): RunnerKind {
-  // 1. localStorage
   if (typeof globalThis !== 'undefined' && typeof localStorage !== 'undefined') {
     try {
       const v = localStorage.getItem(STORAGE_KEY);
@@ -42,11 +44,7 @@ export function readRunnerKind(): RunnerKind {
       /* sandboxed contexts throw — ignore */
     }
   }
-  // 2. NEXT_PUBLIC_TM_RUNNER
-  const env = process.env['NEXT_PUBLIC_TM_RUNNER'];
-  if (env === 'mock' || env === 'live') return env;
-  // 3. fallback
-  return 'live';
+  return getClientConfig().terminal.defaultRunner;
 }
 
 export interface InstallOptions {

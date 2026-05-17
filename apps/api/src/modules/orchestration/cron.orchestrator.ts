@@ -26,6 +26,7 @@
 /* eslint-disable no-restricted-globals -- scheduler races the wall clock; Date use is the unit of work, not a hidden side-effect. */
 
 import { Inject, Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import { ServerConfigCenter } from '@quant/config/server';
 import { newTraceId, type ScanAccepted, type ScanResult } from '@quant/shared';
 import { isPyFlightDown } from '../../adapters/flight/flight-errors.js';
 import { BatchSettler } from './batch-settler.js';
@@ -34,23 +35,21 @@ import { KLINE_QUEUE, META_QUEUE } from './flight.token.js';
 import type { InMemoryQueue } from './domain/in-memory-queue.js';
 import type { KlineJob, MetaJob } from './domain/types.js';
 
-const BJT_HOUR = 16;
-const BJT_MINUTE = 0;
-const BJT_OFFSET_MS = 8 * 60 * 60_000;
-const DAY_MS = 24 * 60 * 60_000;
-
 /**
- * Milliseconds from `now` until the next 16:00 Asia/Shanghai. If we're
- * already past today's 16:00 (BJT), returns the delay to tomorrow's.
+ * Milliseconds from `now` until the next scheduled BJT hour. If we're
+ * already past today's, returns the delay to tomorrow's. Reads the
+ * target hour/minute + offsets from `ServerConfigCenter.orchestration.cron`
+ * so tests can pin a different schedule via env.
  */
 export function msUntilNextBjt1600(now: number = Date.now()): number {
-  const bjt = new Date(now + BJT_OFFSET_MS);
+  const cron = ServerConfigCenter.get().orchestration.cron;
+  const bjt = new Date(now + cron.bjtOffsetMs);
   const y = bjt.getUTCFullYear();
   const m = bjt.getUTCMonth();
   const d = bjt.getUTCDate();
-  const targetUtcMs = Date.UTC(y, m, d, BJT_HOUR, BJT_MINUTE) - BJT_OFFSET_MS;
+  const targetUtcMs = Date.UTC(y, m, d, cron.bjtHour, cron.bjtMinute) - cron.bjtOffsetMs;
   const delta = targetUtcMs - now;
-  return delta <= 0 ? delta + DAY_MS : delta;
+  return delta <= 0 ? delta + cron.dayMs : delta;
 }
 
 @Injectable()

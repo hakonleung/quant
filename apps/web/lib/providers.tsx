@@ -14,6 +14,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useEffect, useState, type ReactNode } from 'react';
 
+import { getClientConfig } from './config/config-center-next-client-getter.js';
 import { registerStoreExportGlobal } from './storage/export-stores.js';
 import { ThemeProvider } from './theme/provider.js';
 import { startWebVitals } from './web-vitals/store.js';
@@ -26,7 +27,12 @@ export function Providers({ children }: ProvidersProps): ReactNode {
   const [client] = useState(
     () =>
       new QueryClient({
-        defaultOptions: { queries: { staleTime: 30_000, refetchOnWindowFocus: false } },
+        defaultOptions: {
+          queries: {
+            staleTime: getClientConfig().ui.reactQuery.defaultStaleTimeMs,
+            refetchOnWindowFocus: false,
+          },
+        },
       }),
   );
   useEffect(() => {

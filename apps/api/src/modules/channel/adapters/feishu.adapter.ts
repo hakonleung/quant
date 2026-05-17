@@ -15,7 +15,7 @@
 import { Logger } from '@nestjs/common';
 import * as Lark from '@larksuiteoapi/node-sdk';
 
-import type { FeishuConfig } from '../config/channel.config.js';
+import type { FeishuConfig } from '@quant/config';
 import {
   buildDecidedCard,
   parseCardAction,

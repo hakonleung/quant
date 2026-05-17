@@ -23,14 +23,18 @@
 import { SocketEnvelopeSchema, type SocketTopic } from '@quant/shared';
 import { io, type Socket } from 'socket.io-client';
 
+import { getClientConfig } from '../config/config-center-next-client-getter.js';
+
 let socketSingleton: Socket | null = null;
 
 function resolveUrl(): string {
-  const env = process.env['NEXT_PUBLIC_QUANT_SOCKET_URL'];
-  if (typeof env === 'string' && env.length > 0) return env;
-  if (typeof window === 'undefined') return 'http://127.0.0.1:3001';
-  const port = process.env['NEXT_PUBLIC_QUANT_API_PORT'] ?? '3001';
-  return `${window.location.protocol}//${window.location.hostname}:${port}`;
+  const socket = getClientConfig().socket;
+  if (socket.url !== null) return socket.url;
+  // `socket.url === null` means "compute at runtime"; ConfigCenter
+  // already supplies the port default, so this only branches on the
+  // browser-vs-server execution context, not on a missing config slot.
+  if (typeof window === 'undefined') return `http://127.0.0.1:${socket.apiPort}`;
+  return `${window.location.protocol}//${window.location.hostname}:${socket.apiPort}`;
 }
 
 export function getSocket(): Socket {

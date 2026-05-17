@@ -19,6 +19,8 @@
 
 import { create } from 'zustand';
 
+import { getClientConfig } from '../config/config-center-next-client-getter.js';
+
 export type NotifyTone = 'info' | 'success' | 'warn' | 'error';
 
 export interface NotifyEntry {
@@ -41,14 +43,21 @@ export interface NotifyInput {
   readonly ttlMs?: number | null;
 }
 
-const DEFAULT_TTL: Record<NotifyTone, number | null> = {
-  info: 4000,
-  success: 3000,
-  warn: 6000,
-  // Errors stay until acknowledged — losing an error message is the
-  // worst possible UX outcome.
-  error: null,
-};
+function defaultTtlFor(tone: NotifyTone): number | null {
+  const notify = getClientConfig().ui.notify;
+  switch (tone) {
+    case 'info':
+      return notify.infoTtlMs;
+    case 'success':
+      return notify.successTtlMs;
+    case 'warn':
+      return notify.warnTtlMs;
+    case 'error':
+      // Errors stay until acknowledged — losing an error message is the
+      // worst possible UX outcome.
+      return notify.errorTtlMs;
+  }
+}
 
 interface NotifyState {
   readonly entries: readonly NotifyEntry[];
@@ -64,7 +73,7 @@ export const useNotifyStore = create<NotifyState>((set, get) => ({
   push: (input) => {
     const id = get().nextId;
     const tone = input.tone ?? 'info';
-    const ttlMs = input.ttlMs === undefined ? DEFAULT_TTL[tone] : input.ttlMs;
+    const ttlMs = input.ttlMs === undefined ? defaultTtlFor(tone) : input.ttlMs;
     set((s) => ({
       entries: [
         ...s.entries,

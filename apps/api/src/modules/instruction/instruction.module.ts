@@ -10,6 +10,7 @@
 
 import { BullModule } from '@nestjs/bullmq';
 import { Global, Module, forwardRef } from '@nestjs/common';
+import { ServerConfigCenter } from '@quant/config/server';
 
 import { SYSTEM_CLOCK_PROVIDER } from '../../common/clock.js';
 import { ChannelModule } from '../channel/channel.module.js';
@@ -20,7 +21,7 @@ import { InstructionAsyncProcessor } from './async/instruction-async.processor.j
 import { ChannelEchoHandler } from './handlers/channel-echo.handler.js';
 import { HelpHandler } from './handlers/help.handler.js';
 import { PingHandler } from './handlers/ping.handler.js';
-import { INSTRUCTION_CONFIG, loadInstructionConfig } from './instruction.config.js';
+import { INSTRUCTION_CONFIG, type InstructionConfig } from './instruction.config.js';
 import { InstructionController } from './instruction.controller.js';
 import { InstructionExecutor } from './instruction.executor.js';
 import { InstructionImListener } from './instruction.im.listener.js';
@@ -39,7 +40,13 @@ import { SocketInstructionAdapter } from './socket-instruction.adapter.js';
     SYSTEM_CLOCK_PROVIDER,
     {
       provide: INSTRUCTION_CONFIG,
-      useFactory: () => loadInstructionConfig(),
+      useFactory: (): InstructionConfig => {
+        const cfg = ServerConfigCenter.get().instruction;
+        return {
+          imAllowlist: cfg.imAllowlist,
+          debugInstructionsEnabled: cfg.debugInstructionsEnabled,
+        };
+      },
     },
     InstructionRegistry,
     InstructionAsyncBus,

@@ -12,13 +12,15 @@
 import { BullModule } from '@nestjs/bullmq';
 import { Module } from '@nestjs/common';
 import { EventEmitterModule } from '@nestjs/event-emitter';
+import { ServerConfigCenter } from '@quant/config/server';
 
 import { ChannelOutboundProcessor } from './bus/outbound.processor.js';
 import { ChannelBus, CHANNEL_OUTBOUND_QUEUE } from './bus/channel-bus.service.js';
 import { ChannelController } from './channel.controller.js';
 import { ChannelRegistry } from './channel.registry.js';
 import { ChannelService } from './channel.service.js';
-import { CHANNEL_CONFIG, loadChannelConfig } from './config/channel.config.js';
+import type { ChannelConfig } from '@quant/config';
+import { CHANNEL_CONFIG } from './channel.tokens.js';
 import { ChannelSendHandler } from './instructions/channel-send.handler.js';
 
 @Module({
@@ -26,7 +28,7 @@ import { ChannelSendHandler } from './instructions/channel-send.handler.js';
     EventEmitterModule.forRoot({ wildcard: false, maxListeners: 100 }),
     BullModule.forRootAsync({
       useFactory: () => {
-        const cfg = loadChannelConfig();
+        const cfg = ServerConfigCenter.get().channel;
         return {
           connection: { url: cfg.redisUrl },
           prefix: cfg.bullPrefix,
@@ -39,7 +41,7 @@ import { ChannelSendHandler } from './instructions/channel-send.handler.js';
   providers: [
     {
       provide: CHANNEL_CONFIG,
-      useFactory: () => loadChannelConfig(),
+      useFactory: (): ChannelConfig => ServerConfigCenter.get().channel,
     },
     ChannelRegistry,
     ChannelBus,

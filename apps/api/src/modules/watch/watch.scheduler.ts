@@ -32,6 +32,7 @@ import {
   type OnModuleDestroy,
   type OnModuleInit,
 } from '@nestjs/common';
+import { ServerConfigCenter } from '@quant/config/server';
 import type { WatchMarket, WatchTask } from '@quant/shared';
 import { UserStore } from '../auth/user.store.js';
 import type { WatchJob } from './domain/watch-job.js';
@@ -41,8 +42,6 @@ import { WatchGroupStore } from './watch-group.store.js';
 import { WatchTaskStore } from './watch-task.store.js';
 import { WatchWorker } from './watch-worker.js';
 import { WATCH_QUEUE_A, WATCH_QUEUE_HK, WATCH_QUEUE_US } from './watch-tokens.js';
-
-const MASTER_TICK_MS = 5_000;
 
 @Injectable()
 export class WatchScheduler implements OnModuleInit, OnModuleDestroy {
@@ -65,10 +64,11 @@ export class WatchScheduler implements OnModuleInit, OnModuleDestroy {
     this.queueA.setProcessor(this.worker);
     this.queueHk.setProcessor(this.worker);
     this.queueUs.setProcessor(this.worker);
+    const tickMs = ServerConfigCenter.get().watch.masterTickMs;
     this.timer = setInterval(() => {
       void this.safeTick();
-    }, MASTER_TICK_MS);
-    this.logger.log(`watch scheduler armed — tick=${String(MASTER_TICK_MS)}ms`);
+    }, tickMs);
+    this.logger.log(`watch scheduler armed — tick=${String(tickMs)}ms`);
   }
 
   async onModuleDestroy(): Promise<void> {

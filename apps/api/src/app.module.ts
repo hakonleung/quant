@@ -1,4 +1,5 @@
-import { Module, type MiddlewareConsumer, type NestModule } from '@nestjs/common';
+import { Global, Module, type MiddlewareConsumer, type NestModule } from '@nestjs/common';
+import { CONFIG_CENTER, ServerConfigCenter } from '@quant/config/server';
 import { HealthController } from './common/health.controller.js';
 import { UserBlobModule } from './common/storage/user-blob.module.js';
 import { TraceMiddleware } from './common/trace.middleware.js';
@@ -24,8 +25,29 @@ import { SysCfgModule } from './modules/sys-cfg/sys-cfg.module.js';
 import { TaModule } from './modules/ta/ta.module.js';
 import { WatchModule } from './modules/watch/watch.module.js';
 
+/**
+ * Global ConfigCenter module — exposes the bootstrap-time singleton as a
+ * Nest provider so any constructor can `@Inject(CONFIG_CENTER)`.
+ *
+ * The class instance is created in `main.ts` via `ServerConfigCenter.init()`
+ * **before** `NestFactory.create()`, so by the time DI runs the singleton
+ * is already populated.
+ */
+@Global()
+@Module({
+  providers: [
+    {
+      provide: CONFIG_CENTER,
+      useFactory: (): ServerConfigCenter => ServerConfigCenter.get(),
+    },
+  ],
+  exports: [CONFIG_CENTER],
+})
+class ConfigCenterModule {}
+
 @Module({
   imports: [
+    ConfigCenterModule,
     // AuthModule is global; must come first so the legacy → users/admin
     // boot-time migration runs before any per-user store loads.
     AuthModule,

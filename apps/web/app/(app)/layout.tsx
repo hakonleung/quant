@@ -2,8 +2,8 @@ import { redirect } from 'next/navigation.js';
 import type { ReactNode } from 'react';
 
 import { AppShell, type SessionChipInfo } from '../../components/shell/app-shell.js';
-import { getAuthMode } from '../../lib/auth/config.js';
 import { getSession } from '../../lib/auth/session.js';
+import { getServerConfig } from '../../lib/config/config-center-next-server-getter.js';
 import { RemoteSyncBoot } from '../../lib/remote-sync-boot.js';
 
 interface AppLayoutProps {
@@ -15,7 +15,7 @@ export default async function AppLayout({ children }: AppLayoutProps): Promise<R
   if (session === null) redirect('/login');
   const chip: SessionChipInfo = {
     displayName: session.user.name,
-    mode: getAuthMode() === 'oauth' ? 'oauth' : 'env',
+    mode: getServerConfig().auth.mode === 'oauth' ? 'oauth' : 'env',
   };
   return (
     <>

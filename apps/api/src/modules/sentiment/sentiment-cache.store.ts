@@ -15,6 +15,7 @@
  */
 
 import { Inject, Injectable, Logger } from '@nestjs/common';
+import { ServerConfigCenter } from '@quant/config/server';
 import {
   MarketSentimentSchema,
   SentimentSchema,
@@ -26,8 +27,6 @@ import { z } from 'zod';
 import { CLOCK, type Clock } from '../../common/clock.js';
 import type { RecordStore, RecordTableSpec } from '../../common/storage/ports/record-store.port.js';
 import { SENTIMENT_MARKET_RECORD_STORE, SENTIMENT_STOCK_RECORD_STORE } from './sentiment.token.js';
-
-const TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
 export interface SentimentStockRow {
   readonly code: string;
@@ -161,7 +160,8 @@ export class SentimentCacheStore {
   private isStale(timestampIso: string): boolean {
     const t = Date.parse(timestampIso);
     if (!Number.isFinite(t)) return true;
-    return this.clock.now().getTime() - t > TTL_MS;
+    const ttlMs = ServerConfigCenter.get().cache.sentiment.ttlMs;
+    return this.clock.now().getTime() - t > ttlMs;
   }
 
   private async runLocked<R>(key: string, fn: () => Promise<R>): Promise<R> {

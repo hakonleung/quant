@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 from dotenv import load_dotenv
+from quant_core.config import init_settings
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -18,6 +19,11 @@ if TYPE_CHECKING:
 # environment-set values winning over the file.
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 load_dotenv(_REPO_ROOT / ".env", override=False)
+
+# Seed the ConfigCenter with defaults so adapters that read through
+# :func:`get_settings` (slack timeout, parquet lock, transport retry)
+# can run in tests without each one calling init_settings themselves.
+init_settings()
 
 
 def pytest_addoption(parser: pytest.Parser) -> None:

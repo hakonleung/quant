@@ -27,7 +27,6 @@ const SCREEN_FIELDS = [
 ].join(', ');
 
 const UNIVERSE_FIELDS = [
-  // meta
   'code',
   'name',
   'industries',
@@ -36,7 +35,6 @@ const UNIVERSE_FIELDS = [
   'is_st',
   'exchange',
   'listed_days',
-  // snapshot scalars + derived（每日 post-kline-sync 投影）
   'price',
   'mkt_cap',
   'float_mkt_cap',
@@ -45,14 +43,12 @@ const UNIVERSE_FIELDS = [
   'pb',
   'peg',
   'gross_margin_ttm',
-  // 阶段收益（小数：0.05 = +5%）
   'ret_1d',
   'ret_5d',
   'ret_10d',
   'ret_20d',
   'ret_90d',
   'ret_250d',
-  // DDE 主力（超大单+大单）阶段资金面
   'dde_main_net_inflow_3d',
   'dde_main_net_inflow_5d',
   'dde_main_net_inflow_10d',
