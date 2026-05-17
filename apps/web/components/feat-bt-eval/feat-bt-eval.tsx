@@ -17,6 +17,7 @@ import { Box, Button, Flex, Input, Text } from '@chakra-ui/react';
 import type { BacktestEvaluateResponse, BacktestSpreadSummary } from '@quant/shared';
 import { useMemo, useState } from 'react';
 
+import type { ScreenProgressEvent } from '../../lib/api/backtest-stream.js';
 import { Feat } from '../../lib/eqty/feat.js';
 import { useBacktestScreen } from '../../lib/hooks/use-backtest.js';
 import { useSectorsStore, type Sector } from '../../lib/stores/sectors.store.js';
@@ -50,7 +51,7 @@ function Runner({ sector }: { sector: Sector }): React.ReactElement {
   const [startDate, setStartDate] = useState(initial.start);
   const [endDate, setEndDate] = useState(initial.end);
   const [holdingsText, setHoldingsText] = useState(DEFAULT_HOLDINGS);
-  const mutation = useBacktestScreen();
+  const { mutation, progress, cancel } = useBacktestScreen();
 
   const holdings = parseHoldings(holdingsText);
   const validation = validate(holdings, startDate, endDate);
@@ -79,11 +80,30 @@ function Runner({ sector }: { sector: Sector }): React.ReactElement {
         onEnd={setEndDate}
         onHoldings={setHoldingsText}
         onRun={onRun}
+        onCancel={mutation.isPending ? cancel : null}
         disabled={disabled}
         pending={mutation.isPending}
       />
+      {mutation.isPending && progress !== null && <ProgressBar progress={progress} />}
       {errorMsg !== null && <Err msg={errorMsg} />}
       {mutation.data !== undefined && <Results data={mutation.data} />}
+    </Flex>
+  );
+}
+
+function ProgressBar({ progress }: { readonly progress: ScreenProgressEvent }): React.ReactElement {
+  const pct = progress.totalDays === 0 ? 0 : (progress.runDays / progress.totalDays) * 100;
+  const phaseLabel = progress.phase === 'flight' ? 'aggregating' : `screening ${progress.day ?? ''}`;
+  return (
+    <Flex direction="column" gap="2px">
+      <Text fontFamily="mono" fontSize="10px" color="ink3" letterSpacing="0.06em">
+        // {phaseLabel} · {String(progress.runDays)}/{String(progress.totalDays)} weekdays ·
+        {' '}
+        {String(progress.matchedDays)} matched · {String(progress.signals)} signals
+      </Text>
+      <Box h="3px" bg="line">
+        <Box h="3px" bg="accent" w={`${pct.toFixed(1)}%`} transition="width 120ms linear" />
+      </Box>
     </Flex>
   );
 }
@@ -102,6 +122,7 @@ interface ControlsProps {
   readonly onEnd: (v: string) => void;
   readonly onHoldings: (v: string) => void;
   readonly onRun: () => void;
+  readonly onCancel: (() => void) | null;
   readonly disabled: boolean;
   readonly pending: boolean;
 }
@@ -134,6 +155,23 @@ function Controls(p: ControlsProps): React.ReactElement {
       >
         RUN
       </Button>
+      {p.onCancel !== null && (
+        <Button
+          h="22px"
+          px="10px"
+          bg="panel"
+          color="ink2"
+          borderWidth="1px"
+          borderColor="line"
+          borderRadius="0"
+          fontFamily="mono"
+          fontSize="10px"
+          letterSpacing="0.14em"
+          onClick={p.onCancel}
+        >
+          CANCEL
+        </Button>
+      )}
     </Flex>
   );
 }

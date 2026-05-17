@@ -52,6 +52,23 @@ import { BACKTEST_FLIGHT_CLIENT } from './backtest.token.js';
 const HOLDING_TO_CALENDAR_MULTIPLIER = 1.6;
 const CALENDAR_BUFFER_DAYS = 10;
 
+export interface ScreenProgressEvent {
+  /** 'screen' = mid-loop after each weekday; 'flight' = loop done, Python call about to start. */
+  readonly phase: 'screen' | 'flight';
+  /** ISO date of the weekday just processed; null on the final 'flight' tick. */
+  readonly day: string | null;
+  /** Weekdays processed so far. */
+  readonly runDays: number;
+  /** Total weekdays in the [start,end] window. */
+  readonly totalDays: number;
+  /** Weekdays that produced ≥ 1 match so far. */
+  readonly matchedDays: number;
+  /** Cumulative (signalDate, code) signals collected so far. */
+  readonly signals: number;
+}
+
+export type ScreenProgressCallback = (event: ScreenProgressEvent) => void;
+
 @Injectable()
 export class BacktestService {
   private readonly logger = new Logger(BacktestService.name);
@@ -85,22 +102,45 @@ export class BacktestService {
   async evaluateScreen(
     req: BacktestEvaluateScreenRequest,
     traceId: string,
+    onProgress?: ScreenProgressCallback,
   ): Promise<BacktestEvaluateResponse> {
     const startMs = isoDateToMs(req.startDate);
     const endMs = isoDateToMs(req.endDate);
     if (startMs > endMs) {
       throw new Error(`startDate (${req.startDate}) must be <= endDate (${req.endDate})`);
     }
+    const totalDays = countWeekdays(startMs, endMs);
+    const signals = await this.collectSignals(req, totalDays, onProgress);
 
+    this.logger.log(
+      `evaluate_screen signals=${String(signals.length)} ` +
+        `totalDays=${String(totalDays)} trace_id=${traceId}`,
+    );
+    onProgress?.({
+      phase: 'flight',
+      day: null,
+      runDays: totalDays,
+      totalDays,
+      matchedDays: countMatchedDays(signals),
+      signals: signals.length,
+    });
+
+    if (signals.length === 0) return emptyResponse(req.holdings);
+    return this.runEvaluate(signals, req.holdings, traceId);
+  }
+
+  private async collectSignals(
+    req: BacktestEvaluateScreenRequest,
+    totalDays: number,
+    onProgress: ScreenProgressCallback | undefined,
+  ): Promise<BacktestSignal[]> {
+    const startMs = isoDateToMs(req.startDate);
+    const endMs = isoDateToMs(req.endDate);
     const signals: BacktestSignal[] = [];
     let runDays = 0;
     let matchedDays = 0;
     for (let ms = startMs; ms <= endMs; ms += 86_400_000) {
-      const d = new Date(ms);
-      // Skip Sat (6) / Sun (0) — non-trading days. A-share holidays
-      // mid-week still get visited; on those the screen yields zero
-      // matches because no bar exists for `asof`, which is what we want.
-      const dow = d.getUTCDay();
+      const dow = new Date(ms).getUTCDay();
       if (dow === 0 || dow === 6) continue;
       runDays += 1;
       const asof = msToIsoDate(ms);
@@ -110,21 +150,20 @@ export class BacktestService {
         req.universePlan ?? null,
         req.rank ?? null,
       );
-      if (res.matches.length === 0) continue;
-      matchedDays += 1;
-      for (const m of res.matches) {
-        signals.push({ signalDate: asof, code: m.code });
+      if (res.matches.length > 0) {
+        matchedDays += 1;
+        for (const m of res.matches) signals.push({ signalDate: asof, code: m.code });
       }
+      onProgress?.({
+        phase: 'screen',
+        day: asof,
+        runDays,
+        totalDays,
+        matchedDays,
+        signals: signals.length,
+      });
     }
-    this.logger.log(
-      `evaluate_screen runDays=${String(runDays)} matchedDays=${String(matchedDays)} ` +
-        `signals=${String(signals.length)} trace_id=${traceId}`,
-    );
-
-    if (signals.length === 0) {
-      return emptyResponse(req.holdings);
-    }
-    return this.runEvaluate(signals, req.holdings, traceId);
+    return signals;
   }
 
   // ---- internals ----
@@ -284,6 +323,21 @@ function msToIsoDate(ms: number): string {
 
 function isoFromDate(dt: Date): string {
   return msToIsoDate(dt.getTime());
+}
+
+function countMatchedDays(signals: readonly BacktestSignal[]): number {
+  const days = new Set<string>();
+  for (const s of signals) days.add(s.signalDate);
+  return days.size;
+}
+
+function countWeekdays(startMs: number, endMs: number): number {
+  let n = 0;
+  for (let ms = startMs; ms <= endMs; ms += 86_400_000) {
+    const dow = new Date(ms).getUTCDay();
+    if (dow !== 0 && dow !== 6) n += 1;
+  }
+  return n;
 }
 
 function extractFirstPayload(table: Table): unknown {
