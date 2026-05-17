@@ -39,19 +39,32 @@ function list(): HelpResult {
   const entries = [...allEntries()].sort((a, b) => a.id.localeCompare(b.id));
   const rows = entries.map((e) => ({
     NAME: e.id,
-    USAGE: usageLine(e),
+    EXAMPLE: primaryExample(e),
     SUMMARY: e.summary,
   }));
   const text = [
     renderTable(rows, [
       { key: 'NAME', header: 'CMD', max: 20 },
-      { key: 'USAGE', header: 'USAGE', max: 36 },
-      { key: 'SUMMARY', header: 'SUMMARY', max: 60 },
+      { key: 'EXAMPLE', header: 'EXAMPLE', max: 40 },
+      { key: 'SUMMARY', header: 'SUMMARY', max: 56 },
     ]),
     '',
-    'tip: `/help <id>` shows args, examples, and aliases for one command.',
+    'tip: `/help <id>` shows full arg + alias detail and every example form.',
   ].join('\n');
   return { text };
+}
+
+/**
+ * Pick the most useful single-line example for the list view.
+ * Prefers the first manifest-declared example; falls back to the
+ * positional-derived stub so every row has something concrete.
+ */
+function primaryExample(entry: CommandManifestEntry): string {
+  const explicit = entry.examples ?? [];
+  if (explicit.length > 0 && explicit[0] !== undefined && explicit[0].length > 0) {
+    return `/${explicit[0]}`;
+  }
+  return `/${usageLine(entry)}`;
 }
 
 function detail(id: string): HelpResult {

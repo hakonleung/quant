@@ -421,6 +421,7 @@ const ENTRIES = [
     mode: 'sync',
     summary: 'Add or update a sector',
     revalidate: ['sectors'],
+    examples: ['sector.add  # (form-only — open the 板块 / SEC.LIST pane)'],
     help: 'Not typable from the terminal — args take a full structured `sector` object. Use the 板块 / SEC.LIST pane form (or call programmatically) to create or edit a sector.',
     argsSchema: SectorAddArgsSchema,
     resultSchema: SectorAddResultSchema,

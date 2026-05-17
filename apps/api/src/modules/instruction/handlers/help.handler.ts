@@ -1,6 +1,26 @@
+/**
+ * `/help` — IM-facing instruction list and detail.
+ *
+ * Source of truth is `COMMAND_MANIFEST` from `@quant/shared`, which
+ * covers every command on either side (legacy `InstructionRegistry`
+ * handlers and migrated `InstructionCenter` cells). The legacy code
+ * path only enumerated `registry.list()`, which silently hid all
+ * center-only commands (sector / stock / ledger / watch / analyze /
+ * ta / screen / focus / …) from IM users — that is the bug this
+ * module exists to fix.
+ *
+ * Renders two surfaces from the same data:
+ *   - `tableSections` meta — Feishu adapter turns each into a native
+ *     table card (one per group)
+ *   - plain text fallback — fixed-width tables for terminal / Slack
+ */
+
 import { Inject, Injectable } from '@nestjs/common';
 import {
+  COMMAND_MANIFEST,
   HelpArgsSchema,
+  type CommandGroup,
+  type CommandManifestEntry,
   instructionId,
   okResult,
   okResultWithMeta,
@@ -11,19 +31,31 @@ import type { z } from 'zod';
 import type { InstructionCtx } from '../instruction.port.js';
 import { InstructionRegistrarBase } from '../instruction.provider.js';
 import { InstructionRegistry } from '../instruction.registry.js';
-import type { InstructionEntry } from '../instruction.registry.js';
-import type { InstructionGroup, InstructionSpec } from '../instruction.types.js';
+import type { InstructionSpec } from '../instruction.types.js';
 
 const argsSchema = HelpArgsSchema;
 type Args = z.infer<typeof argsSchema>;
 
-/** Display order and bilingual labels for each group. */
-const GROUP_ORDER: readonly InstructionGroup[] = ['market', 'portfolio', 'watch', 'system'];
+/** Display order — agent / market / sector first since they're what users mostly call. */
+const GROUP_ORDER: readonly CommandGroup[] = [
+  'market',
+  'sector',
+  'watch',
+  'ledger',
+  'agent',
+  'channel',
+  'ui',
+  'system',
+];
 
-const GROUP_LABEL: Record<InstructionGroup, string> = {
+const GROUP_LABEL: Record<CommandGroup, string> = {
   market: '行情 Market',
-  portfolio: '持仓 Portfolio',
+  sector: '板块 Sector',
   watch: '预警 Watch',
+  ledger: '账本 Ledger',
+  agent: '助手 Agent',
+  channel: '频道 Channel',
+  ui: '界面 UI',
   system: '系统 System',
 };
 
@@ -31,13 +63,13 @@ const GROUP_LABEL: Record<InstructionGroup, string> = {
 export class HelpHandler extends InstructionRegistrarBase<Args> {
   readonly spec: InstructionSpec<Args> = {
     id: instructionId('help'),
-    summary: 'List registered instructions, or show detail for one id.',
+    summary: 'List every instruction, or show detail for one id.',
     summaryCn: '列出全部指令或查看某条指令详情',
     group: 'system',
     argsSchema,
     positional: ['id'],
     imAliases: ['帮助'],
-    examples: ['help', 'help sector', 'help watch.add'],
+    examples: ['help', 'help sector.show', 'help id=watch.add'],
   };
 
   constructor(@Inject(InstructionRegistry) registry: InstructionRegistry) {
@@ -46,88 +78,93 @@ export class HelpHandler extends InstructionRegistrarBase<Args> {
 
   execute(args: Args, _ctx: InstructionCtx): Promise<InstructionResult> {
     if (args.id !== undefined && args.id.length > 0) {
-      return Promise.resolve(this.replyDetail(args.id));
+      return Promise.resolve(replyDetail(args.id));
     }
-    return Promise.resolve(this.replyList());
+    return Promise.resolve(replyList());
   }
+}
 
-  // ── list ──────────────────────────────────────────────────────────────
+// ── list ──────────────────────────────────────────────────────────────────
 
-  private replyList(): InstructionResult {
-    const entries = this.registry.list();
-    const byGroup = new Map<InstructionGroup, InstructionEntry[]>();
-    for (const group of GROUP_ORDER) byGroup.set(group, []);
-    // The pre-seeded buckets above guarantee `byGroup.get(group)` is
-    // defined for every InstructionGroup; `system` exists by construction
-    // as the safe fallback for unknown groups (no `!` needed).
-    const systemBucket = byGroup.get('system') ?? [];
-    if (!byGroup.has('system')) byGroup.set('system', systemBucket);
-    for (const entry of entries) {
-      const bucket = byGroup.get(entry.spec.group) ?? systemBucket;
-      bucket.push(entry);
-    }
+function replyList(): InstructionResult {
+  const byGroup = bucketByGroup();
+  const tableSections: Record<string, unknown>[] = [];
+  const textSections: string[] = [];
 
-    const tableSections: Record<string, unknown>[] = [];
-    const textSections: string[] = [];
-    for (const group of GROUP_ORDER) {
-      const bucket = byGroup.get(group);
-      if (bucket === undefined || bucket.length === 0) continue;
-      const sorted = [...bucket].sort((a, b) => a.spec.id.localeCompare(b.spec.id));
-      const rows = sorted.map((e) => buildHelpRow(e.spec));
-      tableSections.push({
-        title: GROUP_LABEL[group],
-        columns: [
-          { name: 'id', displayName: 'id', horizontalAlign: 'left', width: '160px' },
-          { name: 'tags', displayName: 'tag', horizontalAlign: 'left', width: '80px' },
-          { name: 'cn', displayName: '中文', horizontalAlign: 'left' },
-          { name: 'example', displayName: '示例', horizontalAlign: 'left', width: '220px' },
-        ],
-        rows: rows.map((r) => ({
-          id: r.id,
-          tags: r.tags,
-          cn: r.cn,
-          example: r.example,
-        })),
-        // Why: Feishu's native `table` defaults to page_size=10. Help
-        // groups regularly grow past that (market currently has 12 rows
-        // including ta / ta.sector); without this hint the tail entries
-        // get hidden on page 2 and look "deleted".
-        pageSize: Math.max(10, rows.length),
-        // Default `low` clips long Chinese summaries / multi-arg
-        // example commands on a single line; `auto` lets cells wrap.
-        rowHeight: 'auto',
-      });
-      textSections.push(`【${GROUP_LABEL[group]}】\n${renderHelpTable(rows)}`);
-    }
-    return okResultWithMeta(textSections.join('\n\n'), {
-      tableSections,
-      tablesSubheader: '使用 `help <id>` 查看单条指令详情',
-    });
-  }
-
-  // ── detail ────────────────────────────────────────────────────────────
-
-  private replyDetail(id: string): InstructionResult {
-    const entry = this.registry.get(id);
-    if (entry === undefined) return okResult(`unknown instruction: ${id}`);
-    const { spec } = entry;
-    const fields = detailFields(spec);
-    const lines = [`${buildAliasLine(spec)}  ·  ${GROUP_LABEL[spec.group]}`];
-    for (const [k, v] of fields) lines.push(`${k}: ${v}`);
-    const text = lines.join('\n');
-    return okResultWithMeta(text, {
-      tableSections: [
-        {
-          title: `/${String(spec.id)}`,
-          columns: [
-            { name: 'k', displayName: '字段', horizontalAlign: 'left', width: '110px' },
-            { name: 'v', displayName: '内容', horizontalAlign: 'left' },
-          ],
-          rows: fields.map(([k, v]) => ({ k, v })),
-        },
+  for (const group of GROUP_ORDER) {
+    const bucket = byGroup.get(group);
+    if (bucket === undefined || bucket.length === 0) continue;
+    const sorted = [...bucket].sort((a, b) => a.id.localeCompare(b.id));
+    const rows = sorted.map(buildHelpRow);
+    tableSections.push({
+      title: GROUP_LABEL[group],
+      columns: [
+        { name: 'id', displayName: 'id', horizontalAlign: 'left', width: '160px' },
+        { name: 'tags', displayName: 'tag', horizontalAlign: 'left', width: '80px' },
+        { name: 'cn', displayName: '中文', horizontalAlign: 'left' },
+        { name: 'example', displayName: '示例', horizontalAlign: 'left', width: '240px' },
       ],
+      rows: rows.map((r) => ({ id: r.id, tags: r.tags, cn: r.cn, example: r.example })),
+      // Feishu native `table` defaults to page_size=10. Each group can
+      // exceed that (e.g. market has stock / stock.info / stock.kline / ta
+      // / ta.sector / screen / update); without this hint the tail rows
+      // get hidden on page 2 and look "deleted".
+      pageSize: Math.max(10, rows.length),
+      rowHeight: 'auto',
     });
+    textSections.push(`【${GROUP_LABEL[group]}】\n${renderHelpTable(rows)}`);
   }
+
+  return okResultWithMeta(textSections.join('\n\n'), {
+    tableSections,
+    tablesSubheader: '使用 `help <id>` 查看单条指令详情',
+  });
+}
+
+function bucketByGroup(): ReadonlyMap<CommandGroup, CommandManifestEntry[]> {
+  const out = new Map<CommandGroup, CommandManifestEntry[]>();
+  for (const g of GROUP_ORDER) out.set(g, []);
+  for (const entry of COMMAND_MANIFEST) {
+    const bucket = out.get(entry.group);
+    if (bucket === undefined) {
+      // Defensive: unknown group → drop into `system` so it still surfaces.
+      const sys = out.get('system');
+      if (sys !== undefined) sys.push(entry);
+      continue;
+    }
+    bucket.push(entry);
+  }
+  return out;
+}
+
+// ── detail ────────────────────────────────────────────────────────────────
+
+function replyDetail(idOrAlias: string): InstructionResult {
+  const entry = lookup(idOrAlias);
+  if (entry === undefined) return okResult(`unknown instruction: ${idOrAlias}`);
+  const fields = detailFields(entry);
+  const lines = [`${buildAliasLine(entry)}  ·  ${GROUP_LABEL[entry.group]}`];
+  for (const [k, v] of fields) lines.push(`${k}: ${v}`);
+  return okResultWithMeta(lines.join('\n'), {
+    tableSections: [
+      {
+        title: `/${entry.id}`,
+        columns: [
+          { name: 'k', displayName: '字段', horizontalAlign: 'left', width: '110px' },
+          { name: 'v', displayName: '内容', horizontalAlign: 'left' },
+        ],
+        rows: fields.map(([k, v]) => ({ k, v })),
+      },
+    ],
+  });
+}
+
+function lookup(token: string): CommandManifestEntry | undefined {
+  for (const e of COMMAND_MANIFEST) {
+    if (e.id === token) return e;
+    if ((e.aliases ?? []).includes(token)) return e;
+  }
+  return undefined;
 }
 
 // ── pure helpers ──────────────────────────────────────────────────────────
@@ -136,95 +173,80 @@ interface HelpRow {
   readonly id: string;
   readonly tags: string;
   readonly cn: string;
-  readonly en: string;
   readonly example: string;
 }
 
-function buildAliasLine(spec: InstructionSpec<unknown>): string {
-  const cn =
-    spec.imAliases !== undefined && spec.imAliases.length > 0
-      ? ` / ${spec.imAliases.join('/')}`
-      : '';
-  return `${String(spec.id)}${cn}`;
+function buildAliasLine(entry: CommandManifestEntry): string {
+  const a = entry.aliases ?? [];
+  return a.length > 0 ? `${entry.id} / ${a.join('/')}` : entry.id;
 }
 
-function formatTags(spec: InstructionSpec<unknown>): string {
+function formatTags(entry: CommandManifestEntry): string {
   const tags: string[] = [];
-  if (spec.costsCredits === true) tags.push('$');
-  if (spec.destructive === true) tags.push('!');
-  if (spec.mode === 'async') tags.push('⏳');
+  if (entry.doubleConfirm === 'llm') tags.push('$');
+  if (entry.doubleConfirm === 'destructive') tags.push('!');
+  if (entry.mode === 'async') tags.push('⏳');
   return tags.length > 0 ? `[${tags.join('')}]` : '';
 }
 
-/**
- * Produce a representative invocation. Uses the first explicit example
- * when provided, else builds a stub from `positional` (`<sub>` /
- * `<code>` placeholders), else falls back to the bare id.
- */
-function buildExample(spec: InstructionSpec<unknown>): string {
-  if (spec.examples !== undefined && spec.examples.length > 0) {
-    const first = spec.examples[0];
-    if (typeof first === 'string' && first.length > 0) return first;
-  }
-  const id = String(spec.id);
-  if (spec.positional !== undefined && spec.positional.length > 0) {
-    return `${id} ${spec.positional.map((p) => `<${p}>`).join(' ')}`;
-  }
-  return id;
+/** First example if provided; else a positional-derived stub. */
+function buildExample(entry: CommandManifestEntry): string {
+  const ex = entry.examples ?? [];
+  if (ex.length > 0 && ex[0] !== undefined && ex[0].length > 0) return ex[0];
+  const pos = entry.positional ?? [];
+  if (pos.length > 0) return `${entry.id} ${pos.map((p) => `<${p}>`).join(' ')}`;
+  return entry.id;
 }
 
-function buildHelpRow(spec: InstructionSpec<unknown>): HelpRow {
+function buildHelpRow(entry: CommandManifestEntry): HelpRow {
   return {
-    id: buildAliasLine(spec),
-    tags: formatTags(spec),
-    cn: spec.summaryCn,
-    en: spec.summary,
-    example: buildExample(spec),
+    id: buildAliasLine(entry),
+    tags: formatTags(entry),
+    cn: entry.summaryCn ?? entry.summary,
+    example: buildExample(entry),
   };
 }
 
-function paramsField(spec: InstructionSpec<unknown>): string {
-  if (spec.positional !== undefined && spec.positional.length > 0) {
-    return `${spec.positional.map((p) => `<${p}>`).join(' ')} （位置参数，按顺序）；其余以 key=value 形式传入`;
+function paramsField(entry: CommandManifestEntry): string {
+  const pos = entry.positional ?? [];
+  if (pos.length > 0) {
+    return `${pos.map((p) => `<${p}>`).join(' ')} （位置参数，按顺序）；其余以 key=value 形式传入`;
   }
   return '无 / 仅 key=value 形式';
 }
 
-function tagFields(spec: InstructionSpec<unknown>): readonly (readonly [string, string])[] {
+function tagFields(entry: CommandManifestEntry): readonly (readonly [string, string])[] {
   const out: (readonly [string, string])[] = [];
-  if (spec.mode === 'async') out.push(['执行方式', '异步（先收到开始通知，再收到完成回调）']);
-  if (spec.costsCredits === true) out.push(['标签', '[$] 调用会触发外部付费 LLM']);
-  if (spec.destructive === true) out.push(['标签', '[!] 写操作 / 不可逆']);
+  if (entry.mode === 'async') out.push(['执行方式', '异步（先收到开始通知，再收到完成回调）']);
+  if (entry.doubleConfirm === 'llm') out.push(['标签', '[$] 调用会触发外部付费 LLM']);
+  if (entry.doubleConfirm === 'destructive') out.push(['标签', '[!] 写操作 / 不可逆']);
   return out;
 }
 
-function detailFields(spec: InstructionSpec<unknown>): readonly (readonly [string, string])[] {
+function detailFields(
+  entry: CommandManifestEntry,
+): readonly (readonly [string, string])[] {
   const examples =
-    spec.examples !== undefined && spec.examples.length > 0 ? spec.examples : [buildExample(spec)];
+    entry.examples !== undefined && entry.examples.length > 0
+      ? entry.examples
+      : [buildExample(entry)];
   const fields: (readonly [string, string])[] = [
-    ['中文', spec.summaryCn],
-    ['English', spec.summary],
+    ['中文', entry.summaryCn ?? entry.summary],
+    ['English', entry.summary],
   ];
-  if (spec.help !== undefined && spec.help.length > 0) fields.push(['说明', spec.help]);
-  fields.push(['参数', paramsField(spec)]);
-  fields.push(['示例', examples.join('\n')]);
-  if (spec.aliases !== undefined && spec.aliases.length > 0) {
-    fields.push(['别名', spec.aliases.join(', ')]);
+  if (entry.help !== undefined && entry.help.length > 0) fields.push(['说明', entry.help]);
+  fields.push(['参数', paramsField(entry)]);
+  fields.push(['示例', examples.map((e) => `/${e}`).join('\n')]);
+  if (entry.aliases !== undefined && entry.aliases.length > 0) {
+    fields.push(['别名', entry.aliases.join(', ')]);
   }
-  if (spec.imAliases !== undefined && spec.imAliases.length > 0) {
-    fields.push(['中文别名', spec.imAliases.join('、')]);
-  }
-  fields.push(...tagFields(spec));
+  fields.push(...tagFields(entry));
   return fields;
 }
 
-/**
- * Code-fenced fixed-width fallback used by terminal / Slack consumers
- * (`text`). Feishu picks `tableSections` from `meta` and renders native
- * tables instead.
- */
+/** Plain-text fallback for terminal / Slack consumers (no Feishu tables). */
 function renderHelpTable(rows: readonly HelpRow[]): string {
-  const HEADER: HelpRow = { id: 'id', tags: 'tag', cn: '中文', en: 'English', example: '示例' };
+  const HEADER: HelpRow = { id: 'id', tags: 'tag', cn: '中文', example: '示例' };
   const all: readonly HelpRow[] = [HEADER, ...rows];
   const w = {
     id: maxWidth(all, (r) => r.id),
@@ -240,8 +262,7 @@ function renderHelpTable(rows: readonly HelpRow[]): string {
       pad(r.example, w.example, 'left'),
     ].join('  ');
   const sep = `${'─'.repeat(w.id)}  ${'─'.repeat(w.tags)}  ${'─'.repeat(w.cn)}  ${'─'.repeat(w.example)}`;
-  const lines = ['```', fmt(HEADER), sep, ...rows.map(fmt), '```'];
-  return lines.join('\n');
+  return ['```', fmt(HEADER), sep, ...rows.map(fmt), '```'].join('\n');
 }
 
 function maxWidth(rows: readonly HelpRow[], pick: (r: HelpRow) => string): number {
