@@ -153,7 +153,7 @@ export class BeInstructionCenter implements BeInstructionCenterPort {
       ledger: buildLedgerCell({ ledger: ledgerService }),
       'ledger.add': buildLedgerAddCell({ ledger: ledgerService }),
       'ledger.remove': buildLedgerRemoveCell({ ledger: ledgerService }),
-      stock: buildStockCell({ stockMeta }),
+      stock: buildStockCell({ stockMeta, stockList }),
       'stock.info': buildStockInfoCell({ stockMeta, kline: klineReader }),
       'stock.kline': buildStockKlineCell({ kline: klineReader }),
       watch: buildWatchCell({ watch, stockList }),

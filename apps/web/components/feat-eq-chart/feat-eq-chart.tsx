@@ -228,27 +228,19 @@ function FocusLabel({
   vp,
   setVp,
 }: FocusProps): React.ReactElement {
-  if (bar === null) {
-    return (
-      <Flex
-        px="14px"
-        py="4px"
-        borderBottomWidth="1px"
-        borderColor="line"
-        bg="panel3"
-        align="center"
-        justify="space-between"
-      >
-        <Text fontFamily="mono" fontSize="10px" color="ink3" letterSpacing="0.12em">
-          // no bar
-        </Text>
-        <ZoomControls vp={vp} setVp={setVp} />
-      </Flex>
-    );
-  }
-  const closeColor = bar.close > bar.open ? 'up' : bar.close < bar.open ? 'down' : 'ink2';
-  const tag = selected ? `SEL ${bar.date}` : hovered ? `HOV ${bar.date}` : `LATEST ${bar.date}`;
+  const closeColor =
+    bar === null ? 'ink2' : bar.close > bar.open ? 'up' : bar.close < bar.open ? 'down' : 'ink2';
+  const tag =
+    bar === null
+      ? 'LATEST —'
+      : selected
+        ? `SEL ${bar.date}`
+        : hovered
+          ? `HOV ${bar.date}`
+          : `LATEST ${bar.date}`;
   return (
+    // Render the 2-row strip even when `bar` is null so the chart below
+    // does not jump down once kline loads (avoids first-paint CLS).
     <Flex
       direction="column"
       px="14px"
@@ -270,7 +262,7 @@ function FocusLabel({
           fontWeight="800"
           letterSpacing="0.04em"
         >
-          {bar.close.toFixed(2)}
+          {bar === null ? '—' : bar.close.toFixed(2)}
         </Text>
         {dayChgPct !== null && (
           <Text
@@ -292,10 +284,10 @@ function FocusLabel({
             bold
           />
         )}
-        <Stat label="换手" value={`${(bar.turnoverRate * 100).toFixed(2)}%`} />
-        <Stat label="H" value={bar.high.toFixed(2)} color="up" />
-        <Stat label="L" value={bar.low.toFixed(2)} color="down" />
-        <Stat label="O" value={bar.open.toFixed(2)} />
+        <Stat label="换手" value={bar === null ? '—' : `${(bar.turnoverRate * 100).toFixed(2)}%`} />
+        <Stat label="H" value={bar === null ? '—' : bar.high.toFixed(2)} color="up" />
+        <Stat label="L" value={bar === null ? '—' : bar.low.toFixed(2)} color="down" />
+        <Stat label="O" value={bar === null ? '—' : bar.open.toFixed(2)} />
         {/* `ml="auto"` pins the zoom controls to the right edge no
             matter how many wrap-rows row 1 spans. */}
         <Box ml="auto">
@@ -321,10 +313,10 @@ function FocusLabel({
         >
           {tag}
         </Box>
-        <MaInline ma="MA5" value={bar.ma5} color={MA_COLORS.ma5} />
-        <MaInline ma="MA10" value={bar.ma10} color={MA_COLORS.ma10} />
-        <MaInline ma="MA20" value={bar.ma20} color={MA_COLORS.ma20} />
-        <MaInline ma="MA60" value={bar.ma60} color={MA_COLORS.ma60} />
+        <MaInline ma="MA5" value={bar?.ma5 ?? null} color={MA_COLORS.ma5} />
+        <MaInline ma="MA10" value={bar?.ma10 ?? null} color={MA_COLORS.ma10} />
+        <MaInline ma="MA20" value={bar?.ma20 ?? null} color={MA_COLORS.ma20} />
+        <MaInline ma="MA60" value={bar?.ma60 ?? null} color={MA_COLORS.ma60} />
       </Flex>
     </Flex>
   );
@@ -482,23 +474,24 @@ function FinancialsSection({ code, meta }: FinancialsProps): React.ReactElement 
         <FinCell label="TOTAL SHARE" value={fmtShare(meta?.total_share ?? null)} />
         <FinCell label="FLOAT SHARE" value={fmtShare(meta?.float_share ?? null)} />
       </Box>
-      {latestQ !== null && (
-        <Box mt="8px" pt="6px" borderTopWidth="1px" borderColor="line2">
-          <Text color="ink3" fontSize="9px" letterSpacing="0.16em" mb="4px">
-            LATEST QUARTER {latestQ.period}
-          </Text>
-          <Box
-            display="grid"
-            gridTemplateColumns="repeat(auto-fit, minmax(140px, 1fr))"
-            gap="4px 16px"
-          >
-            <FinCell label="REVENUE" value={fmtCny(latestQ.revenue)} />
-            <FinCell label="OP COST" value={fmtCny(latestQ.operating_cost)} />
-            <FinCell label="NET PROFIT" value={fmtCny(latestQ.net_profit)} />
-            <FinCell label="NET PROFIT EXNR" value={fmtCny(latestQ.net_profit_excl_nr)} />
-          </Box>
+      {/* Always render the LATEST QUARTER container so the section's
+          height is stable from first paint — prevents CLS when the
+          meta query resolves later. */}
+      <Box mt="8px" pt="6px" borderTopWidth="1px" borderColor="line2">
+        <Text color="ink3" fontSize="9px" letterSpacing="0.16em" mb="4px">
+          LATEST QUARTER {latestQ?.period ?? '—'}
+        </Text>
+        <Box
+          display="grid"
+          gridTemplateColumns="repeat(auto-fit, minmax(140px, 1fr))"
+          gap="4px 16px"
+        >
+          <FinCell label="REVENUE" value={fmtCny(latestQ?.revenue ?? null)} />
+          <FinCell label="OP COST" value={fmtCny(latestQ?.operating_cost ?? null)} />
+          <FinCell label="NET PROFIT" value={fmtCny(latestQ?.net_profit ?? null)} />
+          <FinCell label="NET PROFIT EXNR" value={fmtCny(latestQ?.net_profit_excl_nr ?? null)} />
         </Box>
-      )}
+      </Box>
     </Box>
   );
 }

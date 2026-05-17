@@ -2,21 +2,19 @@
  * `/stock` cell — A-share metadata search by code / name / pinyin.
  *
  * Handler: filters the metadata list against the lower-cased query
- * (codes match raw), tops out at `limit`, then joins with the latest
- * snapshot map to produce `StockListRow[]`. Renderer: `renderStock`.
+ * (codes match raw), tops out at `limit`, then hands the resulting
+ * codes to `StockListService.assembleRows` so the row shape — and the
+ * snapshot + kline-derived fields (turnoverRate, turnover, consecUp)
+ * — match every other stock-list surface (sector / watch / screen).
  *
- * Snapshot fetch failures degrade gracefully — the row builder fills
- * every numeric field with `null` when no snapshot is available,
- * matching the legacy `StockInstructionHandler` behaviour.
+ * If row assembly throws (snapshot or kline outage), we degrade to a
+ * code-only row list so the search itself still returns something
+ * useful in IM.
  */
 
-import type {
-  InstructionCell,
-  ResultOf,
-  StockListRow,
-  StockSnapshotDto,
-} from '@quant/shared';
+import type { InstructionCell, ResultOf, StockListRow } from '@quant/shared';
 
+import { StockListService } from '../../stock-list/stock-list.service.js';
 import { StockMetaService } from '../../stock-meta/stock-meta.service.js';
 import type { BeEnv } from '../be-types.js';
 import { renderStock } from './stock.render.js';
@@ -25,6 +23,7 @@ type StockSearchResult = ResultOf<'stock'>;
 
 export interface StockCellDeps {
   readonly stockMeta: StockMetaService;
+  readonly stockList: StockListService;
 }
 
 export function buildStockCell(deps: StockCellDeps): InstructionCell<BeEnv, 'stock'> {
@@ -45,15 +44,18 @@ export function buildStockCell(deps: StockCellDeps): InstructionCell<BeEnv, 'sto
               .slice(0, args.limit);
       if (matches.length === 0) return { query: args.q ?? '', rows: [] };
 
-      let byCode: Map<string, StockSnapshotDto>;
+      const codes = matches.map((m) => m.code);
       try {
-        const snapshots = await deps.stockMeta.snapshotAll(ctx.traceId);
-        byCode = new Map(snapshots.map((s) => [s.meta.code, s]));
+        const out = await deps.stockList.assembleRows({
+          kind: 'screen',
+          codes,
+          traceId: ctx.traceId,
+        });
+        return { query: args.q ?? '', rows: out.rows };
       } catch {
-        byCode = new Map();
+        const fallback: StockListRow[] = matches.map((m) => emptyRow(m.code, m.name));
+        return { query: args.q ?? '', rows: fallback };
       }
-      const rows: StockListRow[] = matches.map((m) => buildRow(m.code, m.name, byCode.get(m.code)));
-      return { query: args.q ?? '', rows };
     },
     renderer(envelope) {
       return renderStock(envelope);
@@ -61,32 +63,26 @@ export function buildStockCell(deps: StockCellDeps): InstructionCell<BeEnv, 'sto
   };
 }
 
-function buildRow(code: string, name: string, snap: StockSnapshotDto | undefined): StockListRow {
+function emptyRow(code: string, name: string): StockListRow {
   return {
     code,
     name,
-    price: parseDecimal(snap?.price),
-    chgPct: parseDecimal(snap?.returns.ret_1d),
+    price: null,
+    chgPct: null,
     turnoverRate: null,
     turnover: null,
     consecUp: null,
-    ret5d: parseDecimal(snap?.returns.ret_5d),
-    ret10d: parseDecimal(snap?.returns.ret_10d),
-    ret20d: parseDecimal(snap?.returns.ret_20d),
-    ret90d: parseDecimal(snap?.returns.ret_90d),
-    ret250d: parseDecimal(snap?.returns.ret_250d),
-    mktCap: parseDecimal(snap?.derived.mkt_cap),
-    floatMktCap: parseDecimal(snap?.derived.float_mkt_cap),
-    peTtm: parseDecimal(snap?.derived.pe_ttm),
-    peDynamic: parseDecimal(snap?.derived.pe_dynamic),
-    pb: parseDecimal(snap?.derived.pb),
-    peg: parseDecimal(snap?.derived.peg),
-    grossMargin: parseDecimal(snap?.derived.gross_margin_ttm),
+    ret5d: null,
+    ret10d: null,
+    ret20d: null,
+    ret90d: null,
+    ret250d: null,
+    mktCap: null,
+    floatMktCap: null,
+    peTtm: null,
+    peDynamic: null,
+    pb: null,
+    peg: null,
+    grossMargin: null,
   };
-}
-
-function parseDecimal(raw: string | null | undefined): number | null {
-  if (raw === null || raw === undefined || raw === '') return null;
-  const n = Number(raw);
-  return Number.isFinite(n) ? n : null;
 }

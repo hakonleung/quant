@@ -59,7 +59,7 @@ export function startWebVitals(): void {
   if (started) return;
   started = true;
   onLCP((m) => update('lcp', m), { reportAllChanges: true });
-  onINP((m) => update('inp', m));
+  onINP((m) => update('inp', m), { reportAllChanges: true });
   onCLS((m) => update('cls', m), { reportAllChanges: true });
 }
 

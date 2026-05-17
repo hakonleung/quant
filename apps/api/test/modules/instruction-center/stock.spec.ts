@@ -16,12 +16,18 @@
 import type {
   InstructionEnvelope,
   ResultOf,
+  StockListRow,
+  StockListRowsResponse,
   StockMetaDto,
 } from '@quant/shared';
 
 import { buildStockCell } from '../../../src/modules/instruction-center/cells/stock.cell.js';
 import { renderStock } from '../../../src/modules/instruction-center/cells/stock.render.js';
 import type { InstructionCtx } from '../../../src/modules/instruction/instruction.port.js';
+import type {
+  AssembleRowsArgs,
+  StockListService,
+} from '../../../src/modules/stock-list/stock-list.service.js';
 import type { StockMetaService } from '../../../src/modules/stock-meta/stock-meta.service.js';
 
 type StockSearchResult = ResultOf<'stock'>;
@@ -46,23 +52,60 @@ function meta(code: string, name: string, pinyin: string): StockMetaDto {
   };
 }
 
-function fakeMeta(
-  all: readonly StockMetaDto[],
-  snapshotFails = false,
-): StockMetaService {
+function fakeMeta(all: readonly StockMetaDto[]): StockMetaService {
   return {
     listAll: () => Promise.resolve(all),
-    snapshotAll: () =>
-      snapshotFails
-        ? Promise.reject(new Error('snapshot upstream down'))
-        : Promise.resolve([]),
   } as unknown as StockMetaService;
+}
+
+function emptyRow(code: string, name: string | null): StockListRow {
+  return {
+    code,
+    name,
+    price: null,
+    chgPct: null,
+    turnoverRate: null,
+    turnover: null,
+    consecUp: null,
+    ret5d: null,
+    ret10d: null,
+    ret20d: null,
+    ret90d: null,
+    ret250d: null,
+    mktCap: null,
+    floatMktCap: null,
+    peTtm: null,
+    peDynamic: null,
+    pb: null,
+    peg: null,
+    grossMargin: null,
+  };
+}
+
+function fakeStockList(opts: {
+  fail?: boolean;
+  rowsByCode?: Readonly<Record<string, StockListRow>>;
+}): StockListService {
+  return {
+    assembleRows: (args: AssembleRowsArgs): Promise<StockListRowsResponse> => {
+      if (opts.fail === true) return Promise.reject(new Error('kline upstream down'));
+      const rows = args.codes.map(
+        (code) => opts.rowsByCode?.[code] ?? emptyRow(code, null),
+      );
+      return Promise.resolve({
+        kind: args.kind,
+        columns: [],
+        sort: { key: 'chgPct', dir: 'desc' },
+        rows,
+      });
+    },
+  } as unknown as StockListService;
 }
 
 describe('buildStockCell.handler', () => {
   it('returns the first `limit` rows when query is empty', async () => {
     const all = [meta('600519', '茅台', 'mt'), meta('000001', '平安', 'pa')];
-    const cell = buildStockCell({ stockMeta: fakeMeta(all) });
+    const cell = buildStockCell({ stockMeta: fakeMeta(all), stockList: fakeStockList({}) });
     const r = await cell.handler({ q: '', limit: 1 }, ctx);
     expect(r.query).toBe('');
     expect(r.rows).toHaveLength(1);
@@ -71,37 +114,41 @@ describe('buildStockCell.handler', () => {
 
   it('matches by code substring', async () => {
     const all = [meta('600519', '茅台', 'mt'), meta('000001', '平安', 'pa')];
-    const cell = buildStockCell({ stockMeta: fakeMeta(all) });
+    const cell = buildStockCell({ stockMeta: fakeMeta(all), stockList: fakeStockList({}) });
     const r = await cell.handler({ q: '00000', limit: 10 }, ctx);
     expect(r.rows.map((x) => x.code)).toEqual(['000001']);
   });
 
   it('matches by name substring (case-insensitive)', async () => {
     const all = [meta('600519', '茅台', 'mt'), meta('000001', '平安', 'pa')];
-    const cell = buildStockCell({ stockMeta: fakeMeta(all) });
+    const cell = buildStockCell({ stockMeta: fakeMeta(all), stockList: fakeStockList({}) });
     const r = await cell.handler({ q: '茅', limit: 10 }, ctx);
     expect(r.rows.map((x) => x.code)).toEqual(['600519']);
   });
 
   it('matches by pinyin substring (case-insensitive)', async () => {
     const all = [meta('600519', '茅台', 'mt'), meta('000001', '平安', 'pa')];
-    const cell = buildStockCell({ stockMeta: fakeMeta(all) });
+    const cell = buildStockCell({ stockMeta: fakeMeta(all), stockList: fakeStockList({}) });
     const r = await cell.handler({ q: 'PA', limit: 10 }, ctx);
     expect(r.rows.map((x) => x.code)).toEqual(['000001']);
   });
 
   it('returns empty rows on no match (preserving original query for the renderer)', async () => {
     const all = [meta('600519', '茅台', 'mt')];
-    const cell = buildStockCell({ stockMeta: fakeMeta(all) });
+    const cell = buildStockCell({ stockMeta: fakeMeta(all), stockList: fakeStockList({}) });
     const r = await cell.handler({ q: 'nope', limit: 10 }, ctx);
     expect(r).toEqual<StockSearchResult>({ query: 'nope', rows: [] });
   });
 
-  it('degrades gracefully when snapshotAll throws — rows still emitted', async () => {
+  it('degrades gracefully when assembleRows throws — code-only rows still emitted', async () => {
     const all = [meta('600519', '茅台', 'mt')];
-    const cell = buildStockCell({ stockMeta: fakeMeta(all, true) });
+    const cell = buildStockCell({
+      stockMeta: fakeMeta(all),
+      stockList: fakeStockList({ fail: true }),
+    });
     const r = await cell.handler({ q: '茅', limit: 10 }, ctx);
     expect(r.rows).toHaveLength(1);
+    expect(r.rows[0]?.code).toBe('600519');
     expect(r.rows[0]?.price).toBeNull();
     expect(r.rows[0]?.mktCap).toBeNull();
   });
