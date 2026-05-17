@@ -143,6 +143,14 @@ export function listRowFromStockListRow(
     pb: row.pb,
     peg: row.peg,
     grossMargin: row.grossMargin,
+    ddeMainInflow3d: row.ddeMainInflow3d,
+    ddeMainInflow5d: row.ddeMainInflow5d,
+    ddeMainInflow10d: row.ddeMainInflow10d,
+    ddeMainInflow20d: row.ddeMainInflow20d,
+    ddeMainInflowRatio3d: row.ddeMainInflowRatio3d,
+    ddeMainInflowRatio5d: row.ddeMainInflowRatio5d,
+    ddeMainInflowRatio10d: row.ddeMainInflowRatio10d,
+    ddeMainInflowRatio20d: row.ddeMainInflowRatio20d,
   };
   return out as ListRow;
 }
