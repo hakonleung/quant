@@ -27,10 +27,14 @@ import { buildLedgerCell } from './cells/ledger.cell.js';
 import { buildLedgerAddCell } from './cells/ledger-add.cell.js';
 import { buildLedgerAnalyzeCell } from './cells/ledger-analyze.cell.js';
 import { buildLedgerRemoveCell } from './cells/ledger-remove.cell.js';
+import { buildAnalyzeCell } from './cells/analyze.cell.js';
+import { buildAnalyzeSectorCell } from './cells/analyze-sector.cell.js';
 import { buildScreenCell } from './cells/screen.cell.js';
 import { buildStockCell } from './cells/stock.cell.js';
 import { buildStockInfoCell } from './cells/stock-info.cell.js';
 import { buildStockKlineCell } from './cells/stock-kline.cell.js';
+import { buildTaCell } from './cells/ta.cell.js';
+import { buildTaSectorCell } from './cells/ta-sector.cell.js';
 import { buildUpdateCell } from './cells/update.cell.js';
 import { buildUsrCell } from './cells/usr.cell.js';
 
@@ -54,7 +58,11 @@ export type FeMigratedIds =
   | 'stock'
   | 'stock.info'
   | 'stock.kline'
-  | 'screen';
+  | 'screen'
+  | 'analyze'
+  | 'analyze.sector'
+  | 'ta'
+  | 'ta.sector';
 
 type Excluded = Exclude<AllInstructionIds, FeMigratedIds>;
 type Configured = Exclude<AllInstructionIds, Excluded>;
@@ -84,6 +92,10 @@ export function buildFeCenter(): InstructionCenter<FeEnv, Excluded> {
     'stock.info': buildStockInfoCell(),
     'stock.kline': buildStockKlineCell(),
     screen: buildScreenCell(),
+    analyze: buildAnalyzeCell(),
+    'analyze.sector': buildAnalyzeSectorCell(),
+    ta: buildTaCell(),
+    'ta.sector': buildTaSectorCell(),
   };
   return new InstructionCenter<FeEnv, Excluded>(cfg);
 }
