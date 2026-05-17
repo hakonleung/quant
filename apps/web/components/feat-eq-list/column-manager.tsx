@@ -52,6 +52,14 @@ const FILTERABLE: ReadonlySet<ColumnKey> = new Set([
   'pb',
   'peg',
   'grossMargin',
+  'ddeMainInflow3d',
+  'ddeMainInflow5d',
+  'ddeMainInflow10d',
+  'ddeMainInflow20d',
+  'ddeMainInflowRatio3d',
+  'ddeMainInflowRatio5d',
+  'ddeMainInflowRatio10d',
+  'ddeMainInflowRatio20d',
 ]);
 
 const OPS: readonly ColumnFilterOp[] = ['>', '>=', '<', '<=', '=', '!='];

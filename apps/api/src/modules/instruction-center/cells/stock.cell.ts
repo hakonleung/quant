@@ -12,7 +12,7 @@
  * useful in IM.
  */
 
-import type { InstructionCell, ResultOf, StockListRow } from '@quant/shared';
+import { emptyStockListRow, type InstructionCell, type ResultOf, type StockListRow } from '@quant/shared';
 
 import { StockListService } from '../../stock-list/stock-list.service.js';
 import { StockMetaService } from '../../stock-meta/stock-meta.service.js';
@@ -64,25 +64,5 @@ export function buildStockCell(deps: StockCellDeps): InstructionCell<BeEnv, 'sto
 }
 
 function emptyRow(code: string, name: string): StockListRow {
-  return {
-    code,
-    name,
-    price: null,
-    chgPct: null,
-    turnoverRate: null,
-    turnover: null,
-    consecUp: null,
-    ret5d: null,
-    ret10d: null,
-    ret20d: null,
-    ret90d: null,
-    ret250d: null,
-    mktCap: null,
-    floatMktCap: null,
-    peTtm: null,
-    peDynamic: null,
-    pb: null,
-    peg: null,
-    grossMargin: null,
-  };
+  return emptyStockListRow(code, name);
 }

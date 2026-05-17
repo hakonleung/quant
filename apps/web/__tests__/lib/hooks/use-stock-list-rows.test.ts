@@ -9,7 +9,11 @@ import { renderHook, waitFor } from '@testing-library/react';
 import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import type { StockListRowsRequest, StockListRowsResponse } from '@quant/shared';
+import {
+  emptyStockListRow,
+  type StockListRowsRequest,
+  type StockListRowsResponse,
+} from '@quant/shared';
 
 import { useStockListRows } from '../../../lib/hooks/use-stock-list-rows.js';
 
@@ -23,25 +27,9 @@ vi.mock('../../../lib/api/endpoints.js', () => ({
       columns: body.columns ?? ['name', 'price', 'chgPct', 'turnoverRate', 'turnover', 'consecUp'],
       sort: body.sort ?? { key: 'chgPct', dir: 'desc' },
       rows: body.codes.map((code) => ({
-        code,
-        name: `name-${code}`,
+        ...emptyStockListRow(code, `name-${code}`),
         price: 1,
         chgPct: 0,
-        turnoverRate: null,
-        turnover: null,
-        consecUp: null,
-        ret5d: null,
-        ret10d: null,
-        ret20d: null,
-        ret90d: null,
-        ret250d: null,
-        mktCap: null,
-        floatMktCap: null,
-        peTtm: null,
-        peDynamic: null,
-        pb: null,
-        peg: null,
-        grossMargin: null,
       })),
     };
   },

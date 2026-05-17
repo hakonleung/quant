@@ -61,6 +61,7 @@ export function klineToTerm(b: SharedKlineBar): TermKlineBar {
 /* ---------- snapshot ---------- */
 
 export function snapshotToTerm(s: StockSnapshotDto): TermStockSnapshot {
+  const dde = s.dde;
   return {
     code: s.meta.code,
     price: toFiniteNum(s.price),
@@ -68,6 +69,14 @@ export function snapshotToTerm(s: StockSnapshotDto): TermStockSnapshot {
     pe_ttm: toFiniteNum(s.derived.pe_ttm),
     pb: toFiniteNum(s.derived.pb),
     mkt_cap: toFiniteNum(s.derived.mkt_cap),
+    dde_main_net_inflow_3d: toFiniteNum(dde?.main_net_inflow_3d ?? null),
+    dde_main_net_inflow_5d: toFiniteNum(dde?.main_net_inflow_5d ?? null),
+    dde_main_net_inflow_10d: toFiniteNum(dde?.main_net_inflow_10d ?? null),
+    dde_main_net_inflow_20d: toFiniteNum(dde?.main_net_inflow_20d ?? null),
+    dde_main_inflow_ratio_3d: toFiniteNum(dde?.main_inflow_ratio_3d ?? null),
+    dde_main_inflow_ratio_5d: toFiniteNum(dde?.main_inflow_ratio_5d ?? null),
+    dde_main_inflow_ratio_10d: toFiniteNum(dde?.main_inflow_ratio_10d ?? null),
+    dde_main_inflow_ratio_20d: toFiniteNum(dde?.main_inflow_ratio_20d ?? null),
   };
 }
 

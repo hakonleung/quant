@@ -30,6 +30,17 @@ export const STOCK_LIST_COLUMN_KEYS = [
   'pb',
   'peg',
   'grossMargin',
+  // DDE 主力 fund-flow 阶段块（modules/01-stock-meta.md §5）。
+  // Inflow 列是 CNY 金额（可负，单位元）；ratio 列是占同期成交额的比值
+  // （可负，无量纲，6 dp）。
+  'ddeMainInflow3d',
+  'ddeMainInflow5d',
+  'ddeMainInflow10d',
+  'ddeMainInflow20d',
+  'ddeMainInflowRatio3d',
+  'ddeMainInflowRatio5d',
+  'ddeMainInflowRatio10d',
+  'ddeMainInflowRatio20d',
 ] as const;
 
 export type StockListColumnKey = (typeof STOCK_LIST_COLUMN_KEYS)[number];
@@ -86,6 +97,62 @@ export const STOCK_LIST_COLUMN_CATALOG: readonly StockListColumnSpec[] = [
   {
     key: 'grossMargin',
     label: '毛利率',
+    group: 'derived',
+    defaultApplied: false,
+    source: 'snapshot',
+  },
+  {
+    key: 'ddeMainInflow3d',
+    label: '3日主力净流入',
+    group: 'derived',
+    defaultApplied: false,
+    source: 'snapshot',
+  },
+  {
+    key: 'ddeMainInflow5d',
+    label: '5日主力净流入',
+    group: 'derived',
+    defaultApplied: false,
+    source: 'snapshot',
+  },
+  {
+    key: 'ddeMainInflow10d',
+    label: '10日主力净流入',
+    group: 'derived',
+    defaultApplied: false,
+    source: 'snapshot',
+  },
+  {
+    key: 'ddeMainInflow20d',
+    label: '20日主力净流入',
+    group: 'derived',
+    defaultApplied: false,
+    source: 'snapshot',
+  },
+  {
+    key: 'ddeMainInflowRatio3d',
+    label: '3日主力净流入占比',
+    group: 'derived',
+    defaultApplied: false,
+    source: 'snapshot',
+  },
+  {
+    key: 'ddeMainInflowRatio5d',
+    label: '5日主力净流入占比',
+    group: 'derived',
+    defaultApplied: false,
+    source: 'snapshot',
+  },
+  {
+    key: 'ddeMainInflowRatio10d',
+    label: '10日主力净流入占比',
+    group: 'derived',
+    defaultApplied: false,
+    source: 'snapshot',
+  },
+  {
+    key: 'ddeMainInflowRatio20d',
+    label: '20日主力净流入占比',
     group: 'derived',
     defaultApplied: false,
     source: 'snapshot',
@@ -166,6 +233,14 @@ export const StockListRowSchema = z
     pb: z.number().nullable(),
     peg: z.number().nullable(),
     grossMargin: z.number().nullable(),
+    ddeMainInflow3d: z.number().nullable(),
+    ddeMainInflow5d: z.number().nullable(),
+    ddeMainInflow10d: z.number().nullable(),
+    ddeMainInflow20d: z.number().nullable(),
+    ddeMainInflowRatio3d: z.number().nullable(),
+    ddeMainInflowRatio5d: z.number().nullable(),
+    ddeMainInflowRatio10d: z.number().nullable(),
+    ddeMainInflowRatio20d: z.number().nullable(),
     /**
      * Optional evidence map for dynamic-sector rows (column key →
      * pre-formatted display string). Other kinds leave this empty.
@@ -187,6 +262,43 @@ export const StockListRowsResponseSchema = z
   })
   .strict();
 export type StockListRowsResponse = z.infer<typeof StockListRowsResponseSchema>;
+
+/**
+ * Build a `StockListRow` with every numeric column set to `null`.
+ * Use as a base then spread overrides — keeps callers from going
+ * stale every time the column set grows.
+ */
+export function emptyStockListRow(code: string, name: string | null = null): StockListRow {
+  return {
+    code,
+    name,
+    price: null,
+    chgPct: null,
+    turnoverRate: null,
+    turnover: null,
+    consecUp: null,
+    ret5d: null,
+    ret10d: null,
+    ret20d: null,
+    ret90d: null,
+    ret250d: null,
+    mktCap: null,
+    floatMktCap: null,
+    peTtm: null,
+    peDynamic: null,
+    pb: null,
+    peg: null,
+    grossMargin: null,
+    ddeMainInflow3d: null,
+    ddeMainInflow5d: null,
+    ddeMainInflow10d: null,
+    ddeMainInflow20d: null,
+    ddeMainInflowRatio3d: null,
+    ddeMainInflowRatio5d: null,
+    ddeMainInflowRatio10d: null,
+    ddeMainInflowRatio20d: null,
+  };
+}
 
 export const StockListRowsRequestSchema = z
   .object({

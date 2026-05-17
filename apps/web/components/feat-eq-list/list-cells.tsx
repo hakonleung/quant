@@ -87,3 +87,31 @@ export function CnyCell({ value }: ValueCellProps): React.ReactElement {
     </Text>
   );
 }
+
+/**
+ * Signed CNY cell — magnitudes use the same `亿` / `万` collapse as
+ * {@link CnyCell}, but the sign is preserved and colour-coded
+ * (`+流入` green / `-流出` red). Used for DDE 主力净流入 cells.
+ */
+export function CnyDeltaCell({ value }: ValueCellProps): React.ReactElement {
+  if (value === null) {
+    return (
+      <Text fontFamily="mono" fontSize="11px" color="ink3">
+        —
+      </Text>
+    );
+  }
+  const yi = 1e8;
+  const wan = 1e4;
+  const abs = Math.abs(value);
+  const body =
+    abs >= yi ? `${(abs / yi).toFixed(2)}亿` : abs >= wan ? `${(abs / wan).toFixed(0)}万` : abs.toFixed(0);
+  const color = value > 0 ? 'up' : value < 0 ? 'down' : 'ink3';
+  const sign = value >= 0 ? '+' : '-';
+  return (
+    <Text fontFamily="mono" fontSize="11px" color={color} fontWeight="600">
+      {sign}
+      {body}
+    </Text>
+  );
+}

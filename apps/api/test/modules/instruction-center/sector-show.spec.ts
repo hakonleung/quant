@@ -54,6 +54,14 @@ const emptyRow = (code: string): StockListRow => ({
   pb: null,
   peg: null,
   grossMargin: null,
+  ddeMainInflow3d: null,
+  ddeMainInflow5d: null,
+  ddeMainInflow10d: null,
+  ddeMainInflow20d: null,
+  ddeMainInflowRatio3d: null,
+  ddeMainInflowRatio5d: null,
+  ddeMainInflowRatio10d: null,
+  ddeMainInflowRatio20d: null,
 });
 
 function userSector(overrides: Partial<Sector> = {}): Sector {

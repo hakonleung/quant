@@ -125,6 +125,7 @@ function buildRow(
   const meta = snap?.meta;
   const derived = snap?.derived;
   const returns = snap?.returns;
+  const dde = snap?.dde;
   const row: StockListRow = {
     code,
     name: meta?.name ?? null,
@@ -145,6 +146,14 @@ function buildRow(
     pb: parseDecimal(derived?.pb),
     peg: parseDecimal(derived?.peg),
     grossMargin: parseDecimal(derived?.gross_margin_ttm),
+    ddeMainInflow3d: parseDecimal(dde?.main_net_inflow_3d),
+    ddeMainInflow5d: parseDecimal(dde?.main_net_inflow_5d),
+    ddeMainInflow10d: parseDecimal(dde?.main_net_inflow_10d),
+    ddeMainInflow20d: parseDecimal(dde?.main_net_inflow_20d),
+    ddeMainInflowRatio3d: parseDecimal(dde?.main_inflow_ratio_3d),
+    ddeMainInflowRatio5d: parseDecimal(dde?.main_inflow_ratio_5d),
+    ddeMainInflowRatio10d: parseDecimal(dde?.main_inflow_ratio_10d),
+    ddeMainInflowRatio20d: parseDecimal(dde?.main_inflow_ratio_20d),
     ...(evidence !== undefined ? { evidence: { ...evidence } } : {}),
   };
   return row;
@@ -261,6 +270,22 @@ function pickSortValue(row: StockListRow, key: StockListColumnKey): number | str
       return row.peg;
     case 'grossMargin':
       return row.grossMargin;
+    case 'ddeMainInflow3d':
+      return row.ddeMainInflow3d;
+    case 'ddeMainInflow5d':
+      return row.ddeMainInflow5d;
+    case 'ddeMainInflow10d':
+      return row.ddeMainInflow10d;
+    case 'ddeMainInflow20d':
+      return row.ddeMainInflow20d;
+    case 'ddeMainInflowRatio3d':
+      return row.ddeMainInflowRatio3d;
+    case 'ddeMainInflowRatio5d':
+      return row.ddeMainInflowRatio5d;
+    case 'ddeMainInflowRatio10d':
+      return row.ddeMainInflowRatio10d;
+    case 'ddeMainInflowRatio20d':
+      return row.ddeMainInflowRatio20d;
   }
 }
 

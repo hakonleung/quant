@@ -21,7 +21,7 @@ import {
   type ListRow,
 } from '../../lib/fp/eq-list-fp.js';
 
-import { ChgPctCell, CnyCell, PctCell, PriceCell } from './list-cells.js';
+import { ChgPctCell, CnyCell, CnyDeltaCell, PctCell, PriceCell } from './list-cells.js';
 import { STICKY_COL_WIDTH, type ColumnDef } from './list-types.js';
 
 export function buildColumns(
@@ -162,6 +162,22 @@ function makeAppliedColumn(key: ColumnKey): ColumnDef | null {
       return derivedColumn('peg', 'PEG', 70, 'ratio');
     case 'grossMargin':
       return derivedColumn('grossMargin', '毛利率', 90, 'pct');
+    case 'ddeMainInflow3d':
+      return derivedColumn('ddeMainInflow3d', '3日大单', 100, 'cny-delta');
+    case 'ddeMainInflow5d':
+      return derivedColumn('ddeMainInflow5d', '5日大单', 100, 'cny-delta');
+    case 'ddeMainInflow10d':
+      return derivedColumn('ddeMainInflow10d', '10日大单', 100, 'cny-delta');
+    case 'ddeMainInflow20d':
+      return derivedColumn('ddeMainInflow20d', '20日大单', 100, 'cny-delta');
+    case 'ddeMainInflowRatio3d':
+      return derivedColumn('ddeMainInflowRatio3d', '3日大单占比', 100, 'pct');
+    case 'ddeMainInflowRatio5d':
+      return derivedColumn('ddeMainInflowRatio5d', '5日大单占比', 100, 'pct');
+    case 'ddeMainInflowRatio10d':
+      return derivedColumn('ddeMainInflowRatio10d', '10日大单占比', 100, 'pct');
+    case 'ddeMainInflowRatio20d':
+      return derivedColumn('ddeMainInflowRatio20d', '20日大单占比', 100, 'pct');
   }
 }
 
@@ -179,7 +195,7 @@ function derivedColumn(
   key: ColumnKey,
   label: string,
   w: number,
-  format: 'cny' | 'ratio' | 'pct',
+  format: 'cny' | 'cny-delta' | 'ratio' | 'pct',
 ): ColumnDef {
   const sortValue = (r: ListRow): number | null => readNumber(r, key);
   return {
@@ -197,6 +213,7 @@ function derivedColumn(
         );
       }
       if (format === 'cny') return <CnyCell value={v} />;
+      if (format === 'cny-delta') return <CnyDeltaCell value={v} />;
       if (format === 'pct') return <ChgPctCell value={v} />;
       return (
         <Text fontFamily="mono" fontSize="11px" color="ink2">

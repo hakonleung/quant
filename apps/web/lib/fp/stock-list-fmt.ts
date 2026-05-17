@@ -52,6 +52,23 @@ export function fmtCny(value: number | null): string {
   return value.toFixed(0);
 }
 
+/**
+ * Signed CNY — for DDE net inflow where the sign carries meaning
+ * (+流入 / −流出). Magnitude uses the same 亿/万 collapse as
+ * {@link fmtCny}. Zero renders as `+0` to keep alignment with signed
+ * peers.
+ */
+export function fmtCnyDelta(value: number | null): string {
+  if (value === null || !Number.isFinite(value)) return '—';
+  const sign = value >= 0 ? '+' : '-';
+  const abs = Math.abs(value);
+  const yi = 1e8;
+  const wan = 1e4;
+  if (abs >= yi) return `${sign}${(abs / yi).toFixed(2)}亿`;
+  if (abs >= wan) return `${sign}${(abs / wan).toFixed(0)}万`;
+  return `${sign}${abs.toFixed(0)}`;
+}
+
 /** Consecutive-up days. Renders `0d` instead of `—` to match MKT. */
 export function fmtConsecUp(days: number | null): string {
   if (days === null || !Number.isFinite(days)) return '—';

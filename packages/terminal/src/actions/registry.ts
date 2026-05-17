@@ -62,6 +62,17 @@ const stockSnapshotSchema = z.object({
   pe_ttm: z.number().nullable().optional(),
   pb: z.number().nullable().optional(),
   mkt_cap: z.number().nullable().optional(),
+  // DDE 主力 fund-flow phase block. Inflow is signed CNY (元); ratio
+  // is inflow / trailing-N-day amount sum (unitless decimal, can be
+  // negative). All optional+nullable so legacy fixtures stay valid.
+  dde_main_net_inflow_3d: z.number().nullable().optional(),
+  dde_main_net_inflow_5d: z.number().nullable().optional(),
+  dde_main_net_inflow_10d: z.number().nullable().optional(),
+  dde_main_net_inflow_20d: z.number().nullable().optional(),
+  dde_main_inflow_ratio_3d: z.number().nullable().optional(),
+  dde_main_inflow_ratio_5d: z.number().nullable().optional(),
+  dde_main_inflow_ratio_10d: z.number().nullable().optional(),
+  dde_main_inflow_ratio_20d: z.number().nullable().optional(),
 });
 export type StockSnapshot = z.infer<typeof stockSnapshotSchema>;
 

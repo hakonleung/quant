@@ -13,12 +13,13 @@
  *   - error envelope passthrough
  */
 
-import type {
-  InstructionEnvelope,
-  ResultOf,
-  StockListRow,
-  StockListRowsResponse,
-  StockMetaDto,
+import {
+  emptyStockListRow,
+  type InstructionEnvelope,
+  type ResultOf,
+  type StockListRow,
+  type StockListRowsResponse,
+  type StockMetaDto,
 } from '@quant/shared';
 
 import { buildStockCell } from '../../../src/modules/instruction-center/cells/stock.cell.js';
@@ -59,27 +60,7 @@ function fakeMeta(all: readonly StockMetaDto[]): StockMetaService {
 }
 
 function emptyRow(code: string, name: string | null): StockListRow {
-  return {
-    code,
-    name,
-    price: null,
-    chgPct: null,
-    turnoverRate: null,
-    turnover: null,
-    consecUp: null,
-    ret5d: null,
-    ret10d: null,
-    ret20d: null,
-    ret90d: null,
-    ret250d: null,
-    mktCap: null,
-    floatMktCap: null,
-    peTtm: null,
-    peDynamic: null,
-    pb: null,
-    peg: null,
-    grossMargin: null,
-  };
+  return emptyStockListRow(code, name);
 }
 
 function fakeStockList(opts: {
@@ -173,25 +154,12 @@ describe('renderStock', () => {
         query: '茅',
         rows: [
           {
-            code: '600519',
-            name: '茅台',
+            ...emptyStockListRow('600519', '茅台'),
             price: 1800,
             chgPct: 1.23,
-            turnoverRate: null,
-            turnover: null,
-            consecUp: null,
-            ret5d: null,
-            ret10d: null,
-            ret20d: null,
-            ret90d: null,
-            ret250d: null,
             mktCap: 2.3e12,
             floatMktCap: 2.0e12,
             peTtm: 30,
-            peDynamic: null,
-            pb: null,
-            peg: null,
-            grossMargin: null,
           },
         ],
       }),

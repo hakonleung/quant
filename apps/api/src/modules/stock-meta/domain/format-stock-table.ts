@@ -37,6 +37,14 @@ const HEADER_OVERRIDES: Partial<Record<StockListColumnKey, string>> = {
   ret20d: '20d%',
   ret90d: '90d%',
   ret250d: '250d%',
+  ddeMainInflow3d: '3d净流入',
+  ddeMainInflow5d: '5d净流入',
+  ddeMainInflow10d: '10d净流入',
+  ddeMainInflow20d: '20d净流入',
+  ddeMainInflowRatio3d: '3d占比',
+  ddeMainInflowRatio5d: '5d占比',
+  ddeMainInflowRatio10d: '10d占比',
+  ddeMainInflowRatio20d: '20d占比',
 };
 
 const COLUMN_DEFAULTS: Readonly<
@@ -60,6 +68,14 @@ const COLUMN_DEFAULTS: Readonly<
   pb: { align: 'right', width: 70, min: 6 },
   peg: { align: 'right', width: 70, min: 6 },
   grossMargin: { align: 'right', width: 80, min: 7 },
+  ddeMainInflow3d: { align: 'right', width: 100, min: 9 },
+  ddeMainInflow5d: { align: 'right', width: 100, min: 9 },
+  ddeMainInflow10d: { align: 'right', width: 100, min: 9 },
+  ddeMainInflow20d: { align: 'right', width: 100, min: 9 },
+  ddeMainInflowRatio3d: { align: 'right', width: 80, min: 7 },
+  ddeMainInflowRatio5d: { align: 'right', width: 80, min: 7 },
+  ddeMainInflowRatio10d: { align: 'right', width: 80, min: 7 },
+  ddeMainInflowRatio20d: { align: 'right', width: 80, min: 7 },
 };
 
 /** The default column set rendered by IM tables — drops the 6 derived/snapshot
@@ -192,11 +208,20 @@ function formatCell(row: StockListRow, col: StockListColumnKey): string | null {
     case 'ret90d':
     case 'ret250d':
     case 'grossMargin':
+    case 'ddeMainInflowRatio3d':
+    case 'ddeMainInflowRatio5d':
+    case 'ddeMainInflowRatio10d':
+    case 'ddeMainInflowRatio20d':
       return typeof v === 'number' ? formatPct(v) : null;
     case 'turnover':
     case 'mktCap':
     case 'floatMktCap':
       return typeof v === 'number' ? formatCny(v) : null;
+    case 'ddeMainInflow3d':
+    case 'ddeMainInflow5d':
+    case 'ddeMainInflow10d':
+    case 'ddeMainInflow20d':
+      return typeof v === 'number' ? formatCnyDelta(v) : null;
     case 'peTtm':
     case 'peDynamic':
     case 'pb':
@@ -217,6 +242,21 @@ function formatCny(n: number): string {
   if (Math.abs(n) >= 1e8) return `${(n / 1e8).toFixed(2)}亿`;
   if (Math.abs(n) >= 1e4) return `${(n / 1e4).toFixed(2)}万`;
   return n.toFixed(2);
+}
+
+/**
+ * CNY amount with explicit sign — for DDE net inflow columns where the
+ * sign carries information (+ inflow / − outflow). Negative values keep
+ * the natural `-`; non-negative values are prefixed with `+` (zero gets
+ * `+0` to avoid the visual confusion of bare `0` alongside signed peers).
+ */
+function formatCnyDelta(n: number): string {
+  if (!Number.isFinite(n)) return '—';
+  const sign = n >= 0 ? '+' : '-';
+  const abs = Math.abs(n);
+  if (abs >= 1e8) return `${sign}${(abs / 1e8).toFixed(2)}亿`;
+  if (abs >= 1e4) return `${sign}${(abs / 1e4).toFixed(2)}万`;
+  return `${sign}${abs.toFixed(2)}`;
 }
 
 function displayWidth(s: string): number {
