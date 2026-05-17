@@ -79,6 +79,21 @@ describe('parseArgv', () => {
     expect(r.positional).toEqual(['--b']);
     expect(r.flags).toEqual({ a: '1' });
   });
+
+  it('treats bare key=value tokens as flags (no leading --)', () => {
+    const r = parseArgv(['300632', 'code=300632', 'fresh=1']);
+    expect(r.positional).toEqual(['300632']);
+    expect(r.flags).toEqual({ code: '300632', fresh: '1' });
+  });
+
+  it('keeps tokens whose key portion is not a valid identifier as positional', () => {
+    const r = parseArgv(['=foo', '1=2', 'x y=z', 'has space=v']);
+    // `=foo` empty key → positional; `1=2` key starts with digit → positional;
+    // 'x y=z' / 'has space=v' arrived as a single token via a quoted source
+    // → positional (key contains space).
+    expect(r.positional).toEqual(['=foo', '1=2', 'x y=z', 'has space=v']);
+    expect(r.flags).toEqual({});
+  });
 });
 
 // ── coerceArgs ──────────────────────────────────────────────────────────

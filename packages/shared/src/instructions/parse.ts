@@ -11,10 +11,18 @@
  * (`packages/terminal/src/engine/parse-argv.ts`):
  *   - Single & double quoted strings (no escape inside single)
  *   - Backslash escapes outside quotes (`"\\ "` → literal space)
- *   - `--key=value` and `--key value` flag forms
+ *   - `--key=value`, `--key value`, and bare `key=value` flag forms.
+ *     The bare form is what users actually type (`analyze code=300632`);
+ *     the `--` prefix is supported for parity with classic CLIs but is
+ *     never required. A token only counts as a `key=value` flag when
+ *     the key matches `[A-Za-z_][A-Za-z0-9_-]*` so values containing
+ *     `=` (URLs, screen plans, etc.) stay positional.
  *   - Bare `--` ends flag parsing; remainder is positional
  *   - `--flag` followed by another `--flag` or EOL → boolean true
  */
+
+/** Matches a legal flag key — letters, digits, `_`, `-`, leading non-digit. */
+const FLAG_KEY_RE = /^[A-Za-z_][A-Za-z0-9_-]*$/u;
 
 export interface ParsedArgv {
   readonly positional: readonly string[];
@@ -129,6 +137,14 @@ export function parseArgv(tokens: readonly string[]): ParsedArgv {
         i += 1;
       }
       continue;
+    }
+    const eq = t.indexOf('=');
+    if (eq > 0) {
+      const key = t.slice(0, eq);
+      if (FLAG_KEY_RE.test(key)) {
+        flags[key] = t.slice(eq + 1);
+        continue;
+      }
     }
     positional.push(t);
   }

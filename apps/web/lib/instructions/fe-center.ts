@@ -20,6 +20,7 @@ import {
 import { invokeInstruction, type InvokeOptions } from './client.js';
 import type { FeEnv, InstructionInvoker } from './fe-types.js';
 import { buildCacheCell } from './cells/cache.cell.js';
+import { buildChannelEchoCell } from './cells/channel-echo.cell.js';
 import { buildClearCell } from './cells/clear.cell.js';
 import { buildFocusCell } from './cells/focus.cell.js';
 import { buildHelpCell } from './cells/help.cell.js';
@@ -27,6 +28,7 @@ import { buildLedgerCell } from './cells/ledger.cell.js';
 import { buildLedgerAddCell } from './cells/ledger-add.cell.js';
 import { buildLedgerAnalyzeCell } from './cells/ledger-analyze.cell.js';
 import { buildLedgerRemoveCell } from './cells/ledger-remove.cell.js';
+import { buildPingCell } from './cells/ping.cell.js';
 import { buildAgentCell } from './cells/agent.cell.js';
 import { buildAgentConfirmCell } from './cells/agent-confirm.cell.js';
 import { buildAnalyzeCell } from './cells/analyze.cell.js';
@@ -90,7 +92,9 @@ export type FeMigratedIds =
   | 'watch.remove'
   | 'watch.group'
   | 'agent'
-  | 'agent.confirm';
+  | 'agent.confirm'
+  | 'ping'
+  | 'channel.echo';
 
 type Excluded = Exclude<AllInstructionIds, FeMigratedIds>;
 type Configured = Exclude<AllInstructionIds, Excluded>;
@@ -137,6 +141,8 @@ export function buildFeCenter(): InstructionCenter<FeEnv, Excluded> {
     'watch.group': buildWatchGroupCell(),
     agent: buildAgentCell(),
     'agent.confirm': buildAgentConfirmCell(),
+    ping: buildPingCell(),
+    'channel.echo': buildChannelEchoCell(),
   };
   return new InstructionCenter<FeEnv, Excluded>(cfg);
 }

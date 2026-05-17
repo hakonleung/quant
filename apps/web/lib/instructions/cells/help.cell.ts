@@ -39,12 +39,18 @@ function list(): HelpResult {
   const entries = [...allEntries()].sort((a, b) => a.id.localeCompare(b.id));
   const rows = entries.map((e) => ({
     NAME: e.id,
+    USAGE: usageLine(e),
     SUMMARY: e.summary,
   }));
-  const text = renderTable(rows, [
-    { key: 'NAME', header: 'CMD', max: 18 },
-    { key: 'SUMMARY', header: 'SUMMARY', max: 80 },
-  ]);
+  const text = [
+    renderTable(rows, [
+      { key: 'NAME', header: 'CMD', max: 20 },
+      { key: 'USAGE', header: 'USAGE', max: 36 },
+      { key: 'SUMMARY', header: 'SUMMARY', max: 60 },
+    ]),
+    '',
+    'tip: `/help <id>` shows args, examples, and aliases for one command.',
+  ].join('\n');
   return { text };
 }
 
@@ -55,18 +61,52 @@ function detail(id: string): HelpResult {
   }
   const aliases = (entry.aliases ?? []).join(', ') || '(none)';
   const subs = subcommandsOf(entry.id).join(' / ') || '(none)';
+  const tags = tagLine(entry);
   const lines = [
-    `# ${entry.id}`,
+    `# ${entry.id}${tags.length > 0 ? `  ${tags}` : ''}`,
     `aliases:     ${aliases}`,
     `subcommands: ${subs}`,
     `group:       ${entry.group}`,
+    `mode:        ${entry.mode}`,
+    `args:        ${argsLine(entry)}`,
+    `usage:       ${usageLine(entry)}`,
     ``,
     entry.summary,
   ];
   if (entry.summaryCn !== undefined && entry.summaryCn.length > 0) {
     lines.push(entry.summaryCn);
   }
+  if (entry.help !== undefined && entry.help.length > 0) {
+    lines.push('', entry.help);
+  }
+  const examples = entry.examples ?? [];
+  if (examples.length > 0) {
+    lines.push('', 'examples:');
+    for (const ex of examples) lines.push(`  /${ex}`);
+  }
   return { text: lines.join('\n') };
+}
+
+function usageLine(entry: CommandManifestEntry): string {
+  const parts: string[] = [entry.id];
+  for (const p of entry.positional ?? []) parts.push(`<${p}>`);
+  return parts.join(' ');
+}
+
+function argsLine(entry: CommandManifestEntry): string {
+  const pos = entry.positional ?? [];
+  if (pos.length > 0) {
+    return `${pos.map((p) => `<${p}>`).join(' ')} (positional, in order); other keys via key=value`;
+  }
+  return 'none / key=value only';
+}
+
+function tagLine(entry: CommandManifestEntry): string {
+  const tags: string[] = [];
+  if (entry.doubleConfirm === 'llm') tags.push('[$ paid]');
+  if (entry.doubleConfirm === 'destructive') tags.push('[! destructive]');
+  if (entry.mode === 'async') tags.push('[⏳ async]');
+  return tags.join(' ');
 }
 
 function allEntries(): readonly CommandManifestEntry[] {
