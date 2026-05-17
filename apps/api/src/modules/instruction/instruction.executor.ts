@@ -279,7 +279,13 @@ export class InstructionExecutor {
    * `route()` flow (with its sync/async split, argsSchema validation,
    * and async enqueue logic) works uniformly.
    */
-  private resolveEntry(id: string): InstructionEntry | undefined {
+  /**
+   * Public lookup so callers outside the executor (notably the IM
+   * listener) can resolve center-owned ids too — `registry.get(id)`
+   * alone only sees the 5 legacy handlers and silently drops every
+   * migrated cell.
+   */
+  resolveEntry(id: string): InstructionEntry | undefined {
     if (this.center !== null && this.center.has(id)) {
       return this.synthesiseCenterEntry(id);
     }
@@ -287,13 +293,11 @@ export class InstructionExecutor {
   }
 
   /**
-   * Merge legacy registry tokens with center-owned ids so
-   * `parseInstructionLine` accepts both. Migrated ids don't carry
-   * extra aliases in the manifest today (the few that do — e.g. `usr`
-   * with `['我的', '账号', '我']` — are added here from the shared
-   * manifest).
+   * Public so the IM listener can feed `parseInstructionLine` the
+   * full set of tokens (legacy + center). Merges legacy registry
+   * tokens with center-owned ids and their manifest aliases.
    */
-  private knownIds(): ReadonlyMap<string, string> {
+  knownIds(): ReadonlyMap<string, string> {
     const out = new Map(this.registry.knownIds());
     if (this.center !== null) {
       for (const id of this.center.ids()) {
@@ -332,6 +336,11 @@ export class InstructionExecutor {
       // migrated to InstructionCenter cells) and the IM listener still
       // read these; preserving the shim keeps the registry path working
       // until phase-3 FE migration removes that surface entirely.
+      // `positional` is critical for the IM `parseArgvToObject` shim —
+      // dropping it makes `sector.show s1` etc. error with `id: Required`.
+      ...(manifestEntry.positional !== undefined
+        ? { positional: manifestEntry.positional }
+        : {}),
       ...(manifestEntry.aliases !== undefined ? { imAliases: manifestEntry.aliases } : {}),
       ...(manifestEntry.doubleConfirm === 'llm' ? { costsCredits: true as const } : {}),
       ...(manifestEntry.doubleConfirm === 'destructive'

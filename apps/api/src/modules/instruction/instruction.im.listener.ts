@@ -46,7 +46,6 @@ import {
 import { INSTRUCTION_CONFIG, type InstructionConfig } from './instruction.config.js';
 import type { InstructionCtx } from './instruction.port.js';
 import { InstructionExecutor } from './instruction.executor.js';
-import { InstructionRegistry } from './instruction.registry.js';
 import { ArgvParseError, parseArgvToObject } from './parse-argv.js';
 
 interface PendingAsync {
@@ -81,7 +80,6 @@ export class InstructionImListener implements OnModuleInit {
   private readonly pendingByJobId = new Map<string, PendingAsync>();
 
   constructor(
-    @Inject(InstructionRegistry) private readonly registry: InstructionRegistry,
     @Inject(InstructionExecutor) private readonly executor: InstructionExecutor,
     @Inject(ChannelService) private readonly channels: ChannelService,
     @Inject(AuthService) private readonly auth: AuthService,
@@ -164,7 +162,10 @@ export class InstructionImListener implements OnModuleInit {
     }
     const guard = this.applyAcl(msg, parsed.id);
     if (guard !== null) return guard;
-    const entry = this.registry.get(parsed.id);
+    // `executor.resolveEntry` merges legacy registry + InstructionCenter
+    // ids; `registry.get` alone only sees the 5 legacy handlers and would
+    // not-found every migrated cell (sector / watch / stock / ...).
+    const entry = this.executor.resolveEntry(parsed.id);
     if (entry === undefined) {
       return reply(errResult('not-found', `unknown instruction: ${parsed.id}`), parsed.id);
     }
@@ -201,7 +202,7 @@ export class InstructionImListener implements OnModuleInit {
     rawArgs: Record<string, string>,
     ctx: InstructionCtx,
   ): Promise<ReplyEnvelope | null> {
-    const entry = this.registry.get(instructionId);
+    const entry = this.executor.resolveEntry(instructionId);
     if (entry?.spec.requiresImConfirm !== true) return null;
     if (this.isConfirmTokenSet(rawArgs)) return null;
     const peek = entry.handler.peekImConfirmBypass?.bind(entry.handler);
@@ -257,7 +258,9 @@ export class InstructionImListener implements OnModuleInit {
       // Don't surface "forbidden" for casual chat — keep IM polite.
       return null;
     }
-    const entry = this.registry.get('agent');
+    // `/agent` lives on the InstructionCenter, not the legacy registry —
+    // resolveEntry merges both sides.
+    const entry = this.executor.resolveEntry('agent');
     if (entry === undefined) {
       // /agent is registered as part of AgentModule; if it isn't there,
       // fallback should be inert rather than chatty.
@@ -272,7 +275,8 @@ export class InstructionImListener implements OnModuleInit {
     | { readonly kind: 'silent' }
     | { readonly kind: 'parse-error'; readonly reason: string }
     | { readonly kind: 'ok'; readonly id: string; readonly rest: string } {
-    const known = this.registry.knownIds();
+    // Merged set: legacy registry + center-owned ids + manifest aliases.
+    const known = this.executor.knownIds();
     const parsed = parseInstructionLine(text, known, { requirePrefix: false });
     if (!parsed.ok) {
       // A `/`-prefixed unknown token signals explicit command intent — reply

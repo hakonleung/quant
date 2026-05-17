@@ -106,7 +106,6 @@ function build(cfg?: Partial<InstructionConfig>): Harness {
     debugInstructionsEnabled: cfg?.debugInstructionsEnabled ?? false,
   };
   const listener = new InstructionImListener(
-    reg,
     exe,
     channels as unknown as ChannelService,
     auth as unknown as AuthService,
@@ -127,6 +126,111 @@ function inbound(text: string, sender = 'slack:U1', target = 'C1'): InboundMessa
     raw: {},
   };
 }
+
+/**
+ * Build a listener whose executor is wired to a fake InstructionCenter.
+ * Mirrors how production resolves migrated instructions — `registry.get`
+ * alone only sees the few legacy handlers, so the IM listener must route
+ * through `executor.resolveEntry` (which checks the center first). A
+ * regression here is what made center-owned commands silently no-op.
+ */
+function buildWithCenter(centerIds: readonly string[]): Harness & {
+  centerCalls: { id: string; args: unknown }[];
+} {
+  const reg = new InstructionRegistry();
+  const enqueued: InstructionAsyncJob[] = [];
+  const asyncBus: Pick<InstructionAsyncBus, 'enqueue'> = {
+    enqueue: (job) => {
+      enqueued.push(job);
+      return Promise.resolve();
+    },
+  };
+  // eslint-disable-next-line no-restricted-globals -- test fixture
+  const clock = new FrozenClock(new Date('2026-05-09T00:00:00.000Z'));
+  const centerCalls: { id: string; args: unknown }[] = [];
+  const center = {
+    has: (id: string) => centerIds.includes(id),
+    ids: () => centerIds,
+    executeMigrated: (id: string, args: unknown) => {
+      centerCalls.push({ id, args });
+      return Promise.resolve({
+        ok: true as const,
+        output: { text: `center handled ${id} ${JSON.stringify(args)}` },
+      });
+    },
+    peekImConfirmBypass: () => Promise.resolve(false),
+    invokeRaw: () => Promise.resolve({}),
+  };
+  const exe = new InstructionExecutor(
+    reg,
+    asyncBus as unknown as InstructionAsyncBus,
+    clock,
+    center,
+  );
+  const sends: SendCall[] = [];
+  const channels: Pick<ChannelService, 'send'> = {
+    send: (channel, req) => {
+      sends.push({
+        channel,
+        text: req.text,
+        kind: req.kind,
+        meta: req.meta,
+        target: req.target,
+      });
+      return Promise.resolve({ accepted: [channel], activityIds: ['act'] });
+    },
+  };
+  const auth: Pick<AuthService, 'resolveFromImChannel'> = {
+    resolveFromImChannel: (channel, sender) =>
+      Promise.resolve({
+        id: sender,
+        displayName: sender,
+        source: 'im',
+        imBootstrap: true,
+      }),
+  };
+  const fullCfg: InstructionConfig = {
+    imAllowlist: new Set<string>(),
+    debugInstructionsEnabled: false,
+  };
+  const listener = new InstructionImListener(
+    exe,
+    channels as unknown as ChannelService,
+    auth as unknown as AuthService,
+    fullCfg,
+  );
+  return { reg, exe, listener, sends, enqueued, centerCalls };
+}
+
+describe('InstructionImListener.onInbound — InstructionCenter routing', () => {
+  it('resolves a center-only command by id and forwards positional args', async () => {
+    // `sector.show` is a real manifest entry with `positional: ['id']`.
+    // Pre-fix, the IM listener used `registry.get('sector.show')` which
+    // returned undefined → "unknown instruction" reply. Now it routes
+    // through `executor.resolveEntry` which checks the center first.
+    const { listener, sends, centerCalls } = buildWithCenter(['sector.show']);
+    await listener.onInbound(inbound('/sector.show s1'));
+    expect(sends).toHaveLength(1);
+    expect(sends[0]?.meta).toEqual({ ok: true, instructionId: 'sector.show' });
+    expect(centerCalls).toHaveLength(1);
+    expect(centerCalls[0]?.id).toBe('sector.show');
+    expect(centerCalls[0]?.args).toEqual(
+      expect.objectContaining({ id: 's1' }),
+    );
+  });
+
+  it('resolves a center command via its Chinese manifest alias', async () => {
+    // `sector` declares `aliases: ['板块']` in the shared manifest. The
+    // executor's knownIds() must include manifest aliases for center ids,
+    // otherwise `板块` is just casual chat and gets dropped.
+    const { listener, sends, centerCalls } = buildWithCenter(['sector']);
+    await listener.onInbound(inbound('板块'));
+    expect(sends).toHaveLength(1);
+    expect(sends[0]?.meta).toEqual({ ok: true, instructionId: 'sector' });
+    expect(centerCalls).toHaveLength(1);
+    expect(centerCalls[0]?.id).toBe('sector');
+  });
+});
 
 describe('InstructionImListener.onInbound — sync path', () => {
   it('replies with handler text on a known instruction', async () => {
