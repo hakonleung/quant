@@ -52,8 +52,9 @@ class EvaluateSignalHandler:
         signals = _parse_signals(args.get("signals"))
         bars_by_code = _parse_klines(args.get("klines"))
         holdings = _parse_holdings(args.get("holdings"))
+        baselines = _parse_baselines(args.get("baselines"))
 
-        result = evaluate_signal(signals, bars_by_code, holdings)
+        result = evaluate_signal(signals, bars_by_code, holdings, baselines=baselines)
 
         payload: dict[str, Any] = {
             "holdings": list(result.holdings),
@@ -73,6 +74,8 @@ class EvaluateSignalHandler:
                     "exitDate": o.exit_date.isoformat(),
                     "exitPx": float(o.exit_px),
                     "ret": o.ret,
+                    "baselineMean": o.baseline_mean,
+                    "excessRet": o.excess_ret,
                 }
                 for o in result.observations
             ],
@@ -92,6 +95,34 @@ class EvaluateSignalHandler:
                 }
                 for s in result.summary
             ],
+            "baselineSummary": (
+                [
+                    {
+                        "holding": b.holding,
+                        "n": b.n,
+                        "universeMean": b.universe_mean,
+                        "universeStd": b.universe_std,
+                    }
+                    for b in result.baseline_summary
+                ]
+                if result.baseline_summary is not None
+                else None
+            ),
+            "spreadSummary": (
+                [
+                    {
+                        "holding": s.holding,
+                        "n": s.n,
+                        "spreadMean": s.spread_mean,
+                        "spreadStd": s.spread_std,
+                        "spreadTStat": s.spread_t_stat,
+                        "winRate": s.win_rate,
+                    }
+                    for s in result.spread_summary
+                ]
+                if result.spread_summary is not None
+                else None
+            ),
         }
         return pa.Table.from_pylist(
             [{"payload_json": json.dumps(payload, ensure_ascii=False)}],
@@ -230,6 +261,89 @@ def _parse_holdings(raw: object) -> list[int]:
             )
         out.append(item)
     return out
+
+
+def _parse_baselines(
+    raw: object,
+) -> dict[int, dict[date_cls, tuple[float, float]]] | None:
+    """Parse the optional ``baselines`` arg.
+
+    Shape: ``{ "<holding>": { "YYYY-MM-DD": [mean, std] } }``.
+    ``None`` / missing means "no baseline supplied".
+    """
+    if raw is None:
+        return None
+    if not isinstance(raw, dict):
+        raise QuantError(
+            "INVALID_ARGUMENT",
+            "args.baselines must be an object keyed by holding (int as str)",
+        )
+    out: dict[int, dict[date_cls, tuple[float, float]]] = {}
+    for h_raw, series in raw.items():
+        holding = _parse_holding_key(h_raw)
+        out[holding] = _parse_baseline_series(h_raw, series)
+    return out
+
+
+def _parse_holding_key(h_raw: object) -> int:
+    if not isinstance(h_raw, str):
+        raise QuantError(
+            "INVALID_ARGUMENT",
+            "args.baselines keys must be stringified positive ints",
+        )
+    try:
+        holding = int(h_raw)
+    except ValueError as exc:
+        raise QuantError(
+            "INVALID_ARGUMENT",
+            f"args.baselines key {h_raw!r} is not an int",
+        ) from exc
+    if holding <= 0:
+        raise QuantError(
+            "INVALID_ARGUMENT",
+            f"args.baselines key must be > 0; got {holding}",
+        )
+    return holding
+
+
+def _parse_baseline_series(h_raw: str, series: object) -> dict[date_cls, tuple[float, float]]:
+    if not isinstance(series, dict):
+        raise QuantError(
+            "INVALID_ARGUMENT",
+            f"args.baselines[{h_raw!r}] must be an object {{date: [mean, std]}}",
+        )
+    parsed: dict[date_cls, tuple[float, float]] = {}
+    for d_raw, pair in series.items():
+        if not isinstance(d_raw, str) or not d_raw:
+            raise QuantError(
+                "INVALID_ARGUMENT",
+                f"args.baselines[{h_raw!r}] date key must be YYYY-MM-DD string",
+            )
+        d = _parse_date(d_raw, f"baselines[{h_raw!r}].{d_raw}")
+        parsed[d] = _parse_baseline_pair(h_raw, d_raw, pair)
+    return parsed
+
+
+def _parse_baseline_pair(h_raw: str, d_raw: str, pair: object) -> tuple[float, float]:
+    if not isinstance(pair, list) or len(pair) != 2:
+        raise QuantError(
+            "INVALID_ARGUMENT",
+            f"args.baselines[{h_raw!r}][{d_raw!r}] must be [mean, std]",
+        )
+    mean_raw, std_raw = pair
+    return (
+        _coerce_baseline_num(h_raw, d_raw, 0, mean_raw),
+        _coerce_baseline_num(h_raw, d_raw, 1, std_raw),
+    )
+
+
+def _coerce_baseline_num(h_raw: str, d_raw: str, idx: int, value: object) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise QuantError(
+            "INVALID_ARGUMENT",
+            f"args.baselines[{h_raw!r}][{d_raw!r}][{idx}] must be numeric",
+        )
+    return float(value)
 
 
 def _parse_date(s: str, key: str) -> date_cls:

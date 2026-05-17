@@ -78,6 +78,18 @@ function Column({ col, bottomY }: { col: BoxColumn; bottomY: number }): React.Re
   return (
     <g>
       {col.n > 0 && <BoxShape col={col} />}
+      {col.yBaseline !== null && (
+        <line
+          x1={col.cx - col.halfWidth}
+          x2={col.cx + col.halfWidth}
+          y1={col.yBaseline}
+          y2={col.yBaseline}
+          stroke="#ffb454"
+          strokeWidth={1}
+          strokeDasharray="3 2"
+          opacity={0.8}
+        />
+      )}
       <text
         x={col.cx}
         y={bottomY + 14}

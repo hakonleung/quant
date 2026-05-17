@@ -20,7 +20,9 @@
  * `KlineReaderService`.
  */
 
+import { join } from 'node:path';
 import { Inject, Injectable, Logger } from '@nestjs/common';
+import { DuckDBInstance, type DuckDBConnection } from '@duckdb/node-api';
 import {
   BacktestEvaluateResponseSchema,
   type BacktestEvaluateResponse,
@@ -33,6 +35,7 @@ import { type Table } from 'apache-arrow';
 
 import { FlightClient } from '../../adapters/flight/flight-client.js';
 import { KlineReaderService } from '../kline/kline-reader.service.js';
+import { KLINE_DATA_DIR } from '../kline/kline.token.js';
 import { ScreenExecService } from '../screen/screen-exec.service.js';
 import { BACKTEST_FLIGHT_CLIENT } from './backtest.token.js';
 
@@ -52,12 +55,25 @@ const CALENDAR_BUFFER_DAYS = 10;
 @Injectable()
 export class BacktestService {
   private readonly logger = new Logger(BacktestService.name);
+  private readonly klineParquetGlob: string;
+  private connPromise: Promise<DuckDBConnection> | null = null;
 
   constructor(
     @Inject(BACKTEST_FLIGHT_CLIENT) private readonly flight: FlightClient,
     @Inject(KlineReaderService) private readonly klineReader: KlineReaderService,
     @Inject(ScreenExecService) private readonly screenExec: ScreenExecService,
-  ) {}
+    @Inject(KLINE_DATA_DIR) klineDataRoot: string,
+  ) {
+    this.klineParquetGlob = join(klineDataRoot, 'kline', '*.parquet');
+  }
+
+  private async connection(): Promise<DuckDBConnection> {
+    this.connPromise ??= (async (): Promise<DuckDBConnection> => {
+      const instance = await DuckDBInstance.create(':memory:');
+      return instance.connect();
+    })();
+    return this.connPromise;
+  }
 
   async evaluateSignals(
     req: BacktestEvaluateSignalsRequest,
@@ -135,10 +151,13 @@ export class BacktestService {
       klinesArg[code] = { trade_date, open_qfq };
     }
 
+    const baselines = await this.universeBaselines(signals, holdings);
+
     const args: Record<string, unknown> = {
       signals: signals.map((s) => ({ signal_date: s.signalDate, code: s.code })),
       klines: klinesArg,
       holdings: [...holdings],
+      baselines,
     };
     const result = await this.flight.doGet('evaluate_signal', args, { traceId });
     const payload = extractFirstPayload(result.value);
@@ -146,6 +165,75 @@ export class BacktestService {
       throw new Error('evaluate_signal returned no payload');
     }
     return BacktestEvaluateResponseSchema.parse(payload);
+  }
+
+  /**
+   * Compute the universe baseline per (holding, entry_day). For each
+   * trading day E in [minSignal+1, maxSignal+1+maxHolding], we want
+   * `mean(open(E+h)/open(E) - 1)` over every code in the universe.
+   *
+   * Implementation: single DuckDB query per holding, joining each bar
+   * to the bar `h` trading-positions later within the same code. Bars
+   * are dense (one per trading day per code), so `ROW_NUMBER` over
+   * `(code, ts)` gives an integer "trading position" we can offset.
+   *
+   * Returns the shape Python expects:
+   * `{ "<holding>": { "<entry_date YYYY-MM-DD>": [mean, std] } }`.
+   *
+   * Overridable: tests substitute this method on the instance to skip
+   * the real DuckDB call (the unit suite stays purely in-memory).
+   */
+  protected async universeBaselines(
+    signals: readonly BacktestSignal[],
+    holdings: readonly number[],
+  ): Promise<Record<string, Record<string, [number, number]>>> {
+    const window = klineWindow(signals, holdings);
+    const start = isoFromDate(window.kStart);
+    const end = isoFromDate(window.kEnd);
+    const conn = await this.connection();
+
+    const out: Record<string, Record<string, [number, number]>> = {};
+    for (const h of new Set(holdings)) {
+      const series = await this.universeBaselineForHolding(conn, h, start, end);
+      out[String(h)] = series;
+    }
+    return out;
+  }
+
+  private async universeBaselineForHolding(
+    conn: DuckDBConnection,
+    holding: number,
+    startIso: string,
+    endIso: string,
+  ): Promise<Record<string, [number, number]>> {
+    // DuckDB pushdown over the whole parquet glob; trade_date is the
+    // primary partition column so the date range filter is cheap.
+    const sql = `
+      WITH bars AS (
+        SELECT code, ts, open_qfq,
+               ROW_NUMBER() OVER (PARTITION BY code ORDER BY ts) AS rn
+        FROM read_parquet('${this.klineParquetGlob}')
+        WHERE ts BETWEEN DATE '${startIso}' AND DATE '${endIso}'
+          AND open_qfq IS NOT NULL AND open_qfq > 0
+      )
+      SELECT strftime(e.ts, '%Y-%m-%d') AS entry_date,
+             AVG(x.open_qfq / e.open_qfq - 1) AS mean_ret,
+             COALESCE(STDDEV_POP(x.open_qfq / e.open_qfq - 1), 0) AS std_ret
+      FROM bars e
+      JOIN bars x ON x.code = e.code AND x.rn = e.rn + ${String(holding)}
+      GROUP BY e.ts
+      ORDER BY e.ts
+    `;
+    const result = await conn.runAndReadAll(sql);
+    const out: Record<string, [number, number]> = {};
+    for (const row of result.getRowObjects()) {
+      const entryDate = String(row['entry_date'] ?? '');
+      const meanRet = Number(row['mean_ret'] ?? 0);
+      const stdRet = Number(row['std_ret'] ?? 0);
+      if (entryDate.length === 0) continue;
+      out[entryDate] = [meanRet, stdRet];
+    }
+    return out;
   }
 }
 
@@ -194,6 +282,10 @@ function msToIsoDate(ms: number): string {
   return `${y}-${m}-${d}`;
 }
 
+function isoFromDate(dt: Date): string {
+  return msToIsoDate(dt.getTime());
+}
+
 function extractFirstPayload(table: Table): unknown {
   if (table.numRows === 0) return null;
   const proxy = table.get(0);
@@ -228,5 +320,7 @@ function emptyResponse(holdings: readonly number[]): BacktestEvaluateResponse {
       winRate: 0,
       sharpeLike: 0,
     })),
+    baselineSummary: null,
+    spreadSummary: null,
   };
 }

@@ -241,3 +241,78 @@ def test_summary_quantiles_on_known_distribution() -> None:
     assert s.median == pytest.approx(0.01)
     assert s.std > 0
     assert s.sharpe_like == pytest.approx(s.mean / s.std)
+
+
+# --- baseline / spread ----------------------------------------------------
+
+
+def test_baseline_attached_to_observations_and_summary() -> None:
+    bars = {
+        "A": _bars([10.0, 11.0, 12.0]),
+        "B": _bars([10.0, 11.0, 13.0]),
+    }
+    sigs = [
+        SignalInput(signal_date=date(2024, 1, 2), code="A"),
+        SignalInput(signal_date=date(2024, 1, 2), code="B"),
+    ]
+    # Baselines are keyed by ENTRY day (the trading day open the trade
+    # actually happens on). Signal on 2024-01-02 → entry on 2024-01-03.
+    baselines = {1: {date(2024, 1, 3): (0.05, 0.02)}}
+
+    result = evaluate_signal(sigs, bars, [1], baselines=baselines)
+
+    assert all(o.baseline_mean == 0.05 for o in result.observations)
+    assert result.baseline_summary is not None
+    assert len(result.baseline_summary) == 1
+    b = result.baseline_summary[0]
+    assert b.holding == 1
+    assert b.n == 1
+    assert b.universe_mean == pytest.approx(0.05)
+
+    assert result.spread_summary is not None
+    sp = result.spread_summary[0]
+    # Signal returns at h=1: 12/11-1, 13/11-1; mean ≈ 0.1364.
+    expected_signal_mean = ((12 / 11) - 1 + (13 / 11) - 1) / 2
+    assert sp.spread_mean == pytest.approx(expected_signal_mean - 0.05)
+    assert sp.n == 1
+    # n=1 → no t-stat (need ≥ 2 dates for std)
+    assert sp.spread_t_stat == 0.0
+
+
+def test_no_baselines_leaves_excess_fields_none() -> None:
+    bars = {"A": _bars([10.0, 11.0, 12.0])}
+    sigs = [SignalInput(signal_date=date(2024, 1, 2), code="A")]
+
+    result = evaluate_signal(sigs, bars, [1])
+
+    assert result.baseline_summary is None
+    assert result.spread_summary is None
+    assert all(o.baseline_mean is None and o.excess_ret is None for o in result.observations)
+
+
+def test_spread_t_stat_aggregates_over_dates() -> None:
+    # Two signal dates, each with one selected code beating baseline by
+    # the same amount. With n=2 we can compute t.
+    bars = {
+        "A": _bars([10.0, 11.0, 12.0]),  # h=1 ret on 01-02 = 12/11-1
+        "B": _bars([10.0, 11.0, 12.0], start=date(2024, 1, 3)),  # h=1 ret on 01-03
+    }
+    sigs = [
+        SignalInput(signal_date=date(2024, 1, 2), code="A"),
+        SignalInput(signal_date=date(2024, 1, 3), code="B"),
+    ]
+    baselines = {
+        1: {
+            # Keyed by entry day = signal_date + 1 trading day.
+            date(2024, 1, 3): (0.05, 0.0),
+            date(2024, 1, 4): (0.04, 0.0),
+        }
+    }
+    result = evaluate_signal(sigs, bars, [1], baselines=baselines)
+    assert result.spread_summary is not None
+    sp = result.spread_summary[0]
+    assert sp.n == 2
+    # Both spreads positive → win_rate == 1.0; t-stat > 0 when std > 0.
+    assert sp.win_rate == pytest.approx(1.0)
+    if sp.spread_std > 0.0:
+        assert sp.spread_t_stat > 0.0

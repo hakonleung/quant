@@ -52,7 +52,12 @@ class Bar:
 
 @dataclass(frozen=True, slots=True)
 class Observation:
-    """A realised return for a (signal, holding) pair."""
+    """A realised return for a (signal, holding) pair.
+
+    ``baseline_mean`` and ``excess_ret`` are populated only when the
+    caller supplied a baseline series for ``(signal_date, holding)``.
+    Both are ``None`` when no baseline was available.
+    """
 
     signal_date: date
     code: str
@@ -62,6 +67,8 @@ class Observation:
     exit_date: date
     exit_px: Decimal
     ret: float
+    baseline_mean: float | None
+    excess_ret: float | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -79,6 +86,35 @@ class HoldingSummary:
     p95: float
     win_rate: float
     sharpe_like: float
+
+
+@dataclass(frozen=True, slots=True)
+class BaselineSummary:
+    """Aggregate of the universe-mean series at one holding.
+
+    See ``packages/shared/src/types/backtest.ts`` for the口径.
+    """
+
+    holding: int
+    n: int
+    universe_mean: float
+    universe_std: float
+
+
+@dataclass(frozen=True, slots=True)
+class SpreadSummary:
+    """Selection-effect t-stat at one holding.
+
+    ``spread`` for date T = ``mean(signal_returns@T) - universe_mean(T)``.
+    Reported stats aggregate that per-date series.
+    """
+
+    holding: int
+    n: int
+    spread_mean: float
+    spread_std: float
+    spread_t_stat: float
+    win_rate: float
 
 
 @dataclass(frozen=True, slots=True)
@@ -103,3 +139,5 @@ class SignalEvalResult:
     holdings: tuple[int, ...]
     signal_date_range: tuple[date, date] | None
     universe_size_avg: float
+    baseline_summary: tuple[BaselineSummary, ...] | None
+    spread_summary: tuple[SpreadSummary, ...] | None

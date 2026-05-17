@@ -25,6 +25,8 @@ export interface BoxStat {
   readonly p25: number;
   readonly p75: number;
   readonly p95: number;
+  /** Optional universe-baseline mean for this holding. */
+  readonly baselineMean?: number | null;
 }
 
 export interface BoxLayoutOptions {
@@ -50,6 +52,10 @@ export interface BoxColumn {
   readonly yP25: number;
   readonly yP75: number;
   readonly yP95: number;
+  /** Y of the universe baseline; null when no baseline supplied. */
+  readonly yBaseline: number | null;
+  /** Raw baseline mean (echoed for hover labels); null when absent. */
+  readonly baselineMean: number | null;
 }
 
 export interface YTick {
@@ -125,6 +131,8 @@ function columnAt(
   halfWidth: number,
   yOf: (v: number) => number,
 ): BoxColumn {
+  const baselineMean = s.baselineMean ?? null;
+  const yBaseline = baselineMean === null ? null : yOf(baselineMean);
   if (s.n === 0) {
     const yz = yOf(0);
     return {
@@ -138,6 +146,8 @@ function columnAt(
       yP25: yz,
       yP75: yz,
       yP95: yz,
+      yBaseline,
+      baselineMean,
     };
   }
   return {
@@ -151,6 +161,8 @@ function columnAt(
     yP25: yOf(s.p25),
     yP75: yOf(s.p75),
     yP95: yOf(s.p95),
+    yBaseline,
+    baselineMean,
   };
 }
 
@@ -166,10 +178,7 @@ function computeDomain(stats: readonly BoxStat[]): Domain {
   let lo = Number.POSITIVE_INFINITY;
   let hi = Number.NEGATIVE_INFINITY;
   for (const s of stats) {
-    if (s.p05 < lo) lo = s.p05;
-    if (s.p95 > hi) hi = s.p95;
-    if (s.mean < lo) lo = s.mean;
-    if (s.mean > hi) hi = s.mean;
+    [lo, hi] = absorb(lo, hi, valuesOf(s));
   }
   // Always include zero so positive/negative reading is unambiguous.
   if (lo > 0) lo = 0;
@@ -178,6 +187,22 @@ function computeDomain(stats: readonly BoxStat[]): Domain {
   const span = Math.max(hi - lo, 1e-6);
   const margin = span * 0.08;
   return { yMin: lo - margin, yMax: hi + margin };
+}
+
+function valuesOf(s: BoxStat): number[] {
+  const out = [s.p05, s.p95, s.mean];
+  if (s.baselineMean !== undefined && s.baselineMean !== null) out.push(s.baselineMean);
+  return out;
+}
+
+function absorb(lo: number, hi: number, values: readonly number[]): [number, number] {
+  let nextLo = lo;
+  let nextHi = hi;
+  for (const v of values) {
+    if (v < nextLo) nextLo = v;
+    if (v > nextHi) nextHi = v;
+  }
+  return [nextLo, nextHi];
 }
 
 /**

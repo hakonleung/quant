@@ -153,6 +153,63 @@ def test_non_numeric_price_string_rejected() -> None:
     assert exc.value.code == "INVALID_ARGUMENT"
 
 
+# --- baselines -------------------------------------------------------------
+
+
+def test_baselines_arg_round_trips() -> None:
+    args: dict[str, object] = {
+        "signals": [{"signal_date": "2024-01-02", "code": "000001"}],
+        "klines": {
+            "000001": {
+                "trade_date": ["2024-01-02", "2024-01-03", "2024-01-04"],
+                "open_qfq": [10.0, 11.0, 12.0],
+            },
+        },
+        "holdings": [1],
+        # Keyed by entry day (signal 2024-01-02 → entry 2024-01-03).
+        "baselines": {"1": {"2024-01-03": [0.05, 0.02]}},
+    }
+    out = _run(args)
+    obs = out["observations"]
+    assert isinstance(obs, list)
+    assert len(obs) == 1
+    first = obs[0]
+    assert isinstance(first, dict)
+    assert first["baselineMean"] == pytest.approx(0.05)
+    assert first["excessRet"] == pytest.approx((12 / 11 - 1) - 0.05)
+    assert out["baselineSummary"] is not None
+    assert out["spreadSummary"] is not None
+
+
+def test_baselines_omitted_yields_null_summaries() -> None:
+    args: dict[str, object] = {
+        "signals": [{"signal_date": "2024-01-02", "code": "000001"}],
+        "klines": {
+            "000001": {
+                "trade_date": ["2024-01-02", "2024-01-03", "2024-01-04"],
+                "open_qfq": [10.0, 11.0, 12.0],
+            },
+        },
+        "holdings": [1],
+    }
+    out = _run(args)
+    assert out["baselineSummary"] is None
+    assert out["spreadSummary"] is None
+
+
+def test_bad_baselines_shape_rejected() -> None:
+    with pytest.raises(QuantError) as exc:
+        EvaluateSignalHandler().execute(
+            {
+                "signals": [],
+                "klines": {},
+                "holdings": [1],
+                "baselines": {"1": {"2024-01-02": "not-a-pair"}},
+            }
+        )
+    assert exc.value.code == "INVALID_ARGUMENT"
+
+
 # --- schema ----------------------------------------------------------------
 
 

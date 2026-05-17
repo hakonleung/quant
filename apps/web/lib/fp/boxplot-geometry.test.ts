@@ -75,6 +75,24 @@ describe('computeBoxLayout', () => {
     expect(layout.yTicks.length).toBeGreaterThan(0);
   });
 
+  it('attaches yBaseline to columns when baselineMean is supplied', () => {
+    const layout = computeBoxLayout(
+      [{ ...statAt('5d', 0.02), baselineMean: 0.01 }],
+      opts,
+    );
+    const c = layout.columns[0]!;
+    expect(c.baselineMean).toBe(0.01);
+    expect(c.yBaseline).not.toBeNull();
+    // baseline (0.01) is below mean (0.02) on the chart → yBaseline > yMean.
+    expect(c.yBaseline!).toBeGreaterThan(c.yMean);
+  });
+
+  it('leaves yBaseline null when no baselineMean given', () => {
+    const layout = computeBoxLayout([statAt('5d', 0.02)], opts);
+    expect(layout.columns[0]!.yBaseline).toBeNull();
+    expect(layout.columns[0]!.baselineMean).toBeNull();
+  });
+
   it('emits at least two ticks covering both signs of the data range', () => {
     const layout = computeBoxLayout([statAt('a', 0.02), statAt('b', -0.03)], opts);
     expect(layout.yTicks.length).toBeGreaterThanOrEqual(2);

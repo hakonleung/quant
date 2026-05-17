@@ -14,7 +14,7 @@
  */
 
 import { Box, Button, Flex, Input, Text } from '@chakra-ui/react';
-import type { BacktestEvaluateResponse } from '@quant/shared';
+import type { BacktestEvaluateResponse, BacktestSpreadSummary } from '@quant/shared';
 import { useMemo, useState } from 'react';
 
 import { Feat } from '../../lib/eqty/feat.js';
@@ -22,6 +22,8 @@ import { useBacktestScreen } from '../../lib/hooks/use-backtest.js';
 import { useSectorsStore, type Sector } from '../../lib/stores/sectors.store.js';
 import { useUiStore } from '../../lib/stores/ui.store.js';
 import { FeatView } from '../feat-view/feat-view.js';
+import { Cell } from './cell.js';
+import { ObservationsPanel } from './observations-panel.js';
 import { ReturnBoxplot } from './return-boxplot.js';
 
 const DEFAULT_HOLDINGS = '5,10,20,60,90';
@@ -176,6 +178,16 @@ function Field({
 }
 
 function Results({ data }: { readonly data: BacktestEvaluateResponse }): React.ReactElement {
+  const baselineByHolding = useMemo(() => {
+    const map: Record<number, number> = {};
+    for (const b of data.baselineSummary ?? []) map[b.holding] = b.universeMean;
+    return map;
+  }, [data.baselineSummary]);
+  const spreadByHolding = useMemo(() => {
+    const map: Record<number, BacktestSpreadSummary> = {};
+    for (const s of data.spreadSummary ?? []) map[s.holding] = s;
+    return map;
+  }, [data.spreadSummary]);
   const stats = data.summary.map((s) => ({
     label: `${String(s.holding)}d`,
     n: s.n,
@@ -185,24 +197,49 @@ function Results({ data }: { readonly data: BacktestEvaluateResponse }): React.R
     p25: s.p25,
     p75: s.p75,
     p95: s.p95,
+    baselineMean: baselineByHolding[s.holding] ?? null,
   }));
+  const [expandedHolding, setExpandedHolding] = useState<number | null>(null);
   return (
     <Flex direction="column" gap="6px">
       <Text fontFamily="mono" fontSize="10px" color="ink3" letterSpacing="0.14em">
         // range {data.signalDateRange?.[0] ?? '—'} → {data.signalDateRange?.[1] ?? '—'} · avg
-        signals/day {data.universeSizeAvg.toFixed(1)}
+        signals/day {data.universeSizeAvg.toFixed(1)} · dashed amber line = universe baseline
       </Text>
       <ReturnBoxplot stats={stats} width={420} height={220} />
-      <SummaryTable data={data} />
+      <SummaryTable
+        data={data}
+        spreadByHolding={spreadByHolding}
+        expandedHolding={expandedHolding}
+        onToggleHolding={(h): void => {
+          setExpandedHolding((prev) => (prev === h ? null : h));
+        }}
+      />
+      {expandedHolding !== null && (
+        <ObservationsPanel
+          observations={data.observations.filter((o) => o.holding === expandedHolding)}
+          holding={expandedHolding}
+        />
+      )}
     </Flex>
   );
 }
 
+interface SummaryTableProps {
+  readonly data: BacktestEvaluateResponse;
+  readonly spreadByHolding: Record<number, BacktestSpreadSummary>;
+  readonly expandedHolding: number | null;
+  readonly onToggleHolding: (holding: number) => void;
+}
+
+const SUMMARY_HEADERS = ['hold', 'n', 'mean', 'median', 'win', 'vs univ', 't', 'sharpe'];
+
 function SummaryTable({
   data,
-}: {
-  readonly data: BacktestEvaluateResponse;
-}): React.ReactElement {
+  spreadByHolding,
+  expandedHolding,
+  onToggleHolding,
+}: SummaryTableProps): React.ReactElement {
   return (
     <Box
       as="table"
@@ -211,34 +248,44 @@ function SummaryTable({
       fontSize="11px"
       style={{ borderCollapse: 'collapse' }}
     >
-      <Box as="thead">
-        <Box as="tr" color="ink3">
-          {['hold', 'n', 'mean', 'median', 'win', 'p25', 'p75', 'sharpe'].map((h) => (
-            <Box
-              as="td"
-              key={h}
-              px="6px"
-              py="3px"
-              textAlign={h === 'hold' ? 'left' : 'right'}
-              borderBottomWidth="1px"
-              borderColor="line"
-            >
-              {h}
-            </Box>
-          ))}
-        </Box>
-      </Box>
+      <SummaryTableHead headers={SUMMARY_HEADERS} />
       <Box as="tbody">
         {data.summary.map((s) => (
-          <Box as="tr" key={s.holding} color="ink">
-            <Box as="td" px="6px" py="3px">{s.holding}d</Box>
-            <Cell num={s.n} digits={0} />
-            <Cell num={s.mean} pct />
-            <Cell num={s.median} pct />
-            <Cell num={s.winRate} pct />
-            <Cell num={s.p25} pct />
-            <Cell num={s.p75} pct />
-            <Cell num={s.sharpeLike} digits={2} />
+          <SummaryRow
+            key={s.holding}
+            holding={s.holding}
+            n={s.n}
+            mean={s.mean}
+            median={s.median}
+            winRate={s.winRate}
+            sharpeLike={s.sharpeLike}
+            spread={spreadByHolding[s.holding] ?? null}
+            expanded={expandedHolding === s.holding}
+            onToggle={(): void => {
+              onToggleHolding(s.holding);
+            }}
+          />
+        ))}
+      </Box>
+    </Box>
+  );
+}
+
+function SummaryTableHead({ headers }: { readonly headers: readonly string[] }): React.ReactElement {
+  return (
+    <Box as="thead">
+      <Box as="tr" color="ink3">
+        {headers.map((h) => (
+          <Box
+            as="td"
+            key={h}
+            px="6px"
+            py="3px"
+            textAlign={h === 'hold' ? 'left' : 'right'}
+            borderBottomWidth="1px"
+            borderColor="line"
+          >
+            {h}
           </Box>
         ))}
       </Box>
@@ -246,20 +293,47 @@ function SummaryTable({
   );
 }
 
-function Cell({
-  num,
-  pct,
-  digits,
-}: {
-  readonly num: number;
-  readonly pct?: boolean;
-  readonly digits?: number;
-}): React.ReactElement {
-  const text = pct === true ? `${(num * 100).toFixed(1)}%` : num.toFixed(digits ?? 2);
-  const color = pct === true && num !== 0 ? (num > 0 ? 'up' : 'down') : 'ink';
+interface SummaryRowProps {
+  readonly holding: number;
+  readonly n: number;
+  readonly mean: number;
+  readonly median: number;
+  readonly winRate: number;
+  readonly sharpeLike: number;
+  readonly spread: BacktestSpreadSummary | null;
+  readonly expanded: boolean;
+  readonly onToggle: () => void;
+}
+
+function SummaryRow(p: SummaryRowProps): React.ReactElement {
   return (
-    <Box as="td" px="6px" py="3px" textAlign="right" color={color}>
-      {text}
+    <Box
+      as="tr"
+      color="ink"
+      cursor="pointer"
+      _hover={{ bg: 'panel3' }}
+      bg={p.expanded ? 'panel3' : undefined}
+      onClick={p.onToggle}
+    >
+      <Box as="td" px="6px" py="3px">
+        {p.expanded ? '▾' : '▸'} {p.holding}d
+      </Box>
+      <Cell num={p.n} digits={0} />
+      <Cell num={p.mean} pct />
+      <Cell num={p.median} pct />
+      <Cell num={p.winRate} pct />
+      {p.spread === null ? (
+        <>
+          <Cell num={NaN} />
+          <Cell num={NaN} />
+        </>
+      ) : (
+        <>
+          <Cell num={p.spread.spreadMean} pct />
+          <Cell num={p.spread.spreadTStat} digits={2} />
+        </>
+      )}
+      <Cell num={p.sharpeLike} digits={2} />
     </Box>
   );
 }

@@ -145,6 +145,8 @@ const VALID_PAYLOAD = {
       exitDate: '2024-01-10',
       exitPx: 11,
       ret: 0.1,
+      baselineMean: 0.02,
+      excessRet: 0.08,
     },
   ],
   summary: [
@@ -175,7 +177,38 @@ const VALID_PAYLOAD = {
       sharpeLike: 0,
     },
   ],
+  baselineSummary: [
+    { holding: 5, n: 1, universeMean: 0.02, universeStd: 0 },
+    { holding: 10, n: 0, universeMean: 0, universeStd: 0 },
+  ],
+  spreadSummary: [
+    { holding: 5, n: 1, spreadMean: 0.08, spreadStd: 0, spreadTStat: 0, winRate: 1.0 },
+    { holding: 10, n: 0, spreadMean: 0, spreadStd: 0, spreadTStat: 0, winRate: 0 },
+  ],
 };
+
+/**
+ * Build a BacktestService whose `universeBaselines` is stubbed to an
+ * empty record — tests should not hit DuckDB. Each test gets its own
+ * fresh instance.
+ */
+function makeService(
+  client: FlightClient,
+  reader: KlineReaderService,
+  exec: ScreenExecService,
+): BacktestService {
+  const svc = new BacktestService(client, reader, exec, '/tmp/quant-test-data');
+  // Replace the protected baseline computation with a no-op so the
+  // suite stays purely in-memory. The "baselines" arg shipped to the
+  // Flight stub will always be an empty object.
+  (
+    svc as unknown as {
+      universeBaselines: () => Promise<Record<string, Record<string, [number, number]>>>;
+    }
+  ).universeBaselines = (): Promise<Record<string, Record<string, [number, number]>>> =>
+    Promise.resolve({});
+  return svc;
+}
 
 // ---- evaluate_signals ----
 
@@ -187,7 +220,7 @@ describe('BacktestService.evaluateSignals', () => {
       '000002': [row('2024-01-02', 20), row('2024-01-03', 21)],
     });
     const screenFake = fakeScreenExec({});
-    const svc = new BacktestService(client, klineFake.reader, screenFake.exec);
+    const svc = makeService(client, klineFake.reader, screenFake.exec);
 
     const req: BacktestEvaluateSignalsRequest = {
       signals: [
@@ -218,7 +251,7 @@ describe('BacktestService.evaluateSignals', () => {
     const { client } = fakeFlight(VALID_PAYLOAD);
     const klineFake = fakeKline({ '000001': [row('2024-01-02', 10)] });
     const screenFake = fakeScreenExec({});
-    const svc = new BacktestService(client, klineFake.reader, screenFake.exec);
+    const svc = makeService(client, klineFake.reader, screenFake.exec);
 
     await svc.evaluateSignals(
       {
@@ -240,7 +273,7 @@ describe('BacktestService.evaluateSignals', () => {
     const { client, calls } = fakeFlight(VALID_PAYLOAD);
     const klineFake = fakeKline({ '000001': [row('2024-01-02', 10)] });
     const screenFake = fakeScreenExec({});
-    const svc = new BacktestService(client, klineFake.reader, screenFake.exec);
+    const svc = makeService(client, klineFake.reader, screenFake.exec);
 
     await svc.evaluateSignals(
       {
@@ -265,7 +298,7 @@ describe('BacktestService.evaluateSignals', () => {
     };
     const klineFake = fakeKline({ '000001': [row('2024-01-02', 10)] });
     const screenFake = fakeScreenExec({});
-    const svc = new BacktestService(fake.client, klineFake.reader, screenFake.exec);
+    const svc = makeService(fake.client, klineFake.reader, screenFake.exec);
 
     await expect(
       svc.evaluateSignals(
@@ -298,7 +331,7 @@ describe('BacktestService.evaluateScreen', () => {
       '2024-01-03': [],
       '2024-01-04': ['000001'],
     });
-    const svc = new BacktestService(client, klineFake.reader, screenFake.exec);
+    const svc = makeService(client, klineFake.reader, screenFake.exec);
 
     const req: BacktestEvaluateScreenRequest = {
       screenPlan: plan,
@@ -319,7 +352,7 @@ describe('BacktestService.evaluateScreen', () => {
       '2024-01-02': [],
       '2024-01-03': [],
     });
-    const svc = new BacktestService(client, klineFake.reader, screenFake.exec);
+    const svc = makeService(client, klineFake.reader, screenFake.exec);
 
     const res = await svc.evaluateScreen(
       {
@@ -343,7 +376,7 @@ describe('BacktestService.evaluateScreen', () => {
     const { client } = fakeFlight(VALID_PAYLOAD);
     const klineFake = fakeKline({});
     const screenFake = fakeScreenExec({});
-    const svc = new BacktestService(client, klineFake.reader, screenFake.exec);
+    const svc = makeService(client, klineFake.reader, screenFake.exec);
 
     await expect(
       svc.evaluateScreen(

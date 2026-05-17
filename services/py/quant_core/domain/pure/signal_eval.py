@@ -20,10 +20,12 @@ import statistics
 from typing import TYPE_CHECKING
 
 from quant_core.domain.types.signal_eval import (
+    BaselineSummary,
     HoldingSummary,
     Observation,
     SignalEvalResult,
     SignalInput,
+    SpreadSummary,
 )
 from quant_core.errors import QuantError
 
@@ -38,6 +40,8 @@ def evaluate_signal(
     signals: Sequence[SignalInput],
     bars_by_code: Mapping[str, Sequence[Bar]],
     holdings: Sequence[int],
+    *,
+    baselines: Mapping[int, Mapping[date_cls, tuple[float, float]]] | None = None,
 ) -> SignalEvalResult:
     """Compute per-holding return observations + summary.
 
@@ -70,11 +74,21 @@ def evaluate_signal(
 
     observations: list[Observation] = []
     for sig in signals:
-        observations.extend(_observations_for_signal(sig, indexed, unique_holdings))
+        observations.extend(_observations_for_signal(sig, indexed, unique_holdings, baselines))
     observations.sort(key=lambda o: (o.signal_date, o.code, o.holding))
 
     summary = tuple(
         _summarise(h, [o.ret for o in observations if o.holding == h]) for h in unique_holdings
+    )
+    baseline_summary = (
+        tuple(_summarise_baseline(h, baselines[h]) for h in unique_holdings if h in baselines)
+        if baselines is not None
+        else None
+    )
+    spread_summary = (
+        tuple(_summarise_spread(h, observations) for h in unique_holdings)
+        if baselines is not None
+        else None
     )
     return SignalEvalResult(
         observations=tuple(observations),
@@ -82,6 +96,8 @@ def evaluate_signal(
         holdings=unique_holdings,
         signal_date_range=_date_range(signals),
         universe_size_avg=_universe_avg(signals),
+        baseline_summary=baseline_summary,
+        spread_summary=spread_summary,
     )
 
 
@@ -102,6 +118,7 @@ def _observations_for_signal(
     sig: SignalInput,
     indexed: Mapping[str, _CodeIndex],
     unique_holdings: tuple[int, ...],
+    baselines: Mapping[int, Mapping[date_cls, tuple[float, float]]] | None,
 ) -> list[Observation]:
     idx = indexed.get(sig.code)
     if idx is None or not idx.bars:
@@ -121,6 +138,12 @@ def _observations_for_signal(
         if exit_bar.open_qfq <= 0:
             continue
         ret = float(exit_bar.open_qfq) / float(entry_bar.open_qfq) - 1.0
+        # Baseline is keyed by entry_bar.trade_date — the actual trading
+        # day from which the universe forward-return is measured. NestJS
+        # computes it as mean(open(E+h)/open(E) - 1) over all codes for
+        # each trading day E.
+        baseline_mean = _baseline_at(baselines, h, entry_bar.trade_date)
+        excess = ret - baseline_mean if baseline_mean is not None else None
         out.append(
             Observation(
                 signal_date=sig.signal_date,
@@ -131,9 +154,83 @@ def _observations_for_signal(
                 exit_date=exit_bar.trade_date,
                 exit_px=exit_bar.open_qfq,
                 ret=ret,
+                baseline_mean=baseline_mean,
+                excess_ret=excess,
             )
         )
     return out
+
+
+def _baseline_at(
+    baselines: Mapping[int, Mapping[date_cls, tuple[float, float]]] | None,
+    holding: int,
+    signal_date: date_cls,
+) -> float | None:
+    if baselines is None:
+        return None
+    series = baselines.get(holding)
+    if series is None:
+        return None
+    pair = series.get(signal_date)
+    if pair is None:
+        return None
+    return pair[0]
+
+
+def _summarise_baseline(
+    holding: int, series: Mapping[date_cls, tuple[float, float]]
+) -> BaselineSummary:
+    means = [m for (m, _s) in series.values()]
+    n = len(means)
+    if n == 0:
+        return BaselineSummary(holding=holding, n=0, universe_mean=0.0, universe_std=0.0)
+    mean = statistics.fmean(means)
+    std = statistics.pstdev(means) if n > 1 else 0.0
+    return BaselineSummary(holding=holding, n=n, universe_mean=mean, universe_std=std)
+
+
+def _summarise_spread(holding: int, observations: list[Observation]) -> SpreadSummary:
+    # Group this-holding observations by signal_date, then compute the
+    # per-date spread = mean(signal_returns@T) - universe_mean@T.
+    by_date: dict[date_cls, list[Observation]] = {}
+    for o in observations:
+        if o.holding != holding or o.baseline_mean is None:
+            continue
+        by_date.setdefault(o.signal_date, []).append(o)
+    spreads: list[float] = []
+    wins = 0
+    for group in by_date.values():
+        signal_mean = statistics.fmean(o.ret for o in group)
+        baseline_mean = group[0].baseline_mean
+        if baseline_mean is None:  # pragma: no cover — filtered above
+            continue
+        spread = signal_mean - baseline_mean
+        spreads.append(spread)
+        if spread > 0.0:
+            wins += 1
+    n = len(spreads)
+    if n == 0:
+        return SpreadSummary(
+            holding=holding,
+            n=0,
+            spread_mean=0.0,
+            spread_std=0.0,
+            spread_t_stat=0.0,
+            win_rate=0.0,
+        )
+    mean = statistics.fmean(spreads)
+    std = statistics.pstdev(spreads) if n > 1 else 0.0
+    t_stat = mean / (std / math.sqrt(n)) if std > 0.0 and n > 1 else 0.0
+    if math.isnan(t_stat) or math.isinf(t_stat):
+        t_stat = 0.0
+    return SpreadSummary(
+        holding=holding,
+        n=n,
+        spread_mean=mean,
+        spread_std=std,
+        spread_t_stat=t_stat,
+        win_rate=wins / n,
+    )
 
 
 def _date_range(signals: Sequence[SignalInput]) -> tuple[date_cls, date_cls] | None:
