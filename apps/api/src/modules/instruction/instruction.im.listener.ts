@@ -73,11 +73,31 @@ function reply(result: InstructionResult, instructionId: string | null): ReplyEn
   return { result, kind: 'instruction.reply', instructionId };
 }
 
+/**
+ * Window during which an early `INSTRUCTION_ASYNC_COMPLETED_EVENT` is
+ * held in case the worker finishes the job before the producer side of
+ * `runEntry` reaches `pendingByJobId.set`. 60s comfortably covers any
+ * micro-task or IO scheduling delay between `executor.dispatch` resolving
+ * and the next listener tick. Confirmed cache-miss bug: TA / sentiment
+ * jobs that finish in <100 ms used to race the pending registration and
+ * the completion was dropped silently.
+ */
+const EARLY_COMPLETION_TTL_MS = 60_000;
+
 @Injectable()
 export class InstructionImListener implements OnModuleInit {
   private readonly logger = new Logger(InstructionImListener.name);
   /** Bridges async jobs back to the IM thread that triggered them. */
   private readonly pendingByJobId = new Map<string, PendingAsync>();
+  /**
+   * Async completions that arrived before `pendingByJobId.set` was
+   * called for the same jobId. Drained when the pending entry lands.
+   * See `EARLY_COMPLETION_TTL_MS`.
+   */
+  private readonly earlyCompletions = new Map<
+    string,
+    { readonly payload: InstructionAsyncCompletedPayload; readonly timer: NodeJS.Timeout }
+  >();
 
   constructor(
     @Inject(InstructionExecutor) private readonly executor: InstructionExecutor,
@@ -115,8 +135,35 @@ export class InstructionImListener implements OnModuleInit {
   @OnEvent(INSTRUCTION_ASYNC_COMPLETED_EVENT)
   async onAsyncCompleted(payload: InstructionAsyncCompletedPayload): Promise<void> {
     const pending = this.pendingByJobId.get(payload.jobId);
-    if (pending === undefined) return;
+    if (pending === undefined) {
+      // Worker finished before `runEntry` registered the pending entry.
+      // Buffer the payload; `runEntry` drains it after `pendingByJobId.set`.
+      this.bufferEarlyCompletion(payload);
+      return;
+    }
     this.pendingByJobId.delete(payload.jobId);
+    await this.deliverAsyncCompletion(pending, payload);
+  }
+
+  private bufferEarlyCompletion(payload: InstructionAsyncCompletedPayload): void {
+    const existing = this.earlyCompletions.get(payload.jobId);
+    if (existing !== undefined) clearTimeout(existing.timer);
+    const timer = setTimeout(() => {
+      this.earlyCompletions.delete(payload.jobId);
+      this.logger.warn(
+        `instruction_async_completion_orphaned jobId=${payload.jobId} instructionId=${payload.instructionId} — no IM pending entry within TTL`,
+      );
+    }, EARLY_COMPLETION_TTL_MS);
+    // Node's setTimeout keeps the event loop alive; release the ref so a
+    // stray buffered completion doesn't block graceful shutdown.
+    timer.unref?.();
+    this.earlyCompletions.set(payload.jobId, { payload, timer });
+  }
+
+  private async deliverAsyncCompletion(
+    pending: PendingAsync,
+    payload: InstructionAsyncCompletedPayload,
+  ): Promise<void> {
     try {
       // Forward handler-side `output.meta` (e.g. `stockTableRows`) the
       // same way the sync path does, so async screen / TA results render
@@ -339,12 +386,26 @@ export class InstructionImListener implements OnModuleInit {
     if (gate !== null) return gate;
     const dispatched = await this.executor.dispatch(instructionId, rawArgs, ctx, imHints);
     if (dispatched.kind === 'async-queued') {
-      this.pendingByJobId.set(dispatched.jobId, {
+      const pending: PendingAsync = {
         channel: msg.channel,
         target: replyTarget,
         traceId,
         instructionId: dispatched.instructionId,
-      });
+      };
+      // Drain race: a fast worker may have already emitted
+      // INSTRUCTION_ASYNC_COMPLETED_EVENT between `enqueue` resolving and
+      // this line. `onAsyncCompleted` would have buffered the payload in
+      // `earlyCompletions` rather than dropping it; pull it out and
+      // deliver before installing the pending entry (so the next event,
+      // if any duplicate, becomes a no-op).
+      const early = this.earlyCompletions.get(dispatched.jobId);
+      if (early !== undefined) {
+        clearTimeout(early.timer);
+        this.earlyCompletions.delete(dispatched.jobId);
+        await this.deliverAsyncCompletion(pending, early.payload);
+      } else {
+        this.pendingByJobId.set(dispatched.jobId, pending);
+      }
       return null;
     }
     return this.envelopeFromDispatch(instructionId, dispatched.result);

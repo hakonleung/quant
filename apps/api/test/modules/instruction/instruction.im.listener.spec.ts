@@ -334,7 +334,40 @@ describe('InstructionImListener.onInbound — async path', () => {
       finishedAt: '2026-05-09T00:00:00.000Z',
       durationMs: 0,
     });
+    // No bridge entry => no send. The payload is buffered briefly in
+    // `earlyCompletions` in case the pending registration is racing.
     expect(sends).toHaveLength(0);
+  });
+
+  it('delivers early completions that race ahead of the pending registration', async () => {
+    // Simulates the cache-miss race: worker finishes the job and emits
+    // INSTRUCTION_ASYNC_COMPLETED_EVENT before `runEntry` reaches
+    // `pendingByJobId.set`. The buffer must capture it and `runEntry`
+    // must drain it on the way out.
+    const { listener, sends, enqueued, exe } = build();
+    // Patch the async bus to fire `onAsyncCompleted` synchronously
+    // during `enqueue` — i.e. before `executor.dispatch` resolves.
+    const bus = (
+      exe as unknown as { asyncBus: { enqueue: (j: InstructionAsyncJob) => Promise<void> } }
+    ).asyncBus;
+    const origEnqueue = bus.enqueue.bind(bus);
+    bus.enqueue = async (job: InstructionAsyncJob): Promise<void> => {
+      await origEnqueue(job);
+      await listener.onAsyncCompleted({
+        jobId: job.jobId,
+        instructionId: 'analyze',
+        userId: job.ctx.userId,
+        result: { ok: true, output: { text: 'fast result' } },
+        finishedAt: '2026-05-09T00:00:01.000Z',
+        durationMs: 50,
+      });
+    };
+
+    await listener.onInbound(inbound('/analyze'));
+    expect(enqueued).toHaveLength(1);
+    expect(sends).toHaveLength(1);
+    expect(sends[0]?.kind).toBe('instruction.async.completed');
+    expect(sends[0]?.text).toBe('fast result');
   });
 });
 
