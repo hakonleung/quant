@@ -2,97 +2,148 @@
 
 ## 功能
 
-- 将「FE 命令面板 / term 命令 / IM 入站消息 / Socket 命令」四条历史路径统一到一套指令注册表语义之下。
-- **共享层**只提供 id 命名规范、纯文本解析器、结果类型；**FE / BE 各自维护自己的注册表实例**。
-- BE 端订阅 `channel.inbound`（Slack / Feishu）：匹配指令 → 执行 → 通过 `ChannelService.send` 把结果回推到同一频道，构成 IM 闭环。
-- Socket 命令 `{ id, args }` 统一走同一个 `InstructionExecutor`，不再为每条命令单独写 schema 分支。
+- 将「FE term 命令 / IM 入站消息 / Socket 命令」三条路径统一到一套
+  `InstructionCenter<E, X>` 下（`packages/shared/src/instructions/center.ts`）。
+- **Manifest**（`packages/shared/src/instructions/manifest.ts`）是唯一的声明源：
+  args schema、result schema、别名、mode、revalidate scopes、doubleConfirm、
+  imGate、positional 绑定全部在此声明一次。
+- **FE 单例** `feCenter`（`apps/web/lib/instructions/fe-center.ts`）承载所有
+  FE 指令；**BE 单例** `BeInstructionCenter`
+  （`apps/api/src/modules/instruction-center/be-instruction-center.service.ts`）
+  承载所有 BE 指令。两侧均由 `InstructionCenter<Env, Excluded>` 实例化，
+  `Excluded` 联合列出本侧不参与的 id。
+- BE 端订阅 `channel.inbound`（Slack / Feishu）：匹配指令 → 执行 → 通过
+  `ChannelService.send` 把结果回推到同一频道，构成 IM 闭环。
+- Socket 命令 `{ id, args }` 统一走 `InstructionExecutor`，不再为每条命令
+  单独写 schema 分支。
+
+迁移历史与分阶段记录见
+`docs/integrations/instruction-center-migration.md`。
 
 ## 进程拓扑
 
 ```
                 packages/shared/src/instructions/
-                ┌────────────────────────────────────┐
-                │  InstructionId 命名规范             │
-                │  parseInstructionLine() 纯解析      │  ← 唯一的跨进程契约
-                │  InstructionResult / formatResult    │
-                └────────────────────────────────────┘
-                        ▲                ▲
-        ┌───────────────┘                └────────────────┐
-        │                                                 │
-   FE 实例（已存在，零改动）                          BE 实例（新增）
-   packages/terminal/src/registry.ts                  apps/api/src/modules/instruction/
-                                                      ────────────────────────────────
-   feat-term-main 唯一入口；                          InstructionRegistry / Executor
-   ⌘K → setAppMode('term')；                         InstructionImListener  ← @OnEvent('channel.inbound')
-   命令面板已删除。                                   SocketInstructionAdapter ← SocketCommandHandler
-                                                      handlers/* (built-ins)
-                                                      <feature>/instructions/*.handler.ts
+                ┌──────────────────────────────────────────────────────┐
+                │  InstructionCenter<E, X>   (center.ts)               │
+                │  INSTRUCTION_MANIFEST      (manifest.ts)             │  ← 跨进程唯一源
+                │  ArgsOf<I> / ResultOf<I>   (center.ts)               │
+                │  InstructionId / parse     (id.ts / parse.ts)        │
+                │  InstructionResult         (result.ts)               │
+                └──────────────────────────────────────────────────────┘
+                        ▲                              ▲
+        ┌───────────────┘                              └──────────────────────┐
+        │                                                                     │
+   FE 单例                                                              BE 单例
+   apps/web/lib/instructions/fe-center.ts                apps/api/src/modules/instruction-center/
+   ──────────────────────────────────────                ──────────────────────────────────────────
+   feCenter = InstructionCenter<FeEnv, Excluded>         BeInstructionCenter
+   cells/* — FE 侧 handler + renderer                    cells/* — BE 侧 handler + renderer
+   dispatch.ts — feDispatch() 接收 runCommand 效果        be-types.ts — BeEnv / BeCtx / ImHost
+   completion.ts — buildCompleterEnv(stockIndex)
+   feat-term-main 唯一入口；⌘K → setAppMode('term')
+
+   legacy InstructionRegistry（apps/api/src/modules/instruction/）
+   ─────────────────────────────────────────────────────────────────
+   仅剩 help / ping / channel.echo / channel.send（IM-only / debug 门控）
+   InstructionImListener  ← @OnEvent('channel.inbound')
+   SocketInstructionAdapter ← SocketCommandHandler
 ```
 
 ## 共享层（`packages/shared/src/instructions/`）
 
-| 文件        | 内容                                                                                                                                                                     |
-| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `id.ts`     | `InstructionId` 品牌类型 + `INSTRUCTION_ID_RE`（`^[a-z][a-z0-9]*(\.[a-z][a-z0-9]*)*$`） + `instructionId(raw)` 校验                                                      |
-| `parser.ts` | `parseInstructionLine(text, knownIds, { requirePrefix? })`：剥离 `/` 前缀（IM 模式）→ 切首 token → 校验 id 是否在 `knownIds` 中。**不做** zod 校验、不做 argv tokenize。 |
-| `result.ts` | `InstructionResult = { ok:true, output:{ text } } \| { ok:false, error:{ code, message } }`；`formatResult(r)` 用于 IM 文本 / FE toast 的统一渲染。                      |
-| `index.ts`  | re-export 上述三个模块                                                                                                                                                   |
+| 文件          | 内容                                                                                                                                                                       |
+| ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `center.ts`   | `InstructionCenter<E, X>`：统一 dispatcher；`InstructionCell`、`InstructionConfig`、`InstructionEnv`、`coerceArgs`、`AllInstructionIds`、`ArgsOf<I>`、`ResultOf<I>` 等类型 |
+| `manifest.ts` | `INSTRUCTION_MANIFEST`：每条指令的 `argsSchema`、`resultSchema`、`aliases`、`positional`、`mode`、`requiresImConfirm`、`revalidate` 等声明；`COMMAND_MANIFEST` 扁平数组     |
+| `schemas.ts`  | 所有 `XxxArgsSchema` / `XxxResultSchema`（zod）；manifest 引用这里；两侧 handler 通过 `ArgsOf<I>` 取类型                                                                  |
+| `id.ts`       | `InstructionId` 品牌类型 + `INSTRUCTION_ID_RE` + `instructionId(raw)` 校验                                                                                                |
+| `parse.ts`    | `tokenize` / `parseArgv`：把字符串切成 `{ positional, flags }` 供 `InstructionCenter.dispatch` 内部使用                                                                   |
+| `parser.ts`   | `parseInstructionLine(text, knownIds, { requirePrefix? })`：IM 路径用（剥 `/` 前缀 → 匹配 knownIds）                                                                      |
+| `result.ts`   | `InstructionResult`；`InstructionError` + `InstructionErrorCode`；`formatResult(r)`                                                                                       |
+| `index.ts`    | re-export 上述所有模块                                                                                                                                                     |
 
-**为什么共享层不放 spec 类型？** FE 的 `CommandSpec`（`@quant/terminal`）携带 tab 补全 + xterm 交互 widget；BE 的 `InstructionSpec` 用 zod argsSchema + Nest 注入的 service。两侧唯一可共享的是「id + summary + 参数 schema」，但 FE 现成 spec 没用 zod，强行统一会牵动 11 个命令文件，违反 §2.5.2 Rule of Three。
+## BE 实例
 
-## BE 实例（`apps/api/src/modules/instruction/`）
+### `instruction-center/`（主路径）
 
-| 文件                                           | 角色                                                                                                                                                                             |
-| ---------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `instruction.spec.ts`                          | `InstructionSpec<TArgs> { id; summary; help?; argsSchema: z.ZodType<TArgs>; positional?; aliases? }`                                                                             |
-| `instruction.port.ts`                          | `InstructionHandler<TArgs> { execute(args, ctx): Promise<InstructionResult> }`；`InstructionCtx = { traceId; source: 'im' \| 'socket' \| 'http'; channelId?; sender?; target? }` |
-| `instruction.registry.ts`                      | `@Injectable()`：`register(spec, handler)` / `get(id)` / `list()` / `knownIds()`；alias → canonical id                                                                           |
-| `instruction.executor.ts`                      | 两个入口：`execute(id, args, ctx)`（socket / http）和 `executeLine(line, ctx)`（IM）。zod 校验失败 → `{code:'validation'}`，handler 抛错 → `{code:'handler'}`                    |
-| `instruction.provider.ts`                      | `InstructionRegistrarBase<TArgs>` —— 让 handler 类直接 extends，`onModuleInit` 自动注册                                                                                          |
-| `instruction.im.listener.ts`                   | `@OnEvent(CHANNEL_INBOUND_EVENT)` → 解析 → 执行 → `ChannelService.send` 回推                                                                                                     |
-| `parse-argv.ts`                                | `tokenize(rest)` + `parseArgvToObject(rest, positional)`：把首 token 后的字符串切成 `Record<string,string>`，支持 `k=v`、位置参数、`"..."` 引号转义                              |
-| `socket-instruction.adapter.ts`                | 实现 socket gateway 的 `SocketCommandHandler` 接口，把 `{id, args}` 路由到 executor                                                                                              |
-| `instruction.module.ts`                        | `@Global()` 模块；注入 `INSTRUCTION_CONFIG`、注册 `instruction.async` BullMQ 队列；导出 Registry / Executor / AsyncBus / Adapter；导入 ChannelModule                             |
-| `instruction.config.ts`                        | env 驱动配置：`INSTRUCTION_IM_ALLOWLIST`（逗号分隔 sender id）+ `INSTRUCTION_DEBUG_ENABLED`（启用调试指令）                                                                      |
-| `async/instruction-async.bus.ts`               | `instruction.async` 队列 + `INSTRUCTION_ASYNC_{STARTED,COMPLETED}_EVENT` 事件                                                                                                    |
-| `async/instruction-async.processor.ts`         | BullMQ Worker；处理流程 = emit started → executor.execute → emit completed（同时打 socket 与 EventEmitter）                                                                      |
-| `handlers/{help,ping,channel-echo}.handler.ts` | 内置 handler（ping / channel.echo 仅在 `INSTRUCTION_DEBUG_ENABLED=1` 时注册）                                                                                                    |
+`apps/api/src/modules/instruction-center/` 承载所有迁移后的指令。
 
-### v1 已注册指令
+| 文件                                   | 角色                                                                                                                                                       |
+| -------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `be-instruction-center.service.ts`     | `@Injectable()` NestJS service；`BeInstructionCenter = InstructionCenter<BeEnv, Excluded>`；`has(id)` + `executeMigrated(id, args, ctx)` 供 executor 调用  |
+| `be-types.ts`                          | `BeEnv`、`BeCtx`（NestJS services 注入包）、`ImHost`、`ImOutput`                                                                                           |
+| `cells/`                               | 每条 BE 指令一个 `*.cell.ts`：`handler` + `renderer`（可选 `peek`）                                                                                        |
+| `instruction-center.module.ts`         | 装配 `BeInstructionCenter` 及其 cell 所需 services                                                                                                         |
+| `async/`                               | BullMQ `instruction.async` 队列 + processor（与 legacy executor 共用）                                                                                    |
+| `handlers/{help,ping,channel-echo}.handler.ts` | 仅剩的 legacy handlers（IM-only / debug 门控；不在 manifest 里）                                                                                  |
 
-| Spec id            | 来源                                               | 模式      | 摘要                                                                                                                                              |
-| ------------------ | -------------------------------------------------- | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `help`             | `instruction/handlers/help.handler.ts`             | sync      | 列已注册 spec；`/help <id>` 显示详情                                                                                                              |
-| `focus`            | `stock-meta/instructions/focus.handler.ts`         | sync      | 校验 6 位 A 股 code 并回 `focus = <code> <name> (<industry>)`                                                                                     |
-| `stock`            | `stock-meta/instructions/stock.handler.ts`         | sync      | 按 code / 名称 / 拼音搜索（默认 limit=10）                                                                                                        |
-| `sector`           | `sectors/instructions/sector.handler.ts`           | sync      | 列对当前用户可见的板块（own + published），输出包含 OWNER 与 [PUB] 标识                                                                           |
-| `sector.publish`   | `sectors/instructions/sector-publish.handler.ts`   | sync      | `/sector.publish <id>` 仅创建者；触发 confirm 后置 `published=true` 让全员可见                                                                    |
-| `sector.unpublish` | `sectors/instructions/sector-publish.handler.ts`   | sync      | `/sector.unpublish <id>` 仅创建者；恢复为私有                                                                                                     |
-| `sector.refresh`   | `sectors/instructions/sector-refresh.handler.ts`   | sync      | `/sector.refresh <id>` 任何用户可触发；动态板块按 `screenPlan` 重跑并落库,所有人共享结果                                                          |
-| `watch`            | `watch/instructions/watch.handler.ts`              | sync      | `watch list`（别名 `watch.list`）—— 列 watch 任务                                                                                                 |
-| `ledger`           | `ledger/instructions/ledger.handler.ts`            | sync      | `/ledger [sub=list] [limit=N]`：基于 `LedgerService.enriched` 输出近 N 条（`sub=summary` 已下线，复盘走 `/ledger.analyze`）                       |
-| `ledger.analyze`   | `ledger/instructions/ledger-analyze.handler.ts`    | **async** | `/ledger analyze [fresh=1]` `[$]`：调 `LedgerService.analyze`（LLM in NestJS），与 term 的 `analyze.ledger` 按钮等价；走 `instruction.async` 通道 |
-| `analyze`          | `sentiment/instructions/analyze.handler.ts`        | **async** | `/analyze <code> [fresh=1] [windowDays=N]` `[$]`：单只新闻舆情，对齐 term `analyze.one`；async 通道                                               |
-| `analyze.sector`   | `sentiment/instructions/analyze-sector.handler.ts` | **async** | `/analyze.sector <id> [fresh=1] [windowDays=N]` `[$]`：板块成员舆情扇出 + LLM 主题聚类，对齐 term `analyze.many`                                  |
-| `ta`               | `ta/instructions/ta.handler.ts`                    | **async** | `/ta <code> [fresh=1]` `[$]`：单只技术分析，对齐 term `analyze.ta`                                                                                |
-| `ta.show`          | `ta/instructions/ta-show.handler.ts`               | sync      | `/ta.show <code>` `[$]`：从缓存读已生成的 TA 分析（无 LLM 调用，仍走 confirm 流以与 `/ta` 一致）                                                  |
-| `ta.sector`        | `ta/instructions/ta-sector.handler.ts`             | **async** | `/ta.sector <id> [fresh=1]` `[$]`：板块成员 TA 扇出 + LLM 综述，对齐 term `analyze.ta.many`                                                       |
-| `web.search`       | `agent/instructions/web-search.handler.ts`         | sync      | `/web.search q="..." [n=5]`：仅给 `/agent` 工具集使用；锁定 Qwen 提供方做付费网搜，输出中文摘要                                                   |
-| `update`           | `blacklist/instructions/update.handler.ts`         | sync      | `/update target=blacklist` `[!]`：调 `BlacklistService.refresh`，回 size/asof/universe                                                            |
-| `screen`           | `screen/instructions/screen.handler.ts`            | **async** | `/screen "<NL>" [asof=YYYY-MM-DD]` `[$]`：NestJS 端 NL→DSL + 进程内 `ScreenExecService` 执行（无 Flight）；走 async 通道                          |
-| `agent`            | `agent/instructions/agent.handler.ts`              | sync      | `/agent <prompt>` `[$]`：自然语言总入口，多步 tool-use 循环 + 流式收尾；首次返回 `confirm-required` 让 IM 出付费卡，term 出 confirmPrompt         |
-| `agent.confirm`    | `agent/instructions/agent-confirm.handler.ts`      | sync      | `/agent.confirm correlationId=… approve=1\|0`：续派被付费/破坏性工具暂停的循环；只接 `correlationId` 所属的同一 userId                            |
-| `usr`              | `instruction/handlers/usr.handler.ts`              | sync      | 显示用户身份 + LLM ledger 累计（今日 / 本月 / 总计 + per-scope CNY）                                                                              |
+### `instruction/`（legacy 路径，缩减中）
 
-#### 调试 / 内部指令（`INSTRUCTION_DEBUG_ENABLED=1` 才注册）
+| 文件                            | 角色                                                                                                                                                                              |
+| ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `instruction.types.ts`          | `InstructionSpec<TArgs>` + `AnyInstructionSpec`                                                                                                                                   |
+| `instruction.port.ts`           | `InstructionHandler<TArgs>`；`InstructionCtx = { traceId; source; channelId?; sender?; target? }`                                                                                |
+| `instruction.registry.ts`       | `@Injectable()`：`register` / `get` / `list` / `knownIds`；只剩 `help` / `ping` / `channel.echo` / `channel.send` 四条注册项                                                    |
+| `instruction.executor.ts`       | `execute(id, args, ctx)` + `executeLine(line, ctx)`；先检查 `BeInstructionCenter.has(id)` 拦截，否则回落 `InstructionRegistry`                                                   |
+| `instruction.provider.ts`       | `InstructionRegistrarBase<TArgs>` — `onModuleInit` 自动调 `registry.register`；作用域已缩减至上述四条 legacy handlers                                                            |
+| `instruction.im.listener.ts`    | `@OnEvent(CHANNEL_INBOUND_EVENT)` → 解析 → executor → `ChannelService.send` 回推                                                                                                 |
+| `parse-argv.ts`                 | `tokenize(rest)` + `parseArgvToObject`：legacy 路径用；manifest 路径改用 `packages/shared/src/instructions/parse.ts`                                                             |
+| `socket-instruction.adapter.ts` | 把 `{id, args}` 路由到 executor                                                                                                                                                   |
+| `instruction.module.ts`         | `@Global()`；注入 `INSTRUCTION_CONFIG`、BullMQ 队列；导出 Registry / Executor / AsyncBus / Adapter                                                                               |
+| `instruction.config.ts`         | `INSTRUCTION_IM_ALLOWLIST` + `INSTRUCTION_DEBUG_ENABLED`                                                                                                                          |
 
-| Spec id        | 来源                                           | 用途                                                   |
-| -------------- | ---------------------------------------------- | ------------------------------------------------------ |
-| `ping`         | `instruction/handlers/ping.handler.ts`         | echo args + traceId — 链路存活探针                     |
-| `channel.echo` | `instruction/handlers/channel-echo.handler.ts` | 原样回推 args + ctx — 调 IM 鉴权 / 路由时用            |
-| `channel.send` | `channel/instructions/channel-send.handler.ts` | 手动外发（socket / web term 触发）；prod IM 通常不需要 |
+### Manifest 指令（`BeInstructionCenter` + `feCenter` 共享）
 
-> `help` 输出只展示当前已注册的项；调试指令未启时不会出现在列表里。
+下表中 `help` 在 FE 侧有 cell（`cells/help.cell.ts`），BE 侧另有 legacy handler 给 IM 用。
+其余指令两侧均通过 manifest 统一定义。
+
+| Spec id            | FE cell 来源                                       | BE cell 来源（`instruction-center/cells/`）        | 模式      | 摘要                                                                                                                                              |
+| ------------------ | -------------------------------------------------- | -------------------------------------------------- | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `help`             | `cells/help.cell.ts`                               | —（legacy registry only）                          | sync      | FE：列 manifest 指令；IM：通过 legacy `help.handler.ts` 列 registry 已注册 spec                                                                  |
+| `focus`            | `cells/focus.cell.ts`                              | `focus.cell.ts`                                    | sync      | 校验 6 位 A 股 code 并回 `focus = <code> <name> (<industry>)`                                                                                     |
+| `stock`            | `cells/stock.cell.ts`        | `cells/stock.cell.ts`         | sync      | 按 code / 名称 / 拼音搜索（默认 limit=10）                                                                                                        |
+| `stock.info`       | `cells/stock-info.cell.ts`   | `cells/stock-info.cell.ts`    | sync      | 单股详情                                                                                                                                          |
+| `stock.kline`      | `cells/stock-kline.cell.ts`  | `cells/stock-kline.cell.ts`   | sync      | 单股 K 线                                                                                                                                         |
+| `sector`           | `cells/sector.cell.ts`       | `cells/sector.cell.ts`        | sync      | 列对当前用户可见的板块（own + published），输出包含 OWNER 与 [PUB] 标识                                                                           |
+| `sector.show`      | `cells/sector-show.cell.ts`  | `cells/sector-show.cell.ts`   | sync      | 板块详情 + 成员列表                                                                                                                               |
+| `sector.add`       | `cells/sector-add.cell.ts`   | `cells/sector-add.cell.ts`    | sync      | `sector.add sector=<json>`；无引导式多步表单                                                                                                      |
+| `sector.publish`   | `cells/sector-ack.cell.ts`   | `cells/sector-publish.cell.ts` | sync    | `sector.publish <id>` 仅创建者；置 `published=true`                                                                                               |
+| `sector.unpublish` | `cells/sector-ack.cell.ts`   | `cells/sector-publish.cell.ts` | sync    | `sector.unpublish <id>` 仅创建者；恢复私有                                                                                                        |
+| `sector.refresh`   | `cells/sector-refresh.cell.ts` | `cells/sector-refresh.cell.ts` | sync  | 任何用户可触发；动态板块按 `screenPlan` 重跑并落库，所有人共享结果                                                                               |
+| `sector.rm`        | `cells/sector-ack.cell.ts`   | `cells/sector-rm.cell.ts`     | sync      | owner-only 删除                                                                                                                                    |
+| `watch`            | `cells/watch.cell.ts`        | `cells/watch.cell.ts`         | sync      | 列 watch 任务（别名 `watch.list`）                                                                                                                 |
+| `watch.add`        | `cells/watch-add.cell.ts`    | `cells/watch-add.cell.ts`     | sync      | `watch.add code=... market=... group=...`；无引导式表单                                                                                           |
+| `watch.remove`     | `cells/watch-remove.cell.ts` | `cells/watch-remove.cell.ts`  | sync      | `watch.remove id=wN`                                                                                                                              |
+| `watch.group`      | `cells/watch-group.cell.ts`  | `cells/watch-group.cell.ts`   | sync      | watch 分组管理                                                                                                                                     |
+| `ledger`           | `cells/ledger.cell.ts`       | `cells/ledger.cell.ts`        | sync      | `/ledger [limit=N]`：基于 `LedgerService.enriched` 输出近 N 条                                                                                    |
+| `ledger.add`       | `cells/ledger-add.cell.ts`   | `cells/ledger-add.cell.ts`    | sync      | 添加持仓记录                                                                                                                                       |
+| `ledger.remove`    | `cells/ledger-remove.cell.ts`| `cells/ledger-remove.cell.ts` | sync      | 删除持仓记录                                                                                                                                       |
+| `ledger.analyze`   | `cells/ledger-analyze.cell.ts` | `cells/ledger-analyze.cell.ts` | **async** | `/ledger.analyze [fresh=1]` `[$]`：调 `LedgerService.analyze`（LLM），走 `instruction.async` 通道                                              |
+| `analyze`          | `cells/analyze.cell.ts`      | `cells/analyze.cell.ts`       | **async** | `/analyze <code> [fresh=1] [windowDays=N]` `[$]`：单只新闻舆情；async 通道                                                                        |
+| `analyze.sector`   | `cells/analyze-sector.cell.ts` | —（BE-excluded）              | **async** | `/analyze.sector <id> [fresh=1]` `[$]`：板块成员舆情扇出 + LLM 主题聚类；FE async 通道のみ                                                      |
+| `ta`               | `cells/ta.cell.ts`           | `cells/ta.cell.ts`            | **async** | `/ta <code> [fresh=1]` `[$]`：单只技术分析；async 通道                                                                                            |
+| `ta.sector`        | `cells/ta-sector.cell.ts`    | `cells/ta-sector.cell.ts`     | **async** | `/ta.sector <id> [fresh=1]` `[$]`：板块成员 TA 扇出 + LLM 综述；async 通道                                                                       |
+| `screen`           | `cells/screen.cell.ts`       | `cells/screen.cell.ts`        | **async** | `/screen "<NL>" [asof=YYYY-MM-DD]` `[$]`：NL→DSL + `ScreenExecService`（无 Flight）；async 通道                                                   |
+| `agent`            | `cells/agent.cell.ts`        | `cells/agent.cell.ts`         | sync      | `/agent <prompt>` `[$]`：多步 tool-use；`confirm-required` 让 IM 出付费卡 / term 出 confirmPrompt                                                  |
+| `agent.confirm`    | `cells/agent-confirm.cell.ts`| `cells/agent-confirm.cell.ts` | sync      | `/agent.confirm correlationId=… approve=1\|0`：续派被暂停的循环                                                                                   |
+| `usr`              | `cells/usr.cell.ts`          | `cells/usr.cell.ts`           | sync      | 用户身份 + LLM ledger 累计（今日 / 本月 / 总计 + per-scope CNY）                                                                                  |
+| `update`           | `cells/update.cell.ts`       | `cells/update.cell.ts`        | sync      | `/update target=blacklist` `[!]`：调 `BlacklistService.refresh`                                                                                   |
+| `cache`            | `cells/cache.cell.ts`        | —（BE-excluded）              | sync      | FE-only：action runner 缓存 stats / clear                                                                                                         |
+| `clear`            | `cells/clear.cell.ts`        | —（BE-excluded）              | sync      | FE-only：清空 term 滚动缓存                                                                                                                        |
+| `web.search`       | —（FE-excluded）             | `cells/web-search.cell.ts`    | sync      | BE-only（`/agent` 工具集）：Qwen 付费网搜，输出中文摘要                                                                                           |
+
+#### Legacy registry 专属指令（不在 manifest 里）
+
+以下四条仍通过 `InstructionRegistry` / `InstructionRegistrarBase` 注册，
+不在 `INSTRUCTION_MANIFEST` 中，因此也不在 `feCenter`。
+
+| Spec id        | 来源                                           | 门控                          | 用途                                                   |
+| -------------- | ---------------------------------------------- | ----------------------------- | ------------------------------------------------------ |
+| `help`         | `instruction/handlers/help.handler.ts`         | 始终注册                      | 列 registry 中已注册 spec（IM 专用）                   |
+| `ping`         | `instruction/handlers/ping.handler.ts`         | `INSTRUCTION_DEBUG_ENABLED=1` | echo args + traceId — 链路存活探针                     |
+| `channel.echo` | `instruction/handlers/channel-echo.handler.ts` | `INSTRUCTION_DEBUG_ENABLED=1` | 原样回推 args + ctx — 调 IM 鉴权 / 路由时用            |
+| `channel.send` | `channel/instructions/channel-send.handler.ts` | `INSTRUCTION_DEBUG_ENABLED=1` | 手动外发（socket / web term 触发）；prod IM 通常不需要 |
 
 ### 文本语法
 
@@ -102,8 +153,11 @@
 
 - IM 端要求 `/` 前缀（避免普通聊天误触发）；term / socket 端不要前缀。
 - **IM 兜底**：allowlist 内的 sender 发的裸消息（无 `/`，且不匹配任何已注册 id / 别名）会被自动路由到 `/agent q="<原文>"`；非 allowlist 仍沉默。
-- **`InstructionSpec` 元数据**：`costsCredits=true`（外部付费 LLM）渲染为 `[$]`；`destructive=true`（不可逆写）渲染为 `[!]`。`/agent` 循环按这两个 flag 决定是否在工具调用前暂停等用户确认。
-- **`InstructionResult.error.code`** 新增 `confirm-required`：付费指令在缺 `confirm` 时返回；IM 列表器把它映射成 `agent.paid_confirm` 卡 kind 而不是红色 error。
+- **manifest 元数据**：`doubleConfirm: 'llm'`（外部付费 LLM）渲染为 `[$]`；
+  `doubleConfirm: 'destructive'`（不可逆写）渲染为 `[!]`；`imGate: true` 表示
+  IM 端在分发前必须等待用户确认卡片。`/agent` 循环按这些 flag 决定是否在工具调用前暂停。
+- **`InstructionError.code`** 包含 `confirm-required`：handler 抛出时表示需要付费确认；
+  IM listener 把它映射成 `agent.paid_confirm` 卡 kind 而不是红色 error。
 - `k=v` 对应 spec 的 zod 字段；位置参数按 `spec.positional` 顺序填入对应 key（已被 `k=v` 占用的 key 跳过）。
 - 双引号包裹的值支持 `\"` 与 `\\` 转义；超过 `positional` 数量的多余位置参数静默丢弃，由 `argsSchema` 决定是否报错。
 
@@ -115,15 +169,29 @@
 
 ## FE 实例
 
-- 唯一权威是 `@quant/terminal` 的 `CommandRegistry`（`packages/terminal/src/registry.ts`），由 `feat-term-main` 用 `createDefaultRegistry()` 装载。
-- 不引入 `InstructionSpec` 类型转译，也不复制一份注册表到 FE：term 命令的副作用本就在浏览器里发生，不需要往 BE 转。
-- `apps/web/components/feat-cmd-palette/` 已**删除**。⌘K 全局快捷键直接 `setAppMode('term')`（参见 `apps/web/components/shell/app-shell.tsx`），顶栏新增 `TermTrigger` 替代旧的 palette chip。
+- **`feCenter`**（`apps/web/lib/instructions/fe-center.ts`）是进程单例，类型为
+  `InstructionCenter<FeEnv, Excluded>`，包含所有 FE 指令的 `handler` + `renderer`。
+- `apps/web/lib/instructions/dispatch.ts` 的 `feDispatch(line, ctx)` 接收 engine
+  `runCommand` 效果，调用 `feCenter.dispatch(...)` 并在成功后扇出 manifest 声明的
+  `revalidate` scopes。
+- `apps/web/lib/instructions/completion.ts` 的 `buildCompleterEnv(stockIndex)` 从
+  `INSTRUCTION_MANIFEST` 派生 tab 补全的 `commands` / `subcommands` / `paramCompleter`，
+  不再依赖 `CommandRegistry`。
+- `packages/terminal/src/registry.ts` 现在只导出 `CommandCtx`、`CommandRunOutput`、
+  `CommandStores`、`UiStoreShim`、`RevalidateScope`、`CommitResolution` 等 ctx / 输出类型。
+  `CommandSpec`、`CommandRegistry`、`createRegistry`、`createDefaultRegistry`、
+  `CommandError` 均已删除。
+- `apps/web/components/feat-cmd-palette/` 已**删除**。⌘K 全局快捷键直接
+  `setAppMode('term')`（参见 `apps/web/components/shell/app-shell.tsx`），
+  顶栏 `TermTrigger` 替代旧的 palette chip。
 
 ## Socket 路径
 
 - 共享 schema：`packages/shared/src/types/socket.ts` 的 `SocketCommandSchema = { id, args }`。
 - gateway：`apps/api/src/modules/socket/socket.gateway.ts` 仍用 `SOCKET_COMMAND_HANDLER` 注入，`AppModule` 把 `SocketInstructionAdapter` 通过 `SocketModule.forRoot` 接进去。
-- 加新指令 = 写一个继承 `InstructionRegistrarBase` 的 handler，列入 feature module 的 `providers`。**不需要**改任何 schema / gateway / adapter。
+- 加新 manifest 指令 = 参见 `docs/integrations/instruction-center-migration.md` 的
+  "Pattern for a new BE cell + manifest id"。加 legacy-only 指令（IM 调试等）= 继承
+  `InstructionRegistrarBase`，列入 feature module 的 `providers`；不需要改 schema / gateway / adapter。
 
 ## ACL（INSTRUCTION_IM_ALLOWLIST）
 
@@ -187,15 +255,14 @@ IM /analyze | /analyze.sector | /ta | /ta.sector | /ledger.analyze | /screen
 ## 测试
 
 - `packages/shared/src/instructions/parser.test.ts` —— parser / formatResult 单测。
+- `packages/shared/src/instructions/center.test.ts` —— `InstructionCenter` dispatch / coerceArgs / alias / error envelopes。
+- `packages/shared/src/instructions/manifest.test.ts` —— manifest id 唯一性 / schema 类型一致性。
 - `apps/api/test/modules/instruction/parse-argv.spec.ts` —— argv tokenize / k=v / positional / quote。
-- `apps/api/test/modules/instruction/instruction.registry.spec.ts` —— 注册 / alias / 重复 id / alias 冲突。
+- `apps/api/test/modules/instruction/instruction.registry.spec.ts` —— legacy registry：注册 / alias / 重复 id / alias 冲突。
 - `apps/api/test/modules/instruction/instruction.config.spec.ts` —— allowlist 空白容错 / debug 开关 boolean 解析。
-- `apps/api/test/modules/instruction/instruction.executor.spec.ts` —— execute / executeLine / dispatch / mode='async' 入队 / zod 早失败 / 入队异常。
+- `apps/api/test/modules/instruction/instruction.executor.spec.ts` —— execute / executeLine / dispatch / mode='async' 入队 / BeInstructionCenter 拦截。
 - `apps/api/test/modules/instruction/instruction.im.listener.spec.ts` —— `/` 前缀 / sync 回复 + meta / ACL forbidden / async started + 续推 completed。
 - `apps/api/test/modules/instruction/instruction-async.processor.spec.ts` —— started/completed 事件链 / executor 抛错被包装成 completed 错误。
-- `apps/api/test/modules/ledger/{ledger,ledger-analyze}.handler.spec.ts`、
-  `apps/api/test/modules/blacklist/update.handler.spec.ts`、
-  `apps/api/test/modules/screen/screen.handler.spec.ts` —— 业务 handler golden + 异常路径。
 - `apps/api/test/modules/channel/{feishu-card,slack-card}.spec.ts` —— pickCard / pickBlocks 四类 kind + 截断 + 未知 kind fallback。
 
 ## 暂不做
@@ -206,6 +273,7 @@ IM /analyze | /analyze.sector | /ta | /ta.sector | /ledger.analyze | /screen
   飞书 `card.action.trigger` 长连接钩子留待 v1.5）。
 - LangGraph 编排：`/agent` 循环目前是 NestJS 直管的 while loop；多 agent 分支或长任务
   断点恢复才迁到 `services/py/quant_workflow/`（反向 RPC 调 NestJS `LlmService`）。
-- 装饰器 + DiscoveryModule 扫描：handler 数 < 15 还不必要。
-- 跨进程统一的 `InstructionSpec` 类型：等到出现第三个消费者（CLI / Electron）再抽（§2.5.2 Rule of Three）。
+- 流式中间帧心跳：`instruction.async.progress` 由 handler 主动 emit；processor 不自动产生。
 - 持久化 IM 续推映射：`pendingByJobId` 是内存 Map，进程重启会丢；socket 端可走 topic 自取。
+- 多步引导式表单（`sector.add` name→kind→codes，`watch.add` 多条件）可作为返回
+  `confirm-required` 风格 follow-up 行的 cell renderer 实现，无需框架改动。

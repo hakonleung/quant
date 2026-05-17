@@ -1,16 +1,14 @@
 /**
- * Command registry for the terminal.
- *
- * `CommandSpec`s are pure values (CLAUDE.md §2.5.1) that describe how to
- * dispatch a parsed argv. The actual side-effect surface (action runner,
- * stores) is injected via `CommandCtx`.
+ * Terminal ctx + output shapes — what an `InstructionCell`'s handler
+ * and renderer see on the FE side. Historically this file also hosted
+ * the legacy `CommandRegistry` / `CommandSpec` plumbing; every
+ * instruction has since moved to the cross-side `InstructionCenter`,
+ * leaving only the ctx / output types here.
  */
 
-import type { CompletionCandidate } from './completion/completer.js';
 import type { StockIndex } from './completion/stock-index.js';
 import type { DataActionRunner } from './actions/types.js';
 import type { CommitResolution, Event, InteractiveWidgetAny, OutputEntry } from './engine/state.js';
-import type { ParsedArgv } from './engine/parse-argv.js';
 
 /* ---------- ctx & stores shim ---------- */
 
@@ -46,8 +44,8 @@ export interface CommandCtx {
   readonly signal: AbortSignal;
   /**
    * Host-provided handle to dispatch engine events from outside the
-   * normal `run` return value. Used by long-running streaming commands
-   * (`/agent`) that own a socket subscription and need to push
+   * normal cell-handler return path. Used by long-running streaming
+   * cells (`/agent`) that own a socket subscription and need to push
    * `streamChunk` / `streamStepLog` / `streamClose` events as frames
    * arrive. Optional because mock runners + unit tests don't have a
    * dispatch loop.
@@ -55,7 +53,7 @@ export interface CommandCtx {
   readonly dispatchEvent?: (event: Event) => void;
 }
 
-/* ---------- command spec ---------- */
+/* ---------- output shape ---------- */
 
 export type CommandRunOutput =
   | {
@@ -66,71 +64,9 @@ export type CommandRunOutput =
   | { readonly kind: 'interactive'; readonly widget: InteractiveWidgetAny }
   /**
    * Bypass the normal `result` event and dispatch one or more engine events
-   * directly. Used by `clear`, `clear last N`, etc.
+   * directly. Used by the `clear` cell.
    */
   | { readonly kind: 'engine'; readonly events: readonly Event[] };
 
-export interface CommandSpec {
-  readonly name: string;
-  readonly aliases?: readonly string[];
-  readonly summary: string;
-  readonly subcommands?: readonly string[];
-  /**
-   * Per-positional parameter completer. `positionalIdx` is 0-based and
-   * skips the command + subcommand tokens.
-   */
-  readonly complete?: (
-    positionalIdx: number,
-    fragment: string,
-    ctx: CommandCtx,
-  ) => readonly CompletionCandidate[];
-  readonly run: (argv: ParsedArgv, ctx: CommandCtx) => Promise<CommandRunOutput>;
-}
-
-export interface CommandRegistry {
-  register(spec: CommandSpec): void;
-  resolve(name: string): CommandSpec | undefined;
-  list(): readonly CommandSpec[];
-  /** Names + aliases — used for top-level completion. */
-  allNames(): readonly string[];
-  subcommandsOf(name: string): readonly string[];
-}
-
-export function createRegistry(): CommandRegistry {
-  const byName = new Map<string, CommandSpec>();
-  const aliases = new Map<string, string>();
-  const order: string[] = [];
-
-  return {
-    register(spec) {
-      if (byName.has(spec.name)) throw new Error(`duplicate command: ${spec.name}`);
-      byName.set(spec.name, spec);
-      order.push(spec.name);
-      for (const al of spec.aliases ?? []) aliases.set(al, spec.name);
-    },
-    resolve(name) {
-      const real = aliases.get(name) ?? name;
-      return byName.get(real);
-    },
-    list() {
-      return order.map((n) => byName.get(n)!).filter((s): s is CommandSpec => s !== undefined);
-    },
-    allNames() {
-      return [...byName.keys(), ...aliases.keys()];
-    },
-    subcommandsOf(name) {
-      const real = aliases.get(name) ?? name;
-      return byName.get(real)?.subcommands ?? [];
-    },
-  };
-}
-
 /** Resolution → CommitResolution helpers re-exported for convenience. */
 export type { CommitResolution };
-
-export class CommandError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = 'CommandError';
-  }
-}

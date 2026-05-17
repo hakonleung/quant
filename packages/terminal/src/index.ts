@@ -7,8 +7,9 @@
  *   widgets/     interactive primitives (selectable list, form, confirm, ...)
  *   completion/  Tab completion + stock prefix index
  *   actions/     data-action registry + mock backend
- *   commands/    quant-specific command implementations
- *   registry.ts  command registry contract
+ *   registry.ts  legacy command registry (kept as a no-op anchor —
+ *                every instruction lives on the FE `InstructionCenter`
+ *                in `apps/web/lib/instructions/`)
  *
  * Hosts (e.g. `apps/web` Next.js / future Electron / VS Code) bridge
  * xterm.js or any other emulator to this engine via the public types.
@@ -19,5 +20,4 @@ export * from './engine/index.js';
 export * from './widgets/index.js';
 export * from './completion/index.js';
 export * from './actions/index.js';
-export * from './commands/index.js';
 export * from './registry.js';

@@ -28,14 +28,12 @@ import {
   ANSI,
   buildStockIndex,
   complete,
-  createDefaultRegistry,
   EMPTY_STOCK_INDEX,
   fromBrowserEvent,
   getRunner,
   initialState,
   paint,
   reduce,
-  runCommand,
   stockListAction,
   stripAnsi,
   toKeySpec,
@@ -49,12 +47,9 @@ import {
 import { useQueryClient } from '@tanstack/react-query';
 
 import { parseTrailingCursorUp } from '../../lib/fp/parse-trailing-cursor-up.js';
+import { buildCompleterEnv } from '../../lib/instructions/completion.js';
 import { defaultInvoker } from '../../lib/instructions/fe-center.js';
-import {
-  feCenterCanDispatch,
-  feDispatch,
-  termOutputToEvents,
-} from '../../lib/instructions/dispatch.js';
+import { feDispatch, termOutputToEvents } from '../../lib/instructions/dispatch.js';
 import type { FeCtx } from '../../lib/instructions/fe-types.js';
 import { useUiStore } from '../../lib/stores/ui.store.js';
 import { installRunner } from '../../lib/term/install-runner.js';
@@ -108,7 +103,6 @@ export function useTerminal(): TerminalApi {
   const paintScheduledRef = useRef<boolean>(false);
   const spinnerTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const registry = useMemo(() => createDefaultRegistry(), []);
   const queryClient = useQueryClient();
 
   // Revalidator is installed at mount-time alongside the runner so the
@@ -191,19 +185,9 @@ export function useTerminal(): TerminalApi {
     (eff: Effect): void => {
       if (eff.kind === 'runCommand') {
         const baseCtx = buildCtx();
-        // Intercept: when feCenter has the head, dispatch through the
-        // new cell model (typed BE call + revalidate fan-out). Misses
-        // fall through to the legacy registry path so migration is
-        // incremental.
-        if (feCenterCanDispatch(eff.line)) {
-          const feCtx: FeCtx = { ...baseCtx, api: defaultInvoker };
-          void feDispatch(eff.line, feCtx).then((out) => {
-            for (const ev of termOutputToEvents(out)) dispatch(ev);
-          });
-          return;
-        }
-        void runCommand(eff.line, baseCtx, registry).then((events: readonly Event[]) => {
-          for (const ev of events) dispatch(ev);
+        const feCtx: FeCtx = { ...baseCtx, api: defaultInvoker };
+        void feDispatch(eff.line, feCtx).then((out) => {
+          for (const ev of termOutputToEvents(out)) dispatch(ev);
         });
         return;
       }
@@ -225,23 +209,13 @@ export function useTerminal(): TerminalApi {
         applyCompletion();
       }
     },
-    [buildCtx, dispatch, registry /* applyCompletion */],
+    [buildCtx, dispatch /* applyCompletion */],
     // applyCompletion is stable below
   );
 
   const applyCompletion = useCallback((): void => {
     const cur = stateRef.current;
-    const env = {
-      commands: registry.list().map((c) => c.name),
-      subcommands: Object.fromEntries(
-        registry.list().map((c) => [c.name, c.subcommands ?? []]),
-      ) as Readonly<Record<string, readonly string[]>>,
-      paramCompleter: (cmdName: string, idx: number, fragment: string) => {
-        const spec = registry.resolve(cmdName);
-        if (spec?.complete === undefined) return [];
-        return spec.complete(idx, fragment, buildCtx());
-      },
-    };
+    const env = buildCompleterEnv(indexRef.current);
     const r = complete(cur.buffer, cur.cursor, env);
     if (r.candidates.length === 0) return;
     const fragmentText = cur.buffer.slice(r.tokenStart, r.tokenEnd);
@@ -265,7 +239,7 @@ export function useTerminal(): TerminalApi {
       kind: 'setCandidates',
       candidates: r.candidates.map((c) => c.label).slice(0, 16),
     });
-  }, [buildCtx, dispatch, registry]);
+  }, [buildCtx, dispatch]);
 
   const observerRef = useRef<ResizeObserver | null>(null);
 

@@ -18,7 +18,9 @@ layering, and testing rules. Cross-references: `apps/web/components/feat-term-ma
   operation: stock lookup, sector CRUD, analyze, watch, screen.
 - Reusable across hosts — Next.js today; Electron / VS Code later — by
   keeping the library free of React, DOM, and xterm-specific code.
-- Registry-based commands: adding one is one file + one `register()` call.
+- Every instruction lives in the cross-side `InstructionCenter`
+  (`packages/shared/src/instructions/`); `@quant/terminal` provides the
+  pure engine / widget / render / completion / action primitives only.
 - Mock backend in the box. The UX is fully exercisable without any
   Python service running.
 - Cyber/geek aesthetic — Monaspace Neon font + the project's `term.*`
@@ -38,14 +40,20 @@ layering, and testing rules. Cross-references: `apps/web/components/feat-term-ma
 packages/terminal/
   src/
     render/        ANSI / width / table / sparkline               (pure)
-    engine/        state · reducer · dispatcher · keymap · argv   (pure)
+    engine/        state · reducer · keymap · argv                (pure)
     widgets/       selectable-list · form · confirm · paste · loop · hint-bar (pure)
     completion/    stock-index · completer (Tab)                  (pure)
     actions/       config registry + Mock runner (LRU cache)      (pure module)
-    commands/      quant-specific command implementations         (pure)
-    registry.ts    command registry contract                      (pure)
+    registry.ts    CommandCtx / CommandRunOutput / UiStoreShim /
+                   CommandStores / CommitResolution types          (pure)
     index.ts       public barrel
 ```
+
+The `commands/` directory and `engine/dispatcher.ts` (`runCommand` function) have been
+removed. All instruction logic now lives in
+`apps/web/lib/instructions/` (FE cells) and
+`apps/api/src/modules/instruction-center/` (BE cells), unified under
+`InstructionCenter<E, X>` from `packages/shared/src/instructions/`.
 
 Hard rule (CLAUDE.md §2.5.1): **every file under `src/` is pure** — no
 network, no `Date.now()` / `Math.random()` outside seed-injection helpers,
@@ -56,16 +64,12 @@ NOT in this package.
 ### Dependency direction
 
 ```
-commands/  →  actions/        (calls run via CommandCtx.actions)
-commands/  →  widgets/        (returns widgets as CommandRunOutput)
-commands/  →  completion/     (uses StockIndex for parameter completion)
 widgets/   →  render/         (table/ANSI/hint-bar)
 engine/    →  (none)          (closes over only state.ts types)
 actions/   →  zod, @quant/shared
 ```
 
-Disallowed: `engine/` importing `widgets/`, `widgets/` importing
-`actions/`, anything importing `commands/`.
+Disallowed: `engine/` importing `widgets/`, `widgets/` importing `actions/`.
 
 ---
 
@@ -75,7 +79,6 @@ Disallowed: `engine/` importing `widgets/`, `widgets/` importing
 import {
   // engine
   reduce,
-  runCommand,
   initialState,
   type TerminalState,
   type Event,
@@ -112,17 +115,19 @@ import {
   findAction,
   type DataActionConfig,
   type DataActionRunner,
-  // commands
-  createDefaultRegistry,
-  stockCommand,
-  sectorCommand /* ... */,
-  // registry
-  createRegistry,
-  type CommandRegistry,
-  type CommandSpec,
+  // registry (ctx / output types only — no CommandSpec / CommandRegistry)
   type CommandCtx,
+  type CommandRunOutput,
+  type CommandStores,
+  type UiStoreShim,
+  type RevalidateScope,
 } from '@quant/terminal';
 ```
+
+`createDefaultRegistry`, `createRegistry`, `CommandRegistry`, `CommandSpec`,
+`CommandError`, and `runCommand` are **gone** — deleted as part of the
+`InstructionCenter` migration. See
+`docs/integrations/instruction-center-migration.md`.
 
 ### Sub-paths
 
@@ -154,49 +159,65 @@ interactive --(Esc/CtrlC)-->      idle  (frozen snapshot kept)
 The reducer is **pure**: it returns `{ state, effects: Effect[] }`. The
 host (apps/web `use-terminal.ts`) consumes the effects:
 
-- `runCommand`: pass to `runCommand(line, ctx, registry)` from `engine/dispatcher`.
+- `runCommand`: routed through `feDispatch(line, ctx)` in
+  `apps/web/lib/instructions/dispatch.ts`, which delegates to
+  `feCenter.dispatch(...)` on the FE `InstructionCenter`. There is no
+  `runCommand` function exported from `@quant/terminal` anymore.
 - `commitWidget`: chain widgets, dispatch a follow-up `submit`, or write
   an `output` entry directly.
 - `abort`: signal the active AbortController for the current Promise.
-- `completionRequested`: the host calls `complete()` with the registry
-  and either patches the buffer (`setBuffer`) or shows candidates
-  (`setCandidates`).
+- `completionRequested`: the host calls `complete()` with an env built by
+  `buildCompleterEnv(stockIndex)` from
+  `apps/web/lib/instructions/completion.ts` and either patches the buffer
+  (`setBuffer`) or shows candidates (`setCandidates`).
 
 ---
 
 ## 5. Commands & interactive sub-flows
 
-| Command                      | Form                   | Interactive                                                                                                         |
-| ---------------------------- | ---------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| `help [cmd]`                 | text                   | —                                                                                                                   |
-| `clear` / `cls`              | text                   | —                                                                                                                   |
-| `:cache stats / clear`       | text                   | —                                                                                                                   |
-| `stock find <q>`             | interactive            | SelectableList → `stock info <code>`                                                                                |
-| `stock info <code>`          | text                   | —                                                                                                                   |
-| `stock kline <code>`         | text                   | —                                                                                                                   |
-| `sector list`                | interactive            | SelectableList; `a` → analyze (paid+confirm), `d` → remove (owner+confirm), `p` → publish/unpublish (owner+confirm) |
-| `sector show <id>`           | interactive            | members SelectableList; `a` → analyze, `f` → focus                                                                  |
-| `sector add`                 | interactive            | form (name) → enum (kind) → user/dynamic flow                                                                       |
-| `sector refresh <id>`        | text                   | any user may refresh dynamic sectors (server persists)                                                              |
-| `sector publish <id>`        | text                   | owner-only; toggles `published`                                                                                     |
-| `sector unpublish <id>`      | text                   | owner-only                                                                                                          |
-| `sector rm <id>`             | text                   | owner-only                                                                                                          |
-| `analyze [<code>] [--force]` | text or guided picker  | confirm widget for paid path                                                                                        |
-| `analyze sector <id>`        | text or confirm        | confirm for `--force`                                                                                               |
-| `ta [<code>] [--force]`      | text or guided picker  | technical analysis; subcommand `ta sector <id>` fans out + AI summary                                               |
-| `ta sector <id> [--force]`   | text or confirm        | per-stock TA fan-out + LLM sector narrative                                                                         |
-| `screen nl <text>`           | confirm → results list | save matches as dynamic sector                                                                                      |
-| `watch list`                 | interactive            | SelectableList; `d` → remove (confirm)                                                                              |
-| `watch add [--flags]`        | text or full form      | `code` field is search-style (live picker)                                                                          |
-| `watch rm <m> <c>`           | text                   | —                                                                                                                   |
-| `focus [<code>]`             | text or picker         | —                                                                                                                   |
+All commands are FE cells in `apps/web/lib/instructions/cells/` dispatched
+via `feCenter` / `feDispatch`. The table below documents the _terminal syntax_
+(what a user types); the full arg/result schemas live in
+`packages/shared/src/instructions/manifest.ts`.
+
+| Command                       | Form                   | Interactive                                                                                                          |
+| ----------------------------- | ---------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| `help [cmd]`                  | text                   | —                                                                                                                    |
+| `clear` / `cls`               | text                   | —                                                                                                                    |
+| `cache stats / clear`         | text                   | —                                                                                                                    |
+| `stock <q>`                   | interactive            | SelectableList → `stock.info <code>`                                                                                 |
+| `stock.info <code>`           | text                   | —                                                                                                                    |
+| `stock.kline <code>`          | text                   | —                                                                                                                    |
+| `sector`                      | interactive            | SelectableList; `a` → analyze (paid+confirm), `d` → remove (owner+confirm), `p` → publish/unpublish (owner+confirm) |
+| `sector.show <id>`            | interactive            | members SelectableList; `a` → analyze, `f` → focus                                                                  |
+| `sector.add sector=<json>`    | text                   | no guided multi-step form; args passed inline                                                                        |
+| `sector.refresh <id>`         | text                   | any user may refresh dynamic sectors (server persists)                                                               |
+| `sector.publish <id>`         | text                   | owner-only; toggles `published`                                                                                      |
+| `sector.unpublish <id>`       | text                   | owner-only                                                                                                           |
+| `sector.rm <id>`              | text                   | owner-only                                                                                                           |
+| `analyze [code=<c>] [fresh=1]`| text or confirm        | `confirm-required` envelope triggers confirm widget for paid / fresh paths                                           |
+| `analyze.sector <id> [fresh]` | text or confirm        | confirm for paid path                                                                                                |
+| `ta [code=<c>] [fresh=1]`     | text or confirm        | technical analysis; `confirm-required` for fresh LLM paths                                                           |
+| `ta.sector <id> [fresh=1]`    | text or confirm        | per-stock TA fan-out + LLM sector narrative                                                                          |
+| `screen <text> [asof=DATE]`   | confirm → results list | save matches as dynamic sector (`nl` keyword dropped)                                                                |
+| `watch`                       | interactive            | SelectableList; `d` → remove (confirm)                                                                               |
+| `watch.add code=... [...]`    | text                   | no guided form; `watch.group` for group management                                                                   |
+| `watch.remove id=wN`          | text                   | —                                                                                                                    |
+| `focus [<code>]`              | text or picker         | —                                                                                                                    |
+| `ledger [sub=list] [limit=N]` | text                   | —                                                                                                                    |
+| `ledger.add` / `ledger.remove`| text                   | —                                                                                                                    |
+| `ledger.analyze [fresh=1]`    | text or confirm        | LLM portfolio narrative; async channel                                                                               |
+| `agent <prompt>`              | streaming text         | confirm card for paid/destructive tool calls                                                                         |
+| `agent.confirm correlationId` | text                   | resumes a paused agent loop                                                                                          |
+| `usr`                         | text                   | user identity + LLM ledger summary                                                                                   |
+| `update target=blacklist`     | text                   | —                                                                                                                    |
 
 ### Cross-cutting rules
 
-- **Paid operations** always go through a `confirmPrompt(danger=true)`:
-  `analyze`, `analyze sector`, `screen nl`, dynamic `sector add`.
-- **Destructive operations** (rm, rm watch, cache clear with prefix)
-  always confirm. Read-only and user-kind sector creation do not.
+- **Paid operations** surface a `confirm-required` envelope; the renderer
+  produces a `confirmPrompt(danger=true)` widget. Affected: `analyze`,
+  `analyze.sector`, `ta`, `ta.sector`, `screen`, `ledger.analyze`, `agent`.
+- **Destructive operations** (rm, watch.remove, cache clear) always confirm.
 - Esc / Ctrl-C inside any widget cancels the chain and writes a frozen
   `info` snapshot to history; further keys go back to the prompt.
 - Every widget MUST declare its hints via `hints(state) → KeyHint[]`. The
@@ -256,15 +277,20 @@ remove the key (or set anything else) to use live (default).
 `{ commonPrefix, candidates, tokenStart, tokenEnd }`. The host:
 
 1. Reduces `key: Tab` → effect `completionRequested`.
-2. Calls `complete(...)` with `env = { commands, subcommands, paramCompleter }`.
+2. Calls `complete(...)` with `env` built by
+   `buildCompleterEnv(stockIndex)` from
+   `apps/web/lib/instructions/completion.ts`.
 3. If exactly one candidate → `setBuffer` patches the active token.
 4. Otherwise inserts the longest common prefix; if user already typed
    the LCP, surfaces candidates via `setCandidates`.
 
-Per-positional parameter completion plugs into `CommandSpec.complete(idx,
-fragment, ctx)`. Stock-related commands route through
+`buildCompleterEnv` derives the `commands` + `subcommands` lists directly
+from `INSTRUCTION_MANIFEST` (the cross-side source of truth). There is no
+longer a `CommandSpec.complete` hook — per-positional parameter completion
+is wired inside the completer env via the `STOCK_CODE_IDS` set (ids whose
+first positional is a 6-digit A-share code). Stock candidates route through
 `StockIndex.complete(prefix)`, a code/name/pinyin three-way prefix index
-built once at terminal mount via `stock.list`.
+built once at terminal mount.
 
 ---
 
@@ -312,20 +338,32 @@ The Next.js host owns three small files, all under
   `FeatView` shell, attaches the host `<div>` via a ref-callback (handles
   the FeatView fullscreen subtree remount).
 - `use-terminal.ts`: bridges xterm.js to the engine — `onData` →
-  `toKeySpec` → `dispatch`; effects → action runner; renders state to
-  the xterm scrollback incrementally (footer-only erase, no full clear).
+  `toKeySpec` → `dispatch`; `runCommand` effects → `feDispatch`;
+  renders state to the xterm scrollback incrementally (footer-only erase,
+  no full clear).
 - (no other code).
 
-The store-shim (`UiStoreShim` in `registry.ts`) is the only contract
-between the package and the host — the host injects a `ctx.stores.ui`
-that wraps `useUiStore` (`getFocusCode` / `setFocusCode`). The package
-never imports zustand or the workbench's store modules.
+The `CommandCtx` type (from `registry.ts`) is the contract between the
+package and the host. The host injects:
+
+- `ctx.stores.ui` — a `UiStoreShim` wrapping `useUiStore`
+  (`getFocusCode` / `setFocusCode`).
+- `ctx.stores.revalidate` — optional callback; the FE shell fans out
+  manifest-declared `RevalidateScope` values after a successful dispatch.
+- `ctx.dispatchEvent` — optional handle for streaming cells (`/agent`)
+  that push `streamChunk` / `streamClose` events outside the normal
+  handler return path.
+
+The package never imports zustand or the workbench's store modules. The
+`runCommand` effect from the engine is handled by `feDispatch` in the host
+(`use-terminal.ts`); there is no dispatcher inside `@quant/terminal`.
 
 ---
 
 ## 11. Tests
 
-186 unit tests in `packages/terminal/src/**/*.test.ts`:
+Unit tests in `packages/terminal/src/**/*.test.ts` (no `commands/` tests
+— those moved to `apps/web/lib/instructions/` cell tests):
 
 - `render/`: ANSI strip, CJK width, table alignment, sparkline.
 - `engine/`: reducer (idle / running / cancelling / interactive +
@@ -348,12 +386,13 @@ pnpm --filter @quant/terminal test:cov   # 90% lines / 80% branches gate
 
 ## 12. Roadmap
 
-- **M1 ✅** — mock runner, full UX flows, 186 tests green, Next.js host
-  wired with cyber theme + Monaspace + Tab completion.
+- **M1 ✅** — mock runner, full UX flows, Next.js host wired with cyber
+  theme + Monaspace + Tab completion.
 - **M2 ✅** — `LiveActionRunner` against `endpoints.ts` + cross-cache
   revalidation table; `tm.runner` switch.
-- **M3** — extract a generic `@quant/terminal-core` (engine + widgets +
-  render + completion) and keep `@quant/terminal-quant` for actions /
-  commands. Allow third-party hosts to ship their own command surfaces.
+- **M3 ✅** — `InstructionCenter` migration: all commands moved to FE
+  cells (`apps/web/lib/instructions/cells/`); `commands/` directory and
+  `engine/dispatcher.ts` removed; tab completion rebuilt from
+  `INSTRUCTION_MANIFEST` via `buildCompleterEnv`.
 - **M4** — script mode (`pipe`, `&&`), per-user configurable keybindings,
   optional remote history sync.
