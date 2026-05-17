@@ -23,7 +23,7 @@
  *     Completion comes back through `InstructionAsyncBus.emitCompleted`.
  */
 
-import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
+import { Inject, Injectable, Logger, Optional, forwardRef } from '@nestjs/common';
 import {
   errResult,
   okResult,
@@ -66,8 +66,16 @@ export class InstructionExecutor {
     @Inject(InstructionRegistry) private readonly registry: InstructionRegistry,
     @Inject(InstructionAsyncBus) private readonly asyncBus: InstructionAsyncBus,
     @Inject(CLOCK) private readonly clock: Clock,
+    /**
+     * `forwardRef` breaks the provider-level cycle introduced when
+     * `BeInstructionCenter` started depending on `AgentService`:
+     *   InstructionExecutor → BE_INSTRUCTION_CENTER_PORT → BeInstructionCenter
+     *     → AgentService → AgentToolBridge → InstructionExecutor.
+     * Nest's loader stalls silently without it (no error, just a hang
+     * after every other module's deps have resolved).
+     */
     @Optional()
-    @Inject(BE_INSTRUCTION_CENTER_PORT)
+    @Inject(forwardRef(() => BE_INSTRUCTION_CENTER_PORT))
     private readonly center: BeInstructionCenterPort | null = null,
   ) {}
 
