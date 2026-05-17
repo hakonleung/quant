@@ -4,18 +4,15 @@
  * individual commands and assemble a custom registry.
  */
 
-import { agentCommand } from './agent.js';
 import { createRegistry, type CommandRegistry } from '../registry.js';
 
-export { agentCommand };
-
+/**
+ * Empty by design — every instruction now lives on `feCenter`
+ * (apps/web/lib/instructions/cells/*.cell.ts). The terminal shell
+ * checks feCenter first and nothing falls through here. The factory
+ * stays as a no-op anchor for any future host-specific commands
+ * that don't belong in the cross-side manifest.
+ */
 export function createDefaultRegistry(): CommandRegistry {
-  const r = createRegistry();
-  r.register(agentCommand);
-  // All other instructions live on `feCenter`
-  // (apps/web/lib/instructions/cells/*.cell.ts). The terminal shell
-  // checks feCenter first; only `/agent` falls through here because
-  // its streaming subscription doesn't fit the request/response cell
-  // shape yet.
-  return r;
+  return createRegistry();
 }

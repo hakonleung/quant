@@ -27,6 +27,8 @@ import { buildLedgerCell } from './cells/ledger.cell.js';
 import { buildLedgerAddCell } from './cells/ledger-add.cell.js';
 import { buildLedgerAnalyzeCell } from './cells/ledger-analyze.cell.js';
 import { buildLedgerRemoveCell } from './cells/ledger-remove.cell.js';
+import { buildAgentCell } from './cells/agent.cell.js';
+import { buildAgentConfirmCell } from './cells/agent-confirm.cell.js';
 import { buildAnalyzeCell } from './cells/analyze.cell.js';
 import { buildAnalyzeSectorCell } from './cells/analyze-sector.cell.js';
 import { buildSectorCell } from './cells/sector.cell.js';
@@ -86,7 +88,9 @@ export type FeMigratedIds =
   | 'watch'
   | 'watch.add'
   | 'watch.remove'
-  | 'watch.group';
+  | 'watch.group'
+  | 'agent'
+  | 'agent.confirm';
 
 type Excluded = Exclude<AllInstructionIds, FeMigratedIds>;
 type Configured = Exclude<AllInstructionIds, Excluded>;
@@ -131,6 +135,8 @@ export function buildFeCenter(): InstructionCenter<FeEnv, Excluded> {
     'watch.add': buildWatchAddCell(),
     'watch.remove': buildWatchRemoveCell(),
     'watch.group': buildWatchGroupCell(),
+    agent: buildAgentCell(),
+    'agent.confirm': buildAgentConfirmCell(),
   };
   return new InstructionCenter<FeEnv, Excluded>(cfg);
 }
