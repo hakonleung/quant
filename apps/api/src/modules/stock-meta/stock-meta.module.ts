@@ -43,6 +43,12 @@ const DEFAULT_DATA_DIR = '../../data';
     StockMetaService,
     // `stock` (search) migrated to `BeInstructionCenter` (instruction-center/cells/stock.cell.ts).
   ],
-  exports: [StockMetaService, LocalStockMetaWriterService, StockMetricsComputeService],
+  exports: [
+    StockMetaService,
+    LocalStockMetaWriterService,
+    StockMetricsComputeService,
+    // ScreenModule's UniverseFilterService injects the adapter directly.
+    LocalStockMetaAdapter,
+  ],
 })
 export class StockMetaModule {}

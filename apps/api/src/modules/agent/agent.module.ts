@@ -4,11 +4,17 @@
  * Depends on:
  *   - `LlmModule` (global) for chat-completion + streaming.
  *   - `InstructionModule` for the registry + executor (tool dispatch).
+ *     Wrapped in `forwardRef` because the cycle
+ *     `AgentModule → InstructionModule → InstructionCenterModule → AgentModule`
+ *     trips ES-modules TDZ at evaluation time without it — the
+ *     callback delays the `InstructionModule` symbol read until after
+ *     ESM evaluation finishes, while Nest still sees the edge in its
+ *     module graph.
  *   - `ChannelModule` for IM delivery + `AuthService` (history capture).
  *   - `SocketModule` for the realtime delta stream.
  */
 
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 
 import { SYSTEM_CLOCK_PROVIDER } from '../../common/clock.js';
 import { AuthModule } from '../auth/auth.module.js';
@@ -27,8 +33,10 @@ import { AgentToolBridge } from './agent-tool-bridge.js';
   imports: [
     AuthModule,
     ChannelModule,
-    InstructionModule,
-    SocketModule.forRoot({ imports: [InstructionModule] }),
+    forwardRef((): typeof InstructionModule => InstructionModule),
+    SocketModule.forRoot({
+      imports: [forwardRef((): typeof InstructionModule => InstructionModule)],
+    }),
   ],
   providers: [
     {

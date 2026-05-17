@@ -11,6 +11,7 @@ import { Global, Module, forwardRef } from '@nestjs/common';
 
 import { SYSTEM_CLOCK_PROVIDER } from '../../common/clock.js';
 import { AgentModule } from '../agent/agent.module.js';
+import { KlineModule } from '../kline/kline.module.js';
 import { LedgerModule } from '../ledger/ledger.module.js';
 import { OrchestrationModule } from '../orchestration/orchestration.module.js';
 import { ScreenModule } from '../screen/screen.module.js';
@@ -38,6 +39,7 @@ import { BeInstructionCenter } from './be-instruction-center.service.js';
     forwardRef((): typeof SectorsModule => SectorsModule),
     forwardRef((): typeof LedgerModule => LedgerModule),
     forwardRef((): typeof StockMetaModule => StockMetaModule),
+    forwardRef((): typeof KlineModule => KlineModule),
     forwardRef((): typeof WatchModule => WatchModule),
     forwardRef((): typeof StockListModule => StockListModule),
     forwardRef((): typeof SentimentModule => SentimentModule),
