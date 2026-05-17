@@ -241,8 +241,39 @@ function rowToSnapshot(meta: StockMetaDto, row: Record<string, unknown>): StockS
       ret_90d: optionalString(row['ret_90d']),
       ret_250d: optionalString(row['ret_250d']),
     },
+    dde: rowToDde(row),
   };
   return StockSnapshotDtoSchema.parse(candidate);
+}
+
+function rowToDde(row: Record<string, unknown>): {
+  main_net_inflow_3d: string | null;
+  main_net_inflow_5d: string | null;
+  main_net_inflow_10d: string | null;
+  main_net_inflow_20d: string | null;
+  main_inflow_ratio_3d: string | null;
+  main_inflow_ratio_5d: string | null;
+  main_inflow_ratio_10d: string | null;
+  main_inflow_ratio_20d: string | null;
+} | null {
+  // Legacy v1–v3 parquet rows lack the DDE columns entirely; current
+  // rows may carry them as NULL for codes the rank endpoint never
+  // surfaced. Either way, an all-null block collapses to a single
+  // `null` `dde` so consumers can branch cleanly on "no data".
+  const block = {
+    main_net_inflow_3d: optionalString(row['dde_main_net_inflow_3d']),
+    main_net_inflow_5d: optionalString(row['dde_main_net_inflow_5d']),
+    main_net_inflow_10d: optionalString(row['dde_main_net_inflow_10d']),
+    main_net_inflow_20d: optionalString(row['dde_main_net_inflow_20d']),
+    main_inflow_ratio_3d: optionalString(row['dde_main_inflow_ratio_3d']),
+    main_inflow_ratio_5d: optionalString(row['dde_main_inflow_ratio_5d']),
+    main_inflow_ratio_10d: optionalString(row['dde_main_inflow_ratio_10d']),
+    main_inflow_ratio_20d: optionalString(row['dde_main_inflow_ratio_20d']),
+  };
+  for (const v of Object.values(block)) {
+    if (v !== null) return block;
+  }
+  return null;
 }
 
 function splitIndustries(joined: string): readonly string[] {

@@ -20,6 +20,7 @@ import { FrozenClock } from '../../../src/common/clock.js';
 import { LocalStockMetaAdapter } from '../../../src/modules/stock-meta/local-stock-meta.adapter.js';
 import {
   LocalStockMetaWriterService,
+  type StockFundFlowRow,
   type StockMetricsRow,
 } from '../../../src/modules/stock-meta/local-stock-meta-writer.service.js';
 
@@ -55,6 +56,15 @@ const META_COLUMNS: readonly { readonly name: string; readonly type: string }[] 
   { name: 'pb', type: 'VARCHAR' },
   { name: 'peg', type: 'VARCHAR' },
   { name: 'gross_margin_ttm', type: 'VARCHAR' },
+  { name: 'dde_main_net_inflow_3d', type: 'VARCHAR' },
+  { name: 'dde_main_net_inflow_5d', type: 'VARCHAR' },
+  { name: 'dde_main_net_inflow_10d', type: 'VARCHAR' },
+  { name: 'dde_main_net_inflow_20d', type: 'VARCHAR' },
+  { name: 'dde_main_inflow_ratio_3d', type: 'VARCHAR' },
+  { name: 'dde_main_inflow_ratio_5d', type: 'VARCHAR' },
+  { name: 'dde_main_inflow_ratio_10d', type: 'VARCHAR' },
+  { name: 'dde_main_inflow_ratio_20d', type: 'VARCHAR' },
+  { name: 'dde_updated_at', type: 'TIMESTAMP' },
 ];
 
 function buildRowValues(seed: Readonly<Record<string, string>>): string {
@@ -252,6 +262,110 @@ describe('LocalStockMetaWriterService', () => {
       const meta = await adapter.getOne('600519');
       // Seed name (unchanged) — no rewrite happened.
       expect(meta?.name).toBe('贵州茅台');
+    });
+  });
+
+  describe('upsertFundFlow', () => {
+    const ddeRow = (overrides: Partial<StockFundFlowRow> = {}): StockFundFlowRow => ({
+      code: '600519',
+      dde_main_net_inflow_3d: '300000000',
+      dde_main_net_inflow_5d: '500000000',
+      dde_main_net_inflow_10d: '900000000',
+      dde_main_net_inflow_20d: null,
+      dde_main_inflow_ratio_3d: '0.1',
+      dde_main_inflow_ratio_5d: '0.0833',
+      dde_main_inflow_ratio_10d: '0.05',
+      dde_main_inflow_ratio_20d: null,
+      ...overrides,
+    });
+
+    it('populates the DDE block for the targeted code', async () => {
+      await writer.upsertFundFlow([ddeRow()]);
+      const snap = await adapter.listSnapshots(['600519']);
+      expect(snap).toHaveLength(1);
+      const dde = snap[0]?.dde;
+      expect(dde).not.toBeNull();
+      expect(dde?.main_net_inflow_3d).toBe('300000000');
+      expect(dde?.main_inflow_ratio_5d).toBe('0.0833');
+      expect(dde?.main_net_inflow_20d).toBeNull();
+      expect(dde?.main_inflow_ratio_20d).toBeNull();
+    });
+
+    it('leaves non-targeted rows with a null DDE block', async () => {
+      await writer.upsertFundFlow([ddeRow()]);
+      const snap = await adapter.listSnapshots(['000001']);
+      expect(snap[0]?.dde).toBeNull();
+    });
+
+    it('preserves metrics + meta columns when upserting fund flow', async () => {
+      await writer.upsertMetrics([sampleRow('600519')]);
+      await writer.upsertFundFlow([ddeRow()]);
+      const snap = await adapter.listSnapshots(['600519']);
+      expect(snap[0]?.price).toBe('1700.5');
+      expect(snap[0]?.derived.mkt_cap).toBe('2133727500000');
+      expect(snap[0]?.returns.ret_5d).toBe('0.05');
+      expect(snap[0]?.dde?.main_net_inflow_3d).toBe('300000000');
+      const meta = await adapter.getOne('600519');
+      expect(meta?.name).toBe('贵州茅台');
+      expect(meta?.industries).toBe('食品饮料,白酒');
+    });
+
+    it('subsequent metrics upsert preserves the DDE block', async () => {
+      await writer.upsertFundFlow([ddeRow()]);
+      await writer.upsertMetrics([sampleRow('600519')]);
+      const snap = await adapter.listSnapshots(['600519']);
+      expect(snap[0]?.dde?.main_net_inflow_3d).toBe('300000000');
+      expect(snap[0]?.price).toBe('1700.5');
+    });
+
+    it('subsequent meta upsert preserves the DDE block', async () => {
+      await writer.upsertFundFlow([ddeRow()]);
+      await writer.upsertMetas([
+        {
+          code: '600519',
+          name: '贵州茅台 v2',
+          name_pinyin: 'GZMT',
+          industries: '食品饮料,白酒,新主线',
+          list_date: '2001-08-27',
+          float_pct: '0.95',
+          updated_at: '2026-05-16T00:00:00+00:00',
+          total_share: '1255980000',
+          float_share: '1193180000',
+          net_assets: '230000000000',
+          net_assets_period: '2026-03-31',
+          quarterlies: [],
+          financials_updated_at: '2026-05-15T08:00:00+00:00',
+        },
+      ]);
+      const snap = await adapter.listSnapshots(['600519']);
+      expect(snap[0]?.dde?.main_inflow_ratio_3d).toBe('0.1');
+      expect(snap[0]?.meta.name).toBe('贵州茅台 v2');
+    });
+
+    it('handles negative inflow + negative ratio', async () => {
+      await writer.upsertFundFlow([
+        ddeRow({
+          dde_main_net_inflow_3d: '-150000000',
+          dde_main_inflow_ratio_3d: '-0.05',
+        }),
+      ]);
+      const snap = await adapter.listSnapshots(['600519']);
+      expect(snap[0]?.dde?.main_net_inflow_3d).toBe('-150000000');
+      expect(snap[0]?.dde?.main_inflow_ratio_3d).toBe('-0.05');
+    });
+
+    it('is a no-op when given an empty batch', async () => {
+      await writer.upsertFundFlow([]);
+      const snap = await adapter.listSnapshots(['600519']);
+      expect(snap[0]?.dde).toBeNull();
+    });
+
+    it('silently drops rows whose code is absent from the meta file', async () => {
+      await writer.upsertFundFlow([ddeRow({ code: '999999' }), ddeRow()]);
+      const missing = await adapter.getOne('999999');
+      expect(missing).toBeNull();
+      const snap = await adapter.listSnapshots(['600519']);
+      expect(snap[0]?.dde?.main_net_inflow_3d).toBe('300000000');
     });
   });
 });

@@ -8,10 +8,12 @@
  * Three reply paths:
  *   - **sync** instruction: handler runs inline; listener posts a single
  *     `instruction.reply` message carrying the result.
- *   - **async** instruction: handler is enqueued; listener posts a
- *     `instruction.async.started` message immediately (with jobId), and
- *     subscribes to `INSTRUCTION_ASYNC_COMPLETED_EVENT` to push a follow
- *     up `instruction.async.completed` message when the worker finishes.
+ *   - **async** instruction: handler is enqueued. The listener stays
+ *     silent — the BullMQ worker (`InstructionAsyncProcessor`) reads the
+ *     `im` hints baked into the job and pushes the completion card back
+ *     to the originating thread itself. This sidesteps a race where a
+ *     fast handler finished before the listener could register a pending
+ *     entry for the in-process completion event.
  *   - **forbidden** sender (ACL): `errResult('forbidden', ...)` posted back
  *     so the user sees they were rejected. The check runs only after the
  *     parser confirms a known instruction; casual chat from non-allowlisted
@@ -29,8 +31,6 @@ import {
   formatResult,
   newTraceId,
   parseInstructionLine,
-  type ChannelId,
-  type InstructionAsyncCompletedPayload,
   type InstructionResult,
 } from '@quant/shared';
 
@@ -39,21 +39,11 @@ import { ChannelService } from '../channel/channel.service.js';
 import { CHANNEL_INBOUND_EVENT } from '../channel/bus/channel-bus.service.js';
 import type { InboundMessage } from '../channel/ports/channel-adapter.port.js';
 
-import {
-  INSTRUCTION_ASYNC_COMPLETED_EVENT,
-  type InstructionImHints,
-} from './async/instruction-async.bus.js';
+import { type InstructionImHints } from './async/instruction-async.bus.js';
 import { INSTRUCTION_CONFIG, type InstructionConfig } from './instruction.config.js';
 import type { InstructionCtx } from './instruction.port.js';
 import { InstructionExecutor } from './instruction.executor.js';
 import { ArgvParseError, parseArgvToObject } from './parse-argv.js';
-
-interface PendingAsync {
-  readonly channel: ChannelId;
-  readonly target: string;
-  readonly traceId: string;
-  readonly instructionId: string;
-}
 
 type ReplyKind =
   | 'instruction.reply'
@@ -73,31 +63,9 @@ function reply(result: InstructionResult, instructionId: string | null): ReplyEn
   return { result, kind: 'instruction.reply', instructionId };
 }
 
-/**
- * Window during which an early `INSTRUCTION_ASYNC_COMPLETED_EVENT` is
- * held in case the worker finishes the job before the producer side of
- * `runEntry` reaches `pendingByJobId.set`. 60s comfortably covers any
- * micro-task or IO scheduling delay between `executor.dispatch` resolving
- * and the next listener tick. Confirmed cache-miss bug: TA / sentiment
- * jobs that finish in <100 ms used to race the pending registration and
- * the completion was dropped silently.
- */
-const EARLY_COMPLETION_TTL_MS = 60_000;
-
 @Injectable()
 export class InstructionImListener implements OnModuleInit {
   private readonly logger = new Logger(InstructionImListener.name);
-  /** Bridges async jobs back to the IM thread that triggered them. */
-  private readonly pendingByJobId = new Map<string, PendingAsync>();
-  /**
-   * Async completions that arrived before `pendingByJobId.set` was
-   * called for the same jobId. Drained when the pending entry lands.
-   * See `EARLY_COMPLETION_TTL_MS`.
-   */
-  private readonly earlyCompletions = new Map<
-    string,
-    { readonly payload: InstructionAsyncCompletedPayload; readonly timer: NodeJS.Timeout }
-  >();
 
   constructor(
     @Inject(InstructionExecutor) private readonly executor: InstructionExecutor,
@@ -119,81 +87,10 @@ export class InstructionImListener implements OnModuleInit {
     const traceId = newTraceId();
     const envelope = await this.dispatch(msg, traceId);
     // null means either: unrecognised message, or async instruction that
-    // has been silently queued — the result arrives via onAsyncCompleted.
+    // has been silently queued — the result is delivered by the BullMQ
+    // worker via the `im` hints baked into the job.
     if (envelope === null) return;
     await this.replyResult(msg, traceId, envelope);
-  }
-
-  /**
-   * Async completions originate in the worker (see
-   * `InstructionAsyncProcessor`) and arrive here through the in-process
-   * EventEmitter2 bus. We push a follow-up card to the IM thread that
-   * triggered the job, then drop the bridge entry. Completions for jobs
-   * that didn't originate from IM (socket / http) are ignored here —
-   * those clients consume the matching socket topic instead.
-   */
-  @OnEvent(INSTRUCTION_ASYNC_COMPLETED_EVENT)
-  async onAsyncCompleted(payload: InstructionAsyncCompletedPayload): Promise<void> {
-    const pending = this.pendingByJobId.get(payload.jobId);
-    if (pending === undefined) {
-      // Worker finished before `runEntry` registered the pending entry.
-      // Buffer the payload; `runEntry` drains it after `pendingByJobId.set`.
-      this.bufferEarlyCompletion(payload);
-      return;
-    }
-    this.pendingByJobId.delete(payload.jobId);
-    await this.deliverAsyncCompletion(pending, payload);
-  }
-
-  private bufferEarlyCompletion(payload: InstructionAsyncCompletedPayload): void {
-    const existing = this.earlyCompletions.get(payload.jobId);
-    if (existing !== undefined) clearTimeout(existing.timer);
-    const timer = setTimeout(() => {
-      this.earlyCompletions.delete(payload.jobId);
-      this.logger.warn(
-        `instruction_async_completion_orphaned jobId=${payload.jobId} instructionId=${payload.instructionId} — no IM pending entry within TTL`,
-      );
-    }, EARLY_COMPLETION_TTL_MS);
-    // Node's setTimeout keeps the event loop alive; release the ref so a
-    // stray buffered completion doesn't block graceful shutdown.
-    timer.unref?.();
-    this.earlyCompletions.set(payload.jobId, { payload, timer });
-  }
-
-  private async deliverAsyncCompletion(
-    pending: PendingAsync,
-    payload: InstructionAsyncCompletedPayload,
-  ): Promise<void> {
-    try {
-      // Forward handler-side `output.meta` (e.g. `stockTableRows`) the
-      // same way the sync path does, so async screen / TA results render
-      // through the native Feishu table when the handler emits one.
-      const handlerMeta =
-        payload.result.ok && payload.result.output.meta !== undefined
-          ? payload.result.output.meta
-          : undefined;
-      await this.channels.send(
-        pending.channel,
-        {
-          text: formatResult(payload.result),
-          kind: 'instruction.async.completed',
-          target: pending.target,
-          meta: {
-            ok: payload.result.ok,
-            instructionId: payload.instructionId,
-            jobId: payload.jobId,
-            durationMs: payload.durationMs,
-            ...(payload.result.ok ? {} : { code: payload.result.error.code }),
-            ...(handlerMeta ?? {}),
-          },
-        },
-        { traceId: pending.traceId, source: 'system' },
-      );
-    } catch (err) {
-      this.logger.warn(
-        `instruction_async_completed_send_failed channel=${pending.channel} jobId=${payload.jobId} err=${String(err)}`,
-      );
-    }
   }
 
   private async dispatch(msg: InboundMessage, traceId: string): Promise<ReplyEnvelope | null> {
@@ -386,26 +283,8 @@ export class InstructionImListener implements OnModuleInit {
     if (gate !== null) return gate;
     const dispatched = await this.executor.dispatch(instructionId, rawArgs, ctx, imHints);
     if (dispatched.kind === 'async-queued') {
-      const pending: PendingAsync = {
-        channel: msg.channel,
-        target: replyTarget,
-        traceId,
-        instructionId: dispatched.instructionId,
-      };
-      // Drain race: a fast worker may have already emitted
-      // INSTRUCTION_ASYNC_COMPLETED_EVENT between `enqueue` resolving and
-      // this line. `onAsyncCompleted` would have buffered the payload in
-      // `earlyCompletions` rather than dropping it; pull it out and
-      // deliver before installing the pending entry (so the next event,
-      // if any duplicate, becomes a no-op).
-      const early = this.earlyCompletions.get(dispatched.jobId);
-      if (early !== undefined) {
-        clearTimeout(early.timer);
-        this.earlyCompletions.delete(dispatched.jobId);
-        await this.deliverAsyncCompletion(pending, early.payload);
-      } else {
-        this.pendingByJobId.set(dispatched.jobId, pending);
-      }
+      // Listener stays silent; the worker delivers the completion card
+      // directly using the `im` hints we just baked into the job.
       return null;
     }
     return this.envelopeFromDispatch(instructionId, dispatched.result);

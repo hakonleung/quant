@@ -29,6 +29,8 @@ import { newTraceId } from '@quant/shared';
 import { BlacklistService } from '../blacklist/blacklist.service.js';
 import { SectorsService } from '../sectors/sectors.service.js';
 import { SectorsStore } from '../sectors/sectors.store.js';
+import { isPyFlightDown } from '../../adapters/flight/flight-errors.js';
+import { StockFundFlowSyncService } from '../stock-meta/stock-fund-flow.sync.service.js';
 import { KLINE_QUEUE, META_QUEUE } from './flight.token.js';
 import type { InMemoryQueue } from './domain/in-memory-queue.js';
 import type { JobTerminalEvent, KlineJob, MetaJob } from './domain/types.js';
@@ -67,6 +69,7 @@ export class BatchSettler {
     @Inject(BlacklistService) private readonly blacklist: BlacklistService,
     @Inject(SectorsService) private readonly sectors: SectorsService,
     @Inject(SectorsStore) private readonly sectorsStore: SectorsStore,
+    @Inject(StockFundFlowSyncService) private readonly fundFlow: StockFundFlowSyncService,
   ) {
     this.metaQueue.onTerminal((ev) => {
       this.handleTerminal(ev, 'meta');
@@ -138,9 +141,26 @@ export class BatchSettler {
     );
     try {
       await this.runBlacklist(traceId);
+      await this.runFundFlow(traceId);
       await this.refreshAllDynamicSectors(traceId);
     } finally {
       this.settling.delete(batchId);
+    }
+  }
+
+  private async runFundFlow(traceId: string): Promise<void> {
+    try {
+      const result = await this.fundFlow.syncAll(traceId);
+      this.logger.log(
+        `batch_settle_fund_flow ranked=${String(result.ranked)} written=${String(result.written)} trace_id=${traceId}`,
+      );
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (isPyFlightDown(err)) {
+        this.logger.warn(`batch_settle_fund_flow_skipped reason=py_flight_down trace_id=${traceId}`);
+      } else {
+        this.logger.warn(`batch_settle_fund_flow_failed trace_id=${traceId} err=${msg}`);
+      }
     }
   }
 

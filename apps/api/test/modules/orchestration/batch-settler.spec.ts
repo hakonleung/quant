@@ -51,6 +51,14 @@ class FakeSectorsStore {
   }
 }
 
+class FakeFundFlow {
+  calls = 0;
+  async syncAll(_trace?: string): Promise<{ ranked: number; written: number }> {
+    this.calls += 1;
+    return { ranked: 0, written: 0 };
+  }
+}
+
 class NoopProcessor<T> implements JobProcessor<T> {
   async process(_e: JobEnvelope<T>, _q: ReQueue<T>): Promise<void> {
     // success path
@@ -101,6 +109,7 @@ describe('BatchSettler', () => {
       blacklist as never,
       sectorsService as never,
       sectorsStore as never,
+      new FakeFundFlow() as never,
     );
 
     settler.register({ batchId: 'b0', metaCount: 0, klineCount: 0, traceId: 't0' });
@@ -120,6 +129,7 @@ describe('BatchSettler', () => {
       blacklist as never,
       sectorsService as never,
       sectorsStore as never,
+      new FakeFundFlow() as never,
     );
 
     const batchId = 'b1';
@@ -171,6 +181,7 @@ describe('BatchSettler', () => {
       blacklist as never,
       sectorsService as never,
       sectorsStore as never,
+      new FakeFundFlow() as never,
     );
 
     settler.register({ batchId: 'b2', metaCount: 1, klineCount: 0, traceId: 't2' });

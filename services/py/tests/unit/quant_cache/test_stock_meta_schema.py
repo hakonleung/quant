@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import UTC, date, datetime
+from decimal import Decimal
 
 import pytest
 from quant_cache.stock_meta_schema import (
@@ -12,6 +14,7 @@ from quant_cache.stock_meta_schema import (
     stock_meta_key,
     stock_meta_to_row,
 )
+from quant_core.domain.types.fund_flow import DdePhase
 
 from tests._util.stock_meta_fixtures import SEED
 
@@ -64,3 +67,44 @@ class TestStockMetaCodec:
         row["updated_at"] = datetime(2026, 5, 1, 12, 0, 0, tzinfo=UTC)
         again = stock_meta_from_row(row)
         assert again.updated_at.tzinfo is not None
+
+    def test_dde_columns_round_trip_when_populated(self) -> None:
+        dde = DdePhase(
+            main_net_inflow_3d=Decimal("300000000"),
+            main_net_inflow_5d=Decimal("500000000"),
+            main_net_inflow_10d=Decimal("-150000000"),
+            main_net_inflow_20d=None,
+            main_inflow_ratio_3d=Decimal("0.1"),
+            main_inflow_ratio_5d=Decimal("0.0833"),
+            main_inflow_ratio_10d=Decimal("-0.05"),
+            main_inflow_ratio_20d=None,
+        )
+        item = replace(
+            SEED[0],
+            dde=dde,
+            dde_updated_at=datetime(2026, 5, 1, 12, 0, 0, tzinfo=UTC),
+        )
+        row = stock_meta_to_row(item)
+        assert row["dde_main_net_inflow_3d"] == "300000000"
+        assert row["dde_main_inflow_ratio_10d"] == "-0.05"
+        assert row["dde_main_net_inflow_20d"] is None
+        again = stock_meta_from_row(row)
+        assert again.dde == dde
+        assert again.dde_updated_at is not None
+
+    def test_dde_absent_from_legacy_rows_yields_none(self) -> None:
+        item = SEED[0]  # SEED has no DDE; default factory leaves dde=None.
+        row = stock_meta_to_row(item)
+        # Every dde_* column emits None for an unpopulated block.
+        assert row["dde_main_net_inflow_3d"] is None
+        assert row["dde_main_inflow_ratio_20d"] is None
+        assert row["dde_updated_at"] is None
+        again = stock_meta_from_row(row)
+        assert again.dde is None
+        assert again.dde_updated_at is None
+
+    def test_dde_columns_present_in_schema(self) -> None:
+        for window in (3, 5, 10, 20):
+            assert f"dde_main_net_inflow_{window}d" in STOCK_META_SCHEMA.names
+            assert f"dde_main_inflow_ratio_{window}d" in STOCK_META_SCHEMA.names
+        assert "dde_updated_at" in STOCK_META_SCHEMA.names

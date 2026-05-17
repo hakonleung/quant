@@ -68,6 +68,46 @@ export const StockMetaDtoSchema = z
 export type StockMetaDto = z.infer<typeof StockMetaDtoSchema>;
 
 /**
+ * DDE 主力 fund-flow phase block. Mirrors the Python
+ * `quant_core.domain.types.fund_flow.DdePhase` dataclass; populated by
+ * `StockFundFlowSyncService` once per batch settle.
+ *
+ * - `main_net_inflow_<N>d` — trailing-N-day 主力(超大单+大单) net
+ *   inflow in CNY (decimal string, may be negative). `null` when the
+ *   akshare rank endpoint had no data for that window.
+ * - `main_inflow_ratio_<N>d` — `main_net_inflow_<N>d` divided by the
+ *   trailing-N-day local-kline `amount` sum. `null` when the kline
+ *   window had < N bars or summed to zero.
+ *
+ * All windows are emitted together; a partial block (e.g. ratio set
+ * but inflow null) is allowed and means "we have an inflow value but
+ * the local kline can't back it" — consumers should treat any null
+ * as "unknown" rather than zero.
+ */
+export const DdePhaseDtoSchema = z
+  .object({
+    main_net_inflow_3d: decimalStringOrNull,
+    main_net_inflow_5d: decimalStringOrNull,
+    main_net_inflow_10d: decimalStringOrNull,
+    main_net_inflow_20d: decimalStringOrNull,
+    main_inflow_ratio_3d: decimalStringOrNull,
+    main_inflow_ratio_5d: decimalStringOrNull,
+    main_inflow_ratio_10d: decimalStringOrNull,
+    main_inflow_ratio_20d: decimalStringOrNull,
+  })
+  .strict();
+
+export type DdePhaseDto = z.infer<typeof DdePhaseDtoSchema>;
+
+/**
+ * Canonical trailing-day windows the DDE pipeline persists. Used by
+ * NestJS sync / writer and surfaced to the FE for label rendering.
+ * Edit here + the Python `DDE_WINDOWS` constant in lock-step.
+ */
+export const DDE_WINDOWS = [3, 5, 10, 20] as const;
+export type DdeWindow = (typeof DDE_WINDOWS)[number];
+
+/**
  * Server-side derived list-view payload. `meta` is the structural
  * snapshot; `derived` is computed at request time from `meta` + latest
  * `close_qfq`. The DTO is read-only (UI list rendering) and never written
@@ -117,6 +157,9 @@ export const StockSnapshotDtoSchema = z
     asof: isoDate.nullable(),
     derived: StockDerivedMetricsSchema,
     returns: StockReturnsSchema,
+    // DDE 主力 fund-flow phase block; `null` for codes the akshare
+    // rank endpoint never surfaced (delisted / brand-new listing).
+    dde: DdePhaseDtoSchema.nullable(),
   })
   .strict();
 

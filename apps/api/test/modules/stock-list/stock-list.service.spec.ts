@@ -50,6 +50,7 @@ const SNAP_A: StockSnapshotDto = {
     ret_90d: null,
     ret_250d: null,
   },
+  dde: null,
 };
 
 const SNAP_B: StockSnapshotDto = {

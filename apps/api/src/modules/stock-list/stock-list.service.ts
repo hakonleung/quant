@@ -172,6 +172,7 @@ function metasToSnapshotShells(metas: readonly StockMetaDto[]): readonly StockSn
       ret_90d: null,
       ret_250d: null,
     },
+    dde: null,
   }));
 }
 

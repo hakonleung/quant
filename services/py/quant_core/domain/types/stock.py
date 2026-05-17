@@ -34,6 +34,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
+from quant_core.domain.types.fund_flow import DdePhase
+
 if TYPE_CHECKING:
     from datetime import date, datetime
     from decimal import Decimal
@@ -107,6 +109,14 @@ class StockMeta:
     """Latest projected returns + derived-metric block, or ``None``."""
     metrics_updated_at: datetime | None = None
     """When :attr:`metrics` was last refreshed (UTC)."""
+    # ---- DDE 主力 fund-flow phase block. Populated by
+    # ``StockFundFlowSyncService`` (NestJS) once per batch settle; ``None``
+    # for codes the akshare rank endpoint never surfaced (delisted /
+    # brand-new listing).
+    dde: DdePhase | None = None
+    """Trailing-N-day 主力净流入 amount + amount/turnover ratio block."""
+    dde_updated_at: datetime | None = None
+    """When :attr:`dde` was last refreshed (UTC)."""
 
 
 @dataclass(frozen=True, slots=True)

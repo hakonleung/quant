@@ -22,6 +22,7 @@ from decimal import Decimal
 from typing import TYPE_CHECKING, Final
 
 import pyarrow as pa
+from quant_core.domain.types.fund_flow import DDE_WINDOWS, DdePhase
 from quant_core.domain.types.stock import PersistedMetrics, QuarterlyFinancials, StockMeta
 
 from quant_cache.parquet_record_repo import Codec
@@ -65,6 +66,19 @@ STOCK_META_SCHEMA: Final[pa.Schema] = pa.schema(
         ("pb", pa.string()),
         ("peg", pa.string()),
         ("gross_margin_ttm", pa.string()),
+        # DDE 主力 fund-flow phase block (modules/01-stock-meta.md §5).
+        # Nullable so legacy v1–v3 parquet rows read back without
+        # migration; populated by NestJS ``StockFundFlowSyncService``
+        # after each meta+kline batch settles.
+        ("dde_main_net_inflow_3d", pa.string()),
+        ("dde_main_net_inflow_5d", pa.string()),
+        ("dde_main_net_inflow_10d", pa.string()),
+        ("dde_main_net_inflow_20d", pa.string()),
+        ("dde_main_inflow_ratio_3d", pa.string()),
+        ("dde_main_inflow_ratio_5d", pa.string()),
+        ("dde_main_inflow_ratio_10d", pa.string()),
+        ("dde_main_inflow_ratio_20d", pa.string()),
+        ("dde_updated_at", pa.timestamp("us", tz="UTC")),
     ]
 )
 """Schema of the stock-meta parquet file."""
@@ -92,6 +106,14 @@ _METRIC_PRICE_FIELD: Final[str] = "metrics_price"
 STOCK_META_KEY_FIELD: Final[str] = "code"
 
 
+_DDE_NET_INFLOW_FIELDS: Final[tuple[str, ...]] = tuple(
+    f"dde_main_net_inflow_{w}d" for w in DDE_WINDOWS
+)
+_DDE_RATIO_FIELDS: Final[tuple[str, ...]] = tuple(
+    f"dde_main_inflow_ratio_{w}d" for w in DDE_WINDOWS
+)
+
+
 def stock_meta_to_row(item: StockMeta) -> Mapping[str, object]:
     row: dict[str, object] = {
         "code": item.code,
@@ -116,6 +138,13 @@ def stock_meta_to_row(item: StockMeta) -> Mapping[str, object]:
     for field_name in _METRIC_DECIMAL_FIELDS:
         value = getattr(item.metrics, field_name) if item.metrics is not None else None
         row[field_name] = _decimal_to_str_or_none(value)
+    for field_name in (*_DDE_NET_INFLOW_FIELDS, *_DDE_RATIO_FIELDS):
+        # Strip the "dde_" prefix: ``DdePhase`` attributes match the
+        # column names sans prefix, by construction.
+        attr = field_name.removeprefix("dde_")
+        value = getattr(item.dde, attr) if item.dde is not None else None
+        row[field_name] = _decimal_to_str_or_none(value)
+    row["dde_updated_at"] = item.dde_updated_at
     return row
 
 
@@ -143,8 +172,22 @@ def stock_meta_from_row(row: Mapping[str, object]) -> StockMeta:
         quarterlies=_json_to_quarterlies(row.get("quarterlies_json")),
         financials_updated_at=_datetime_or_none(row.get("financials_updated_at")),
         metrics=_persisted_metrics_from_row(row),
-        metrics_updated_at=_datetime_or_none(row.get("metrics_updated_at"), field="metrics_updated_at"),
+        metrics_updated_at=_datetime_or_none(
+            row.get("metrics_updated_at"), field="metrics_updated_at"
+        ),
+        dde=_dde_phase_from_row(row),
+        dde_updated_at=_datetime_or_none(row.get("dde_updated_at"), field="dde_updated_at"),
     )
+
+
+def _dde_phase_from_row(row: Mapping[str, object]) -> DdePhase | None:
+    values = {
+        f.removeprefix("dde_"): _str_to_decimal_or_none(row.get(f))
+        for f in (*_DDE_NET_INFLOW_FIELDS, *_DDE_RATIO_FIELDS)
+    }
+    if not any(v is not None for v in values.values()):
+        return None
+    return DdePhase(**values)
 
 
 def _persisted_metrics_from_row(row: Mapping[str, object]) -> PersistedMetrics | None:
@@ -190,9 +233,7 @@ def _date_or_none(value: object, *, field: str = "net_assets_period") -> date | 
     return value
 
 
-def _datetime_or_none(
-    value: object, *, field: str = "financials_updated_at"
-) -> datetime | None:
+def _datetime_or_none(value: object, *, field: str = "financials_updated_at") -> datetime | None:
     if value is None:
         return None
     if not isinstance(value, datetime):

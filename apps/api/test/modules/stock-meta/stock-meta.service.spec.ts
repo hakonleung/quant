@@ -82,6 +82,7 @@ class FakePort implements StockMetaPort {
           asof: null,
           derived: baseDerived,
           returns: baseReturns,
+          dde: null,
         })),
     );
   }

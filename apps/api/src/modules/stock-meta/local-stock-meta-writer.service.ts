@@ -53,6 +53,31 @@ const METRIC_DECIMAL_COLUMNS = [
 
 export type MetricDecimalColumn = (typeof METRIC_DECIMAL_COLUMNS)[number];
 
+const DDE_DECIMAL_COLUMNS = [
+  'dde_main_net_inflow_3d',
+  'dde_main_net_inflow_5d',
+  'dde_main_net_inflow_10d',
+  'dde_main_net_inflow_20d',
+  'dde_main_inflow_ratio_3d',
+  'dde_main_inflow_ratio_5d',
+  'dde_main_inflow_ratio_10d',
+  'dde_main_inflow_ratio_20d',
+] as const;
+
+export type DdeDecimalColumn = (typeof DDE_DECIMAL_COLUMNS)[number];
+
+export interface StockFundFlowRow {
+  readonly code: string;
+  readonly dde_main_net_inflow_3d: string | null;
+  readonly dde_main_net_inflow_5d: string | null;
+  readonly dde_main_net_inflow_10d: string | null;
+  readonly dde_main_net_inflow_20d: string | null;
+  readonly dde_main_inflow_ratio_3d: string | null;
+  readonly dde_main_inflow_ratio_5d: string | null;
+  readonly dde_main_inflow_ratio_10d: string | null;
+  readonly dde_main_inflow_ratio_20d: string | null;
+}
+
 export interface StockMetricsRow {
   readonly code: string;
   readonly asof: string | null; // ISO YYYY-MM-DD or null
@@ -126,6 +151,27 @@ export class LocalStockMetaWriterService {
     await next;
   }
 
+  /**
+   * Patch the DDE 主力 fund-flow columns for ``rows``. Existing
+   * ``dde_*`` columns on matched rows are replaced; codes not in the
+   * meta parquet are silently dropped (the akshare rank endpoint
+   * sometimes carries codes that aren't in our listed-stock universe,
+   * e.g. ST/退市 stocks). Non-matched rows in the parquet keep their
+   * prior ``dde_*`` values verbatim — a single window failure on the
+   * upstream side cannot wipe yesterday's full block.
+   *
+   * No-op when ``rows`` is empty.
+   */
+  async upsertFundFlow(rows: readonly StockFundFlowRow[]): Promise<void> {
+    if (rows.length === 0) return;
+    const next = this.writeChain.then(
+      () => this.runUpsertFundFlow(rows),
+      () => this.runUpsertFundFlow(rows),
+    );
+    this.writeChain = next.catch(() => undefined);
+    await next;
+  }
+
   private async runUpsertMetrics(rows: readonly StockMetricsRow[]): Promise<void> {
     if (!(await fileExists(this.filePath))) {
       this.logger.warn(
@@ -141,6 +187,27 @@ export class LocalStockMetaWriterService {
       await rename(tmp, this.filePath);
       this.adapter.invalidate();
       this.logger.log(`stock_metrics_upsert wrote=${rows.length}`);
+    } catch (err) {
+      await rm(tmp, { force: true });
+      throw err;
+    }
+  }
+
+  private async runUpsertFundFlow(rows: readonly StockFundFlowRow[]): Promise<void> {
+    if (!(await fileExists(this.filePath))) {
+      this.logger.warn(
+        `stock_metas.parquet missing at ${this.filePath}; skipping fund-flow upsert for ${rows.length} row(s)`,
+      );
+      return;
+    }
+    const conn = await this.connection();
+    const updatedAt = this.clock.now();
+    const tmp = `${this.filePath}.tmp-${process.pid}-${Date.now()}`;
+    try {
+      await conn.run(this.buildFundFlowCopySql(rows, tmp, updatedAt));
+      await rename(tmp, this.filePath);
+      this.adapter.invalidate();
+      this.logger.log(`stock_fund_flow_upsert wrote=${rows.length}`);
     } catch (err) {
       await rm(tmp, { force: true });
       throw err;
@@ -165,6 +232,72 @@ export class LocalStockMetaWriterService {
       await rm(tmp, { force: true });
       throw err;
     }
+  }
+
+  private buildFundFlowCopySql(
+    rows: readonly StockFundFlowRow[],
+    tmpPath: string,
+    updatedAt: Date,
+  ): string {
+    const newCols = ['code', ...DDE_DECIMAL_COLUMNS];
+    const newColList = newCols.map(quoteIdent).join(', ');
+    const valuesSql = rows.map((r) => this.fundFlowRowToValues(r)).join(',\n        ');
+    const updatedAtSql = `TIMESTAMP '${updatedAt.toISOString().replace('T', ' ').replace('Z', '')}'`;
+    // Every non-DDE column passes through verbatim from the existing row.
+    const preserved = [
+      'code',
+      'name',
+      'name_pinyin',
+      'industries',
+      'list_date',
+      'float_pct',
+      'updated_at',
+      'total_share',
+      'float_share',
+      'net_assets',
+      'net_assets_period',
+      'quarterlies_json',
+      'financials_updated_at',
+      'metrics_asof',
+      'metrics_updated_at',
+      ...METRIC_DECIMAL_COLUMNS,
+    ];
+    const preservedSql = preserved.map((c) => `o.${quoteIdent(c)}`).join(', ');
+    const overlaySql = [
+      ...DDE_DECIMAL_COLUMNS.map(
+        (col) =>
+          `CASE WHEN n.code IS NOT NULL THEN n.${quoteIdent(col)} ELSE o.${quoteIdent(col)} END AS ${quoteIdent(col)}`,
+      ),
+      `CASE WHEN n.code IS NOT NULL THEN ${updatedAtSql} ELSE o.dde_updated_at END AS dde_updated_at`,
+    ].join(',\n      ');
+    return `
+      COPY (
+        WITH new_dde(${newColList}) AS (
+          SELECT * FROM (VALUES
+        ${valuesSql}
+          ) AS t(${newColList})
+        )
+        SELECT
+          ${preservedSql},
+          ${overlaySql}
+        FROM read_parquet(${quoteLiteral(this.filePath)}) AS o
+        LEFT JOIN new_dde AS n ON n.code = o.code
+      ) TO ${quoteLiteral(tmpPath)} (FORMAT PARQUET);
+    `;
+  }
+
+  private fundFlowRowToValues(row: StockFundFlowRow): string {
+    return `(${[
+      quoteLiteral(row.code),
+      quoteOptionalString(row.dde_main_net_inflow_3d),
+      quoteOptionalString(row.dde_main_net_inflow_5d),
+      quoteOptionalString(row.dde_main_net_inflow_10d),
+      quoteOptionalString(row.dde_main_net_inflow_20d),
+      quoteOptionalString(row.dde_main_inflow_ratio_3d),
+      quoteOptionalString(row.dde_main_inflow_ratio_5d),
+      quoteOptionalString(row.dde_main_inflow_ratio_10d),
+      quoteOptionalString(row.dde_main_inflow_ratio_20d),
+    ].join(', ')})`;
   }
 
   private buildMetricsCopySql(
@@ -195,6 +328,10 @@ export class LocalStockMetaWriterService {
       'net_assets_period',
       'quarterlies_json',
       'financials_updated_at',
+      // DDE block is preserved across a metrics-side write so the
+      // ratio columns don't get wiped between fund-flow refreshes.
+      ...DDE_DECIMAL_COLUMNS,
+      'dde_updated_at',
     ];
     const preservedSql = preserved.map((c) => `o.${quoteIdent(c)}`).join(', ');
     const overlaySql = [
@@ -248,7 +385,13 @@ export class LocalStockMetaWriterService {
           `CASE WHEN n.code IS NOT NULL THEN n.${quoteIdent(c)} ELSE o.${quoteIdent(c)} END AS ${quoteIdent(c)}`,
       )
       .join(',\n      ');
-    const preservedMetrics = ['metrics_asof', 'metrics_updated_at', ...METRIC_DECIMAL_COLUMNS]
+    const preservedMetrics = [
+      'metrics_asof',
+      'metrics_updated_at',
+      ...METRIC_DECIMAL_COLUMNS,
+      ...DDE_DECIMAL_COLUMNS,
+      'dde_updated_at',
+    ]
       .map((c) => `o.${quoteIdent(c)} AS ${quoteIdent(c)}`)
       .join(', ');
     return `

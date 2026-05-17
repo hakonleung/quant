@@ -46,6 +46,7 @@ from quant_io.sources.akshare_financials import (
     AKShareFinancialsPerStockEnricher,
 )
 from quant_io.sources.akshare_kline import AKShareKlineSource
+from quant_io.sources.akshare_stock_fund_flow import AKShareFundFlowRankSource
 from quant_io.sources.akshare_stock_meta import AKShareStockMetaSource
 from quant_io.sources.akshare_watch import AKShareWatchSource
 from quant_io.sources.routed_watch import MarketRoutedWatchSource
@@ -70,6 +71,7 @@ from quant_rpc.ops.stock_meta_admin import (
     EnrichOneHandler,
     SyncFullHandler,
 )
+from quant_rpc.ops.stock_fund_flow import ListStockFundFlowRanksHandler
 from quant_rpc.ops.stock_snapshot import ListStockSnapshotsHandler
 from quant_rpc.ops.trading_calendar import GetLatestTradeDayHandler
 from quant_rpc.ops.watch import WatchQuoteOneHandler, WatchUniverseRefreshHandler
@@ -246,6 +248,7 @@ def main() -> int:
     registry.register(ListByIndustryHandler(meta_service))
     registry.register(ListAllHandler(meta_service))
     registry.register(ListStockSnapshotsHandler(meta_service, kline_service))
+    registry.register(ListStockFundFlowRanksHandler(AKShareFundFlowRankSource()))
     registry.register(BulkSyncFinancialsHandler(financials_service))
     registry.register(EnrichFinancialsForCodeHandler(financials_service))
     registry.register(CheckSourcesHandler(sync_service))

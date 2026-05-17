@@ -17,15 +17,21 @@
 
 import { Module } from '@nestjs/common';
 import { SYSTEM_CLOCK_PROVIDER } from '../../common/clock.js';
+import { FlightClient } from '../../adapters/flight/flight-client.js';
 import { KlineModule } from '../kline/kline.module.js';
 import { STOCK_META_PORT } from './domain/stock-meta-port.js';
 import { LocalStockMetaAdapter, STOCK_META_DATA_DIR } from './local-stock-meta.adapter.js';
 import { LocalStockMetaWriterService } from './local-stock-meta-writer.service.js';
+import {
+  STOCK_FUND_FLOW_FLIGHT_CLIENT,
+  StockFundFlowSyncService,
+} from './stock-fund-flow.sync.service.js';
 import { StockMetaController } from './stock-meta.controller.js';
 import { StockMetaService } from './stock-meta.service.js';
 import { StockMetricsComputeService } from './stock-metrics-compute.service.js';
 
 const DEFAULT_DATA_DIR = '../../data';
+const DEFAULT_FLIGHT_TARGET = '127.0.0.1:8815';
 
 @Module({
   imports: [KlineModule],
@@ -41,12 +47,24 @@ const DEFAULT_DATA_DIR = '../../data';
     StockMetricsComputeService,
     SYSTEM_CLOCK_PROVIDER,
     StockMetaService,
+    {
+      // Separate Flight channel from orchestration's so a long-running
+      // fund-flow op (4 akshare scrapes in one Arrow batch) can't head-
+      // of-line block the meta/kline package workers.
+      provide: STOCK_FUND_FLOW_FLIGHT_CLIENT,
+      useFactory: (): FlightClient => {
+        const target = process.env['QUANT_FLIGHT_TARGET'] ?? DEFAULT_FLIGHT_TARGET;
+        return new FlightClient(target);
+      },
+    },
+    StockFundFlowSyncService,
     // `stock` (search) migrated to `BeInstructionCenter` (instruction-center/cells/stock.cell.ts).
   ],
   exports: [
     StockMetaService,
     LocalStockMetaWriterService,
     StockMetricsComputeService,
+    StockFundFlowSyncService,
     // ScreenModule's UniverseFilterService injects the adapter directly.
     LocalStockMetaAdapter,
   ],

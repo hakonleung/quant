@@ -114,6 +114,7 @@ describe('snapshotToTerm', () => {
         ret_90d: null,
         ret_250d: null,
       },
+      dde: null,
     });
     expect(out.code).toBe('600519');
     expect(out.price).toBe(1402.5);
@@ -144,6 +145,7 @@ describe('snapshotToTerm', () => {
         ret_90d: null,
         ret_250d: null,
       },
+      dde: null,
     });
     expect(out.price).toBeNull();
   });

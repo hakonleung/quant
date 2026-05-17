@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
+  DDE_WINDOWS,
+  DdePhaseDtoSchema,
   QuarterlyFinancialsSchema,
   StockMetaDtoSchema,
   StockSnapshotDtoSchema,
@@ -163,8 +165,10 @@ describe('StockSnapshotDtoSchema', () => {
       asof: null,
       derived: baseDerived,
       returns: baseReturns,
+      dde: null,
     });
     expect(ok.derived.mkt_cap).toBeNull();
+    expect(ok.dde).toBeNull();
   });
 
   it('accepts a fully populated snapshot', () => {
@@ -174,9 +178,70 @@ describe('StockSnapshotDtoSchema', () => {
       asof: '2026-05-04',
       derived: { ...baseDerived, mkt_cap: '2114000000000', pe_ttm: '24.5' },
       returns: { ...baseReturns, ret_1d: '0.0123' },
+      dde: {
+        main_net_inflow_3d: '300000000',
+        main_net_inflow_5d: '500000000',
+        main_net_inflow_10d: '900000000',
+        main_net_inflow_20d: null,
+        main_inflow_ratio_3d: '0.1',
+        main_inflow_ratio_5d: '0.0833',
+        main_inflow_ratio_10d: '0.0500',
+        main_inflow_ratio_20d: null,
+      },
     });
     expect(ok.price).toBe('1683.50');
     expect(ok.derived.pe_ttm).toBe('24.5');
     expect(ok.returns.ret_1d).toBe('0.0123');
+    expect(ok.dde?.main_inflow_ratio_3d).toBe('0.1');
+    expect(ok.dde?.main_net_inflow_20d).toBeNull();
+  });
+});
+
+describe('DdePhaseDtoSchema', () => {
+  it('accepts an all-null phase', () => {
+    const ok = DdePhaseDtoSchema.parse({
+      main_net_inflow_3d: null,
+      main_net_inflow_5d: null,
+      main_net_inflow_10d: null,
+      main_net_inflow_20d: null,
+      main_inflow_ratio_3d: null,
+      main_inflow_ratio_5d: null,
+      main_inflow_ratio_10d: null,
+      main_inflow_ratio_20d: null,
+    });
+    expect(ok.main_net_inflow_3d).toBeNull();
+  });
+
+  it('accepts negative inflow + negative ratio decimals', () => {
+    const ok = DdePhaseDtoSchema.parse({
+      main_net_inflow_3d: '-150000000',
+      main_net_inflow_5d: null,
+      main_net_inflow_10d: null,
+      main_net_inflow_20d: null,
+      main_inflow_ratio_3d: '-0.05',
+      main_inflow_ratio_5d: null,
+      main_inflow_ratio_10d: null,
+      main_inflow_ratio_20d: null,
+    });
+    expect(ok.main_inflow_ratio_3d).toBe('-0.05');
+  });
+
+  it('rejects a numeric (not string) inflow', () => {
+    expect(() =>
+      DdePhaseDtoSchema.parse({
+        main_net_inflow_3d: 1,
+        main_net_inflow_5d: null,
+        main_net_inflow_10d: null,
+        main_net_inflow_20d: null,
+        main_inflow_ratio_3d: null,
+        main_inflow_ratio_5d: null,
+        main_inflow_ratio_10d: null,
+        main_inflow_ratio_20d: null,
+      }),
+    ).toThrow();
+  });
+
+  it('exposes the canonical window tuple', () => {
+    expect([...DDE_WINDOWS]).toEqual([3, 5, 10, 20]);
   });
 });

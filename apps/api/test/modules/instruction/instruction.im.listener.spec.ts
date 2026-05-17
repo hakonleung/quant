@@ -1,8 +1,4 @@
-import {
-  instructionId,
-  type InstructionAsyncCompletedPayload,
-  type InstructionResult,
-} from '@quant/shared';
+import { instructionId, type InstructionResult } from '@quant/shared';
 import { z } from 'zod';
 
 import { FrozenClock } from '../../../src/common/clock.js';
@@ -297,77 +293,21 @@ describe('InstructionImListener.onInbound — ACL', () => {
 });
 
 describe('InstructionImListener.onInbound — async path', () => {
-  it('enqueues but sends no started card, then bridges completion back to the IM thread', async () => {
+  it('enqueues with `im` hints baked in and sends nothing inline — the worker delivers the completion card itself', async () => {
     const { listener, sends, enqueued } = build();
     await listener.onInbound(inbound('/analyze'));
     expect(enqueued).toHaveLength(1);
-    // No "queued" card is sent — async flow is silent until done.
+    // Listener is silent; the worker pushes the completion card directly
+    // via ChannelService using the job's `im` hints (see
+    // InstructionAsyncProcessor). This sidesteps the old race where a
+    // fast worker dropped the result because `pendingByJobId.set` ran
+    // after the completion event fired.
     expect(sends).toHaveLength(0);
 
     const job = enqueued[0];
     expect(job).toBeDefined();
     if (job === undefined) return;
-    const completion: InstructionAsyncCompletedPayload = {
-      jobId: job.jobId,
-      instructionId: 'analyze',
-      userId: job.ctx.userId,
-      result: { ok: true, output: { text: 'final analysis' } },
-      finishedAt: '2026-05-09T00:00:05.000Z',
-      durationMs: 5000,
-    };
-    await listener.onAsyncCompleted(completion);
-
-    expect(sends).toHaveLength(1);
-    expect(sends[0]?.kind).toBe('instruction.async.completed');
-    expect(sends[0]?.text).toBe('final analysis');
-    expect(sends[0]?.meta?.['jobId']).toBe(job.jobId);
-    expect(sends[0]?.meta?.['durationMs']).toBe(5000);
-  });
-
-  it('ignores completion events for jobs that did not originate from IM', async () => {
-    const { listener, sends } = build();
-    await listener.onAsyncCompleted({
-      jobId: 'orphan',
-      instructionId: 'analyze',
-      userId: 'admin',
-      result: { ok: true, output: { text: 'noop' } },
-      finishedAt: '2026-05-09T00:00:00.000Z',
-      durationMs: 0,
-    });
-    // No bridge entry => no send. The payload is buffered briefly in
-    // `earlyCompletions` in case the pending registration is racing.
-    expect(sends).toHaveLength(0);
-  });
-
-  it('delivers early completions that race ahead of the pending registration', async () => {
-    // Simulates the cache-miss race: worker finishes the job and emits
-    // INSTRUCTION_ASYNC_COMPLETED_EVENT before `runEntry` reaches
-    // `pendingByJobId.set`. The buffer must capture it and `runEntry`
-    // must drain it on the way out.
-    const { listener, sends, enqueued, exe } = build();
-    // Patch the async bus to fire `onAsyncCompleted` synchronously
-    // during `enqueue` — i.e. before `executor.dispatch` resolves.
-    const bus = (
-      exe as unknown as { asyncBus: { enqueue: (j: InstructionAsyncJob) => Promise<void> } }
-    ).asyncBus;
-    const origEnqueue = bus.enqueue.bind(bus);
-    bus.enqueue = async (job: InstructionAsyncJob): Promise<void> => {
-      await origEnqueue(job);
-      await listener.onAsyncCompleted({
-        jobId: job.jobId,
-        instructionId: 'analyze',
-        userId: job.ctx.userId,
-        result: { ok: true, output: { text: 'fast result' } },
-        finishedAt: '2026-05-09T00:00:01.000Z',
-        durationMs: 50,
-      });
-    };
-
-    await listener.onInbound(inbound('/analyze'));
-    expect(enqueued).toHaveLength(1);
-    expect(sends).toHaveLength(1);
-    expect(sends[0]?.kind).toBe('instruction.async.completed');
-    expect(sends[0]?.text).toBe('fast result');
+    expect(job.im).toEqual({ channel: 'slack', target: 'C1' });
   });
 });
 
