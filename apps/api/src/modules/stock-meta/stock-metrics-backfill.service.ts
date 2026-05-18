@@ -1,24 +1,44 @@
 /**
- * Cron-side backfill for the ``metrics_*`` block on ``stock_metas.parquet``.
+ * Batch projector for `data/stock_metas.parquet`'s `metrics_*` block.
  *
- * The per-code projection runs inside the kline worker after a kline
- * sync (see ``kline-worker.ts``). Codes whose kline is already caught
- * up are not enqueued by ``CacheInspector.findStaleKline``, so codes
- * that were last synced before the projection step was wired up never
- * got their metrics back-filled. This service scans the local meta +
- * kline state and runs the in-process projector for codes where the
- * snapshot watermark trails the local kline watermark — no Flight hop,
- * no Python.
+ * The `wcmi` column is **cross-sectional**: a code's score depends on
+ * where its raw features (returns + form counts + drawdown …) sit
+ * inside the percentile table of the whole universe. That makes per-
+ * code projection unsuitable — the kline worker still updates returns
+ * / derived for staled codes, but it leaves `wcmi = null`. This
+ * service runs after each cron settle and re-scores every code in one
+ * batch.
+ *
+ *   Phase 1  read all `(meta, bars)` pairs via bulk APIs
+ *   Phase 2  extract raw features per code (in-process pure code)
+ *   Phase 3  scoreUniverse() — percentile tables + module blend
+ *   Phase 4  emit StockMetricsRow per code, upsert in slices
+ *
+ * Codes whose history is too short or whose gate fails get
+ * `wcmi = null`; they still get their returns/derived block written
+ * via `toRowWithWcmi` so the rest of the snapshot stays fresh.
  */
 
 import { Inject, Injectable, Logger } from '@nestjs/common';
+import type { KlineBar, StockMetaDto } from '@quant/shared';
 
 import { KlineReaderService } from '../kline/kline-reader.service.js';
 import { LocalStockMetaWriterService, type StockMetricsRow } from './local-stock-meta-writer.service.js';
 import { StockMetaService } from './stock-meta.service.js';
 import { StockMetricsComputeService } from './stock-metrics-compute.service.js';
+import {
+  extractRawFeatures,
+  scoreUniverse,
+  type ScoringInput,
+  type WcmiRawFeatures,
+} from './domain/pure/wcmi-scoring.js';
 
-const PROJECT_BATCH_SIZE = 200;
+/** Kline tail window — must cover the longest scoring need (90d
+ *  returns) plus the 50d lookback for S_exp. 280 ≈ 13 calendar months
+ *  of trading days, generous safety margin. */
+const TAIL_BARS = 280;
+/** Per-batch parquet upsert size (cap on memory + SQL footprint). */
+const UPSERT_BATCH_SIZE = 500;
 
 @Injectable()
 export class StockMetricsBackfillService {
@@ -33,73 +53,90 @@ export class StockMetricsBackfillService {
     private readonly writer: LocalStockMetaWriterService,
   ) {}
 
+  /** Backwards-compat shim — the cron used to call this. Now there's
+   *  no "stale only" mode; wcmi requires the full universe, so just
+   *  delegate to {@link runAll}. */
   async run(traceId: string): Promise<{ readonly scanned: number; readonly projected: number }> {
-    const stale = await this.findStaleCodes(traceId);
-    return this.projectCodes(stale, traceId, 'stale');
+    return this.runAll(traceId);
   }
 
   /**
-   * One-shot full-universe projection — ignores the asof watermark.
-   * Use to seed a newly-added metric column (e.g. wcmi) on every code
-   * whose kline is present, without waiting for the daily cron to
-   * happen to flag each one stale.
+   * Full-universe batch run. Returns counts for the cron / admin
+   * endpoint's response body.
    */
   async runAll(traceId: string): Promise<{ readonly scanned: number; readonly projected: number }> {
+    // ── Phase 1: bulk read meta + kline ─────────────────────────
     const snapshots = await this.meta.snapshotAll(traceId);
-    const codes = snapshots.map((s) => s.meta.code);
-    const watermarks = await this.kline.lastTradeDates(codes);
-    const targets = codes.filter((c) => watermarks.has(c));
-    return this.projectCodes(targets, traceId, 'full');
-  }
-
-  private async projectCodes(
-    codes: readonly string[],
-    traceId: string,
-    mode: 'stale' | 'full',
-  ): Promise<{ readonly scanned: number; readonly projected: number }> {
-    if (codes.length === 0) {
-      this.logger.debug(`metrics_backfill_skip mode=${mode} scanned=0 traceId=${traceId}`);
+    if (snapshots.length === 0) {
+      this.logger.debug(`metrics_backfill_skip scanned=0 traceId=${traceId}`);
       return { scanned: 0, projected: 0 };
     }
+    const metaByCode = new Map<string, StockMetaDto>();
+    for (const snap of snapshots) metaByCode.set(snap.meta.code, snap.meta);
+    const codes = Array.from(metaByCode.keys());
+    const klineByCode = await this.kline.lastNBulk(codes, TAIL_BARS);
+
+    // ── Phase 2: extract raw features ───────────────────────────
+    interface CodeContext {
+      readonly code: string;
+      readonly meta: StockMetaDto;
+      readonly bars: readonly KlineBar[];
+      readonly raw: WcmiRawFeatures | null;
+    }
+    const contexts: CodeContext[] = [];
+    const rankInputs: ScoringInput[] = [];
+    for (const code of codes) {
+      const meta = metaByCode.get(code)!;
+      const bars = klineByCode[code] ?? [];
+      if (bars.length === 0) {
+        contexts.push({ code, meta, bars, raw: null });
+        continue;
+      }
+      const raw = extractRawFeatures(bars.map(toBarLike));
+      contexts.push({ code, meta, bars, raw });
+      if (raw !== null) rankInputs.push({ code, raw });
+    }
+
+    // ── Phase 3: universe-wide scoring ──────────────────────────
+    const scores = scoreUniverse(rankInputs);
+    const scoredCount = Array.from(scores.values()).filter((v) => v !== null).length;
+
+    // ── Phase 4: build rows + upsert in slices ──────────────────
+    const rows: StockMetricsRow[] = [];
+    for (const ctx of contexts) {
+      if (ctx.bars.length === 0) continue;
+      const score = scores.get(ctx.code) ?? null;
+      rows.push(this.compute.toRowWithWcmi(ctx.meta, ctx.bars, score));
+    }
     let projected = 0;
-    for (let i = 0; i < codes.length; i += PROJECT_BATCH_SIZE) {
-      const slice = codes.slice(i, i + PROJECT_BATCH_SIZE);
-      const rows: StockMetricsRow[] = [];
-      for (const code of slice) {
-        try {
-          const row = await this.compute.computeForCode(code);
-          if (row !== null) rows.push(row);
-        } catch (err) {
-          this.logger.warn(
-            `metrics_backfill_compute_failed code=${code} traceId=${traceId} err=${err instanceof Error ? err.message : String(err)}`,
-          );
-        }
-      }
-      if (rows.length > 0) {
-        await this.writer.upsertMetrics(rows);
-        projected += rows.length;
-      }
+    for (let i = 0; i < rows.length; i += UPSERT_BATCH_SIZE) {
+      const slice = rows.slice(i, i + UPSERT_BATCH_SIZE);
+      await this.writer.upsertMetrics(slice);
+      projected += slice.length;
     }
     this.logger.log(
-      `metrics_backfill_done mode=${mode} scanned=${String(codes.length)} projected=${String(projected)} traceId=${traceId}`,
+      `metrics_backfill_done scanned=${String(codes.length)} projected=${String(projected)} scored=${String(scoredCount)} traceId=${traceId}`,
     );
     return { scanned: codes.length, projected };
   }
+}
 
-  private async findStaleCodes(traceId: string): Promise<readonly string[]> {
-    const snapshots = await this.meta.snapshotAll(traceId);
-    if (snapshots.length === 0) return [];
-    const codes = snapshots.map((s) => s.meta.code);
-    const watermarks = await this.kline.lastTradeDates(codes);
-    const stale: string[] = [];
-    for (const snap of snapshots) {
-      const code = snap.meta.code;
-      const lastTs = watermarks.get(code);
-      if (lastTs === undefined) continue; // no kline → nothing to project against
-      const klineLast = lastTs.toISOString().slice(0, 10);
-      const asof = snap.asof;
-      if (asof === null || asof < klineLast) stale.push(code);
-    }
-    return stale;
-  }
+function toBarLike(bar: KlineBar): {
+  trade_date: string;
+  open_qfq: number;
+  high_qfq: number;
+  low_qfq: number;
+  close_qfq: number;
+  volume: number;
+  turnover: number;
+} {
+  return {
+    trade_date: bar.date,
+    open_qfq: bar.open,
+    high_qfq: bar.high,
+    low_qfq: bar.low,
+    close_qfq: bar.close,
+    volume: bar.volume,
+    turnover: bar.turnover,
+  };
 }

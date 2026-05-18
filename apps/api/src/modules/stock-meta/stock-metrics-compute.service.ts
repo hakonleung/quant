@@ -14,7 +14,7 @@
  */
 
 import { Inject, Injectable } from '@nestjs/common';
-import type { KlineBar } from '@quant/shared';
+import type { KlineBar, StockMetaDto } from '@quant/shared';
 
 import { KlineReaderService } from '../kline/kline-reader.service.js';
 import { computeMetrics, type BarLike, type StockMetrics } from './domain/pure/compute-metrics.js';
@@ -45,10 +45,34 @@ export class StockMetricsComputeService {
     const metrics = computeMetrics(meta, bars.map(toBarLike));
     return toRow(metrics);
   }
+
+  /**
+   * Batch-side variant: produce a row using a pre-fetched `(meta,
+   * bars)` pair and an externally-supplied `wcmi` score. The wcmi
+   * column requires universe-wide percentile tables which only the
+   * backfill orchestrator has — see `StockMetricsBackfillService`.
+   */
+  toRowWithWcmi(
+    meta: StockMetaDto,
+    bars: readonly KlineBar[],
+    wcmiScore: number | null,
+  ): StockMetricsRow {
+    const metrics = computeMetrics(meta, bars.map(toBarLike));
+    const row = toRow(metrics);
+    return { ...row, wcmi: wcmiScore === null ? null : wcmiScore.toString() };
+  }
 }
 
 function toBarLike(bar: KlineBar): BarLike {
-  return { trade_date: bar.date, close_qfq: bar.close };
+  return {
+    trade_date: bar.date,
+    open_qfq: bar.open,
+    high_qfq: bar.high,
+    low_qfq: bar.low,
+    close_qfq: bar.close,
+    volume: bar.volume,
+    turnover: bar.turnover,
+  };
 }
 
 function toRow(m: StockMetrics): StockMetricsRow {

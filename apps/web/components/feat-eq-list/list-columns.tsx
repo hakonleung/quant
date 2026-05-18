@@ -169,10 +169,14 @@ function makeAppliedColumn(key: ColumnKey): ColumnDef | null {
     case 'ret250d':
       return returnColumn('ret250d', '250D%');
     case 'wcmi':
+      // Cross-sectional swing-momentum score in `[-1, +1]`. Render via
+      // ScoreCell — ×100 scale (so +0.85 reads as "+85.00") but **no**
+      // `%` suffix, since the value is a Sharpe-style ranking score,
+      // not a return.
       return {
         key: 'wcmi',
         label: 'WCMI',
-        w: 90,
+        w: 80,
         align: 'right',
         render: (r) => <ScoreCell value={readNumber(r, 'wcmi')} />,
         sortValue: (r) => readNumber(r, 'wcmi'),
