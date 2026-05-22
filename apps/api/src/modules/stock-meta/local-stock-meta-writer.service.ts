@@ -61,6 +61,7 @@ const METRIC_DECIMAL_COLUMNS = [
   'wcmi_shadow_clean',
   'wcmi_stage_gain',
   'wcmi_crash_avoid',
+  'wcmi_recent_strength',
 ] as const;
 
 export type MetricDecimalColumn = (typeof METRIC_DECIMAL_COLUMNS)[number];
@@ -115,6 +116,7 @@ export interface StockMetricsRow {
   readonly wcmi_shadow_clean: string | null;
   readonly wcmi_stage_gain: string | null;
   readonly wcmi_crash_avoid: string | null;
+  readonly wcmi_recent_strength: string | null;
 }
 
 @Injectable()
@@ -494,6 +496,7 @@ export class LocalStockMetaWriterService {
       quoteOptionalString(row.wcmi_shadow_clean),
       quoteOptionalString(row.wcmi_stage_gain),
       quoteOptionalString(row.wcmi_crash_avoid),
+      quoteOptionalString(row.wcmi_recent_strength),
     ];
     return `(${parts.join(', ')})`;
   }

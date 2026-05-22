@@ -258,6 +258,7 @@ function rowToSnapshot(meta: StockMetaDto, row: Record<string, unknown>): StockS
       wcmi_shadow_clean: optionalString(row['wcmi_shadow_clean']),
       wcmi_stage_gain: optionalString(row['wcmi_stage_gain']),
       wcmi_crash_avoid: optionalString(row['wcmi_crash_avoid']),
+      wcmi_recent_strength: optionalString(row['wcmi_recent_strength']),
     },
     returns: {
       ret_1d: optionalString(row['ret_1d']),

@@ -70,6 +70,7 @@ export interface StockMetrics {
   readonly wcmi_shadow_clean: Dec | null;
   readonly wcmi_stage_gain: Dec | null;
   readonly wcmi_crash_avoid: Dec | null;
+  readonly wcmi_recent_strength: Dec | null;
 }
 
 const RETURN_WINDOWS: readonly (readonly [keyof StockMetrics, number])[] = [
@@ -115,6 +116,7 @@ export function computeMetrics(meta: StockMetaDto, bars: readonly BarLike[]): St
       wcmi_shadow_clean: null,
       wcmi_stage_gain: null,
       wcmi_crash_avoid: null,
+      wcmi_recent_strength: null,
     };
   }
   const latest = bars[bars.length - 1]!;
@@ -137,6 +139,7 @@ export function computeMetrics(meta: StockMetaDto, bars: readonly BarLike[]): St
     wcmi_shadow_clean: null,
     wcmi_stage_gain: null,
     wcmi_crash_avoid: null,
+    wcmi_recent_strength: null,
   };
 }
 

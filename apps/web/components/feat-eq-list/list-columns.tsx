@@ -204,6 +204,8 @@ function makeAppliedColumn(key: ColumnKey): ColumnDef | null {
       return wcmiSubColumn('wcmiStageGain', '阶段涨幅');
     case 'wcmiCrashAvoid':
       return wcmiSubColumn('wcmiCrashAvoid', '抗大跌');
+    case 'wcmiRecentStrength':
+      return wcmiSubColumn('wcmiRecentStrength', '近期强度');
     case 'mktCap':
       return derivedColumn('mktCap', '总市值', 110, 'cny');
     case 'floatMktCap':
@@ -246,6 +248,7 @@ function readWcmiSub(r: ListRow): WcmiSubScores {
     shadowClean: parseSub(r['wcmiShadowClean']),
     stageGain: parseSub(r['wcmiStageGain']),
     crashAvoid: parseSub(r['wcmiCrashAvoid']),
+    recentStrength: parseSub(r['wcmiRecentStrength']),
   };
 }
 

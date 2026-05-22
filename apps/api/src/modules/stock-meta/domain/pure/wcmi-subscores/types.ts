@@ -85,6 +85,39 @@ export interface WcmiConfig {
    */
   readonly GAP_DOWN_CAP: number;
 
+  // ── Sub-score 8: recent-strength (short-term momentum + yin run) ───
+  /**
+   * Trailing-bar count for the short-term "is the stock currently
+   * healthy" view. Defaults to 10 — captures the last ~2 weeks,
+   * enough to spot a multi-day pullback while ignoring single-bar
+   * noise. Must be ≥ 2 and ≤ WINDOW.
+   */
+  readonly RECENT_WINDOW: number;
+
+  /**
+   * Saturation cap for the longest consecutive-yin (close < open)
+   * run inside `RECENT_WINDOW`. 5 consecutive yin bars in the last
+   * 10 fully zeroes the yin-run component. Lower = harsher penalty
+   * (e.g. 3 means a 3-day red streak already saturates).
+   */
+  readonly RECENT_YIN_RUN_CAP: number;
+
+  /**
+   * Pullback-from-window-high tolerance for the recent-strength
+   * sub-score. `(window_high − close[-1]) / window_high` of this
+   * size or larger fully zeroes the drawdown component. 0.15 ≈ 15%
+   * off the 90-day high is the "I should not buy now" threshold.
+   */
+  readonly RECENT_PULLBACK_CAP: number;
+
+  /**
+   * Saturation range for the `RECENT_WINDOW`-bar trailing return
+   * component. `recent_ret` ≥ +RECENT_RET_SCALE scores 1.0;
+   * `recent_ret` ≤ -RECENT_RET_SCALE scores 0.0; linear between.
+   * 0.10 = ±10% over `RECENT_WINDOW` saturates.
+   */
+  readonly RECENT_RET_SCALE: number;
+
   // ── Composite weights (need not sum to 100; the composite formula
   //    normalises by `Σ w_k`). Tuned via 7-round backtest run; see
   //    `docs/perf/wcmi-redesign-backtest.md` for the rationale. ──────
@@ -136,11 +169,23 @@ export interface WcmiConfig {
 
   /**
    * Weight on the `crash_avoidance` sub-score (crash-day count +
-   * severity + gap-down count). Tuned to 60 — the only dimension
-   * with meaningful variance within already-high-stage-gain
-   * stocks. Drives Top-10 discrimination.
+   * severity + gap-down count). Reduced from 60 → 30 after the
+   * recent-strength sub-score was added: crash_avoidance covers
+   * tail-event single-day blows; recent_strength covers slow-bleed
+   * "stock is currently red" cases that crash_avoidance misses.
    */
   readonly W_CRASH_AVOID: number;
+
+  /**
+   * Weight on the `recent_strength` sub-score (recent-window
+   * return + consecutive-yin penalty + pullback-from-high). Set
+   * to 30 by default so it matches `crash_avoidance` in magnitude
+   * — together they ensure a stock with strong 90-day stage gain
+   * but a multi-day red streak right now ranks below an equally
+   * gainful stock that is still trending up. Tune higher to bias
+   * harder against any current weakness.
+   */
+  readonly W_RECENT_STRENGTH: number;
 
   // ── Output scaling ─────────────────────────────────────────────────
   /**
@@ -163,13 +208,18 @@ export const WCMI_CONFIG: WcmiConfig = {
   CRASH_COUNT_CAP: 4,
   GAP_DOWN_THR: -2,
   GAP_DOWN_CAP: 6,
+  RECENT_WINDOW: 10,
+  RECENT_YIN_RUN_CAP: 5,
+  RECENT_PULLBACK_CAP: 0.15,
+  RECENT_RET_SCALE: 0.1,
   W_RHYTHM: 0,
   W_MA_SUPPORT: 3,
   W_UP_WAVE: 3,
   W_YANG_DOM: 3,
   W_SHADOW_CLEAN: 3,
   W_STAGE_GAIN: 28,
-  W_CRASH_AVOID: 60,
+  W_CRASH_AVOID: 30,
+  W_RECENT_STRENGTH: 30,
   WCMI_TOTAL_SCALE: 1000,
 } as const;
 
@@ -181,6 +231,9 @@ export interface WcmiSubscores {
   readonly upperShadowClean: number;
   readonly stageGain: number;
   readonly crashAvoidance: number;
+  /** Short-term momentum + consecutive-yin penalty + pullback-from-
+   *  high. See `recent-strength.ts`. */
+  readonly recentStrength: number;
   readonly windowLen: number;
   readonly passesGate: boolean;
 }
@@ -193,6 +246,7 @@ export interface WcmiPctBreakdown {
   readonly upperShadowClean: number;
   readonly stageGain: number;
   readonly crashAvoidance: number;
+  readonly recentStrength: number;
 }
 
 export interface WcmiScore {

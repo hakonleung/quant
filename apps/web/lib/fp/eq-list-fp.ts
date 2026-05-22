@@ -144,6 +144,7 @@ export function listRowFromStockListRow(
     wcmiShadowClean: row.wcmiShadowClean,
     wcmiStageGain: row.wcmiStageGain,
     wcmiCrashAvoid: row.wcmiCrashAvoid,
+    wcmiRecentStrength: row.wcmiRecentStrength,
     mktCap: row.mktCap,
     floatMktCap: row.floatMktCap,
     peTtm: row.peTtm,

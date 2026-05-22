@@ -71,6 +71,7 @@ export class StockMetricsComputeService {
       wcmi_shadow_clean: formatPct(wcmiScore.pct.upperShadowClean),
       wcmi_stage_gain: formatPct(wcmiScore.pct.stageGain),
       wcmi_crash_avoid: formatPct(wcmiScore.pct.crashAvoidance),
+      wcmi_recent_strength: formatPct(wcmiScore.pct.recentStrength),
     };
   }
 }
@@ -140,6 +141,7 @@ function toRow(m: StockMetrics): StockMetricsRow {
     wcmi_shadow_clean: decStr(m.wcmi_shadow_clean),
     wcmi_stage_gain: decStr(m.wcmi_stage_gain),
     wcmi_crash_avoid: decStr(m.wcmi_crash_avoid),
+    wcmi_recent_strength: decStr(m.wcmi_recent_strength),
   };
 }
 

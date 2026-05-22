@@ -70,6 +70,7 @@ export interface WcmiSubScores {
   readonly shadowClean: number | null;
   readonly stageGain: number | null;
   readonly crashAvoid: number | null;
+  readonly recentStrength: number | null;
 }
 
 interface WcmiCellProps {
@@ -116,6 +117,7 @@ export function WcmiCell({ value, sub }: WcmiCellProps): React.ReactElement {
     formatSub('ShdwCln', sub.shadowClean),
     formatSub('StgGain', sub.stageGain),
     formatSub('CrshAvd', sub.crashAvoid),
+    formatSub('Recent', sub.recentStrength),
   ].join('\n');
   return (
     <Text

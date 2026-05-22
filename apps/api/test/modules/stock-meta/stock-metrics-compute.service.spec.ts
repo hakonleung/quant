@@ -63,7 +63,7 @@ function score(composite: number): WcmiScore {
       yangDominance: 0.5,
       upperShadowClean: 0.5,
       stageGain: 0.5,
-      crashAvoidance: 0.5,
+      crashAvoidance: 0.5, recentStrength: 0.5,
     },
   };
 }
@@ -102,7 +102,7 @@ describe('StockMetricsComputeService.toRowWithWcmi', () => {
         yangDominance: 0.5,
         upperShadowClean: 0.123456,
         stageGain: 0.9,
-        crashAvoidance: 0.25,
+        crashAvoidance: 0.25, recentStrength: 0.25,
       },
     });
     expect(row.wcmi_rhythm).toBe('73.40');

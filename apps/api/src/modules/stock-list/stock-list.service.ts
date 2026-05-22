@@ -147,6 +147,7 @@ function buildRow(
     wcmiShadowClean: parseDecimal(derived?.wcmi_shadow_clean),
     wcmiStageGain: parseDecimal(derived?.wcmi_stage_gain),
     wcmiCrashAvoid: parseDecimal(derived?.wcmi_crash_avoid),
+    wcmiRecentStrength: parseDecimal(derived?.wcmi_recent_strength),
     mktCap: parseDecimal(derived?.mkt_cap),
     floatMktCap: parseDecimal(derived?.float_mkt_cap),
     peTtm: parseDecimal(derived?.pe_ttm),
@@ -188,6 +189,7 @@ function metasToSnapshotShells(metas: readonly StockMetaDto[]): readonly StockSn
       wcmi_shadow_clean: null,
       wcmi_stage_gain: null,
       wcmi_crash_avoid: null,
+      wcmi_recent_strength: null,
     },
     returns: {
       ret_1d: null,
@@ -288,6 +290,8 @@ function pickSortValue(row: StockListRow, key: StockListColumnKey): number | str
       return row.wcmiStageGain;
     case 'wcmiCrashAvoid':
       return row.wcmiCrashAvoid;
+    case 'wcmiRecentStrength':
+      return row.wcmiRecentStrength;
     case 'mktCap':
       return row.mktCap;
     case 'floatMktCap':

@@ -70,6 +70,7 @@ const COLUMN_DEFAULTS: Readonly<
   wcmiShadowClean: { align: 'right', width: 80, min: 7 },
   wcmiStageGain: { align: 'right', width: 80, min: 7 },
   wcmiCrashAvoid: { align: 'right', width: 80, min: 7 },
+  wcmiRecentStrength: { align: 'right', width: 80, min: 7 },
   mktCap: { align: 'right', width: 100, min: 10 },
   floatMktCap: { align: 'right', width: 100, min: 10 },
   peTtm: { align: 'right', width: 80, min: 7 },
@@ -244,6 +245,7 @@ function formatCell(row: StockListRow, col: StockListColumnKey): string | null {
     case 'wcmiShadowClean':
     case 'wcmiStageGain':
     case 'wcmiCrashAvoid':
+    case 'wcmiRecentStrength':
       // Sub-score percentile already scaled to [0, 100]; render as
       // a plain integer so columns line up at width 4.
       return typeof v === 'number' ? v.toFixed(0) : null;

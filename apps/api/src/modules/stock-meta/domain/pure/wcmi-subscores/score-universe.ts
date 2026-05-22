@@ -17,6 +17,7 @@ const SUBSCORE_KEYS: readonly SubscoreKey[] = [
   'upperShadowClean',
   'stageGain',
   'crashAvoidance',
+  'recentStrength',
 ];
 
 /**
@@ -51,7 +52,8 @@ export function scoreUniverse(
       weights.yangDominance * pct.yangDominance +
       weights.upperShadowClean * pct.upperShadowClean +
       weights.stageGain * pct.stageGain +
-      weights.crashAvoidance * pct.crashAvoidance;
+      weights.crashAvoidance * pct.crashAvoidance +
+      weights.recentStrength * pct.recentStrength;
     out.set(survivor.code, { composite: scale * weighted, pct });
   }
   return out;
@@ -68,6 +70,7 @@ function buildSortedTables(raws: readonly WcmiSubscores[]): SortedTables {
     upperShadowClean: [],
     stageGain: [],
     crashAvoidance: [],
+    recentStrength: [],
   };
   for (const raw of raws) {
     tables.rhythm.push(raw.rhythm);
@@ -77,6 +80,7 @@ function buildSortedTables(raws: readonly WcmiSubscores[]): SortedTables {
     tables.upperShadowClean.push(raw.upperShadowClean);
     tables.stageGain.push(raw.stageGain);
     tables.crashAvoidance.push(raw.crashAvoidance);
+    tables.recentStrength.push(raw.recentStrength);
   }
   for (const key of SUBSCORE_KEYS) tables[key].sort((a, b) => a - b);
   return tables;
@@ -91,6 +95,7 @@ function computePct(raw: WcmiSubscores, sortedByKey: SortedTables): WcmiPctBreak
     upperShadowClean: percentileNorm(sortedByKey.upperShadowClean, raw.upperShadowClean),
     stageGain: percentileNorm(sortedByKey.stageGain, raw.stageGain),
     crashAvoidance: percentileNorm(sortedByKey.crashAvoidance, raw.crashAvoidance),
+    recentStrength: percentileNorm(sortedByKey.recentStrength, raw.recentStrength),
   };
 }
 
@@ -102,6 +107,7 @@ interface SubscoreWeights {
   readonly upperShadowClean: number;
   readonly stageGain: number;
   readonly crashAvoidance: number;
+  readonly recentStrength: number;
 }
 
 function weightsFor(config: WcmiConfig): SubscoreWeights {
@@ -113,6 +119,7 @@ function weightsFor(config: WcmiConfig): SubscoreWeights {
     upperShadowClean: config.W_SHADOW_CLEAN,
     stageGain: config.W_STAGE_GAIN,
     crashAvoidance: config.W_CRASH_AVOID,
+    recentStrength: config.W_RECENT_STRENGTH,
   };
 }
 
@@ -124,6 +131,7 @@ function sumWeights(w: SubscoreWeights): number {
     w.yangDominance +
     w.upperShadowClean +
     w.stageGain +
-    w.crashAvoidance
+    w.crashAvoidance +
+    w.recentStrength
   );
 }

@@ -148,7 +148,7 @@ describe('LocalStockMetaWriterService', () => {
     wcmi_yang_dom: null,
     wcmi_shadow_clean: null,
     wcmi_stage_gain: null,
-    wcmi_crash_avoid: null,
+    wcmi_crash_avoid: null, wcmi_recent_strength: null,
   });
 
   it('populates metrics columns for the targeted code', async () => {

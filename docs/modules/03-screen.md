@@ -23,8 +23,6 @@
 | API             | `apps/api/src/modules/screen/`（含 `@CurrentUser` 用于 LLM ledger 计费）                             | `POST /api/screen/nl2dsl`（NL→DSL）、`POST /api/screen/run`（执行 DSL）、`POST /api/screen/nl`（合并）                  |
 | Web             | `feat-scr-nl`（自然语言入口）、`feat-scr-dsl`（DSL 编辑器） + `app/api/screen/{nl2dsl,run}/route.ts` | BFF 双路代理；编辑后的 plan 重跑可跳过 LLM                                                                              |
 
-> 历史背景：v1 时 screen 执行在 Python（`quant_core/services/screen_service.py` + `quant_rpc/ops/screen_ops.py`），通过 `screen_run` Flight op 调度。该 stack 于 storage-unify-rollout 后整体下沉到 NestJS，Python 不再持有 DSL 类型 / 解析 / 求值 / signature 任一环节。
-
 ## DSL 规约
 
 详见 [`docs/rfcs/0001-screening-dsl.md`](../rfcs/0001-screening-dsl.md)（仍为权威）。变更走 schema 版本号；NestJS 端校验在 `nl-screen.ts` zod schema 中收口。

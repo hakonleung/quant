@@ -139,6 +139,7 @@ export const StockDerivedMetricsSchema = z
     wcmi_shadow_clean: decimalStringOrNull,
     wcmi_stage_gain: decimalStringOrNull,
     wcmi_crash_avoid: decimalStringOrNull,
+    wcmi_recent_strength: decimalStringOrNull,
   })
   .strict();
 

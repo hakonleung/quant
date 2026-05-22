@@ -112,7 +112,7 @@ describe('snapshotToTerm', () => {
         wcmi_yang_dom: null,
         wcmi_shadow_clean: null,
         wcmi_stage_gain: null,
-        wcmi_crash_avoid: null,
+        wcmi_crash_avoid: null, wcmi_recent_strength: null,
       },
       returns: {
         ret_1d: null,
@@ -151,7 +151,7 @@ describe('snapshotToTerm', () => {
         wcmi_yang_dom: null,
         wcmi_shadow_clean: null,
         wcmi_stage_gain: null,
-        wcmi_crash_avoid: null,
+        wcmi_crash_avoid: null, wcmi_recent_strength: null,
       },
       returns: {
         ret_1d: null,

@@ -1,5 +1,6 @@
 import { computeCrashAvoidance } from './crash-avoidance.js';
 import { computeMaSupport } from './ma-support.js';
+import { computeRecentStrength } from './recent-strength.js';
 import { computeRhythm } from './rhythm.js';
 import { computeStageGain } from './stage-gain.js';
 import type { BarLike } from '../compute-metrics.js';
@@ -32,6 +33,7 @@ export function extractWcmiSubscores(
   const upperShadowClean = computeUpperShadowClean(window, config);
   const stage = computeStageGain(window, config);
   const crashAvoidance = computeCrashAvoidance(window, config);
+  const recentStrength = computeRecentStrength(window, config);
   return {
     rhythm,
     maSupport,
@@ -40,6 +42,7 @@ export function extractWcmiSubscores(
     upperShadowClean,
     stageGain: stage.value,
     crashAvoidance,
+    recentStrength,
     windowLen: window.length,
     passesGate: stage.rWindow > 0,
   };

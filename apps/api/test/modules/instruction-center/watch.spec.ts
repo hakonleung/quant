@@ -87,7 +87,7 @@ const emptyRow = (code: string): StockListRow => ({
   wcmiYangDom: null,
   wcmiShadowClean: null,
   wcmiStageGain: null,
-  wcmiCrashAvoid: null,
+  wcmiCrashAvoid: null, wcmiRecentStrength: null,
   mktCap: null,
   floatMktCap: null,
   peTtm: null,

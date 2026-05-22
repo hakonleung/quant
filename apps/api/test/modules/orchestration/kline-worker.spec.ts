@@ -125,7 +125,7 @@ const SAMPLE_METRICS_ROW: StockMetricsRow = {
   wcmi_yang_dom: null,
   wcmi_shadow_clean: null,
   wcmi_stage_gain: null,
-  wcmi_crash_avoid: null,
+  wcmi_crash_avoid: null, wcmi_recent_strength: null,
 };
 
 const SYNC_BARS_TABLE = new FakeTable(
