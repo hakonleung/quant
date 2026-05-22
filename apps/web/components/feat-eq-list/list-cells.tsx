@@ -38,10 +38,10 @@ interface ValueCellProps {
   readonly value: number | null;
 }
 
-/** Signed two-decimal score cell — used by WCMI. Values land in the
- *  `[-1, +1]` range from the cross-sectional scoring engine; this
- *  cell scales them to "score units" (× 100, no `%` suffix) so a
- *  +0.85 reads as `+85.00`. Same up/down color coding as ChgPctCell. */
+/** Signed score cell — used by WCMI. Values arrive in display-ready
+ *  units already (the cross-sectional scoring engine scales them to
+ *  `[-1000, +1000]`); no extra multiplier, no `%` suffix. Same
+ *  up/down color coding as ChgPctCell. */
 export function ScoreCell({ value }: ValueCellProps): React.ReactElement {
   if (value === null) {
     return (
@@ -50,13 +50,12 @@ export function ScoreCell({ value }: ValueCellProps): React.ReactElement {
       </Text>
     );
   }
-  const v = value * 100;
-  const color = v > 0 ? 'up' : v < 0 ? 'down' : 'ink3';
-  const sign = v > 0 ? '+' : '';
+  const color = value > 0 ? 'up' : value < 0 ? 'down' : 'ink3';
+  const sign = value > 0 ? '+' : '';
   return (
     <Text fontFamily="mono" fontSize="11px" color={color} fontWeight="600">
       {sign}
-      {v.toFixed(2)}
+      {value.toFixed(0)}
     </Text>
   );
 }

@@ -189,8 +189,8 @@ describe('computeMetrics', () => {
       // Range guarantee for the blend.
       for (const v of out.values()) {
         if (v === null) continue;
-        expect(v).toBeGreaterThanOrEqual(-1);
-        expect(v).toBeLessThanOrEqual(1);
+        expect(v).toBeGreaterThanOrEqual(-1000);
+        expect(v).toBeLessThanOrEqual(1000);
       }
     });
 
