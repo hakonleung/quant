@@ -11,8 +11,9 @@ import {
   type BarLike,
 } from '../../../../../src/modules/stock-meta/domain/pure/compute-metrics.js';
 import {
-  extractRawFeatures,
+  extractWcmiSubscores,
   scoreUniverse,
+  WCMI_CONFIG,
   type ScoringInput,
 } from '../../../../../src/modules/stock-meta/domain/pure/wcmi-scoring.js';
 
@@ -46,6 +47,10 @@ function bar(dayOffset: number, close: number): BarLike {
     close_qfq: close,
     volume: 0,
     turnover: 0,
+    ma5: null,
+    ma10: null,
+    ma20: null,
+    ma60: null,
   };
 }
 
@@ -67,6 +72,10 @@ function ohlcBar(
     close_qfq: close,
     volume: 0,
     turnover: 0,
+    ma5: null,
+    ma10: null,
+    ma20: null,
+    ma60: null,
   };
 }
 
@@ -121,54 +130,43 @@ describe('computeMetrics', () => {
     });
   });
 
-  describe('wcmi cross-sectional scoring (extractRawFeatures + scoreUniverse)', () => {
-    it('extractRawFeatures: returns null when history < 11 bars', () => {
-      const bars = Array.from({ length: 10 }, (_, i) => bar(i, 10 + i));
-      expect(extractRawFeatures(bars)).toBeNull();
+  describe('wcmi v2 cross-sectional scoring (extractWcmiSubscores + scoreUniverse)', () => {
+    it('extractWcmiSubscores: returns null when history < 30 bars', () => {
+      const bars = Array.from({ length: 20 }, (_, i) => bar(i, 10 + i));
+      expect(extractWcmiSubscores(bars, WCMI_CONFIG)).toBeNull();
     });
 
-    it('extractRawFeatures: returns null on the empty-bars branch', () => {
-      expect(extractRawFeatures([])).toBeNull();
+    it('extractWcmiSubscores: returns null on the empty-bars branch', () => {
+      expect(extractWcmiSubscores([], WCMI_CONFIG)).toBeNull();
     });
 
-    it('extractRawFeatures: populates r10 + r5 for a healthy short-history series', () => {
-      // 12 closes ⇒ ret_5 and ret_10 available; ret_20/r60/r90 null.
-      const closes = [10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21];
-      const bars = closes.map((c, i) => bar(i, c));
-      const raw = extractRawFeatures(bars)!;
-      expect(raw).not.toBeNull();
-      expect(raw.r5).not.toBeNull();
-      expect(raw.r10).toBeGreaterThan(0);
-      expect(raw.r20).toBeNull();
-      expect(raw.r90).toBeNull();
-      expect(raw.greenRate).toBe(1); // every bar closes up vs prev
-    });
-
-    it('extractRawFeatures: counts a sealed 一字涨停 into pFomoAbsolute', () => {
+    it('extractWcmiSubscores: populates all sub-scores for a healthy 90-bar series', () => {
       const closes: number[] = [100];
-      for (let i = 1; i <= 89; i += 1) closes.push(closes[i - 1]! * 1.005);
-      const bars: BarLike[] = closes.map((c, i) => bar(i, c));
-      const sealedClose = closes[closes.length - 1]! * 1.1;
-      bars.push(ohlcBar(90, sealedClose, sealedClose, sealedClose, sealedClose));
-      const raw = extractRawFeatures(bars)!;
-      // Sealed limit-up adds at least LIMIT_UP_PEN (20) to P_fomo.
-      expect(raw.pFomoAbsolute).toBeGreaterThanOrEqual(20);
+      for (let i = 1; i <= 90; i += 1) closes.push(closes[i - 1]! * 1.005);
+      const bars = closes.map((c, i) => bar(i, c));
+      const raw = extractWcmiSubscores(bars, WCMI_CONFIG)!;
+      expect(raw).not.toBeNull();
+      expect(raw.windowLen).toBe(90);
+      expect(raw.passesGate).toBe(true);
+      expect(Number.isFinite(raw.stageGain)).toBe(true);
     });
 
-    it('scoreUniverse: gate-failed codes (ret_10d ≤ 0) get null', () => {
-      // 91 bars descending — ret_10d strictly negative.
+    it('extractWcmiSubscores: passesGate=false for a net-down window', () => {
       const closes = Array.from({ length: 91 }, (_, i) => 100 - i * 0.5);
       const bars = closes.map((c, i) => bar(i, c));
-      const raw = extractRawFeatures(bars)!;
-      expect(raw.r10).toBeLessThan(0);
-      const out = scoreUniverse([{ code: 'A', raw }]);
+      const raw = extractWcmiSubscores(bars, WCMI_CONFIG)!;
+      expect(raw.passesGate).toBe(false);
+    });
+
+    it('scoreUniverse: gate-failed codes get null', () => {
+      const closes = Array.from({ length: 91 }, (_, i) => 100 - i * 0.5);
+      const bars = closes.map((c, i) => bar(i, c));
+      const raw = extractWcmiSubscores(bars, WCMI_CONFIG)!;
+      const out = scoreUniverse([{ code: 'A', raw }], WCMI_CONFIG);
       expect(out.get('A')).toBeNull();
     });
 
-    it('scoreUniverse: ranks survivors and outputs `[-1, +1]` finals', () => {
-      // Three survivors with monotonically stronger trends. The
-      // strongest must score higher than the weakest under the
-      // module-blend.
+    it('scoreUniverse: ranks survivors and bounds composite to [0, 1000]', () => {
       const inputs: ScoringInput[] = [];
       for (const [code, daily] of [
         ['weak', 1.001],
@@ -177,25 +175,28 @@ describe('computeMetrics', () => {
       ] as const) {
         const closes: number[] = [100];
         for (let i = 1; i <= 90; i += 1) closes.push(closes[i - 1]! * daily);
-        const raw = extractRawFeatures(closes.map((c, i) => bar(i, c)))!;
+        const raw = extractWcmiSubscores(closes.map((c, i) => bar(i, c)), WCMI_CONFIG)!;
         inputs.push({ code, raw });
       }
-      const out = scoreUniverse(inputs);
-      const weak = out.get('weak')!;
-      const strong = out.get('strong')!;
+      const out = scoreUniverse(inputs, WCMI_CONFIG);
+      const weak = out.get('weak');
+      const strong = out.get('strong');
       expect(weak).not.toBeNull();
       expect(strong).not.toBeNull();
-      expect(strong).toBeGreaterThan(weak);
-      // Range guarantee for the blend.
+      expect(strong!.composite).toBeGreaterThan(weak!.composite);
       for (const v of out.values()) {
         if (v === null) continue;
-        expect(v).toBeGreaterThanOrEqual(-1000);
-        expect(v).toBeLessThanOrEqual(1000);
+        expect(v.composite).toBeGreaterThanOrEqual(0);
+        expect(v.composite).toBeLessThanOrEqual(1000);
       }
     });
 
     it('scoreUniverse: empty input yields empty map', () => {
-      expect(scoreUniverse([]).size).toBe(0);
+      expect(scoreUniverse([], WCMI_CONFIG).size).toBe(0);
     });
   });
 });
+
+// Silence the unused-import warning when this file is run with no
+// wick-sensitive assertions in the test list.
+void ohlcBar;

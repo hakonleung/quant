@@ -27,10 +27,12 @@ import { LocalStockMetaWriterService, type StockMetricsRow } from './local-stock
 import { StockMetaService } from './stock-meta.service.js';
 import { StockMetricsComputeService } from './stock-metrics-compute.service.js';
 import {
-  extractRawFeatures,
+  extractWcmiSubscores,
   scoreUniverse,
+  WCMI_CONFIG,
   type ScoringInput,
-  type WcmiRawFeatures,
+  type WcmiScore,
+  type WcmiSubscores,
 } from './domain/pure/wcmi-scoring.js';
 
 /** Kline tail window — must cover the longest scoring need (90d
@@ -81,7 +83,7 @@ export class StockMetricsBackfillService {
       readonly code: string;
       readonly meta: StockMetaDto;
       readonly bars: readonly KlineBar[];
-      readonly raw: WcmiRawFeatures | null;
+      readonly raw: WcmiSubscores | null;
     }
     const contexts: CodeContext[] = [];
     const rankInputs: ScoringInput[] = [];
@@ -92,13 +94,13 @@ export class StockMetricsBackfillService {
         contexts.push({ code, meta, bars, raw: null });
         continue;
       }
-      const raw = extractRawFeatures(bars.map(toBarLike));
+      const raw = extractWcmiSubscores(bars.map(toBarLike), WCMI_CONFIG);
       contexts.push({ code, meta, bars, raw });
       if (raw !== null) rankInputs.push({ code, raw });
     }
 
     // ── Phase 3: universe-wide scoring ──────────────────────────
-    const scores = scoreUniverse(rankInputs);
+    const scores: Map<string, WcmiScore | null> = scoreUniverse(rankInputs, WCMI_CONFIG);
     const scoredCount = Array.from(scores.values()).filter((v) => v !== null).length;
 
     // ── Phase 4: build rows + upsert in slices ──────────────────
@@ -129,6 +131,10 @@ function toBarLike(bar: KlineBar): {
   close_qfq: number;
   volume: number;
   turnover: number;
+  ma5: number | null;
+  ma10: number | null;
+  ma20: number | null;
+  ma60: number | null;
 } {
   return {
     trade_date: bar.date,
@@ -138,5 +144,9 @@ function toBarLike(bar: KlineBar): {
     close_qfq: bar.close,
     volume: bar.volume,
     turnover: bar.turnover,
+    ma5: bar.ma5,
+    ma10: bar.ma10,
+    ma20: bar.ma20,
+    ma60: bar.ma60,
   };
 }

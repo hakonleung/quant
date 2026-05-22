@@ -21,7 +21,16 @@ import {
   type ListRow,
 } from '../../lib/fp/eq-list-fp.js';
 
-import { ChgPctCell, CnyCell, CnyDeltaCell, PctCell, PriceCell, ScoreCell } from './list-cells.js';
+import {
+  ChgPctCell,
+  CnyCell,
+  CnyDeltaCell,
+  PctCell,
+  PriceCell,
+  WcmiCell,
+  WcmiSubCell,
+  type WcmiSubScores,
+} from './list-cells.js';
 import { INDEX_COL_WIDTH, STICKY_COL_WIDTH, type ColumnDef } from './list-types.js';
 
 export function buildColumns(
@@ -169,18 +178,32 @@ function makeAppliedColumn(key: ColumnKey): ColumnDef | null {
     case 'ret250d':
       return returnColumn('ret250d', '250D%');
     case 'wcmi':
-      // Cross-sectional swing-momentum score in `[-1, +1]`. Render via
-      // ScoreCell — ×100 scale (so +0.85 reads as "+85.00") but **no**
-      // `%` suffix, since the value is a Sharpe-style ranking score,
-      // not a return.
+      // Wave-quality composite ∈ [0, 1000] (v2 redesign — survivor
+      // gate `r_window ≤ 0` ⇒ null; see `docs/perf/wcmi-redesign.md`).
+      // Hover surfaces the seven sub-score percentiles via the cell's
+      // native `title` attribute.
       return {
         key: 'wcmi',
         label: 'WCMI',
         w: 80,
         align: 'right',
-        render: (r) => <ScoreCell value={readNumber(r, 'wcmi')} />,
+        render: (r) => <WcmiCell value={readNumber(r, 'wcmi')} sub={readWcmiSub(r)} />,
         sortValue: (r) => readNumber(r, 'wcmi'),
       };
+    case 'wcmiRhythm':
+      return wcmiSubColumn('wcmiRhythm', '节奏');
+    case 'wcmiMaSupport':
+      return wcmiSubColumn('wcmiMaSupport', '均线支撑');
+    case 'wcmiUpWave':
+      return wcmiSubColumn('wcmiUpWave', '上涨流畅');
+    case 'wcmiYangDom':
+      return wcmiSubColumn('wcmiYangDom', '阳线占优');
+    case 'wcmiShadowClean':
+      return wcmiSubColumn('wcmiShadowClean', '少上引线');
+    case 'wcmiStageGain':
+      return wcmiSubColumn('wcmiStageGain', '阶段涨幅');
+    case 'wcmiCrashAvoid':
+      return wcmiSubColumn('wcmiCrashAvoid', '抗大跌');
     case 'mktCap':
       return derivedColumn('mktCap', '总市值', 110, 'cny');
     case 'floatMktCap':
@@ -212,6 +235,27 @@ function makeAppliedColumn(key: ColumnKey): ColumnDef | null {
     case 'ddeMainInflowRatio20d':
       return derivedColumn('ddeMainInflowRatio20d', '20日大单占比', 100, 'pct');
   }
+}
+
+function readWcmiSub(r: ListRow): WcmiSubScores {
+  return {
+    rhythm: parseSub(r['wcmiRhythm']),
+    maSupport: parseSub(r['wcmiMaSupport']),
+    upWave: parseSub(r['wcmiUpWave']),
+    yangDom: parseSub(r['wcmiYangDom']),
+    shadowClean: parseSub(r['wcmiShadowClean']),
+    stageGain: parseSub(r['wcmiStageGain']),
+    crashAvoid: parseSub(r['wcmiCrashAvoid']),
+  };
+}
+
+function parseSub(v: unknown): number | null {
+  if (typeof v === 'number' && Number.isFinite(v)) return v;
+  if (typeof v === 'string') {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
+  }
+  return null;
 }
 
 function readNumber(r: ListRow, key: ColumnKey): number | null {
@@ -255,6 +299,22 @@ function derivedColumn(
       );
     },
     sortValue,
+  };
+}
+
+/**
+ * WCMI sub-score percentile column. Value on the row is already
+ * scaled `[0, 100]` (the cross-sectional percentile × 100) — pass
+ * straight to {@link WcmiSubCell}.
+ */
+function wcmiSubColumn(key: ColumnKey, label: string): ColumnDef {
+  return {
+    key,
+    label,
+    w: 80,
+    align: 'right',
+    render: (r) => <WcmiSubCell value={readNumber(r, key)} />,
+    sortValue: (r) => readNumber(r, key),
   };
 }
 

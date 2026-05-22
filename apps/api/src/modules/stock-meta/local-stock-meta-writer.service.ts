@@ -49,10 +49,18 @@ const METRIC_DECIMAL_COLUMNS = [
   'pb',
   'peg',
   'gross_margin_ttm',
-  // `wcmi` — Weighted Composite Momentum Index. Composite of the
-  // `ret_*` block; derived inside `computeMetrics` and written here
-  // so the FE can sort/filter on it without re-deriving per request.
+  // `wcmi` — wave-quality composite ∈ [0, 1000] (see
+  // `docs/perf/wcmi-redesign.md`). The seven `wcmi_*` columns are the
+  // per-sub-score cross-sectional percentiles × 100 used both for FE
+  // breakdown rendering and for tuning the composite weights.
   'wcmi',
+  'wcmi_rhythm',
+  'wcmi_ma_support',
+  'wcmi_up_wave',
+  'wcmi_yang_dom',
+  'wcmi_shadow_clean',
+  'wcmi_stage_gain',
+  'wcmi_crash_avoid',
 ] as const;
 
 export type MetricDecimalColumn = (typeof METRIC_DECIMAL_COLUMNS)[number];
@@ -100,6 +108,13 @@ export interface StockMetricsRow {
   readonly peg: string | null;
   readonly gross_margin_ttm: string | null;
   readonly wcmi: string | null;
+  readonly wcmi_rhythm: string | null;
+  readonly wcmi_ma_support: string | null;
+  readonly wcmi_up_wave: string | null;
+  readonly wcmi_yang_dom: string | null;
+  readonly wcmi_shadow_clean: string | null;
+  readonly wcmi_stage_gain: string | null;
+  readonly wcmi_crash_avoid: string | null;
 }
 
 @Injectable()
@@ -346,12 +361,20 @@ export class LocalStockMetaWriterService {
       'dde_updated_at',
     ];
     const preservedSql = preserved.map((c) => `o.${quoteIdent(c)}`).join(', ');
+    // For each metric column: prefer the new value when present, fall
+    // back to the old. COALESCE rather than CASE-on-`n.code` so a
+    // per-code projection that legitimately cannot compute a column
+    // (e.g. kline-worker has no universe-rank tables for `wcmi`/
+    // `wcmi_*`) doesn't WIPE the column the batch backfill already
+    // wrote. Callers that intend to clear a column must do so via a
+    // dedicated path, not by passing null in a partial-update row.
     const overlaySql = [
-      `CASE WHEN n.code IS NOT NULL THEN n.metrics_asof ELSE o.metrics_asof END AS metrics_asof`,
+      `COALESCE(n.metrics_asof, o.metrics_asof) AS metrics_asof`,
+      // metrics_updated_at only advances when a new row was supplied;
+      // otherwise keep whatever timestamp was on disk.
       `CASE WHEN n.code IS NOT NULL THEN ${updatedAtSql} ELSE o.metrics_updated_at END AS metrics_updated_at`,
       ...METRIC_DECIMAL_COLUMNS.map(
-        (col) =>
-          `CASE WHEN n.code IS NOT NULL THEN n.${quoteIdent(col)} ELSE o.${quoteIdent(col)} END AS ${quoteIdent(col)}`,
+        (col) => `COALESCE(n.${quoteIdent(col)}, o.${quoteIdent(col)}) AS ${quoteIdent(col)}`,
       ),
     ].join(',\n      ');
     return `
@@ -464,6 +487,13 @@ export class LocalStockMetaWriterService {
       quoteOptionalString(row.peg),
       quoteOptionalString(row.gross_margin_ttm),
       quoteOptionalString(row.wcmi),
+      quoteOptionalString(row.wcmi_rhythm),
+      quoteOptionalString(row.wcmi_ma_support),
+      quoteOptionalString(row.wcmi_up_wave),
+      quoteOptionalString(row.wcmi_yang_dom),
+      quoteOptionalString(row.wcmi_shadow_clean),
+      quoteOptionalString(row.wcmi_stage_gain),
+      quoteOptionalString(row.wcmi_crash_avoid),
     ];
     return `(${parts.join(', ')})`;
   }

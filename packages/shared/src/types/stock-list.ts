@@ -24,6 +24,19 @@ export const STOCK_LIST_COLUMN_KEYS = [
   'ret90d',
   'ret250d',
   'wcmi',
+  // WCMI v2 sub-score percentile columns. Each value is the per-code
+  // cross-sectional percentile × 100 ∈ [0, 100] for that single
+  // dimension; the composite `wcmi` is a weighted blend of these
+  // (see `WCMI_CONFIG` in apps/api/src/modules/stock-meta/domain/pure/
+  // wcmi-subscores/types.ts). All seven are `null` when the survivor
+  // gate fails.
+  'wcmiRhythm',
+  'wcmiMaSupport',
+  'wcmiUpWave',
+  'wcmiYangDom',
+  'wcmiShadowClean',
+  'wcmiStageGain',
+  'wcmiCrashAvoid',
   'mktCap',
   'floatMktCap',
   'peTtm',
@@ -78,6 +91,57 @@ export const STOCK_LIST_COLUMN_CATALOG: readonly StockListColumnSpec[] = [
   { key: 'ret90d', label: '90D%', group: 'derived', defaultApplied: false, source: 'snapshot' },
   { key: 'ret250d', label: '250D%', group: 'derived', defaultApplied: false, source: 'snapshot' },
   { key: 'wcmi', label: 'WCMI', group: 'derived', defaultApplied: true, source: 'snapshot' },
+  // WCMI sub-score percentiles — opt-in (default off) to avoid
+  // crowding the default view; user enables via the column picker.
+  {
+    key: 'wcmiRhythm',
+    label: '节奏',
+    group: 'derived',
+    defaultApplied: false,
+    source: 'snapshot',
+  },
+  {
+    key: 'wcmiMaSupport',
+    label: '均线支撑',
+    group: 'derived',
+    defaultApplied: false,
+    source: 'snapshot',
+  },
+  {
+    key: 'wcmiUpWave',
+    label: '上涨流畅',
+    group: 'derived',
+    defaultApplied: false,
+    source: 'snapshot',
+  },
+  {
+    key: 'wcmiYangDom',
+    label: '阳线占优',
+    group: 'derived',
+    defaultApplied: false,
+    source: 'snapshot',
+  },
+  {
+    key: 'wcmiShadowClean',
+    label: '少上引线',
+    group: 'derived',
+    defaultApplied: false,
+    source: 'snapshot',
+  },
+  {
+    key: 'wcmiStageGain',
+    label: '阶段涨幅',
+    group: 'derived',
+    defaultApplied: false,
+    source: 'snapshot',
+  },
+  {
+    key: 'wcmiCrashAvoid',
+    label: '抗大跌',
+    group: 'derived',
+    defaultApplied: false,
+    source: 'snapshot',
+  },
   { key: 'mktCap', label: '总市值', group: 'derived', defaultApplied: false, source: 'snapshot' },
   {
     key: 'floatMktCap',
@@ -229,6 +293,20 @@ export const StockListRowSchema = z
     ret90d: z.number().nullable(),
     ret250d: z.number().nullable(),
     wcmi: z.number().nullable(),
+    /**
+     * Per-dimension cross-sectional percentile × 100 ∈ [0, 100]. Mirrors
+     * the `wcmi_*` block in `StockDerivedMetricsSchema`. All seven are
+     * `null` when the composite `wcmi` is `null` (survivor gate failed
+     * or insufficient bars). Surfaced on the row so the list panel can
+     * render a hover breakdown without a second snapshot fetch.
+     */
+    wcmiRhythm: z.number().nullable(),
+    wcmiMaSupport: z.number().nullable(),
+    wcmiUpWave: z.number().nullable(),
+    wcmiYangDom: z.number().nullable(),
+    wcmiShadowClean: z.number().nullable(),
+    wcmiStageGain: z.number().nullable(),
+    wcmiCrashAvoid: z.number().nullable(),
     mktCap: z.number().nullable(),
     floatMktCap: z.number().nullable(),
     peTtm: z.number().nullable(),
@@ -286,6 +364,13 @@ export function emptyStockListRow(code: string, name: string | null = null): Sto
     ret90d: null,
     ret250d: null,
     wcmi: null,
+    wcmiRhythm: null,
+    wcmiMaSupport: null,
+    wcmiUpWave: null,
+    wcmiYangDom: null,
+    wcmiShadowClean: null,
+    wcmiStageGain: null,
+    wcmiCrashAvoid: null,
     mktCap: null,
     floatMktCap: null,
     peTtm: null,

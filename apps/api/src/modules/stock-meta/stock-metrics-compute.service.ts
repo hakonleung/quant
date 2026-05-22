@@ -19,6 +19,7 @@ import type { KlineBar, StockMetaDto } from '@quant/shared';
 import { KlineReaderService } from '../kline/kline-reader.service.js';
 import { computeMetrics, type BarLike, type StockMetrics } from './domain/pure/compute-metrics.js';
 import type { Dec } from './domain/pure/decimal-config.js';
+import type { WcmiScore } from './domain/pure/wcmi-scoring.js';
 import { LocalStockMetaAdapter } from './local-stock-meta.adapter.js';
 import type { StockMetricsRow } from './local-stock-meta-writer.service.js';
 
@@ -55,12 +56,46 @@ export class StockMetricsComputeService {
   toRowWithWcmi(
     meta: StockMetaDto,
     bars: readonly KlineBar[],
-    wcmiScore: number | null,
+    wcmiScore: WcmiScore | null,
   ): StockMetricsRow {
     const metrics = computeMetrics(meta, bars.map(toBarLike));
     const row = toRow(metrics);
-    return { ...row, wcmi: wcmiScore === null ? null : wcmiScore.toString() };
+    if (wcmiScore === null) return row;
+    return {
+      ...row,
+      wcmi: formatWcmiScore(wcmiScore.composite),
+      wcmi_rhythm: formatPct(wcmiScore.pct.rhythm),
+      wcmi_ma_support: formatPct(wcmiScore.pct.maSupport),
+      wcmi_up_wave: formatPct(wcmiScore.pct.upWaveSmoothness),
+      wcmi_yang_dom: formatPct(wcmiScore.pct.yangDominance),
+      wcmi_shadow_clean: formatPct(wcmiScore.pct.upperShadowClean),
+      wcmi_stage_gain: formatPct(wcmiScore.pct.stageGain),
+      wcmi_crash_avoid: formatPct(wcmiScore.pct.crashAvoidance),
+    };
   }
+}
+
+/** Serialise a `[0, 1]` percentile rank as a percent string with two
+ *  decimals (`"73.40"`). Plain `.toFixed(2)` is safe — `pct` is in
+ *  `[0, 1]` so `pct * 100` cannot reach scientific-notation territory. */
+function formatPct(pct: number): string {
+  return (pct * 100).toFixed(2);
+}
+
+/**
+ * Serialise a numeric wcmi score for the parquet column. Plain
+ * `Number.toString()` switches to scientific notation when the
+ * magnitude is below `~1e-6` (e.g. when module-level percentile
+ * norms cancel out under float roundoff). The shared zod
+ * `decimalStringOrNull` schema rejects that format and 500s the read
+ * path. Fixing at the serialise boundary keeps the column shape
+ * stable regardless of upstream float behaviour.
+ */
+function formatWcmiScore(score: number): string {
+  // Two decimals is well past what the FE renders (toFixed(0)) but
+  // keeps a tiny precision buffer for other consumers; either way it
+  // is guaranteed to match `/^-?\d+(\.\d+)?$/`.
+  return score.toFixed(2);
 }
 
 function toBarLike(bar: KlineBar): BarLike {
@@ -72,6 +107,10 @@ function toBarLike(bar: KlineBar): BarLike {
     close_qfq: bar.close,
     volume: bar.volume,
     turnover: bar.turnover,
+    ma5: bar.ma5,
+    ma10: bar.ma10,
+    ma20: bar.ma20,
+    ma60: bar.ma60,
   };
 }
 
@@ -94,6 +133,13 @@ function toRow(m: StockMetrics): StockMetricsRow {
     peg: decStr(m.peg),
     gross_margin_ttm: decStr(m.gross_margin_ttm),
     wcmi: decStr(m.wcmi),
+    wcmi_rhythm: decStr(m.wcmi_rhythm),
+    wcmi_ma_support: decStr(m.wcmi_ma_support),
+    wcmi_up_wave: decStr(m.wcmi_up_wave),
+    wcmi_yang_dom: decStr(m.wcmi_yang_dom),
+    wcmi_shadow_clean: decStr(m.wcmi_shadow_clean),
+    wcmi_stage_gain: decStr(m.wcmi_stage_gain),
+    wcmi_crash_avoid: decStr(m.wcmi_crash_avoid),
   };
 }
 

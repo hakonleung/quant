@@ -11,6 +11,7 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import { QuantError, type StockMetaDto, type StockSnapshotDto } from '@quant/shared';
 import { CLOCK, type Clock } from '../../common/clock.js';
 import { STOCK_META_PORT, type StockMetaPort } from './domain/stock-meta-port.js';
+import { LocalStockMetaAdapter } from './local-stock-meta.adapter.js';
 
 /**
  * `listAll` is the heaviest read in the API: ~5500 rows × 8 nested
@@ -46,7 +47,14 @@ export class StockMetaService {
   constructor(
     @Inject(STOCK_META_PORT) private readonly port: StockMetaPort,
     @Inject(CLOCK) private readonly clock: Clock,
-  ) {}
+    @Inject(LocalStockMetaAdapter) adapter: LocalStockMetaAdapter,
+  ) {
+    // Whenever the writer flushes a parquet rewrite it calls
+    // `adapter.invalidate()`. Subscribe so our 60-s SWR caches drop at
+    // the same instant — otherwise list-route reads stay stale for up
+    // to a minute even after a successful upsert.
+    adapter.onInvalidate(() => this.invalidateCaches());
+  }
 
   async get(code: string, traceId: string): Promise<StockMetaDto> {
     const item = await this.port.getOne(code, traceId);
@@ -97,6 +105,17 @@ export class StockMetaService {
   clearListAllCache(): void {
     this.listAllCache = null;
     this.listAllRevalidating = null;
+  }
+
+  /** Drop both the meta-list and full-snapshot SWR caches. Called by
+   *  the local writer after every successful meta / metrics / fund-flow
+   *  upsert so a subsequent list-route hit re-reads the parquet rather
+   *  than serving the up-to-60s stale snapshot from before the write. */
+  invalidateCaches(): void {
+    this.listAllCache = null;
+    this.listAllRevalidating = null;
+    this.snapshotAllCache = null;
+    this.snapshotAllRevalidating = null;
   }
 
   private async refreshListAll(traceId: string): Promise<readonly StockMetaDto[]> {

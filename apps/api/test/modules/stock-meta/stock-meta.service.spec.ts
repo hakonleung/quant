@@ -3,6 +3,13 @@ import type { Clock } from '../../../src/common/clock.js';
 import { FrozenClock, SystemClock } from '../../../src/common/clock.js';
 import { StockMetaService } from '../../../src/modules/stock-meta/stock-meta.service.js';
 import type { StockMetaPort } from '../../../src/modules/stock-meta/domain/stock-meta-port.js';
+import type { LocalStockMetaAdapter } from '../../../src/modules/stock-meta/local-stock-meta.adapter.js';
+
+// Minimal stub — the service only uses `onInvalidate` to wire its
+// SWR-cache invalidation. Tests don't exercise writer→adapter flushes.
+const STUB_ADAPTER = {
+  onInvalidate: () => undefined,
+} as unknown as LocalStockMetaAdapter;
 
 const SAMPLE: StockMetaDto = {
   code: '600519',
@@ -64,6 +71,13 @@ class FakePort implements StockMetaPort {
       peg: null,
       gross_margin_ttm: null,
       wcmi: null,
+      wcmi_rhythm: null,
+      wcmi_ma_support: null,
+      wcmi_up_wave: null,
+      wcmi_yang_dom: null,
+      wcmi_shadow_clean: null,
+      wcmi_stage_gain: null,
+      wcmi_crash_avoid: null,
     };
     const baseReturns = {
       ret_1d: null,
@@ -95,7 +109,7 @@ describe('StockMetaService', () => {
 
   beforeEach(() => {
     port = new FakePort({ '600519': SAMPLE });
-    service = new StockMetaService(port, new SystemClock());
+    service = new StockMetaService(port, new SystemClock(), STUB_ADAPTER);
   });
 
   it('returns the dto when the code exists', async () => {
@@ -133,7 +147,7 @@ describe('StockMetaService', () => {
   it('listAll forwards trace_id and returns sorted rows', async () => {
     const second: StockMetaDto = { ...SAMPLE, code: '000858' };
     port = new FakePort({ '600519': SAMPLE, '000858': second });
-    service = new StockMetaService(port, new SystemClock());
+    service = new StockMetaService(port, new SystemClock(), STUB_ADAPTER);
     const all = await service.listAll('tid');
     expect(all.map((m) => m.code)).toEqual(['000858', '600519']);
     expect(port.traceIds).toEqual(['tid']);
@@ -166,7 +180,7 @@ describe('StockMetaService', () => {
 
     it('returns cached value within TTL without re-hitting the port', async () => {
       const clock = new StepClock(T0);
-      const cachedService = new StockMetaService(port, clock);
+      const cachedService = new StockMetaService(port, clock, STUB_ADAPTER);
       await cachedService.listAll('first');
       clock.advance(30_000);
       await cachedService.listAll('second');
@@ -175,7 +189,7 @@ describe('StockMetaService', () => {
 
     it('serves stale snapshot and triggers a single background revalidation past TTL', async () => {
       const clock = new StepClock(T0);
-      const cachedService = new StockMetaService(port, clock);
+      const cachedService = new StockMetaService(port, clock, STUB_ADAPTER);
       const fresh = await cachedService.listAll('cold');
       expect(fresh).toEqual([SAMPLE]);
       clock.advance(120_000);
@@ -190,7 +204,7 @@ describe('StockMetaService', () => {
 
     it('caches a frozen instant from FrozenClock — entries never expire', async () => {
       const frozen = new FrozenClock(D('2026-05-09T00:00:00Z'));
-      const cachedService = new StockMetaService(port, frozen);
+      const cachedService = new StockMetaService(port, frozen, STUB_ADAPTER);
       await cachedService.listAll('a');
       await cachedService.listAll('b');
       await cachedService.listAll('c');
@@ -199,7 +213,7 @@ describe('StockMetaService', () => {
 
     it('clearListAllCache forces the next call back to the port', async () => {
       const clock = new StepClock(T0);
-      const cachedService = new StockMetaService(port, clock);
+      const cachedService = new StockMetaService(port, clock, STUB_ADAPTER);
       await cachedService.listAll('first');
       cachedService.clearListAllCache();
       await cachedService.listAll('second');

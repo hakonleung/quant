@@ -1,0 +1,4885 @@
+{
+  "generatedAt": "2026-05-22T02:13:06.488Z",
+  "config": {
+    "WINDOW": 90,
+    "RHYTHM_TARGET": 0.15,
+    "SWING_PERIOD_BARS": 15,
+    "SHADOW_BODY_THR": 1.5,
+    "SHADOW_RANGE_THR": 0.4,
+    "CRASH_DAY_THR": 7,
+    "CRASH_COUNT_CAP": 4,
+    "GAP_DOWN_THR": -2,
+    "GAP_DOWN_CAP": 6,
+    "W_RHYTHM": 0,
+    "W_MA_SUPPORT": 3,
+    "W_UP_WAVE": 3,
+    "W_YANG_DOM": 3,
+    "W_SHADOW_CLEAN": 3,
+    "W_STAGE_GAIN": 28,
+    "W_CRASH_AVOID": 60,
+    "WCMI_TOTAL_SCALE": 1000
+  },
+  "sampleSize": 100,
+  "scoredCount": 100,
+  "metrics": {
+    "spearman": 0.8075127512751276,
+    "overlapTop30": 0.7666666666666667,
+    "overlapTop10": 0.6,
+    "falseNegativeCount": 0,
+    "falsePositiveCount": 0
+  },
+  "falseNegatives": [],
+  "falsePositives": [],
+  "perDimensionScatter": {
+    "rhythm": [
+      {
+        "code": "001259",
+        "labelValue": 100,
+        "pctValue": 1.5,
+        "diff": 98.5
+      },
+      {
+        "code": "603779",
+        "labelValue": 100,
+        "pctValue": 6.5,
+        "diff": 93.5
+      },
+      {
+        "code": "000711",
+        "labelValue": 100,
+        "pctValue": 9.5,
+        "diff": 90.5
+      },
+      {
+        "code": "003004",
+        "labelValue": 100,
+        "pctValue": 10.5,
+        "diff": 89.5
+      },
+      {
+        "code": "301362",
+        "labelValue": 100,
+        "pctValue": 12.5,
+        "diff": 87.5
+      },
+      {
+        "code": "002580",
+        "labelValue": 100,
+        "pctValue": 14.499999999999998,
+        "diff": 85.5
+      },
+      {
+        "code": "600726",
+        "labelValue": 100,
+        "pctValue": 20.5,
+        "diff": 79.5
+      },
+      {
+        "code": "603950",
+        "labelValue": 100,
+        "pctValue": 23.5,
+        "diff": 76.5
+      },
+      {
+        "code": "301217",
+        "labelValue": 100,
+        "pctValue": 29.5,
+        "diff": 70.5
+      },
+      {
+        "code": "300936",
+        "labelValue": 70,
+        "pctValue": 0.5,
+        "diff": 69.5
+      }
+    ],
+    "aesthetic": [
+      {
+        "code": "300959",
+        "labelValue": 40.62276266415806,
+        "pctValue": 6.625,
+        "diff": 33.99776266415806
+      },
+      {
+        "code": "603115",
+        "labelValue": 49.26130309154527,
+        "pctValue": 80.875,
+        "diff": 31.613696908454727
+      },
+      {
+        "code": "603618",
+        "labelValue": 49.897036660745556,
+        "pctValue": 80.375,
+        "diff": 30.477963339254444
+      },
+      {
+        "code": "688309",
+        "labelValue": 49.1522469782391,
+        "pctValue": 78.875,
+        "diff": 29.7227530217609
+      },
+      {
+        "code": "688628",
+        "labelValue": 51.293125453620114,
+        "pctValue": 79.875,
+        "diff": 28.581874546379886
+      },
+      {
+        "code": "600726",
+        "labelValue": 51.09991104671189,
+        "pctValue": 79.375,
+        "diff": 28.275088953288112
+      },
+      {
+        "code": "002491",
+        "labelValue": 50.54783300139605,
+        "pctValue": 78.125,
+        "diff": 27.57716699860395
+      },
+      {
+        "code": "603256",
+        "labelValue": 48.75097277377588,
+        "pctValue": 75.87499999999999,
+        "diff": 27.124027226224108
+      },
+      {
+        "code": "300209",
+        "labelValue": 49.70770615102292,
+        "pctValue": 76.75,
+        "diff": 27.04229384897708
+      },
+      {
+        "code": "002655",
+        "labelValue": 51.249555475620056,
+        "pctValue": 77.75,
+        "diff": 26.500444524379944
+      }
+    ],
+    "stage_gain": [
+      {
+        "code": "300137",
+        "labelValue": 65.61355514507497,
+        "pctValue": 3.5000000000000004,
+        "diff": 62.11355514507497
+      },
+      {
+        "code": "603316",
+        "labelValue": 64.40613026819922,
+        "pctValue": 2.5,
+        "diff": 61.90613026819922
+      },
+      {
+        "code": "002903",
+        "labelValue": 66.1277190705181,
+        "pctValue": 4.5,
+        "diff": 61.6277190705181
+      },
+      {
+        "code": "688218",
+        "labelValue": 66.5092640412551,
+        "pctValue": 5.5,
+        "diff": 61.00926404125509
+      },
+      {
+        "code": "000988",
+        "labelValue": 66.76907922856225,
+        "pctValue": 6.5,
+        "diff": 60.26907922856225
+      },
+      {
+        "code": "603897",
+        "labelValue": 71.69256541360359,
+        "pctValue": 11.5,
+        "diff": 60.19256541360359
+      },
+      {
+        "code": "003031",
+        "labelValue": 72.41897604945807,
+        "pctValue": 12.5,
+        "diff": 59.91897604945807
+      },
+      {
+        "code": "688313",
+        "labelValue": 68.2553747016074,
+        "pctValue": 8.5,
+        "diff": 59.755374701607394
+      },
+      {
+        "code": "300959",
+        "labelValue": 73.1373833947246,
+        "pctValue": 13.5,
+        "diff": 59.637383394724594
+      },
+      {
+        "code": "301603",
+        "labelValue": 67.10211097545898,
+        "pctValue": 7.5,
+        "diff": 59.602110975458984
+      }
+    ],
+    "crash_avoid": [
+      {
+        "code": "603629",
+        "labelValue": 43.77453611067943,
+        "pctValue": 6.5,
+        "diff": 37.27453611067943
+      },
+      {
+        "code": "603773",
+        "labelValue": 44.01633259414952,
+        "pctValue": 7.5,
+        "diff": 36.51633259414952
+      },
+      {
+        "code": "688268",
+        "labelValue": 37.99436440623092,
+        "pctValue": 1.5,
+        "diff": 36.49436440623092
+      },
+      {
+        "code": "301396",
+        "labelValue": 40.423216747607896,
+        "pctValue": 4.5,
+        "diff": 35.923216747607896
+      },
+      {
+        "code": "001896",
+        "labelValue": 44.36374030979691,
+        "pctValue": 8.5,
+        "diff": 35.86374030979691
+      },
+      {
+        "code": "002580",
+        "labelValue": 41.32907420866721,
+        "pctValue": 5.5,
+        "diff": 35.82907420866721
+      },
+      {
+        "code": "300720",
+        "labelValue": 39.16024467640496,
+        "pctValue": 3.5000000000000004,
+        "diff": 35.66024467640496
+      },
+      {
+        "code": "600396",
+        "labelValue": 45.117266656768045,
+        "pctValue": 9.5,
+        "diff": 35.617266656768045
+      },
+      {
+        "code": "688328",
+        "labelValue": 38.11312300339689,
+        "pctValue": 2.5,
+        "diff": 35.61312300339689
+      },
+      {
+        "code": "000890",
+        "labelValue": 45.27299433060764,
+        "pctValue": 10.5,
+        "diff": 34.77299433060764
+      }
+    ]
+  },
+  "rows": [
+    {
+      "code": "000711",
+      "gain60dPct": 147.08520179372195,
+      "wcmiComposite": 801.8000000000001,
+      "wcmiPct": {
+        "rhythm": 0.095,
+        "maSupport": 0.395,
+        "upWaveSmoothness": 0.425,
+        "yangDominance": 0.005,
+        "upperShadowClean": 0.995,
+        "stageGain": 0.815,
+        "crashAvoidance": 0.865
+      },
+      "labelComposite": 73.6501043260298,
+      "labels": {
+        "rhythm": 100,
+        "aesthetic": 47.370602205992164,
+        "stageGain": 100,
+        "crashAvoid": 86.66666666666667,
+        "composite": 73.6501043260298
+      },
+      "raw": {
+        "rhythm": 0.07081545256191518,
+        "maSupport": 0.6746072307508396,
+        "upWaveSmoothness": 0.7898031053409558,
+        "yangDominance": 0.4111111111111111,
+        "upperShadowClean": 0.6871637994801112,
+        "stageGain": 199.3411097573816,
+        "crashAvoidance": 0.8,
+        "windowLen": 90,
+        "passesGate": true
+      },
+      "detail": {
+        "swingDensity": 2,
+        "lag1Autocorr": 0.42432045619840403,
+        "maSupportRaw": 0.6746072307508396,
+        "upWaveSmoothnessRaw": 0.7898031053409558,
+        "yangDominanceRaw": 0.4111111111111111,
+        "upperShadowCleanRaw": 0.6871637994801112,
+        "stageGainRaw": 199.3411097573816,
+        "rWindow": 222.22222222222223,
+        "crashAvoidanceRaw": 0.8,
+        "windowLen": 90,
+        "passesGate": true
+      }
+    },
+    {
+      "code": "000811",
+      "gain60dPct": 92.19006007646095,
+      "wcmiComposite": 478.2,
+      "wcmiPct": {
+        "rhythm": 0.265,
+        "maSupport": 0.225,
+        "upWaveSmoothness": 0.135,
+        "yangDominance": 0.375,
+        "upperShadowClean": 0.725,
+        "stageGain": 0.105,
+        "crashAvoidance": 0.675
+      },
+      "labelComposite": 59.45059230326675,
+      "labels": {
+        "rhythm": 70,
+        "aesthetic": 44.377067773373874,
+        "stageGain": 68.38524572152147,
+        "crashAvoid": 76.51931330472105,
+        "composite": 59.45059230326675
+      },
+      "raw": {
+        "rhythm": 0.16939821311369962,
+        "maSupport": 0.600592362922711,
+        "upWaveSmoothness": 0.7333906571341277,
+        "yangDominance": 0.5444444444444444,
+        "upperShadowClean": 0.49124168572715576,
+        "stageGain": 102.5778685822822,
+        "crashAvoidance": 0.6477896995708157,
+        "windowLen": 90,
+        "passesGate": true
+      },
+      "detail": {
+        "swingDensity": 3.6666666666666665,
+        "lag1Autocorr": -0.04216815573858367,
+        "maSupportRaw": 0.600592362922711,
+        "upWaveSmoothnessRaw": 0.7333906571341277,
+        "yangDominanceRaw": 0.5444444444444444,
+        "upperShadowCleanRaw": 0.49124168572715576,
+        "stageGainRaw": 102.5778685822822,
+        "rWindow": 90.01079913606911,
+        "crashAvoidanceRaw": 0.6477896995708157,
+        "windowLen": 90,
+        "passesGate": true
+      }
+    },
+    {
+      "code": "000890",
+      "gain60dPct": 112.59124087591239,
+      "wcmiComposite": 217.05,
+      "wcmiPct": {
+        "rhythm": 0.685,
+        "maSupport": 0.285,
+        "upWaveSmoothness": 0.605,
+        "yangDominance": 0.9,
+        "upperShadowClean": 0.965,
+        "stageGain": 0.255,
+        "crashAvoidance": 0.105
+      },
+      "labelComposite": 59.40802630537804,
+      "labels": {
+        "rhythm": 77.55790872149838,
+        "aesthetic": 51.16389795034421,
+        "stageGain": 78.47993526688428,
+        "crashAvoid": 45.27299433060764,
+        "composite": 59.40802630537804
+      },
+      "raw": {
+        "rhythm": 0.31069490465798055,
+        "maSupport": 0.6200920614002188,
+        "upWaveSmoothness": 0.8381902098197471,
+        "yangDominance": 0.6111111111111112,
+        "upperShadowClean": 0.5910536764689079,
+        "stageGain": 117.71990290032642,
+        "crashAvoidance": 0.1790949149591145,
+        "windowLen": 90,
+        "passesGate": true
+      },
+      "detail": {
+        "swingDensity": 3.5,
+        "lag1Autocorr": 0.07557908721498377,
+        "maSupportRaw": 0.6200920614002188,
+        "upWaveSmoothnessRaw": 0.8381902098197471,
+        "yangDominanceRaw": 0.6111111111111112,
+        "upperShadowCleanRaw": 0.5910536764689079,
+        "stageGainRaw": 117.71990290032642,
+        "rWindow": 129.78303747534517,
+        "crashAvoidanceRaw": 0.1790949149591145,
+        "windowLen": 90,
+        "passesGate": true
+      }
+    },
+    {
+      "code": "000988",
+      "gain60dPct": 100.8872651356994,
+      "wcmiComposite": 437.45,
+      "wcmiPct": {
+        "rhythm": 0.605,
+        "maSupport": 0.295,
+        "upWaveSmoothness": 0.365,
+        "yangDominance": 0.56,
+        "upperShadowClean": 0.655,
+        "stageGain": 0.065,
+        "crashAvoidance": 0.605
+      },
+      "labelComposite": 60.24082176447767,
+      "labels": {
+        "rhythm": 75.32366825744243,
+        "aesthetic": 45.95968928163016,
+        "stageGain": 66.76907922856225,
+        "crashAvoid": 74.53297751707643,
+        "composite": 60.24082176447767
+      },
+      "raw": {
+        "rhythm": 0.28388401908930927,
+        "maSupport": 0.6217206229031744,
+        "upWaveSmoothness": 0.7825644946988357,
+        "yangDominance": 0.5666666666666667,
+        "upperShadowClean": 0.48293920367067233,
+        "stageGain": 100.15361884284337,
+        "crashAvoidance": 0.6179946627561463,
+        "windowLen": 90,
+        "passesGate": true
+      },
+      "detail": {
+        "swingDensity": 3.3333333333333335,
+        "lag1Autocorr": 0.053236682574424356,
+        "maSupportRaw": 0.6217206229031744,
+        "upWaveSmoothnessRaw": 0.7825644946988357,
+        "yangDominanceRaw": 0.5666666666666667,
+        "upperShadowCleanRaw": 0.48293920367067233,
+        "stageGainRaw": 100.15361884284337,
+        "rWindow": 94.07538131854281,
+        "crashAvoidanceRaw": 0.6179946627561463,
+        "windowLen": 90,
+        "passesGate": true
+      }
+    },
+    {
+      "code": "001259",
+      "gain60dPct": 152.3659305993691,
+      "wcmiComposite": 771.55,
+      "wcmiPct": {
+        "rhythm": 0.015,
+        "maSupport": 0.115,
+        "upWaveSmoothness": 0.565,
+        "yangDominance": 0.06,
+        "upperShadowClean": 0.885,
+        "stageGain": 0.685,
+        "crashAvoidance": 0.885
+      },
+      "labelComposite": 73.25200614208498,
+      "labels": {
+        "rhythm": 100,
+        "aesthetic": 46.12682013950143,
+        "stageGain": 100,
+        "crashAvoid": 87.47468539654669,
+        "composite": 73.25200614208498
+      },
+      "raw": {
+        "rhythm": -0.09447306082307,
+        "maSupport": 0.562262765974711,
+        "upWaveSmoothness": 0.8226408047795201,
+        "yangDominance": 0.4777777777777778,
+        "upperShadowClean": 0.539031595363012,
+        "stageGain": 180.43442519870774,
+        "crashAvoidance": 0.8121202809482003,
+        "windowLen": 90,
+        "passesGate": true
+      },
+      "detail": {
+        "swingDensity": 3.1666666666666665,
+        "lag1Autocorr": 0.562060884019225,
+        "maSupportRaw": 0.562262765974711,
+        "upWaveSmoothnessRaw": 0.8226408047795201,
+        "yangDominanceRaw": 0.4777777777777778,
+        "upperShadowCleanRaw": 0.539031595363012,
+        "stageGainRaw": 180.43442519870774,
+        "rWindow": 193.23558813728755,
+        "crashAvoidanceRaw": 0.8121202809482003,
+        "windowLen": 90,
+        "passesGate": true
+      }
+    },
+    {
+      "code": "001267",
+      "gain60dPct": 91.69819890524964,
+      "wcmiComposite": 350.4,
+      "wcmiPct": {
+        "rhythm": 0.215,
+        "maSupport": 0.825,
+        "upWaveSmoothness": 0.175,
+        "yangDominance": 0.375,
+        "upperShadowClean": 0.625,
+        "stageGain": 0.555,
+        "crashAvoidance": 0.225
+      },
+      "labelComposite": 61.08973672573487,
+      "labels": {
+        "rhythm": 70,
+        "aesthetic": 44.383078896539864,
+        "stageGain": 100,
+        "crashAvoid": 53.08675611145968,
+        "composite": 61.08973672573487
+      },
+      "raw": {
+        "rhythm": 0.14301553415506707,
+        "maSupport": 0.8319494418246896,
+        "upWaveSmoothness": 0.7414898867381023,
+        "yangDominance": 0.5444444444444444,
+        "upperShadowClean": 0.4810693302608009,
+        "stageGain": 154.36811878031992,
+        "crashAvoidance": 0.2963013416718951,
+        "windowLen": 90,
+        "passesGate": true
+      },
+      "detail": {
+        "swingDensity": 4.166666666666667,
+        "lag1Autocorr": -0.06415372153744414,
+        "maSupportRaw": 0.8319494418246896,
+        "upWaveSmoothnessRaw": 0.7414898867381023,
+        "yangDominanceRaw": 0.5444444444444444,
+        "upperShadowCleanRaw": 0.4810693302608009,
+        "stageGainRaw": 154.36811878031992,
+        "rWindow": 162.3376385956253,
+        "crashAvoidanceRaw": 0.2963013416718951,
+        "windowLen": 90,
+        "passesGate": true
+      }
+    },
+    {
+      "code": "001309",
+      "gain60dPct": 173.79984609452333,
+      "wcmiComposite": 442.9,
+      "wcmiPct": {
+        "rhythm": 0.985,
+        "maSupport": 0.675,
+        "upWaveSmoothness": 0.535,
+        "yangDominance": 0.375,
+        "upperShadowClean": 0.845,
+        "stageGain": 0.625,
+        "crashAvoidance": 0.325
+      },
+      "labelComposite": 65.66046255827665,
+      "labels": {
+        "rhythm": 85.10024587250496,
+        "aesthetic": 47.21219027228506,
+        "stageGain": 100,
+        "crashAvoid": 58.24970027436316,
+        "composite": 65.66046255827665
+      },
+      "raw": {
+        "rhythm": 0.39879704952994055,
+        "maSupport": 0.781494813607046,
+        "upWaveSmoothness": 0.814150081359055,
+        "yangDominance": 0.5444444444444444,
+        "upperShadowClean": 0.5220781369518324,
+        "stageGain": 167.7433947412201,
+        "crashAvoidance": 0.37374550411544744,
+        "windowLen": 90,
+        "passesGate": true
+      },
+      "detail": {
+        "swingDensity": 3.1666666666666665,
+        "lag1Autocorr": 0.15100245872504955,
+        "maSupportRaw": 0.781494813607046,
+        "upWaveSmoothnessRaw": 0.814150081359055,
+        "yangDominanceRaw": 0.5444444444444444,
+        "upperShadowCleanRaw": 0.5220781369518324,
+        "stageGainRaw": 167.7433947412201,
+        "rWindow": 183.2339000025902,
+        "crashAvoidanceRaw": 0.37374550411544744,
+        "windowLen": 90,
+        "passesGate": true
+      }
+    },
+    {
+      "code": "001339",
+      "gain60dPct": 95.53829479768787,
+      "wcmiComposite": 647.05,
+      "wcmiPct": {
+        "rhythm": 0.505,
+        "maSupport": 0.385,
+        "upWaveSmoothness": 0.805,
+        "yangDominance": 0.74,
+        "upperShadowClean": 0.385,
+        "stageGain": 0.145,
+        "crashAvoidance": 0.895
+      },
+      "labelComposite": 65.31076509592857,
+      "labels": {
+        "rhythm": 73.26968738027844,
+        "aesthetic": 47.886077154324106,
+        "stageGain": 73.448555072929,
+        "crashAvoid": 90.40933127427579,
+        "composite": 65.31076509592857
+      },
+      "raw": {
+        "rhythm": 0.2592362485633413,
+        "maSupport": 0.6744042155511758,
+        "upWaveSmoothness": 0.8808773908693193,
+        "yangDominance": 0.5888888888888889,
+        "upperShadowClean": 0.4389327642592441,
+        "stageGain": 110.1728326093935,
+        "crashAvoidance": 0.8561399691141367,
+        "windowLen": 90,
+        "passesGate": true
+      },
+      "detail": {
+        "swingDensity": 3.3333333333333335,
+        "lag1Autocorr": 0.032696873802784396,
+        "maSupportRaw": 0.6744042155511758,
+        "upWaveSmoothnessRaw": 0.8808773908693193,
+        "yangDominanceRaw": 0.5888888888888889,
+        "upperShadowCleanRaw": 0.4389327642592441,
+        "stageGainRaw": 110.1728326093935,
+        "rWindow": 111.79808256701233,
+        "crashAvoidanceRaw": 0.8561399691141367,
+        "windowLen": 90,
+        "passesGate": true
+      }
+    },
+    {
+      "code": "001896",
+      "gain60dPct": 97.46682750301572,
+      "wcmiComposite": 332.45,
+      "wcmiPct": {
+        "rhythm": 0.775,
+        "maSupport": 0.425,
+        "upWaveSmoothness": 0.465,
+        "yangDominance": 0.83,
+        "upperShadowClean": 0.615,
+        "stageGain": 0.755,
+        "crashAvoidance": 0.085
+      },
+      "labelComposite": 61.99253288170846,
+      "labels": {
+        "rhythm": 79.44708788307602,
+        "aesthetic": 47.11715919397262,
+        "stageGain": 100,
+        "crashAvoid": 44.36374030979691,
+        "composite": 61.99253288170846
+      },
+      "raw": {
+        "rhythm": 0.33336505459691235,
+        "maSupport": 0.683955585359297,
+        "upWaveSmoothness": 0.8003887658628931,
+        "yangDominance": 0.6,
+        "upperShadowClean": 0.4774580460424189,
+        "stageGain": 188.08388273602543,
+        "crashAvoidance": 0.16545610464695354,
+        "windowLen": 90,
+        "passesGate": true
+      },
+      "detail": {
+        "swingDensity": 2.8333333333333335,
+        "lag1Autocorr": 0.09447087883076027,
+        "maSupportRaw": 0.683955585359297,
+        "upWaveSmoothnessRaw": 0.8003887658628931,
+        "yangDominanceRaw": 0.6,
+        "upperShadowCleanRaw": 0.4774580460424189,
+        "stageGainRaw": 188.08388273602543,
+        "rWindow": 214.80769230769235,
+        "crashAvoidanceRaw": 0.16545610464695354,
+        "windowLen": 90,
+        "passesGate": true
+      }
+    },
+    {
+      "code": "002008",
+      "gain60dPct": 168.85258265534117,
+      "wcmiComposite": 762.65,
+      "wcmiPct": {
+        "rhythm": 0.585,
+        "maSupport": 0.835,
+        "upWaveSmoothness": 0.645,
+        "yangDominance": 0.64,
+        "upperShadowClean": 0.715,
+        "stageGain": 0.845,
+        "crashAvoidance": 0.735
+      },
+      "labelComposite": 68.93153286404036,
+      "labels": {
+        "rhythm": 74.910935645165,
+        "aesthetic": 48.0872449591139,
+        "stageGain": 100,
+        "crashAvoid": 80.2781614283218,
+        "composite": 68.93153286404036
+      },
+      "raw": {
+        "rhythm": 0.2789312277419799,
+        "maSupport": 0.8325435799607052,
+        "upWaveSmoothness": 0.8470116870347872,
+        "yangDominance": 0.5777777777777777,
+        "upperShadowClean": 0.4903748977523841,
+        "stageGain": 216.50495597091646,
+        "crashAvoidance": 0.7041724214248269,
+        "windowLen": 90,
+        "passesGate": true
+      },
+      "detail": {
+        "swingDensity": 3.5,
+        "lag1Autocorr": 0.04910935645164991,
+        "maSupportRaw": 0.8325435799607052,
+        "upWaveSmoothnessRaw": 0.8470116870347872,
+        "yangDominanceRaw": 0.5777777777777777,
+        "upperShadowCleanRaw": 0.4903748977523841,
+        "stageGainRaw": 216.50495597091646,
+        "rWindow": 246.6559696593975,
+        "crashAvoidanceRaw": 0.7041724214248269,
+        "windowLen": 90,
+        "passesGate": true
+      }
+    },
+    {
+      "code": "002281",
+      "gain60dPct": 200.05523336095004,
+      "wcmiComposite": 601.4499999999999,
+      "wcmiPct": {
+        "rhythm": 0.485,
+        "maSupport": 0.645,
+        "upWaveSmoothness": 0.925,
+        "yangDominance": 0.93,
+        "upperShadowClean": 0.335,
+        "stageGain": 0.805,
+        "crashAvoidance": 0.485
+      },
+      "labelComposite": 66.30134546879202,
+      "labels": {
+        "rhythm": 73.07209544427117,
+        "aesthetic": 49.07254044718681,
+        "stageGain": 100,
+        "crashAvoid": 66.28943975458638,
+        "composite": 66.30134546879202
+      },
+      "raw": {
+        "rhythm": 0.2568651453312541,
+        "maSupport": 0.771664199451036,
+        "upWaveSmoothness": 0.9011210950876116,
+        "yangDominance": 0.6222222222222222,
+        "upperShadowClean": 0.43184165858312806,
+        "stageGain": 194.97794541235663,
+        "crashAvoidance": 0.4943415963187956,
+        "windowLen": 90,
+        "passesGate": true
+      },
+      "detail": {
+        "swingDensity": 4,
+        "lag1Autocorr": 0.03072095444271172,
+        "maSupportRaw": 0.771664199451036,
+        "upWaveSmoothnessRaw": 0.9011210950876116,
+        "yangDominanceRaw": 0.6222222222222222,
+        "upperShadowCleanRaw": 0.43184165858312806,
+        "stageGainRaw": 194.97794541235663,
+        "rWindow": 210.65046461758402,
+        "crashAvoidanceRaw": 0.4943415963187956,
+        "windowLen": 90,
+        "passesGate": true
+      }
+    },
+    {
+      "code": "002297",
+      "gain60dPct": 96.11111111111113,
+      "wcmiComposite": 336.20000000000005,
+      "wcmiPct": {
+        "rhythm": 0.845,
+        "maSupport": 0.245,
+        "upWaveSmoothness": 0.145,
+        "yangDominance": 0.025,
+        "upperShadowClean": 0.805,
+        "stageGain": 0.245,
+        "crashAvoidance": 0.385
+      },
+      "labelComposite": 60.00777312893119,
+      "labels": {
+        "rhythm": 87.62037365044657,
+        "aesthetic": 42.64884127462015,
+        "stageGain": 76.89122708901529,
+        "crashAvoid": 61.47246544991036,
+        "composite": 60.00777312893119
+      },
+      "raw": {
+        "rhythm": 0.36855551619464116,
+        "maSupport": 0.614803132948685,
+        "upWaveSmoothness": 0.737284566194226,
+        "yangDominance": 0.45555555555555555,
+        "upperShadowClean": 0.5069654979055378,
+        "stageGain": 115.33684063352294,
+        "crashAvoidance": 0.42208698174865544,
+        "windowLen": 90,
+        "passesGate": true
+      },
+      "detail": {
+        "swingDensity": 3.8333333333333335,
+        "lag1Autocorr": 0.1762037365044657,
+        "maSupportRaw": 0.614803132948685,
+        "upWaveSmoothnessRaw": 0.737284566194226,
+        "yangDominanceRaw": 0.45555555555555555,
+        "upperShadowCleanRaw": 0.5069654979055378,
+        "stageGainRaw": 115.33684063352294,
+        "rWindow": 106.43274853801171,
+        "crashAvoidanceRaw": 0.42208698174865544,
+        "windowLen": 90,
+        "passesGate": true
+      }
+    },
+    {
+      "code": "002348",
+      "gain60dPct": 104.76923076923077,
+      "wcmiComposite": 467.8,
+      "wcmiPct": {
+        "rhythm": 0.815,
+        "maSupport": 0.545,
+        "upWaveSmoothness": 0.165,
+        "yangDominance": 0.485,
+        "upperShadowClean": 0.945,
+        "stageGain": 0.295,
+        "crashAvoidance": 0.535
+      },
+      "labelComposite": 63.36973025550263,
+      "labels": {
+        "rhythm": 80.26317989171062,
+        "aesthetic": 46.638244827795916,
+        "stageGain": 83.15544699560331,
+        "crashAvoid": 68.55976850058605,
+        "composite": 63.36973025550263
+      },
+      "raw": {
+        "rhythm": 0.34315815870052757,
+        "maSupport": 0.7192026323443764,
+        "upWaveSmoothness": 0.7387513153098965,
+        "yangDominance": 0.5555555555555556,
+        "upperShadowClean": 0.5640308959229408,
+        "stageGain": 124.73317049340497,
+        "crashAvoidance": 0.5283965275087907,
+        "windowLen": 90,
+        "passesGate": true
+      },
+      "detail": {
+        "swingDensity": 3.3333333333333335,
+        "lag1Autocorr": 0.10263179891710628,
+        "maSupportRaw": 0.7192026323443764,
+        "upWaveSmoothnessRaw": 0.7387513153098965,
+        "yangDominanceRaw": 0.5555555555555556,
+        "upperShadowCleanRaw": 0.5640308959229408,
+        "stageGainRaw": 124.73317049340497,
+        "rWindow": 131.47826086956522,
+        "crashAvoidanceRaw": 0.5283965275087907,
+        "windowLen": 90,
+        "passesGate": true
+      }
+    },
+    {
+      "code": "002384",
+      "gain60dPct": 167.4722150426467,
+      "wcmiComposite": 517.6,
+      "wcmiPct": {
+        "rhythm": 0.455,
+        "maSupport": 0.335,
+        "upWaveSmoothness": 0.025,
+        "yangDominance": 0.485,
+        "upperShadowClean": 0.635,
+        "stageGain": 0.565,
+        "crashAvoidance": 0.525
+      },
+      "labelComposite": 64.12534326683259,
+      "labels": {
+        "rhythm": 72.68737836889332,
+        "aesthetic": 43.45273920092491,
+        "stageGain": 100,
+        "crashAvoid": 68.34251935541191,
+        "composite": 64.12534326683259
+      },
+      "raw": {
+        "rhythm": 0.25224854042671985,
+        "maSupport": 0.6525366046645871,
+        "upWaveSmoothness": 0.6943225507786286,
+        "yangDominance": 0.5555555555555556,
+        "upperShadowClean": 0.48170609565616607,
+        "stageGain": 154.4505527175677,
+        "crashAvoidance": 0.5251377903311788,
+        "windowLen": 90,
+        "passesGate": true
+      },
+      "detail": {
+        "swingDensity": 3.5,
+        "lag1Autocorr": 0.026873783688933194,
+        "maSupportRaw": 0.6525366046645871,
+        "upWaveSmoothnessRaw": 0.6943225507786286,
+        "yangDominanceRaw": 0.5555555555555556,
+        "upperShadowCleanRaw": 0.48170609565616607,
+        "stageGainRaw": 154.4505527175677,
+        "rWindow": 144.50088600118133,
+        "crashAvoidanceRaw": 0.5251377903311788,
+        "windowLen": 90,
+        "passesGate": true
+      }
+    },
+    {
+      "code": "002428",
+      "gain60dPct": 138.13583404376243,
+      "wcmiComposite": 390.25000000000006,
+      "wcmiPct": {
+        "rhythm": 0.975,
+        "maSupport": 0.745,
+        "upWaveSmoothness": 0.935,
+        "yangDominance": 0.83,
+        "upperShadowClean": 0.405,
+        "stageGain": 0.535,
+        "crashAvoidance": 0.255
+      },
+      "labelComposite": 65.54489911363152,
+      "labels": {
+        "rhythm": 85.24271727468987,
+        "aesthetic": 48.88678025198695,
+        "stageGain": 100,
+        "crashAvoid": 53.7972020451695,
+        "composite": 65.54489911363152
+      },
+      "raw": {
+        "rhythm": 0.3970873927037217,
+        "maSupport": 0.8031959879860465,
+        "upWaveSmoothness": 0.9032373884163887,
+        "yangDominance": 0.6,
+        "upperShadowClean": 0.4442018617832286,
+        "stageGain": 153.59048635996928,
+        "crashAvoidance": 0.3069580306775426,
+        "windowLen": 90,
+        "passesGate": true
+      },
+      "detail": {
+        "swingDensity": 3.5,
+        "lag1Autocorr": 0.15242717274689863,
+        "maSupportRaw": 0.8031959879860465,
+        "upWaveSmoothnessRaw": 0.9032373884163887,
+        "yangDominanceRaw": 0.6,
+        "upperShadowCleanRaw": 0.4442018617832286,
+        "stageGainRaw": 153.59048635996928,
+        "rWindow": 163.93700787401576,
+        "crashAvoidanceRaw": 0.3069580306775426,
+        "windowLen": 90,
+        "passesGate": true
+      }
+    },
+    {
+      "code": "002491",
+      "gain60dPct": 111.27308066083575,
+      "wcmiComposite": 413.75,
+      "wcmiPct": {
+        "rhythm": 0.435,
+        "maSupport": 0.695,
+        "upWaveSmoothness": 0.545,
+        "yangDominance": 0.98,
+        "upperShadowClean": 0.905,
+        "stageGain": 0.875,
+        "crashAvoidance": 0.125
+      },
+      "labelComposite": 62.91156495221975,
+      "labels": {
+        "rhythm": 72.15438916944106,
+        "aesthetic": 50.54783300139605,
+        "stageGain": 100,
+        "crashAvoid": 46.70940863087683,
+        "composite": 62.91156495221975
+      },
+      "raw": {
+        "rhythm": 0.2458526700332928,
+        "maSupport": 0.7850795111794492,
+        "upWaveSmoothness": 0.8190134052786567,
+        "yangDominance": 0.6444444444444445,
+        "upperShadowClean": 0.5506046752209464,
+        "stageGain": 232.6557223021396,
+        "crashAvoidance": 0.20064112946315255,
+        "windowLen": 90,
+        "passesGate": true
+      },
+      "detail": {
+        "swingDensity": 3.3333333333333335,
+        "lag1Autocorr": 0.02154389169441066,
+        "maSupportRaw": 0.7850795111794492,
+        "upWaveSmoothnessRaw": 0.8190134052786567,
+        "yangDominanceRaw": 0.6444444444444445,
+        "upperShadowCleanRaw": 0.5506046752209464,
+        "stageGainRaw": 232.6557223021396,
+        "rWindow": 262.3333333333333,
+        "crashAvoidanceRaw": 0.20064112946315255,
+        "windowLen": 90,
+        "passesGate": true
+      }
+    },
+    {
+      "code": "002580",
+      "gain60dPct": 101.42215568862278,
+      "wcmiComposite": 162.15,
+      "wcmiPct": {
+        "rhythm": 0.145,
+        "maSupport": 0.445,
+        "upWaveSmoothness": 0.715,
+        "yangDominance": 0.74,
+        "upperShadowClean": 0.865,
+        "stageGain": 0.165,
+        "crashAvoidance": 0.055
+      },
+      "labelComposite": 60.44333893340493,
+      "labels": {
+        "rhythm": 100,
+        "aesthetic": 49.47206050130659,
+        "stageGain": 74.57548433041757,
+        "crashAvoid": 41.32907420866721,
+        "composite": 60.44333893340493
+      },
+      "raw": {
+        "rhythm": 0.11099023076255571,
+        "maSupport": 0.6920689762604255,
+        "upWaveSmoothness": 0.8570609896432098,
+        "yangDominance": 0.5888888888888889,
+        "upperShadowClean": 0.5260118517575608,
+        "stageGain": 111.86322649562635,
+        "crashAvoidance": 0.11993611313000818,
+        "windowLen": 90,
+        "passesGate": true
+      },
+      "detail": {
+        "swingDensity": 3.1666666666666665,
+        "lag1Autocorr": 0.3908414743645369,
+        "maSupportRaw": 0.6920689762604255,
+        "upWaveSmoothnessRaw": 0.8570609896432098,
+        "yangDominanceRaw": 0.5888888888888889,
+        "upperShadowCleanRaw": 0.5260118517575608,
+        "stageGainRaw": 111.86322649562635,
+        "rWindow": 116.31832797427654,
+        "crashAvoidanceRaw": 0.11993611313000818,
+        "windowLen": 90,
+        "passesGate": true
+      }
+    },
+    {
+      "code": "002655",
+      "gain60dPct": 135.5479452054795,
+      "wcmiComposite": 770.9000000000001,
+      "wcmiPct": {
+        "rhythm": 0.955,
+        "maSupport": 0.855,
+        "upWaveSmoothness": 0.985,
+        "yangDominance": 0.995,
+        "upperShadowClean": 0.275,
+        "stageGain": 0.545,
+        "crashAvoidance": 0.875
+      },
+      "labelComposite": 73.22137724078311,
+      "labels": {
+        "rhythm": 85.35816545620892,
+        "aesthetic": 51.249555475620056,
+        "stageGain": 100,
+        "crashAvoid": 86.77676229161374,
+        "composite": 73.22137724078311
+      },
+      "raw": {
+        "rhythm": 0.39570201452549303,
+        "maSupport": 0.837995257320424,
+        "upWaveSmoothness": 0.9413509079327749,
+        "yangDominance": 0.6777777777777778,
+        "upperShadowClean": 0.422473580741045,
+        "stageGain": 154.20033228005684,
+        "crashAvoidance": 0.8016514343742062,
+        "windowLen": 90,
+        "passesGate": true
+      },
+      "detail": {
+        "swingDensity": 3.5,
+        "lag1Autocorr": 0.15358165456208916,
+        "maSupportRaw": 0.837995257320424,
+        "upWaveSmoothnessRaw": 0.9413509079327749,
+        "yangDominanceRaw": 0.6777777777777778,
+        "upperShadowCleanRaw": 0.422473580741045,
+        "stageGainRaw": 154.20033228005684,
+        "rWindow": 166.17647058823528,
+        "crashAvoidanceRaw": 0.8016514343742062,
+        "windowLen": 90,
+        "passesGate": true
+      }
+    },
+    {
+      "code": "002787",
+      "gain60dPct": 107.16560509554141,
+      "wcmiComposite": 504.7,
+      "wcmiPct": {
+        "rhythm": 0.705,
+        "maSupport": 0.235,
+        "upWaveSmoothness": 0.635,
+        "yangDominance": 0.185,
+        "upperShadowClean": 0.675,
+        "stageGain": 0.235,
+        "crashAvoidance": 0.645
+      },
+      "labelComposite": 63.110041505488894,
+      "labels": {
+        "rhythm": 77.70615674371427,
+        "aesthetic": 46.46544056329146,
+        "stageGain": 76.73874573451674,
+        "crashAvoid": 75.98460296773625,
+        "composite": 63.110041505488894
+      },
+      "raw": {
+        "rhythm": 0.3124738809245713,
+        "maSupport": 0.6061337741609154,
+        "upWaveSmoothness": 0.8464586237543514,
+        "yangDominance": 0.5222222222222223,
+        "upperShadowClean": 0.4838754388134755,
+        "stageGain": 115.10811860177512,
+        "crashAvoidance": 0.6397690445160438,
+        "windowLen": 90,
+        "passesGate": true
+      },
+      "detail": {
+        "swingDensity": 3.1666666666666665,
+        "lag1Autocorr": 0.07706156743714274,
+        "maSupportRaw": 0.6061337741609154,
+        "upWaveSmoothnessRaw": 0.8464586237543514,
+        "yangDominanceRaw": 0.5222222222222223,
+        "upperShadowCleanRaw": 0.4838754388134755,
+        "stageGainRaw": 115.10811860177512,
+        "rWindow": 108.99598393574298,
+        "crashAvoidanceRaw": 0.6397690445160438,
+        "windowLen": 90,
+        "passesGate": true
+      }
+    },
+    {
+      "code": "002903",
+      "gain60dPct": 96.6019417475728,
+      "wcmiComposite": 414.6,
+      "wcmiPct": {
+        "rhythm": 0.355,
+        "maSupport": 0.305,
+        "upWaveSmoothness": 0.085,
+        "yangDominance": 0.185,
+        "upperShadowClean": 0.325,
+        "stageGain": 0.045,
+        "crashAvoidance": 0.625
+      },
+      "labelComposite": 57.6740094845958,
+      "labels": {
+        "rhythm": 70,
+        "aesthetic": 42.02206587899004,
+        "stageGain": 66.1277190705181,
+        "crashAvoid": 75.19268012473334,
+        "composite": 57.6740094845958
+      },
+      "raw": {
+        "rhythm": 0.20132062571117743,
+        "maSupport": 0.6266251471837906,
+        "upWaveSmoothness": 0.7251319929767104,
+        "yangDominance": 0.5222222222222223,
+        "upperShadowClean": 0.42726216848883114,
+        "stageGain": 99.19157860577714,
+        "crashAvoidance": 0.6278902018710001,
+        "windowLen": 90,
+        "passesGate": true
+      },
+      "detail": {
+        "swingDensity": 3.5,
+        "lag1Autocorr": -0.0155661452406855,
+        "maSupportRaw": 0.6266251471837906,
+        "upWaveSmoothnessRaw": 0.7251319929767104,
+        "yangDominanceRaw": 0.5222222222222223,
+        "upperShadowCleanRaw": 0.42726216848883114,
+        "stageGainRaw": 99.19157860577714,
+        "rWindow": 93.69565217391303,
+        "crashAvoidanceRaw": 0.6278902018710001,
+        "windowLen": 90,
+        "passesGate": true
+      }
+    },
+    {
+      "code": "002980",
+      "gain60dPct": 340.8333333333333,
+      "wcmiComposite": 904.5500000000002,
+      "wcmiPct": {
+        "rhythm": 0.185,
+        "maSupport": 0.845,
+        "upWaveSmoothness": 0.275,
+        "yangDominance": 0.83,
+        "upperShadowClean": 0.895,
+        "stageGain": 0.965,
+        "crashAvoidance": 0.915
+      },
+      "labelComposite": 70.27307568208701,
+      "labels": {
+        "rhythm": 70,
+        "aesthetic": 47.88658268202157,
+        "stageGain": 100,
+        "crashAvoid": 91.12056737588654,
+        "composite": 70.27307568208701
+      },
+      "raw": {
+        "rhythm": 0.12785227313764752,
+        "maSupport": 0.8344444444444444,
+        "upWaveSmoothness": 0.765112551601293,
+        "yangDominance": 0.6,
+        "upperShadowClean": 0.5420063112351254,
+        "stageGain": 344.6222196743866,
+        "crashAvoidance": 0.866808510638298,
+        "windowLen": 90,
+        "passesGate": true
+      },
+      "detail": {
+        "swingDensity": 3.6666666666666665,
+        "lag1Autocorr": -0.07678977238529375,
+        "maSupportRaw": 0.8344444444444444,
+        "upWaveSmoothnessRaw": 0.765112551601293,
+        "yangDominanceRaw": 0.6,
+        "upperShadowCleanRaw": 0.5420063112351254,
+        "stageGainRaw": 344.6222196743866,
+        "rWindow": 402.13573801613666,
+        "crashAvoidanceRaw": 0.866808510638298,
+        "windowLen": 90,
+        "passesGate": true
+      }
+    },
+    {
+      "code": "002990",
+      "gain60dPct": 121.41634218757899,
+      "wcmiComposite": 354.35,
+      "wcmiPct": {
+        "rhythm": 0.725,
+        "maSupport": 0.125,
+        "upWaveSmoothness": 0.855,
+        "yangDominance": 0.28,
+        "upperShadowClean": 0.485,
+        "stageGain": 0.275,
+        "crashAvoidance": 0.375
+      },
+      "labelComposite": 63.42495298895008,
+      "labels": {
+        "rhythm": 92.04330024174091,
+        "aesthetic": 47.240482323138856,
+        "stageGain": 80.38442916775217,
+        "crashAvoid": 61.41677536863014,
+        "composite": 63.42495298895008
+      },
+      "raw": {
+        "rhythm": 0.31548039709910913,
+        "maSupport": 0.5665186271924453,
+        "upWaveSmoothness": 0.886513347650557,
+        "yangDominance": 0.5333333333333333,
+        "upperShadowClean": 0.4641074256697394,
+        "stageGain": 120.57664375162827,
+        "crashAvoidance": 0.42125163052945214,
+        "windowLen": 90,
+        "passesGate": true
+      },
+      "detail": {
+        "swingDensity": 3.1666666666666665,
+        "lag1Autocorr": 0.22043300241740907,
+        "maSupportRaw": 0.5665186271924453,
+        "upWaveSmoothnessRaw": 0.886513347650557,
+        "yangDominanceRaw": 0.5333333333333333,
+        "upperShadowCleanRaw": 0.4641074256697394,
+        "stageGainRaw": 120.57664375162827,
+        "rWindow": 116.87983159086485,
+        "crashAvoidanceRaw": 0.42125163052945214,
+        "windowLen": 90,
+        "passesGate": true
+      }
+    },
+    {
+      "code": "003004",
+      "gain60dPct": 91.58626013122347,
+      "wcmiComposite": 718.5,
+      "wcmiPct": {
+        "rhythm": 0.105,
+        "maSupport": 0.365,
+        "upWaveSmoothness": 0.045,
+        "yangDominance": 0.185,
+        "upperShadowClean": 0.935,
+        "stageGain": 0.345,
+        "crashAvoidance": 0.96
+      },
+      "labelComposite": 71.81732184451297,
+      "labels": {
+        "rhythm": 100,
+        "aesthetic": 44.704238785666874,
+        "stageGain": 85.72429417703658,
+        "crashAvoid": 97.77777777777779,
+        "composite": 71.81732184451297
+      },
+      "raw": {
+        "rhythm": 0.08577543866128151,
+        "maSupport": 0.6611908845999097,
+        "upWaveSmoothness": 0.699523668059989,
+        "yangDominance": 0.5222222222222223,
+        "upperShadowClean": 0.5598117522984642,
+        "stageGain": 128.58644126555487,
+        "crashAvoidance": 0.9666666666666667,
+        "windowLen": 90,
+        "passesGate": true
+      },
+      "detail": {
+        "swingDensity": 3.1666666666666665,
+        "lag1Autocorr": 0.4118538011155987,
+        "maSupportRaw": 0.6611908845999097,
+        "upWaveSmoothnessRaw": 0.699523668059989,
+        "yangDominanceRaw": 0.5222222222222223,
+        "upperShadowCleanRaw": 0.5598117522984642,
+        "stageGainRaw": 128.58644126555487,
+        "rWindow": 131.52985074626864,
+        "crashAvoidanceRaw": 0.9666666666666667,
+        "windowLen": 90,
+        "passesGate": true
+      }
+    },
+    {
+      "code": "003018",
+      "gain60dPct": 198.2126899016979,
+      "wcmiComposite": 783.95,
+      "wcmiPct": {
+        "rhythm": 0.875,
+        "maSupport": 0.685,
+        "upWaveSmoothness": 0.005,
+        "yangDominance": 0.04,
+        "upperShadowClean": 0.855,
+        "stageGain": 0.905,
+        "crashAvoidance": 0.805
+      },
+      "labelComposite": 68.1987686708776,
+      "labels": {
+        "rhythm": 83.24035195591118,
+        "aesthetic": 41.79665074502334,
+        "stageGain": 100,
+        "crashAvoid": 84.5211152111521,
+        "composite": 68.1987686708776
+      },
+      "raw": {
+        "rhythm": 0.37888422347093414,
+        "maSupport": 0.7842150044758491,
+        "upWaveSmoothness": 0.6750237400424228,
+        "yangDominance": 0.4666666666666667,
+        "upperShadowClean": 0.5223334730470861,
+        "stageGain": 253.72056763053683,
+        "crashAvoidance": 0.7678167281672813,
+        "windowLen": 90,
+        "passesGate": true
+      },
+      "detail": {
+        "swingDensity": 3.6666666666666665,
+        "lag1Autocorr": 0.13240351955911175,
+        "maSupportRaw": 0.7842150044758491,
+        "upWaveSmoothnessRaw": 0.6750237400424228,
+        "yangDominanceRaw": 0.4666666666666667,
+        "upperShadowCleanRaw": 0.5223334730470861,
+        "stageGainRaw": 253.72056763053683,
+        "rWindow": 283.1228473019517,
+        "crashAvoidanceRaw": 0.7678167281672813,
+        "windowLen": 90,
+        "passesGate": true
+      }
+    },
+    {
+      "code": "003031",
+      "gain60dPct": 103.64963503649633,
+      "wcmiComposite": 296.45,
+      "wcmiPct": {
+        "rhythm": 0.035,
+        "maSupport": 0.435,
+        "upWaveSmoothness": 0.115,
+        "yangDominance": 0.64,
+        "upperShadowClean": 0.225,
+        "stageGain": 0.125,
+        "crashAvoidance": 0.365
+      },
+      "labelComposite": 56.77152590506146,
+      "labels": {
+        "rhythm": 70,
+        "aesthetic": 43.35472160235335,
+        "stageGain": 72.41897604945807,
+        "crashAvoid": 61.390529870554175,
+        "composite": 56.77152590506146
+      },
+      "raw": {
+        "rhythm": -0.02731026056553948,
+        "maSupport": 0.6865549301922323,
+        "upWaveSmoothness": 0.7306673721626701,
+        "yangDominance": 0.5777777777777777,
+        "upperShadowClean": 0.41887816485176355,
+        "stageGain": 108.6284640741871,
+        "crashAvoidance": 0.42085794805831267,
+        "windowLen": 90,
+        "passesGate": true
+      },
+      "detail": {
+        "swingDensity": 4.166666666666667,
+        "lag1Autocorr": -0.20609188380461627,
+        "maSupportRaw": 0.6865549301922323,
+        "upWaveSmoothnessRaw": 0.7306673721626701,
+        "yangDominanceRaw": 0.5777777777777777,
+        "upperShadowCleanRaw": 0.41887816485176355,
+        "stageGainRaw": 108.6284640741871,
+        "rWindow": 109.7457627118644,
+        "crashAvoidanceRaw": 0.42085794805831267,
+        "windowLen": 90,
+        "passesGate": true
+      }
+    },
+    {
+      "code": "003036",
+      "gain60dPct": 152.046783625731,
+      "wcmiComposite": 616.65,
+      "wcmiPct": {
+        "rhythm": 0.695,
+        "maSupport": 0.635,
+        "upWaveSmoothness": 0.745,
+        "yangDominance": 0.83,
+        "upperShadowClean": 0.585,
+        "stageGain": 0.735,
+        "crashAvoidance": 0.545
+      },
+      "labelComposite": 67.69125972815561,
+      "labels": {
+        "rhythm": 77.65355857916038,
+        "aesthetic": 48.655193839566415,
+        "stageGain": 100,
+        "crashAvoid": 70.74194356738333,
+        "composite": 67.69125972815561
+      },
+      "raw": {
+        "rhythm": 0.31184270294992456,
+        "maSupport": 0.7708213274152574,
+        "upWaveSmoothness": 0.863039019171761,
+        "yangDominance": 0.6,
+        "upperShadowClean": 0.4754605211367433,
+        "stageGain": 185.79105539142654,
+        "crashAvoidance": 0.5611291535107501,
+        "windowLen": 90,
+        "passesGate": true
+      },
+      "detail": {
+        "swingDensity": 3.1666666666666665,
+        "lag1Autocorr": 0.07653558579160376,
+        "maSupportRaw": 0.7708213274152574,
+        "upWaveSmoothnessRaw": 0.863039019171761,
+        "yangDominanceRaw": 0.6,
+        "upperShadowCleanRaw": 0.4754605211367433,
+        "stageGainRaw": 185.79105539142654,
+        "rWindow": 206.26614987080097,
+        "crashAvoidanceRaw": 0.5611291535107501,
+        "windowLen": 90,
+        "passesGate": true
+      }
+    },
+    {
+      "code": "300042",
+      "gain60dPct": 102.17780429594269,
+      "wcmiComposite": 271.55,
+      "wcmiPct": {
+        "rhythm": 0.595,
+        "maSupport": 0.565,
+        "upWaveSmoothness": 0.585,
+        "yangDominance": 0.28,
+        "upperShadowClean": 0.115,
+        "stageGain": 0.515,
+        "crashAvoidance": 0.135
+      },
+      "labelComposite": 60.732453688687066,
+      "labels": {
+        "rhythm": 75.10921152276472,
+        "aesthetic": 44.25325411576464,
+        "stageGain": 100,
+        "crashAvoid": 47.76053804089135,
+        "composite": 60.732453688687066
+      },
+      "raw": {
+        "rhythm": 0.28131053827317665,
+        "maSupport": 0.7410217213969508,
+        "upWaveSmoothness": 0.8294313850881475,
+        "yangDominance": 0.5333333333333333,
+        "upperShadowClean": 0.399955228995135,
+        "stageGain": 151.10359247498008,
+        "crashAvoidance": 0.21640807061337025,
+        "windowLen": 90,
+        "passesGate": true
+      },
+      "detail": {
+        "swingDensity": 4,
+        "lag1Autocorr": 0.05109211522764721,
+        "maSupportRaw": 0.7410217213969508,
+        "upWaveSmoothnessRaw": 0.8294313850881475,
+        "yangDominanceRaw": 0.5333333333333333,
+        "upperShadowCleanRaw": 0.399955228995135,
+        "stageGainRaw": 151.10359247498008,
+        "rWindow": 163.6964980544747,
+        "crashAvoidanceRaw": 0.21640807061337025,
+        "windowLen": 90,
+        "passesGate": true
+      }
+    },
+    {
+      "code": "300069",
+      "gain60dPct": 142.75482093663916,
+      "wcmiComposite": 603.85,
+      "wcmiPct": {
+        "rhythm": 0.315,
+        "maSupport": 0.065,
+        "upWaveSmoothness": 0.655,
+        "yangDominance": 0.64,
+        "upperShadowClean": 0.755,
+        "stageGain": 0.505,
+        "crashAvoidance": 0.665
+      },
+      "labelComposite": 71.92126124208293,
+      "labels": {
+        "rhythm": 100,
+        "aesthetic": 48.10120202591036,
+        "stageGain": 100,
+        "crashAvoid": 76.37860165211633,
+        "composite": 71.92126124208293
+      },
+      "raw": {
+        "rhythm": 0.18688792767625653,
+        "maSupport": 0.5094847397582246,
+        "upWaveSmoothness": 0.847351406251984,
+        "yangDominance": 0.5777777777777777,
+        "upperShadowClean": 0.49382404960907056,
+        "stageGain": 150.55418937761442,
+        "crashAvoidance": 0.645679024781745,
+        "windowLen": 90,
+        "passesGate": true
+      },
+      "detail": {
+        "swingDensity": 3,
+        "lag1Autocorr": 0.32759339360311956,
+        "maSupportRaw": 0.5094847397582246,
+        "upWaveSmoothnessRaw": 0.847351406251984,
+        "yangDominanceRaw": 0.5777777777777777,
+        "upperShadowCleanRaw": 0.49382404960907056,
+        "stageGainRaw": 150.55418937761442,
+        "rWindow": 156.90962099125366,
+        "crashAvoidanceRaw": 0.645679024781745,
+        "windowLen": 90,
+        "passesGate": true
+      }
+    },
+    {
+      "code": "300137",
+      "gain60dPct": 94.80392156862747,
+      "wcmiComposite": 516.8,
+      "wcmiPct": {
+        "rhythm": 0.375,
+        "maSupport": 0.485,
+        "upWaveSmoothness": 0.015,
+        "yangDominance": 0.185,
+        "upperShadowClean": 0.315,
+        "stageGain": 0.035,
+        "crashAvoidance": 0.795
+      },
+      "labelComposite": 58.948154217788684,
+      "labels": {
+        "rhythm": 70,
+        "aesthetic": 41.062626317601755,
+        "stageGain": 65.61355514507497,
+        "crashAvoid": 84.23630672926448,
+        "composite": 58.948154217788684
+      },
+      "raw": {
+        "rhythm": 0.20327763662978124,
+        "maSupport": 0.7057509926313019,
+        "upWaveSmoothness": 0.6874047368216378,
+        "yangDominance": 0.5222222222222223,
+        "upperShadowClean": 0.42582058373389675,
+        "stageGain": 98.42033271761245,
+        "crashAvoidance": 0.7635446009389673,
+        "windowLen": 90,
+        "passesGate": true
+      },
+      "detail": {
+        "swingDensity": 3.3333333333333335,
+        "lag1Autocorr": -0.013935302808515664,
+        "maSupportRaw": 0.7057509926313019,
+        "upWaveSmoothnessRaw": 0.6874047368216378,
+        "yangDominanceRaw": 0.5222222222222223,
+        "upperShadowCleanRaw": 0.42582058373389675,
+        "stageGainRaw": 98.42033271761245,
+        "rWindow": 91.79536679536682,
+        "crashAvoidanceRaw": 0.7635446009389673,
+        "windowLen": 90,
+        "passesGate": true
+      }
+    },
+    {
+      "code": "300201",
+      "gain60dPct": 92.4705882352941,
+      "wcmiComposite": 660.3999999999999,
+      "wcmiPct": {
+        "rhythm": 0.245,
+        "maSupport": 0.915,
+        "upWaveSmoothness": 0.305,
+        "yangDominance": 0.485,
+        "upperShadowClean": 0.135,
+        "stageGain": 0.415,
+        "crashAvoidance": 0.815
+      },
+      "labelComposite": 65.26453963563192,
+      "labels": {
+        "rhythm": 70,
+        "aesthetic": 43.44608705660647,
+        "stageGain": 91.46616542136235,
+        "crashAvoid": 84.60283687943266,
+        "composite": 65.26453963563192
+      },
+      "raw": {
+        "rhythm": 0.14906741836894138,
+        "maSupport": 0.8510093406274151,
+        "upWaveSmoothness": 0.7689893510489624,
+        "yangDominance": 0.5555555555555556,
+        "upperShadowClean": 0.4047884822534671,
+        "stageGain": 137.19924813204352,
+        "crashAvoidance": 0.7690425531914897,
+        "windowLen": 90,
+        "passesGate": true
+      },
+      "detail": {
+        "swingDensity": 3.3333333333333335,
+        "lag1Autocorr": -0.05911048469254888,
+        "maSupportRaw": 0.8510093406274151,
+        "upWaveSmoothnessRaw": 0.7689893510489624,
+        "yangDominanceRaw": 0.5555555555555556,
+        "upperShadowCleanRaw": 0.4047884822534671,
+        "stageGainRaw": 137.19924813204352,
+        "rWindow": 139.53147877013177,
+        "crashAvoidanceRaw": 0.7690425531914897,
+        "windowLen": 90,
+        "passesGate": true
+      }
+    },
+    {
+      "code": "300209",
+      "gain60dPct": 260.9375,
+      "wcmiComposite": 464.1,
+      "wcmiPct": {
+        "rhythm": 0.335,
+        "maSupport": 0.775,
+        "upWaveSmoothness": 0.915,
+        "yangDominance": 0.955,
+        "upperShadowClean": 0.425,
+        "stageGain": 0.975,
+        "crashAvoidance": 0.165
+      },
+      "labelComposite": 62.804388676029134,
+      "labels": {
+        "rhythm": 70,
+        "aesthetic": 49.70770615102292,
+        "stageGain": 100,
+        "crashAvoid": 49.67960454034411,
+        "composite": 62.804388676029134
+      },
+      "raw": {
+        "rhythm": 0.1974693201593183,
+        "maSupport": 0.8111111111111111,
+        "upWaveSmoothness": 0.9001850289370904,
+        "yangDominance": 0.6333333333333333,
+        "upperShadowClean": 0.4466787726593817,
+        "stageGain": 349.2364612357243,
+        "crashAvoidance": 0.2451940681051616,
+        "windowLen": 90,
+        "passesGate": true
+      },
+      "detail": {
+        "swingDensity": 3.6666666666666665,
+        "lag1Autocorr": -0.018775566533901448,
+        "maSupportRaw": 0.8111111111111111,
+        "upWaveSmoothnessRaw": 0.9001850289370904,
+        "yangDominanceRaw": 0.6333333333333333,
+        "upperShadowCleanRaw": 0.4466787726593817,
+        "stageGainRaw": 349.2364612357243,
+        "rWindow": 408.6238532110092,
+        "crashAvoidanceRaw": 0.2451940681051616,
+        "windowLen": 90,
+        "passesGate": true
+      }
+    },
+    {
+      "code": "300283",
+      "gain60dPct": 110.41916167664674,
+      "wcmiComposite": 629.95,
+      "wcmiPct": {
+        "rhythm": 0.275,
+        "maSupport": 0.175,
+        "upWaveSmoothness": 0.815,
+        "yangDominance": 0.64,
+        "upperShadowClean": 0.875,
+        "stageGain": 0.385,
+        "crashAvoidance": 0.745
+      },
+      "labelComposite": 66.72982967455191,
+      "labels": {
+        "rhythm": 70,
+        "aesthetic": 49.99023111037978,
+        "stageGain": 87.9666580567394,
+        "crashAvoid": 80.70447031766562,
+        "composite": 66.72982967455191
+      },
+      "raw": {
+        "rhythm": 0.16987034334328194,
+        "maSupport": 0.5898777315227354,
+        "upWaveSmoothness": 0.8810451296198816,
+        "yangDominance": 0.5777777777777777,
+        "upperShadowClean": 0.5348875597023044,
+        "stageGain": 131.94998708510911,
+        "crashAvoidance": 0.7105670547649843,
+        "windowLen": 90,
+        "passesGate": true
+      },
+      "detail": {
+        "swingDensity": 3.1666666666666665,
+        "lag1Autocorr": -0.041774713880598405,
+        "maSupportRaw": 0.5898777315227354,
+        "upWaveSmoothnessRaw": 0.8810451296198816,
+        "yangDominanceRaw": 0.5777777777777777,
+        "upperShadowCleanRaw": 0.5348875597023044,
+        "stageGainRaw": 131.94998708510911,
+        "rWindow": 133.33333333333331,
+        "crashAvoidanceRaw": 0.7105670547649843,
+        "windowLen": 90,
+        "passesGate": true
+      }
+    },
+    {
+      "code": "300302",
+      "gain60dPct": 187.1740287386908,
+      "wcmiComposite": 343.4,
+      "wcmiPct": {
+        "rhythm": 0.765,
+        "maSupport": 0.195,
+        "upWaveSmoothness": 0.245,
+        "yangDominance": 0.185,
+        "upperShadowClean": 0.235,
+        "stageGain": 0.695,
+        "crashAvoidance": 0.205
+      },
+      "labelComposite": 62.879568110680026,
+      "labels": {
+        "rhythm": 90.64247821441393,
+        "aesthetic": 42.44338845964301,
+        "stageGain": 100,
+        "crashAvoid": 50.9183578583929,
+        "composite": 62.879568110680026
+      },
+      "raw": {
+        "rhythm": 0.332290261427033,
+        "maSupport": 0.5939567669266839,
+        "upWaveSmoothness": 0.7494728217360612,
+        "yangDominance": 0.5222222222222223,
+        "upperShadowClean": 0.4201009267581698,
+        "stageGain": 182.50848959513266,
+        "crashAvoidance": 0.2637753678758937,
+        "windowLen": 90,
+        "passesGate": true
+      },
+      "detail": {
+        "swingDensity": 3,
+        "lag1Autocorr": 0.20642478214413917,
+        "maSupportRaw": 0.5939567669266839,
+        "upWaveSmoothnessRaw": 0.7494728217360612,
+        "yangDominanceRaw": 0.5222222222222223,
+        "upperShadowCleanRaw": 0.4201009267581698,
+        "stageGainRaw": 182.50848959513266,
+        "rWindow": 197.46416758544652,
+        "crashAvoidanceRaw": 0.2637753678758937,
+        "windowLen": 90,
+        "passesGate": true
+      }
+    },
+    {
+      "code": "300323",
+      "gain60dPct": 121.13341204250294,
+      "wcmiComposite": 366.6,
+      "wcmiPct": {
+        "rhythm": 0.785,
+        "maSupport": 0.325,
+        "upWaveSmoothness": 0.865,
+        "yangDominance": 0.375,
+        "upperShadowClean": 0.455,
+        "stageGain": 0.375,
+        "crashAvoidance": 0.335
+      },
+      "labelComposite": 64.23615373175753,
+      "labels": {
+        "rhythm": 90.38158721982506,
+        "aesthetic": 47.4730262552235,
+        "stageGain": 87.65678488217024,
+        "crashAvoid": 58.92348428749569,
+        "composite": 64.23615373175753
+      },
+      "raw": {
+        "rhythm": 0.33542095336209937,
+        "maSupport": 0.6454196052574449,
+        "upWaveSmoothness": 0.886546930614632,
+        "yangDominance": 0.5444444444444444,
+        "upperShadowClean": 0.46147547909728925,
+        "stageGain": 131.48517732325536,
+        "crashAvoidance": 0.38385226431243535,
+        "windowLen": 90,
+        "passesGate": true
+      },
+      "detail": {
+        "swingDensity": 3.5,
+        "lag1Autocorr": 0.20381587219825054,
+        "maSupportRaw": 0.6454196052574449,
+        "upWaveSmoothnessRaw": 0.886546930614632,
+        "yangDominanceRaw": 0.5444444444444444,
+        "upperShadowCleanRaw": 0.46147547909728925,
+        "stageGainRaw": 131.48517732325536,
+        "rWindow": 134.71177944862154,
+        "crashAvoidanceRaw": 0.38385226431243535,
+        "windowLen": 90,
+        "passesGate": true
+      }
+    },
+    {
+      "code": "300489",
+      "gain60dPct": 201.6144127281235,
+      "wcmiComposite": 774.8,
+      "wcmiPct": {
+        "rhythm": 0.995,
+        "maSupport": 0.145,
+        "upWaveSmoothness": 0.505,
+        "yangDominance": 0.185,
+        "upperShadowClean": 0.145,
+        "stageGain": 0.605,
+        "crashAvoidance": 0.96
+      },
+      "labelComposite": 71.8625129470293,
+      "labels": {
+        "rhythm": 84.98980909970282,
+        "aesthetic": 43.46330228115185,
+        "stageGain": 100,
+        "crashAvoid": 97.77777777777779,
+        "composite": 71.8625129470293
+      },
+      "raw": {
+        "rhythm": 0.39987770919643384,
+        "maSupport": 0.5784288761357538,
+        "upWaveSmoothness": 0.8052533725927428,
+        "yangDominance": 0.5222222222222223,
+        "upperShadowClean": 0.40527220766975136,
+        "stageGain": 163.3377021587189,
+        "crashAvoidance": 0.9666666666666667,
+        "windowLen": 90,
+        "passesGate": true
+      },
+      "detail": {
+        "swingDensity": 2.6666666666666665,
+        "lag1Autocorr": 0.1498980909970282,
+        "maSupportRaw": 0.5784288761357538,
+        "upWaveSmoothnessRaw": 0.8052533725927428,
+        "yangDominanceRaw": 0.5222222222222223,
+        "upperShadowCleanRaw": 0.40527220766975136,
+        "stageGainRaw": 163.3377021587189,
+        "rWindow": 153.75984251968504,
+        "crashAvoidanceRaw": 0.9666666666666667,
+        "windowLen": 90,
+        "passesGate": true
+      }
+    },
+    {
+      "code": "300632",
+      "gain60dPct": 154.35092724679026,
+      "wcmiComposite": 296.55,
+      "wcmiPct": {
+        "rhythm": 0.535,
+        "maSupport": 0.135,
+        "upWaveSmoothness": 0.495,
+        "yangDominance": 0.64,
+        "upperShadowClean": 0.295,
+        "stageGain": 0.495,
+        "crashAvoidance": 0.185
+      },
+      "labelComposite": 61.47447572163143,
+      "labels": {
+        "rhythm": 73.61259198214105,
+        "aesthetic": 45.2916533025207,
+        "stageGain": 100,
+        "crashAvoid": 50.25671469087977,
+        "composite": 61.47447572163143
+      },
+      "raw": {
+        "rhythm": 0.2633511037856926,
+        "maSupport": 0.5706416136560183,
+        "upWaveSmoothness": 0.8039660142112243,
+        "yangDominance": 0.5777777777777777,
+        "upperShadowClean": 0.424215923975266,
+        "stageGain": 150.17450471530037,
+        "crashAvoidance": 0.25385072036319645,
+        "windowLen": 90,
+        "passesGate": true
+      },
+      "detail": {
+        "swingDensity": 3.6666666666666665,
+        "lag1Autocorr": 0.036125919821410495,
+        "maSupportRaw": 0.5706416136560183,
+        "upWaveSmoothnessRaw": 0.8039660142112243,
+        "yangDominanceRaw": 0.5777777777777777,
+        "upperShadowCleanRaw": 0.424215923975266,
+        "stageGainRaw": 150.17450471530037,
+        "rWindow": 159.15697674418604,
+        "crashAvoidanceRaw": 0.25385072036319645,
+        "windowLen": 90,
+        "passesGate": true
+      }
+    },
+    {
+      "code": "300668",
+      "gain60dPct": 136.21513944223108,
+      "wcmiComposite": 348.15,
+      "wcmiPct": {
+        "rhythm": 0.825,
+        "maSupport": 0.555,
+        "upWaveSmoothness": 0.055,
+        "yangDominance": 0.04,
+        "upperShadowClean": 0.035,
+        "stageGain": 0.195,
+        "crashAvoidance": 0.455
+      },
+      "labelComposite": 58.14104924024626,
+      "labels": {
+        "rhythm": 81.71773374493468,
+        "aesthetic": 39.33495597133678,
+        "stageGain": 76.0886823487433,
+        "crashAvoid": 64.82461260827925,
+        "composite": 58.14104924024626
+      },
+      "raw": {
+        "rhythm": 0.3606128049392161,
+        "maSupport": 0.7393290743175286,
+        "upWaveSmoothness": 0.7151601780019456,
+        "yangDominance": 0.4666666666666667,
+        "upperShadowClean": 0.384178103441684,
+        "stageGain": 114.13302352311496,
+        "crashAvoidance": 0.4723691891241888,
+        "windowLen": 90,
+        "passesGate": true
+      },
+      "detail": {
+        "swingDensity": 3.8333333333333335,
+        "lag1Autocorr": 0.11717733744934672,
+        "maSupportRaw": 0.7393290743175286,
+        "upWaveSmoothnessRaw": 0.7151601780019456,
+        "yangDominanceRaw": 0.4666666666666667,
+        "upperShadowCleanRaw": 0.384178103441684,
+        "stageGainRaw": 114.13302352311496,
+        "rWindow": 103.18711446196025,
+        "crashAvoidanceRaw": 0.4723691891241888,
+        "windowLen": 90,
+        "passesGate": true
+      }
+    },
+    {
+      "code": "300720",
+      "gain60dPct": 109.61836798014275,
+      "wcmiComposite": 107.9,
+      "wcmiPct": {
+        "rhythm": 0.225,
+        "maSupport": 0.515,
+        "upWaveSmoothness": 0.945,
+        "yangDominance": 0.485,
+        "upperShadowClean": 0.065,
+        "stageGain": 0.095,
+        "crashAvoidance": 0.035
+      },
+      "labelComposite": 52.95944190319264,
+      "labels": {
+        "rhythm": 70,
+        "aesthetic": 46.59561580631947,
+        "stageGain": 68.29682927533939,
+        "crashAvoid": 39.16024467640496,
+        "composite": 52.95944190319264
+      },
+      "raw": {
+        "rhythm": 0.14359495580015452,
+        "maSupport": 0.7123330515202467,
+        "upWaveSmoothness": 0.9053739853190851,
+        "yangDominance": 0.5555555555555556,
+        "upperShadowClean": 0.39577176086293575,
+        "stageGain": 102.4452439130091,
+        "crashAvoidance": 0.08740367014607439,
+        "windowLen": 90,
+        "passesGate": true
+      },
+      "detail": {
+        "swingDensity": 3.1666666666666665,
+        "lag1Autocorr": -0.06367087016653793,
+        "maSupportRaw": 0.7123330515202467,
+        "upWaveSmoothnessRaw": 0.9053739853190851,
+        "yangDominanceRaw": 0.5555555555555556,
+        "upperShadowCleanRaw": 0.39577176086293575,
+        "stageGainRaw": 102.4452439130091,
+        "rWindow": 99.35084095603423,
+        "crashAvoidanceRaw": 0.08740367014607439,
+        "windowLen": 90,
+        "passesGate": true
+      }
+    },
+    {
+      "code": "300721",
+      "gain60dPct": 96.25468164794009,
+      "wcmiComposite": 417.75,
+      "wcmiPct": {
+        "rhythm": 0.735,
+        "maSupport": 0.085,
+        "upWaveSmoothness": 0.415,
+        "yangDominance": 0.28,
+        "upperShadowClean": 0.185,
+        "stageGain": 0.435,
+        "crashAvoidance": 0.445
+      },
+      "labelComposite": 64.65327481287503,
+      "labels": {
+        "rhythm": 91.79159327657555,
+        "aesthetic": 43.478671171019194,
+        "stageGain": 92.49108012358583,
+        "crashAvoid": 64.10458884856445,
+        "composite": 64.65327481287503
+      },
+      "raw": {
+        "rhythm": 0.3185008806810933,
+        "maSupport": 0.5278759094956282,
+        "upWaveSmoothness": 0.7888271354724288,
+        "yangDominance": 0.5333333333333333,
+        "upperShadowClean": 0.41170761894004937,
+        "stageGain": 138.73662018537874,
+        "crashAvoidance": 0.4615688327284667,
+        "windowLen": 90,
+        "passesGate": true
+      },
+      "detail": {
+        "swingDensity": 3.3333333333333335,
+        "lag1Autocorr": 0.2179159327657556,
+        "maSupportRaw": 0.5278759094956282,
+        "upWaveSmoothnessRaw": 0.7888271354724288,
+        "yangDominanceRaw": 0.5333333333333333,
+        "upperShadowCleanRaw": 0.41170761894004937,
+        "stageGainRaw": 138.73662018537874,
+        "rWindow": 146.9756480754124,
+        "crashAvoidanceRaw": 0.4615688327284667,
+        "windowLen": 90,
+        "passesGate": true
+      }
+    },
+    {
+      "code": "300868",
+      "gain60dPct": 189.11147011308566,
+      "wcmiComposite": 806.3999999999999,
+      "wcmiPct": {
+        "rhythm": 0.945,
+        "maSupport": 0.705,
+        "upWaveSmoothness": 0.765,
+        "yangDominance": 0.185,
+        "upperShadowClean": 0.285,
+        "stageGain": 0.615,
+        "crashAvoidance": 0.96
+      },
+      "labelComposite": 72.91595149625398,
+      "labels": {
+        "rhythm": 85.38937190114642,
+        "aesthetic": 45.67108923450325,
+        "stageGain": 100,
+        "crashAvoid": 97.77777777777779,
+        "composite": 72.91595149625398
+      },
+      "raw": {
+        "rhythm": 0.395327537186243,
+        "maSupport": 0.7944261567036339,
+        "upWaveSmoothness": 0.8726158382966461,
+        "yangDominance": 0.5222222222222223,
+        "upperShadowClean": 0.42406124729422545,
+        "stageGain": 167.345477597229,
+        "crashAvoidance": 0.9666666666666667,
+        "windowLen": 90,
+        "passesGate": true
+      },
+      "detail": {
+        "swingDensity": 3,
+        "lag1Autocorr": 0.15389371901146418,
+        "maSupportRaw": 0.7944261567036339,
+        "upWaveSmoothnessRaw": 0.8726158382966461,
+        "yangDominanceRaw": 0.5222222222222223,
+        "upperShadowCleanRaw": 0.42406124729422545,
+        "stageGainRaw": 167.345477597229,
+        "rWindow": 182.27129337539435,
+        "crashAvoidanceRaw": 0.9666666666666667,
+        "windowLen": 90,
+        "passesGate": true
+      }
+    },
+    {
+      "code": "300903",
+      "gain60dPct": 163.89918458117126,
+      "wcmiComposite": 751.6499999999999,
+      "wcmiPct": {
+        "rhythm": 0.395,
+        "maSupport": 0.875,
+        "upWaveSmoothness": 0.385,
+        "yangDominance": 0.08,
+        "upperShadowClean": 0.155,
+        "stageGain": 0.885,
+        "crashAvoidance": 0.765
+      },
+      "labelComposite": 66.33260328141613,
+      "labels": {
+        "rhythm": 70,
+        "aesthetic": 42.596037696685926,
+        "stageGain": 100,
+        "crashAvoid": 83.32193158953727,
+        "composite": 66.33260328141613
+      },
+      "raw": {
+        "rhythm": 0.21829066657087925,
+        "maSupport": 0.8423863775101349,
+        "upWaveSmoothness": 0.7842995242230155,
+        "yangDominance": 0.5,
+        "upperShadowClean": 0.4111181198693199,
+        "stageGain": 238.51419252105302,
+        "crashAvoidance": 0.7498289738430589,
+        "windowLen": 90,
+        "passesGate": true
+      },
+      "detail": {
+        "swingDensity": 4,
+        "lag1Autocorr": -0.0014244445242673138,
+        "maSupportRaw": 0.8423863775101349,
+        "upWaveSmoothnessRaw": 0.7842995242230155,
+        "yangDominanceRaw": 0.5,
+        "upperShadowCleanRaw": 0.4111181198693199,
+        "stageGainRaw": 238.51419252105302,
+        "rWindow": 269.1031622602385,
+        "crashAvoidanceRaw": 0.7498289738430589,
+        "windowLen": 90,
+        "passesGate": true
+      }
+    },
+    {
+      "code": "300936",
+      "gain60dPct": 105.08594301860134,
+      "wcmiComposite": 604.6500000000001,
+      "wcmiPct": {
+        "rhythm": 0.005,
+        "maSupport": 0.885,
+        "upWaveSmoothness": 0.195,
+        "yangDominance": 0.83,
+        "upperShadowClean": 0.085,
+        "stageGain": 0.285,
+        "crashAvoidance": 0.775
+      },
+      "labelComposite": 63.315254386223984,
+      "labels": {
+        "rhythm": 70,
+        "aesthetic": 43.71722048122267,
+        "stageGain": 82.13379969253309,
+        "crashAvoid": 83.57872615583578,
+        "composite": 63.315254386223984
+      },
+      "raw": {
+        "rhythm": -0.11142528724895173,
+        "maSupport": 0.843281641439703,
+        "upWaveSmoothness": 0.7437072919946405,
+        "yangDominance": 0.6,
+        "upperShadowClean": 0.39654871083986887,
+        "stageGain": 123.20069953879963,
+        "crashAvoidance": 0.7536808923375367,
+        "windowLen": 90,
+        "passesGate": true
+      },
+      "detail": {
+        "swingDensity": 4.5,
+        "lag1Autocorr": -0.27618773937412644,
+        "maSupportRaw": 0.843281641439703,
+        "upWaveSmoothnessRaw": 0.7437072919946405,
+        "yangDominanceRaw": 0.6,
+        "upperShadowCleanRaw": 0.39654871083986887,
+        "stageGainRaw": 123.20069953879963,
+        "rWindow": 123.33333333333331,
+        "crashAvoidanceRaw": 0.7536808923375367,
+        "windowLen": 90,
+        "passesGate": true
+      }
+    },
+    {
+      "code": "300959",
+      "gain60dPct": 91.78816466552315,
+      "wcmiComposite": 396.75,
+      "wcmiPct": {
+        "rhythm": 0.565,
+        "maSupport": 0.005,
+        "upWaveSmoothness": 0.125,
+        "yangDominance": 0.11,
+        "upperShadowClean": 0.025,
+        "stageGain": 0.135,
+        "crashAvoidance": 0.585
+      },
+      "labelComposite": 62.048606189758985,
+      "labels": {
+        "rhythm": 95.62124481036584,
+        "aesthetic": 40.62276266415806,
+        "stageGain": 73.1373833947246,
+        "crashAvoid": 73.98849795194032,
+        "composite": 62.048606189758985
+      },
+      "raw": {
+        "rhythm": 0.27254506227561004,
+        "maSupport": 0.23670891071168704,
+        "upWaveSmoothness": 0.7317363904973871,
+        "yangDominance": 0.5111111111111111,
+        "upperShadowClean": 0.37969591585070717,
+        "stageGain": 109.70607509208689,
+        "crashAvoidance": 0.6098274692791048,
+        "windowLen": 90,
+        "passesGate": true
+      },
+      "detail": {
+        "swingDensity": 4,
+        "lag1Autocorr": 0.25621244810365834,
+        "maSupportRaw": 0.23670891071168704,
+        "upWaveSmoothnessRaw": 0.7317363904973871,
+        "yangDominanceRaw": 0.5111111111111111,
+        "upperShadowCleanRaw": 0.37969591585070717,
+        "stageGainRaw": 109.70607509208689,
+        "rWindow": 88.91235480464626,
+        "crashAvoidanceRaw": 0.6098274692791048,
+        "windowLen": 90,
+        "passesGate": true
+      }
+    },
+    {
+      "code": "301188",
+      "gain60dPct": 142.90521592821094,
+      "wcmiComposite": 511.85,
+      "wcmiPct": {
+        "rhythm": 0.655,
+        "maSupport": 0.265,
+        "upWaveSmoothness": 0.065,
+        "yangDominance": 0.11,
+        "upperShadowClean": 0.595,
+        "stageGain": 0.485,
+        "crashAvoidance": 0.575
+      },
+      "labelComposite": 65.51510875026194,
+      "labels": {
+        "rhythm": 77.31038015555889,
+        "aesthetic": 42.77831475606734,
+        "stageGain": 99.5049491262995,
+        "crashAvoid": 73.83660130718953,
+        "composite": 65.51510875026194
+      },
+      "raw": {
+        "rhythm": 0.3077245618667067,
+        "maSupport": 0.6194240206816038,
+        "upWaveSmoothness": 0.7182698905402396,
+        "yangDominance": 0.5111111111111111,
+        "upperShadowClean": 0.475557348384527,
+        "stageGain": 149.25742368944924,
+        "crashAvoidance": 0.607549019607843,
+        "windowLen": 90,
+        "passesGate": true
+      },
+      "detail": {
+        "swingDensity": 3.8333333333333335,
+        "lag1Autocorr": 0.07310380155558888,
+        "maSupportRaw": 0.6194240206816038,
+        "upWaveSmoothnessRaw": 0.7182698905402396,
+        "yangDominanceRaw": 0.5111111111111111,
+        "upperShadowCleanRaw": 0.475557348384527,
+        "stageGainRaw": 149.25742368944924,
+        "rWindow": 146.07954545454544,
+        "crashAvoidanceRaw": 0.607549019607843,
+        "windowLen": 90,
+        "passesGate": true
+      }
+    },
+    {
+      "code": "301189",
+      "gain60dPct": 114.82274565786344,
+      "wcmiComposite": 353.9,
+      "wcmiPct": {
+        "rhythm": 0.935,
+        "maSupport": 0.495,
+        "upWaveSmoothness": 0.775,
+        "yangDominance": 0.375,
+        "upperShadowClean": 0.205,
+        "stageGain": 0.155,
+        "crashAvoidance": 0.425
+      },
+      "labelComposite": 61.04425697054893,
+      "labels": {
+        "rhythm": 84.4075238372406,
+        "aesthetic": 46.13134554327166,
+        "stageGain": 74.22844996374356,
+        "crashAvoid": 63.891664538709435,
+        "composite": 61.04425697054893
+      },
+      "raw": {
+        "rhythm": 0.3928902860468873,
+        "maSupport": 0.7071146436926665,
+        "upWaveSmoothness": 0.8764444096582275,
+        "yangDominance": 0.5444444444444444,
+        "upperShadowClean": 0.41729382119126734,
+        "stageGain": 111.34267494561533,
+        "crashAvoidance": 0.4583749680806415,
+        "windowLen": 90,
+        "passesGate": true
+      },
+      "detail": {
+        "swingDensity": 3,
+        "lag1Autocorr": 0.14407523837240604,
+        "maSupportRaw": 0.7071146436926665,
+        "upWaveSmoothnessRaw": 0.8764444096582275,
+        "yangDominanceRaw": 0.5444444444444444,
+        "upperShadowCleanRaw": 0.41729382119126734,
+        "stageGainRaw": 111.34267494561533,
+        "rWindow": 107.6109450448379,
+        "crashAvoidanceRaw": 0.4583749680806415,
+        "windowLen": 90,
+        "passesGate": true
+      }
+    },
+    {
+      "code": "301217",
+      "gain60dPct": 124.37770562770565,
+      "wcmiComposite": 411.05000000000007,
+      "wcmiPct": {
+        "rhythm": 0.295,
+        "maSupport": 0.165,
+        "upWaveSmoothness": 0.845,
+        "yangDominance": 0.28,
+        "upperShadowClean": 0.265,
+        "stageGain": 0.455,
+        "crashAvoidance": 0.395
+      },
+      "labelComposite": 67.51210973348,
+      "labels": {
+        "rhythm": 100,
+        "aesthetic": 46.13288875732984,
+        "stageGain": 96.21354353520388,
+        "crashAvoid": 62.548005428203936,
+        "composite": 67.51210973348
+      },
+      "raw": {
+        "rhythm": 0.1790611863302564,
+        "maSupport": 0.5883105839368127,
+        "upWaveSmoothness": 0.8842790841456097,
+        "yangDominance": 0.5333333333333333,
+        "upperShadowClean": 0.4218200269748824,
+        "stageGain": 144.32031530280582,
+        "crashAvoidance": 0.438220081423059,
+        "windowLen": 90,
+        "passesGate": true
+      },
+      "detail": {
+        "swingDensity": 3.6666666666666665,
+        "lag1Autocorr": 0.3341156780581197,
+        "maSupportRaw": 0.5883105839368127,
+        "upWaveSmoothnessRaw": 0.8842790841456097,
+        "yangDominanceRaw": 0.5333333333333333,
+        "upperShadowCleanRaw": 0.4218200269748824,
+        "stageGainRaw": 144.32031530280582,
+        "rWindow": 141.91948658109686,
+        "crashAvoidanceRaw": 0.438220081423059,
+        "windowLen": 90,
+        "passesGate": true
+      }
+    },
+    {
+      "code": "301319",
+      "gain60dPct": 168.25774750761235,
+      "wcmiComposite": 293.35,
+      "wcmiPct": {
+        "rhythm": 0.645,
+        "maSupport": 0.045,
+        "upWaveSmoothness": 0.345,
+        "yangDominance": 0.11,
+        "upperShadowClean": 0.545,
+        "stageGain": 0.475,
+        "crashAvoidance": 0.215
+      },
+      "labelComposite": 61.53651882175556,
+      "labels": {
+        "rhythm": 77.13492711142426,
+        "aesthetic": 44.10737908370222,
+        "stageGain": 98.60575856001526,
+        "crashAvoid": 51.98403727686435,
+        "composite": 61.53651882175556
+      },
+      "raw": {
+        "rhythm": 0.3056191253370911,
+        "maSupport": 0.48276273084913096,
+        "upWaveSmoothness": 0.7770461121701443,
+        "yangDominance": 0.5111111111111111,
+        "upperShadowClean": 0.47131031275834234,
+        "stageGain": 147.9086378400229,
+        "crashAvoidance": 0.27976055915296527,
+        "windowLen": 90,
+        "passesGate": true
+      },
+      "detail": {
+        "swingDensity": 3.3333333333333335,
+        "lag1Autocorr": 0.07134927111424255,
+        "maSupportRaw": 0.48276273084913096,
+        "upWaveSmoothnessRaw": 0.7770461121701443,
+        "yangDominanceRaw": 0.5111111111111111,
+        "upperShadowCleanRaw": 0.47131031275834234,
+        "stageGainRaw": 147.9086378400229,
+        "rWindow": 122.72568564805455,
+        "crashAvoidanceRaw": 0.27976055915296527,
+        "windowLen": 90,
+        "passesGate": true
+      }
+    },
+    {
+      "code": "301362",
+      "gain60dPct": 138.42281879194633,
+      "wcmiComposite": 527.4,
+      "wcmiPct": {
+        "rhythm": 0.125,
+        "maSupport": 0.625,
+        "upWaveSmoothness": 0.255,
+        "yangDominance": 0.375,
+        "upperShadowClean": 0.605,
+        "stageGain": 0.945,
+        "crashAvoidance": 0.345
+      },
+      "labelComposite": 67.0766978576483,
+      "labels": {
+        "rhythm": 100,
+        "aesthetic": 44.64044937087885,
+        "stageGain": 100,
+        "crashAvoid": 59.9424782037641,
+        "composite": 67.0766978576483
+      },
+      "raw": {
+        "rhythm": 0.09259040197251461,
+        "maSupport": 0.7655555555555555,
+        "upWaveSmoothness": 0.7574968227569848,
+        "yangDominance": 0.5444444444444444,
+        "upperShadowClean": 0.4760211520781692,
+        "stageGain": 341.6452317587283,
+        "crashAvoidance": 0.3991371730564615,
+        "windowLen": 90,
+        "passesGate": true
+      },
+      "detail": {
+        "swingDensity": 3.5,
+        "lag1Autocorr": 0.40617466502290456,
+        "maSupportRaw": 0.7655555555555555,
+        "upWaveSmoothnessRaw": 0.7574968227569848,
+        "yangDominanceRaw": 0.5444444444444444,
+        "upperShadowCleanRaw": 0.4760211520781692,
+        "stageGainRaw": 341.6452317587283,
+        "rWindow": 399.4727592267136,
+        "crashAvoidanceRaw": 0.3991371730564615,
+        "windowLen": 90,
+        "passesGate": true
+      }
+    },
+    {
+      "code": "301369",
+      "gain60dPct": 111.37997680711251,
+      "wcmiComposite": 687.2,
+      "wcmiPct": {
+        "rhythm": 0.755,
+        "maSupport": 0.355,
+        "upWaveSmoothness": 0.205,
+        "yangDominance": 0.185,
+        "upperShadowClean": 0.535,
+        "stageGain": 0.185,
+        "crashAvoidance": 0.995
+      },
+      "labelComposite": 66.64254643120546,
+      "labels": {
+        "rhythm": 79.16724005658742,
+        "aesthetic": 43.59818033370272,
+        "stageGain": 75.7413963627556,
+        "crashAvoid": 100,
+        "composite": 66.64254643120546
+      },
+      "raw": {
+        "rhythm": 0.330006880679049,
+        "maSupport": 0.659493014219898,
+        "upWaveSmoothness": 0.7465671080950855,
+        "yangDominance": 0.5222222222222223,
+        "upperShadowClean": 0.46854295288860204,
+        "stageGain": 113.6120945441334,
+        "crashAvoidance": 1,
+        "windowLen": 90,
+        "passesGate": true
+      },
+      "detail": {
+        "swingDensity": 2.8333333333333335,
+        "lag1Autocorr": 0.09167240056587414,
+        "maSupportRaw": 0.659493014219898,
+        "upWaveSmoothnessRaw": 0.7465671080950855,
+        "yangDominanceRaw": 0.5222222222222223,
+        "upperShadowCleanRaw": 0.46854295288860204,
+        "stageGainRaw": 113.6120945441334,
+        "rWindow": 104.19716206123975,
+        "crashAvoidanceRaw": 1,
+        "windowLen": 90,
+        "passesGate": true
+      }
+    },
+    {
+      "code": "301373",
+      "gain60dPct": 242.5720620842572,
+      "wcmiComposite": 441.85,
+      "wcmiPct": {
+        "rhythm": 0.865,
+        "maSupport": 0.965,
+        "upWaveSmoothness": 0.215,
+        "yangDominance": 0.74,
+        "upperShadowClean": 0.555,
+        "stageGain": 0.895,
+        "crashAvoidance": 0.195
+      },
+      "labelComposite": 63.62038649568012,
+      "labels": {
+        "rhythm": 86.83447648943365,
+        "aesthetic": 45.454784903328594,
+        "stageGain": 100,
+        "crashAvoid": 50.70280907883603,
+        "composite": 63.62038649568012
+      },
+      "raw": {
+        "rhythm": 0.3779862821267961,
+        "maSupport": 0.8905555555555555,
+        "upWaveSmoothness": 0.7465824263532532,
+        "yangDominance": 0.5888888888888889,
+        "upperShadowClean": 0.47381452533544577,
+        "stageGain": 246.83319086489163,
+        "crashAvoidance": 0.2605421361825405,
+        "windowLen": 90,
+        "passesGate": true
+      },
+      "detail": {
+        "swingDensity": 3.8333333333333335,
+        "lag1Autocorr": 0.1683447648943366,
+        "maSupportRaw": 0.8905555555555555,
+        "upWaveSmoothnessRaw": 0.7465824263532532,
+        "yangDominanceRaw": 0.5888888888888889,
+        "upperShadowCleanRaw": 0.47381452533544577,
+        "stageGainRaw": 246.83319086489163,
+        "rWindow": 285.04672897196264,
+        "crashAvoidanceRaw": 0.2605421361825405,
+        "windowLen": 90,
+        "passesGate": true
+      }
+    },
+    {
+      "code": "301396",
+      "gain60dPct": 186.94015444015446,
+      "wcmiComposite": 358.45000000000005,
+      "wcmiPct": {
+        "rhythm": 0.195,
+        "maSupport": 0.975,
+        "upWaveSmoothness": 0.225,
+        "yangDominance": 0.64,
+        "upperShadowClean": 0.575,
+        "stageGain": 0.925,
+        "crashAvoidance": 0.045
+      },
+      "labelComposite": 58.93435824539057,
+      "labels": {
+        "rhythm": 70,
+        "aesthetic": 45.22158865748665,
+        "stageGain": 100,
+        "crashAvoid": 40.423216747607896,
+        "composite": 58.93435824539057
+      },
+      "raw": {
+        "rhythm": 0.13352223174270683,
+        "maSupport": 0.9033333333333333,
+        "upWaveSmoothness": 0.7467117676524001,
+        "yangDominance": 0.5777777777777777,
+        "upperShadowClean": 0.47534066753595483,
+        "stageGain": 302.1379834931854,
+        "crashAvoidance": 0.10634825121411856,
+        "windowLen": 90,
+        "passesGate": true
+      },
+      "detail": {
+        "swingDensity": 3.3333333333333335,
+        "lag1Autocorr": -0.07206480688107769,
+        "maSupportRaw": 0.9033333333333333,
+        "upWaveSmoothnessRaw": 0.7467117676524001,
+        "yangDominanceRaw": 0.5777777777777777,
+        "upperShadowCleanRaw": 0.47534066753595483,
+        "stageGainRaw": 302.1379834931854,
+        "rWindow": 348.3710407239819,
+        "crashAvoidanceRaw": 0.10634825121411856,
+        "windowLen": 90,
+        "passesGate": true
+      }
+    },
+    {
+      "code": "301511",
+      "gain60dPct": 213.5971911905522,
+      "wcmiComposite": 533.8000000000001,
+      "wcmiPct": {
+        "rhythm": 0.835,
+        "maSupport": 0.255,
+        "upWaveSmoothness": 0.885,
+        "yangDominance": 0.485,
+        "upperShadowClean": 0.795,
+        "stageGain": 0.715,
+        "crashAvoidance": 0.435
+      },
+      "labelComposite": 67.13572181655267,
+      "labels": {
+        "rhythm": 81.93031132518354,
+        "aesthetic": 48.978815684223974,
+        "stageGain": 100,
+        "crashAvoid": 64.02854029937176,
+        "composite": 67.13572181655267
+      },
+      "raw": {
+        "rhythm": 0.36316373590220247,
+        "maSupport": 0.6167009842371094,
+        "upWaveSmoothness": 0.8939599719634144,
+        "yangDominance": 0.5555555555555556,
+        "upperShadowClean": 0.5034700900076181,
+        "stageGain": 182.8311331453802,
+        "crashAvoidance": 0.46042810449057625,
+        "windowLen": 90,
+        "passesGate": true
+      },
+      "detail": {
+        "swingDensity": 2.8333333333333335,
+        "lag1Autocorr": 0.11930311325183535,
+        "maSupportRaw": 0.6167009842371094,
+        "upWaveSmoothnessRaw": 0.8939599719634144,
+        "yangDominanceRaw": 0.5555555555555556,
+        "upperShadowCleanRaw": 0.5034700900076181,
+        "stageGainRaw": 182.8311331453802,
+        "rWindow": 174.51802179379717,
+        "crashAvoidanceRaw": 0.46042810449057625,
+        "windowLen": 90,
+        "passesGate": true
+      }
+    },
+    {
+      "code": "301603",
+      "gain60dPct": 101.09843081312411,
+      "wcmiComposite": 581.8499999999999,
+      "wcmiPct": {
+        "rhythm": 0.555,
+        "maSupport": 0.095,
+        "upWaveSmoothness": 0.595,
+        "yangDominance": 0.74,
+        "upperShadowClean": 0.365,
+        "stageGain": 0.075,
+        "crashAvoidance": 0.845
+      },
+      "labelComposite": 62.67569821492617,
+      "labels": {
+        "rhythm": 73.94377764669105,
+        "aesthetic": 46.72225563660223,
+        "stageGain": 67.10211097545898,
+        "crashAvoid": 85.69347168179858,
+        "composite": 62.67569821492617
+      },
+      "raw": {
+        "rhythm": 0.2673253317602926,
+        "maSupport": 0.5395953680682382,
+        "upWaveSmoothness": 0.8380501271483061,
+        "yangDominance": 0.5888888888888889,
+        "upperShadowClean": 0.43655525574621157,
+        "stageGain": 100.65316646318847,
+        "crashAvoidance": 0.7854020752269787,
+        "windowLen": 90,
+        "passesGate": true
+      },
+      "detail": {
+        "swingDensity": 3.8333333333333335,
+        "lag1Autocorr": 0.039437776466910476,
+        "maSupportRaw": 0.5395953680682382,
+        "upWaveSmoothnessRaw": 0.8380501271483061,
+        "yangDominanceRaw": 0.5888888888888889,
+        "upperShadowCleanRaw": 0.43655525574621157,
+        "stageGainRaw": 100.65316646318847,
+        "rWindow": 86.4613479924024,
+        "crashAvoidanceRaw": 0.7854020752269787,
+        "windowLen": 90,
+        "passesGate": true
+      }
+    },
+    {
+      "code": "600396",
+      "gain60dPct": 353.1847133757962,
+      "wcmiComposite": 408.95000000000005,
+      "wcmiPct": {
+        "rhythm": 0.445,
+        "maSupport": 0.795,
+        "upWaveSmoothness": 0.485,
+        "yangDominance": 0.74,
+        "upperShadowClean": 0.985,
+        "stageGain": 0.935,
+        "crashAvoidance": 0.095
+      },
+      "labelComposite": 66.14614708824126,
+      "labels": {
+        "rhythm": 97.49180067016628,
+        "aesthetic": 49.99760812525048,
+        "stageGain": 100,
+        "crashAvoid": 45.117266656768045,
+        "composite": 66.14614708824126
+      },
+      "raw": {
+        "rhythm": 0.25009839195800465,
+        "maSupport": 0.813888888888889,
+        "upWaveSmoothness": 0.8022177230446975,
+        "yangDominance": 0.5888888888888889,
+        "upperShadowClean": 0.6006588241875437,
+        "stageGain": 339.5983029396256,
+        "crashAvoidance": 0.17675899985152072,
+        "windowLen": 90,
+        "passesGate": true
+      },
+      "detail": {
+        "swingDensity": 3,
+        "lag1Autocorr": 0.27491800670166283,
+        "maSupportRaw": 0.813888888888889,
+        "upWaveSmoothnessRaw": 0.8022177230446975,
+        "yangDominanceRaw": 0.5888888888888889,
+        "upperShadowCleanRaw": 0.6006588241875437,
+        "stageGainRaw": 339.5983029396256,
+        "rWindow": 399.29824561403507,
+        "crashAvoidanceRaw": 0.17675899985152072,
+        "windowLen": 90,
+        "passesGate": true
+      }
+    },
+    {
+      "code": "600683",
+      "gain60dPct": 109.3795093795094,
+      "wcmiComposite": 463,
+      "wcmiPct": {
+        "rhythm": 0.405,
+        "maSupport": 0.605,
+        "upWaveSmoothness": 0.575,
+        "yangDominance": 0.375,
+        "upperShadowClean": 0.785,
+        "stageGain": 0.835,
+        "crashAvoidance": 0.265
+      },
+      "labelComposite": 67.06915192036236,
+      "labels": {
+        "rhythm": 99.0292551614985,
+        "aesthetic": 46.95600136310626,
+        "stageGain": 100,
+        "crashAvoid": 55.42281516369884,
+        "composite": 67.06915192036236
+      },
+      "raw": {
+        "rhythm": 0.231648938062018,
+        "maSupport": 0.7527777777777779,
+        "upWaveSmoothness": 0.8264327589421322,
+        "yangDominance": 0.5444444444444444,
+        "upperShadowClean": 0.49983507335989585,
+        "stageGain": 212.4720454580078,
+        "crashAvoidance": 0.3313422274554827,
+        "windowLen": 90,
+        "passesGate": true
+      },
+      "detail": {
+        "swingDensity": 2.5,
+        "lag1Autocorr": 0.290292551614985,
+        "maSupportRaw": 0.7527777777777779,
+        "upWaveSmoothnessRaw": 0.8264327589421322,
+        "yangDominanceRaw": 0.5444444444444444,
+        "upperShadowCleanRaw": 0.49983507335989585,
+        "stageGainRaw": 212.4720454580078,
+        "rWindow": 239.81264637002346,
+        "crashAvoidanceRaw": 0.3313422274554827,
+        "windowLen": 90,
+        "passesGate": true
+      }
+    },
+    {
+      "code": "600726",
+      "gain60dPct": 140.8560311284047,
+      "wcmiComposite": 312.45,
+      "wcmiPct": {
+        "rhythm": 0.205,
+        "maSupport": 0.535,
+        "upWaveSmoothness": 0.975,
+        "yangDominance": 0.83,
+        "upperShadowClean": 0.835,
+        "stageGain": 0.465,
+        "crashAvoidance": 0.145
+      },
+      "labelComposite": 67.36817590862323,
+      "labels": {
+        "rhythm": 100,
+        "aesthetic": 51.09991104671189,
+        "stageGain": 97.66934914853069,
+        "crashAvoid": 49.196730539483724,
+        "composite": 67.36817590862323
+      },
+      "raw": {
+        "rhythm": 0.13834819800176956,
+        "maSupport": 0.716011282570202,
+        "upWaveSmoothness": 0.9186310098309401,
+        "yangDominance": 0.6,
+        "upperShadowClean": 0.5182053192118333,
+        "stageGain": 146.50402372279603,
+        "crashAvoidance": 0.23795095809225592,
+        "windowLen": 90,
+        "passesGate": true
+      },
+      "detail": {
+        "swingDensity": 3,
+        "lag1Autocorr": 0.36804316833185874,
+        "maSupportRaw": 0.716011282570202,
+        "upWaveSmoothnessRaw": 0.9186310098309401,
+        "yangDominanceRaw": 0.6,
+        "upperShadowCleanRaw": 0.5182053192118333,
+        "stageGainRaw": 146.50402372279603,
+        "rWindow": 158.99581589958157,
+        "crashAvoidanceRaw": 0.23795095809225592,
+        "windowLen": 90,
+        "passesGate": true
+      }
+    },
+    {
+      "code": "600791",
+      "gain60dPct": 120.96530920060333,
+      "wcmiComposite": 674.3000000000001,
+      "wcmiPct": {
+        "rhythm": 0.475,
+        "maSupport": 0.805,
+        "upWaveSmoothness": 0.735,
+        "yangDominance": 0.955,
+        "upperShadowClean": 0.355,
+        "stageGain": 0.785,
+        "crashAvoidance": 0.615
+      },
+      "labelComposite": 67.65671283987524,
+      "labels": {
+        "rhythm": 72.99689353766213,
+        "aesthetic": 48.40833504199792,
+        "stageGain": 100,
+        "crashAvoid": 74.61714020163424,
+        "composite": 67.65671283987524
+      },
+      "raw": {
+        "rhythm": 0.2559627224519456,
+        "maSupport": 0.8314179463067704,
+        "upWaveSmoothness": 0.8598327247770868,
+        "yangDominance": 0.6333333333333333,
+        "upperShadowClean": 0.43485316410642927,
+        "stageGain": 192.63808516226854,
+        "crashAvoidance": 0.6192571030245136,
+        "windowLen": 90,
+        "passesGate": true
+      },
+      "detail": {
+        "swingDensity": 3,
+        "lag1Autocorr": 0.029968935376621295,
+        "maSupportRaw": 0.8314179463067704,
+        "upWaveSmoothnessRaw": 0.8598327247770868,
+        "yangDominanceRaw": 0.6333333333333333,
+        "upperShadowCleanRaw": 0.43485316410642927,
+        "stageGainRaw": 192.63808516226854,
+        "rWindow": 213.03418803418808,
+        "crashAvoidanceRaw": 0.6192571030245136,
+        "windowLen": 90,
+        "passesGate": true
+      }
+    },
+    {
+      "code": "601126",
+      "gain60dPct": 90.90696587190277,
+      "wcmiComposite": 534.65,
+      "wcmiPct": {
+        "rhythm": 0.115,
+        "maSupport": 0.585,
+        "upWaveSmoothness": 0.835,
+        "yangDominance": 0.64,
+        "upperShadowClean": 0.495,
+        "stageGain": 0.575,
+        "crashAvoidance": 0.495
+      },
+      "labelComposite": 65.55151730615694,
+      "labels": {
+        "rhythm": 70,
+        "aesthetic": 48.371838922714254,
+        "stageGain": 100,
+        "crashAvoid": 66.42094895467764,
+        "composite": 65.55151730615694
+      },
+      "raw": {
+        "rhythm": 0.08716521262764898,
+        "maSupport": 0.7466136573738674,
+        "upWaveSmoothness": 0.8841326333700785,
+        "yangDominance": 0.5777777777777777,
+        "upperShadowClean": 0.465497009186975,
+        "stageGain": 158.21977653117835,
+        "crashAvoidance": 0.4963142343201645,
+        "windowLen": 90,
+        "passesGate": true
+      },
+      "detail": {
+        "swingDensity": 3.8333333333333335,
+        "lag1Autocorr": -0.11069565614362589,
+        "maSupportRaw": 0.7466136573738674,
+        "upWaveSmoothnessRaw": 0.8841326333700785,
+        "yangDominanceRaw": 0.5777777777777777,
+        "upperShadowCleanRaw": 0.465497009186975,
+        "stageGainRaw": 158.21977653117835,
+        "rWindow": 171.50930851063833,
+        "crashAvoidanceRaw": 0.4963142343201645,
+        "windowLen": 90,
+        "passesGate": true
+      }
+    },
+    {
+      "code": "601133",
+      "gain60dPct": 95.22687094873308,
+      "wcmiComposite": 488.65,
+      "wcmiPct": {
+        "rhythm": 0.175,
+        "maSupport": 0.205,
+        "upWaveSmoothness": 0.075,
+        "yangDominance": 0.08,
+        "upperShadowClean": 0.395,
+        "stageGain": 0.175,
+        "crashAvoidance": 0.695
+      },
+      "labelComposite": 59.93089697273538,
+      "labels": {
+        "rhythm": 70,
+        "aesthetic": 41.73592705557965,
+        "stageGain": 75.67465795723251,
+        "crashAvoid": 77.57399103139016,
+        "composite": 59.93089697273538
+      },
+      "raw": {
+        "rhythm": 0.12588705843344072,
+        "maSupport": 0.5939775092648457,
+        "upWaveSmoothness": 0.7218505907306827,
+        "yangDominance": 0.5,
+        "upperShadowClean": 0.44164671639985476,
+        "stageGain": 113.51198693584877,
+        "crashAvoidance": 0.6636098654708525,
+        "windowLen": 90,
+        "passesGate": true
+      },
+      "detail": {
+        "swingDensity": 3.8333333333333335,
+        "lag1Autocorr": -0.07842745130546612,
+        "maSupportRaw": 0.5939775092648457,
+        "upWaveSmoothnessRaw": 0.7218505907306827,
+        "yangDominanceRaw": 0.5,
+        "upperShadowCleanRaw": 0.44164671639985476,
+        "stageGainRaw": 113.51198693584877,
+        "rWindow": 115.12987012987014,
+        "crashAvoidanceRaw": 0.6636098654708525,
+        "windowLen": 90,
+        "passesGate": true
+      }
+    },
+    {
+      "code": "603045",
+      "gain60dPct": 124.51635596201194,
+      "wcmiComposite": 645.75,
+      "wcmiPct": {
+        "rhythm": 0.515,
+        "maSupport": 0.755,
+        "upWaveSmoothness": 0.705,
+        "yangDominance": 0.83,
+        "upperShadowClean": 0.435,
+        "stageGain": 0.825,
+        "crashAvoidance": 0.555
+      },
+      "labelComposite": 70.62348328361291,
+      "labels": {
+        "rhythm": 96.70292059522052,
+        "aesthetic": 47.81557270089693,
+        "stageGain": 100,
+        "crashAvoid": 73.00518739463108,
+        "composite": 70.62348328361291
+      },
+      "raw": {
+        "rhythm": 0.2595649528573538,
+        "maSupport": 0.8078992557225488,
+        "upWaveSmoothness": 0.8570360841063025,
+        "yangDominance": 0.6,
+        "upperShadowClean": 0.44750783137234906,
+        "stageGain": 200.38952761132774,
+        "crashAvoidance": 0.5950778109194662,
+        "windowLen": 90,
+        "passesGate": true
+      },
+      "detail": {
+        "swingDensity": 3.1666666666666665,
+        "lag1Autocorr": 0.26702920595220514,
+        "maSupportRaw": 0.8078992557225488,
+        "upWaveSmoothnessRaw": 0.8570360841063025,
+        "yangDominanceRaw": 0.6,
+        "upperShadowCleanRaw": 0.44750783137234906,
+        "stageGainRaw": 200.38952761132774,
+        "rWindow": 224.83460559796438,
+        "crashAvoidanceRaw": 0.5950778109194662,
+        "windowLen": 90,
+        "passesGate": true
+      }
+    },
+    {
+      "code": "603063",
+      "gain60dPct": 88.64168035438753,
+      "wcmiComposite": 625.6999999999999,
+      "wcmiPct": {
+        "rhythm": 0.305,
+        "maSupport": 0.075,
+        "upWaveSmoothness": 0.685,
+        "yangDominance": 0.185,
+        "upperShadowClean": 0.665,
+        "stageGain": 0.005,
+        "crashAvoidance": 0.96
+      },
+      "labelComposite": 62.30432827187783,
+      "labels": {
+        "rhythm": 70,
+        "aesthetic": 46.60109673728565,
+        "stageGain": 56.39139592271863,
+        "crashAvoid": 97.77777777777779,
+        "composite": 62.30432827187783
+      },
+      "raw": {
+        "rhythm": 0.18389865435900782,
+        "maSupport": 0.5103251468081484,
+        "upWaveSmoothness": 0.8532031880340971,
+        "yangDominance": 0.5222222222222223,
+        "upperShadowClean": 0.4835152077670254,
+        "stageGain": 84.58709388407794,
+        "crashAvoidance": 0.9666666666666667,
+        "windowLen": 90,
+        "passesGate": true
+      },
+      "detail": {
+        "swingDensity": 4.5,
+        "lag1Autocorr": -0.030084454700826862,
+        "maSupportRaw": 0.5103251468081484,
+        "upWaveSmoothnessRaw": 0.8532031880340971,
+        "yangDominanceRaw": 0.5222222222222223,
+        "upperShadowCleanRaw": 0.4835152077670254,
+        "stageGainRaw": 84.58709388407794,
+        "rWindow": 72.27011711943757,
+        "crashAvoidanceRaw": 0.9666666666666667,
+        "windowLen": 90,
+        "passesGate": true
+      }
+    },
+    {
+      "code": "603115",
+      "gain60dPct": 301.74772036474155,
+      "wcmiComposite": 825.8499999999999,
+      "wcmiPct": {
+        "rhythm": 0.615,
+        "maSupport": 0.985,
+        "upWaveSmoothness": 0.895,
+        "yangDominance": 0.83,
+        "upperShadowClean": 0.525,
+        "stageGain": 0.985,
+        "crashAvoidance": 0.755
+      },
+      "labelComposite": 69.94828051526237,
+      "labels": {
+        "rhythm": 75.72770441685695,
+        "aesthetic": 49.26130309154527,
+        "stageGain": 100,
+        "crashAvoid": 82.10769230769229,
+        "composite": 69.94828051526237
+      },
+      "raw": {
+        "rhythm": 0.28873245300228345,
+        "maSupport": 0.9266666666666666,
+        "upWaveSmoothness": 0.8950302754533236,
+        "yangDominance": 0.6,
+        "upperShadowClean": 0.46615518154182056,
+        "stageGain": 393.1245495767314,
+        "crashAvoidance": 0.7316153846153843,
+        "windowLen": 90,
+        "passesGate": true
+      },
+      "detail": {
+        "swingDensity": 3.6666666666666665,
+        "lag1Autocorr": 0.057277044168569484,
+        "maSupportRaw": 0.9266666666666666,
+        "upWaveSmoothnessRaw": 0.8950302754533236,
+        "yangDominanceRaw": 0.6,
+        "upperShadowCleanRaw": 0.46615518154182056,
+        "stageGainRaw": 393.1245495767314,
+        "rWindow": 465.1523249599145,
+        "crashAvoidanceRaw": 0.7316153846153843,
+        "windowLen": 90,
+        "passesGate": true
+      }
+    },
+    {
+      "code": "603256",
+      "gain60dPct": 97.73440698785313,
+      "wcmiComposite": 740.25,
+      "wcmiPct": {
+        "rhythm": 0.895,
+        "maSupport": 0.865,
+        "upWaveSmoothness": 0.615,
+        "yangDominance": 0.74,
+        "upperShadowClean": 0.815,
+        "stageGain": 0.915,
+        "crashAvoidance": 0.655
+      },
+      "labelComposite": 69.68541807300288,
+      "labels": {
+        "rhythm": 83.61059639897002,
+        "aesthetic": 48.75097277377588,
+        "stageGain": 100,
+        "crashAvoid": 76.02945432479112,
+        "composite": 69.68541807300288
+      },
+      "raw": {
+        "rhythm": 0.38332715678764023,
+        "maSupport": 0.8383333333333334,
+        "upWaveSmoothness": 0.8428509402877813,
+        "yangDominance": 0.5888888888888889,
+        "upperShadowClean": 0.5099157484410312,
+        "stageGain": 258.1240753061388,
+        "crashAvoidance": 0.6404418148718669,
+        "windowLen": 90,
+        "passesGate": true
+      },
+      "detail": {
+        "swingDensity": 3.8333333333333335,
+        "lag1Autocorr": 0.13610596398970015,
+        "maSupportRaw": 0.8383333333333334,
+        "upWaveSmoothnessRaw": 0.8428509402877813,
+        "yangDominanceRaw": 0.5888888888888889,
+        "upperShadowCleanRaw": 0.5099157484410312,
+        "stageGainRaw": 258.1240753061388,
+        "rWindow": 293.588698723173,
+        "crashAvoidanceRaw": 0.6404418148718669,
+        "windowLen": 90,
+        "passesGate": true
+      }
+    },
+    {
+      "code": "603311",
+      "gain60dPct": 95.61128526645768,
+      "wcmiComposite": 556.5,
+      "wcmiPct": {
+        "rhythm": 0.575,
+        "maSupport": 0.525,
+        "upWaveSmoothness": 0.675,
+        "yangDominance": 0.375,
+        "upperShadowClean": 0.375,
+        "stageGain": 0.225,
+        "crashAvoidance": 0.725
+      },
+      "labelComposite": 66.27676171107657,
+      "labels": {
+        "rhythm": 95.49661144266915,
+        "aesthetic": 45.92813910920244,
+        "stageGain": 76.63404615198743,
+        "crashAvoid": 79.78899082568806,
+        "composite": 66.27676171107657
+      },
+      "raw": {
+        "rhythm": 0.27404066268797034,
+        "maSupport": 0.7157206014321595,
+        "upWaveSmoothness": 0.8487588838262659,
+        "yangDominance": 0.5444444444444444,
+        "upperShadowClean": 0.43676503008306566,
+        "stageGain": 114.95106922798115,
+        "crashAvoidance": 0.6968348623853209,
+        "windowLen": 90,
+        "passesGate": true
+      },
+      "detail": {
+        "swingDensity": 2.6666666666666665,
+        "lag1Autocorr": 0.2549661144266914,
+        "maSupportRaw": 0.7157206014321595,
+        "upWaveSmoothnessRaw": 0.8487588838262659,
+        "yangDominanceRaw": 0.5444444444444444,
+        "upperShadowCleanRaw": 0.43676503008306566,
+        "stageGainRaw": 114.95106922798115,
+        "rWindow": 109.6774193548387,
+        "crashAvoidanceRaw": 0.6968348623853209,
+        "windowLen": 90,
+        "passesGate": true
+      }
+    },
+    {
+      "code": "603316",
+      "gain60dPct": 101.1070110701107,
+      "wcmiComposite": 468.84999999999997,
+      "wcmiPct": {
+        "rhythm": 0.855,
+        "maSupport": 0.035,
+        "upWaveSmoothness": 0.405,
+        "yangDominance": 0.11,
+        "upperShadowClean": 0.745,
+        "stageGain": 0.025,
+        "crashAvoidance": 0.705
+      },
+      "labelComposite": 61.85142564729191,
+      "labels": {
+        "rhythm": 87.33156235953675,
+        "aesthetic": 44.94023902011477,
+        "stageGain": 64.40613026819922,
+        "crashAvoid": 78.23678840334955,
+        "composite": 61.85142564729191
+      },
+      "raw": {
+        "rhythm": 0.372021251685559,
+        "maSupport": 0.42769881324822906,
+        "upWaveSmoothness": 0.7886013944930331,
+        "yangDominance": 0.5111111111111111,
+        "upperShadowClean": 0.49362006706796435,
+        "stageGain": 96.60919540229884,
+        "crashAvoidance": 0.6735518260502431,
+        "windowLen": 90,
+        "passesGate": true
+      },
+      "detail": {
+        "swingDensity": 3.6666666666666665,
+        "lag1Autocorr": 0.1733156235953675,
+        "maSupportRaw": 0.42769881324822906,
+        "upWaveSmoothnessRaw": 0.7886013944930331,
+        "yangDominanceRaw": 0.5111111111111111,
+        "upperShadowCleanRaw": 0.49362006706796435,
+        "stageGainRaw": 96.60919540229884,
+        "rWindow": 87.93103448275862,
+        "crashAvoidanceRaw": 0.6735518260502431,
+        "windowLen": 90,
+        "passesGate": true
+      }
+    },
+    {
+      "code": "603538",
+      "gain60dPct": 151.18147448015122,
+      "wcmiComposite": 400.75,
+      "wcmiPct": {
+        "rhythm": 0.415,
+        "maSupport": 0.575,
+        "upWaveSmoothness": 0.375,
+        "yangDominance": 0.28,
+        "upperShadowClean": 0.475,
+        "stageGain": 0.595,
+        "crashAvoidance": 0.305
+      },
+      "labelComposite": 62.36834903339021,
+      "labels": {
+        "rhythm": 71.00314009386003,
+        "aesthetic": 44.706395598469335,
+        "stageGain": 100,
+        "crashAvoid": 57.99999999999999,
+        "composite": 62.36834903339021
+      },
+      "raw": {
+        "rhythm": 0.23203768112632042,
+        "maSupport": 0.7413792044345234,
+        "upWaveSmoothness": 0.7839169713831975,
+        "yangDominance": 0.5333333333333333,
+        "upperShadowClean": 0.4635917271778973,
+        "stageGain": 158.69866551134106,
+        "crashAvoidance": 0.36999999999999983,
+        "windowLen": 90,
+        "passesGate": true
+      },
+      "detail": {
+        "swingDensity": 3.3333333333333335,
+        "lag1Autocorr": 0.010031400938600324,
+        "maSupportRaw": 0.7413792044345234,
+        "upWaveSmoothnessRaw": 0.7839169713831975,
+        "yangDominanceRaw": 0.5333333333333333,
+        "upperShadowCleanRaw": 0.4635917271778973,
+        "stageGainRaw": 158.69866551134106,
+        "rWindow": 176.24740124740123,
+        "crashAvoidanceRaw": 0.36999999999999983,
+        "windowLen": 90,
+        "passesGate": true
+      }
+    },
+    {
+      "code": "603618",
+      "gain60dPct": 149.81389578163774,
+      "wcmiComposite": 612.8499999999999,
+      "wcmiPct": {
+        "rhythm": 0.795,
+        "maSupport": 0.935,
+        "upWaveSmoothness": 0.625,
+        "yangDominance": 0.74,
+        "upperShadowClean": 0.915,
+        "stageGain": 0.955,
+        "crashAvoidance": 0.415
+      },
+      "labelComposite": 67.10461708706775,
+      "labels": {
+        "rhythm": 79.88406571915324,
+        "aesthetic": 49.897036660745556,
+        "stageGain": 100,
+        "crashAvoid": 63.34170365929636,
+        "composite": 67.10461708706775
+      },
+      "raw": {
+        "rhythm": 0.3386087886298389,
+        "maSupport": 0.8605555555555555,
+        "upWaveSmoothness": 0.8461937473569345,
+        "yangDominance": 0.5888888888888889,
+        "upperShadowClean": 0.552193274628443,
+        "stageGain": 342.31989728734095,
+        "crashAvoidance": 0.4501255548894453,
+        "windowLen": 90,
+        "passesGate": true
+      },
+      "detail": {
+        "swingDensity": 3.1666666666666665,
+        "lag1Autocorr": 0.09884065719153239,
+        "maSupportRaw": 0.8605555555555555,
+        "upWaveSmoothnessRaw": 0.8461937473569345,
+        "yangDominanceRaw": 0.5888888888888889,
+        "upperShadowCleanRaw": 0.552193274628443,
+        "stageGainRaw": 342.31989728734095,
+        "rWindow": 399.6277915632754,
+        "crashAvoidanceRaw": 0.4501255548894453,
+        "windowLen": 90,
+        "passesGate": true
+      }
+    },
+    {
+      "code": "603629",
+      "gain60dPct": 199.5496997998666,
+      "wcmiComposite": 401.9,
+      "wcmiPct": {
+        "rhythm": 0.885,
+        "maSupport": 0.995,
+        "upWaveSmoothness": 0.355,
+        "yangDominance": 0.485,
+        "upperShadowClean": 0.975,
+        "stageGain": 0.995,
+        "crashAvoidance": 0.065
+      },
+      "labelComposite": 63.10175300728155,
+      "labels": {
+        "rhythm": 83.4192743948911,
+        "aesthetic": 48.519899168693335,
+        "stageGain": 100,
+        "crashAvoid": 43.77453611067943,
+        "composite": 63.10175300728155
+      },
+      "raw": {
+        "rhythm": 0.38103129273869324,
+        "maSupport": 0.9466666666666667,
+        "upWaveSmoothness": 0.7780277785033386,
+        "yangDominance": 0.5555555555555556,
+        "upperShadowClean": 0.5977459660221726,
+        "stageGain": 481.3995347586402,
+        "crashAvoidance": 0.1566180416601915,
+        "windowLen": 90,
+        "passesGate": true
+      },
+      "detail": {
+        "swingDensity": 3.3333333333333335,
+        "lag1Autocorr": 0.134192743948911,
+        "maSupportRaw": 0.9466666666666667,
+        "upWaveSmoothnessRaw": 0.7780277785033386,
+        "yangDominanceRaw": 0.5555555555555556,
+        "upperShadowCleanRaw": 0.5977459660221726,
+        "stageGainRaw": 481.3995347586402,
+        "rWindow": 573.9587242026266,
+        "crashAvoidanceRaw": 0.1566180416601915,
+        "windowLen": 90,
+        "passesGate": true
+      }
+    },
+    {
+      "code": "603738",
+      "gain60dPct": 179.0408525754885,
+      "wcmiComposite": 576.45,
+      "wcmiPct": {
+        "rhythm": 0.425,
+        "maSupport": 0.895,
+        "upWaveSmoothness": 0.665,
+        "yangDominance": 0.56,
+        "upperShadowClean": 0.695,
+        "stageGain": 0.675,
+        "crashAvoidance": 0.505
+      },
+      "labelComposite": 65.54698495144082,
+      "labels": {
+        "rhythm": 71.8095742039633,
+        "aesthetic": 47.727016764960865,
+        "stageGain": 100,
+        "crashAvoid": 66.49195638306965,
+        "composite": 65.54698495144082
+      },
+      "raw": {
+        "rhythm": 0.24171489044755953,
+        "maSupport": 0.8437821044989843,
+        "upWaveSmoothness": 0.8480164097762698,
+        "yangDominance": 0.5666666666666667,
+        "upperShadowClean": 0.4859597731105084,
+        "stageGain": 180.3204784342153,
+        "crashAvoidance": 0.4973793457460448,
+        "windowLen": 90,
+        "passesGate": true
+      },
+      "detail": {
+        "swingDensity": 3,
+        "lag1Autocorr": 0.018095742039632896,
+        "maSupportRaw": 0.8437821044989843,
+        "upWaveSmoothnessRaw": 0.8480164097762698,
+        "yangDominanceRaw": 0.5666666666666667,
+        "upperShadowCleanRaw": 0.4859597731105084,
+        "stageGainRaw": 180.3204784342153,
+        "rWindow": 200,
+        "crashAvoidanceRaw": 0.4973793457460448,
+        "windowLen": 90,
+        "passesGate": true
+      }
+    },
+    {
+      "code": "603773",
+      "gain60dPct": 120.58263000272258,
+      "wcmiComposite": 198.7,
+      "wcmiPct": {
+        "rhythm": 0.365,
+        "maSupport": 0.375,
+        "upWaveSmoothness": 0.285,
+        "yangDominance": 0.375,
+        "upperShadowClean": 0.775,
+        "stageGain": 0.355,
+        "crashAvoidance": 0.075
+      },
+      "labelComposite": 56.862547375066654,
+      "labels": {
+        "rhythm": 70,
+        "aesthetic": 45.36461845533114,
+        "stageGain": 85.72601275668866,
+        "crashAvoid": 44.01633259414952,
+        "composite": 56.862547375066654
+      },
+      "raw": {
+        "rhythm": 0.2015996371542996,
+        "maSupport": 0.6675403860698095,
+        "upWaveSmoothness": 0.7658932376784684,
+        "yangDominance": 0.5444444444444444,
+        "upperShadowClean": 0.4975716522296344,
+        "stageGain": 128.589019135033,
+        "crashAvoidance": 0.16024498891224276,
+        "windowLen": 90,
+        "passesGate": true
+      },
+      "detail": {
+        "swingDensity": 3.8333333333333335,
+        "lag1Autocorr": -0.015333635704750364,
+        "maSupportRaw": 0.6675403860698095,
+        "upWaveSmoothnessRaw": 0.7658932376784684,
+        "yangDominanceRaw": 0.5444444444444444,
+        "upperShadowCleanRaw": 0.4975716522296344,
+        "stageGainRaw": 128.589019135033,
+        "rWindow": 128.99943470887504,
+        "crashAvoidanceRaw": 0.16024498891224276,
+        "windowLen": 90,
+        "passesGate": true
+      }
+    },
+    {
+      "code": "603779",
+      "gain60dPct": 110.7402031930334,
+      "wcmiComposite": 695.5999999999999,
+      "wcmiPct": {
+        "rhythm": 0.065,
+        "maSupport": 0.015,
+        "upWaveSmoothness": 0.155,
+        "yangDominance": 0.015,
+        "upperShadowClean": 0.955,
+        "stageGain": 0.305,
+        "crashAvoidance": 0.96
+      },
+      "labelComposite": 71.00777846604166,
+      "labels": {
+        "rhythm": 100,
+        "aesthetic": 43.53704795317724,
+        "stageGain": 84.30275665778164,
+        "crashAvoid": 97.77777777777779,
+        "composite": 71.00777846604166
+      },
+      "raw": {
+        "rhythm": -0.011800436873782127,
+        "maSupport": 0.33760008213004455,
+        "upWaveSmoothness": 0.7377677420722091,
+        "yangDominance": 0.43333333333333335,
+        "upperShadowClean": 0.5670048419002469,
+        "stageGain": 126.45413498667247,
+        "crashAvoidance": 0.9666666666666667,
+        "windowLen": 90,
+        "passesGate": true
+      },
+      "detail": {
+        "swingDensity": 3,
+        "lag1Autocorr": 0.49316703072815177,
+        "maSupportRaw": 0.33760008213004455,
+        "upWaveSmoothnessRaw": 0.7377677420722091,
+        "yangDominanceRaw": 0.43333333333333335,
+        "upperShadowCleanRaw": 0.5670048419002469,
+        "stageGainRaw": 126.45413498667247,
+        "rWindow": 120.33383915022762,
+        "crashAvoidanceRaw": 0.9666666666666667,
+        "windowLen": 90,
+        "passesGate": true
+      }
+    },
+    {
+      "code": "603897",
+      "gain60dPct": 106.00222304557244,
+      "wcmiComposite": 550.45,
+      "wcmiPct": {
+        "rhythm": 0.495,
+        "maSupport": 0.405,
+        "upWaveSmoothness": 0.905,
+        "yangDominance": 0.9,
+        "upperShadowClean": 0.765,
+        "stageGain": 0.115,
+        "crashAvoidance": 0.715
+      },
+      "labelComposite": 63.60228186638905,
+      "labels": {
+        "rhythm": 73.21773894395805,
+        "aesthetic": 50.26966656815687,
+        "stageGain": 71.69256541360359,
+        "crashAvoid": 78.29878993202014,
+        "composite": 63.60228186638905
+      },
+      "raw": {
+        "rhythm": 0.2586128673274967,
+        "maSupport": 0.6769773427564121,
+        "upWaveSmoothness": 0.8956719116853508,
+        "yangDominance": 0.6111111111111112,
+        "upperShadowClean": 0.49723386650224866,
+        "stageGain": 107.53884812040538,
+        "crashAvoidance": 0.6744818489803022,
+        "windowLen": 90,
+        "passesGate": true
+      },
+      "detail": {
+        "swingDensity": 3.6666666666666665,
+        "lag1Autocorr": 0.032177389439580574,
+        "maSupportRaw": 0.6769773427564121,
+        "upWaveSmoothnessRaw": 0.8956719116853508,
+        "yangDominanceRaw": 0.6111111111111112,
+        "upperShadowCleanRaw": 0.49723386650224866,
+        "stageGainRaw": 107.53884812040538,
+        "rWindow": 104.41176470588236,
+        "crashAvoidanceRaw": 0.6744818489803022,
+        "windowLen": 90,
+        "passesGate": true
+      }
+    },
+    {
+      "code": "603938",
+      "gain60dPct": 92.46575342465752,
+      "wcmiComposite": 528.45,
+      "wcmiPct": {
+        "rhythm": 0.965,
+        "maSupport": 0.315,
+        "upWaveSmoothness": 0.725,
+        "yangDominance": 0.64,
+        "upperShadowClean": 0.735,
+        "stageGain": 0.525,
+        "crashAvoidance": 0.515
+      },
+      "labelComposite": 68.0943361349336,
+      "labels": {
+        "rhythm": 85.29848361826457,
+        "aesthetic": 48.384501749716755,
+        "stageGain": 100,
+        "crashAvoid": 67.63268902410688,
+        "composite": 68.0943361349336
+      },
+      "raw": {
+        "rhythm": 0.3964181965808253,
+        "maSupport": 0.6388373882084123,
+        "upWaveSmoothness": 0.8596092032140421,
+        "yangDominance": 0.5777777777777777,
+        "upperShadowClean": 0.4916047151147662,
+        "stageGain": 152.52772491182463,
+        "crashAvoidance": 0.5144903353616032,
+        "windowLen": 90,
+        "passesGate": true
+      },
+      "detail": {
+        "swingDensity": 3.3333333333333335,
+        "lag1Autocorr": 0.15298483618264563,
+        "maSupportRaw": 0.6388373882084123,
+        "upWaveSmoothnessRaw": 0.8596092032140421,
+        "yangDominanceRaw": 0.5777777777777777,
+        "upperShadowCleanRaw": 0.4916047151147662,
+        "stageGainRaw": 152.52772491182463,
+        "rWindow": 164.67817896389326,
+        "crashAvoidanceRaw": 0.5144903353616032,
+        "windowLen": 90,
+        "passesGate": true
+      }
+    },
+    {
+      "code": "603950",
+      "gain60dPct": 123.80148548278194,
+      "wcmiComposite": 655.45,
+      "wcmiPct": {
+        "rhythm": 0.235,
+        "maSupport": 0.275,
+        "upWaveSmoothness": 0.455,
+        "yangDominance": 0.06,
+        "upperShadowClean": 0.925,
+        "stageGain": 0.325,
+        "crashAvoidance": 0.855
+      },
+      "labelComposite": 69.83712729538536,
+      "labels": {
+        "rhythm": 100,
+        "aesthetic": 45.836563532693944,
+        "stageGain": 84.83839811909644,
+        "crashAvoid": 86.214970409269,
+        "composite": 69.83712729538536
+      },
+      "raw": {
+        "rhythm": 0.14723428361583762,
+        "maSupport": 0.6196653840043235,
+        "upWaveSmoothness": 0.7921246297665565,
+        "yangDominance": 0.4777777777777778,
+        "upperShadowClean": 0.5573634799233802,
+        "stageGain": 127.25759717864466,
+        "crashAvoidance": 0.793224556139035,
+        "windowLen": 90,
+        "passesGate": true
+      },
+      "detail": {
+        "swingDensity": 2.6666666666666665,
+        "lag1Autocorr": 0.360638096986802,
+        "maSupportRaw": 0.6196653840043235,
+        "upWaveSmoothnessRaw": 0.7921246297665565,
+        "yangDominanceRaw": 0.4777777777777778,
+        "upperShadowCleanRaw": 0.5573634799233802,
+        "stageGainRaw": 127.25759717864466,
+        "rWindow": 132.84158763610822,
+        "crashAvoidanceRaw": 0.793224556139035,
+        "windowLen": 90,
+        "passesGate": true
+      }
+    },
+    {
+      "code": "688001",
+      "gain60dPct": 101.41779788838612,
+      "wcmiComposite": 532.05,
+      "wcmiPct": {
+        "rhythm": 0.525,
+        "maSupport": 0.415,
+        "upWaveSmoothness": 0.475,
+        "yangDominance": 0.64,
+        "upperShadowClean": 0.565,
+        "stageGain": 0.315,
+        "crashAvoidance": 0.635
+      },
+      "labelComposite": 63.991243319678034,
+      "labels": {
+        "rhythm": 73.3878206437424,
+        "aesthetic": 46.50862704513729,
+        "stageGain": 84.52207582557044,
+        "crashAvoid": 75.74886443845402,
+        "composite": 63.991243319678034
+      },
+      "raw": {
+        "rhythm": 0.26065384772490896,
+        "maSupport": 0.6811453030746105,
+        "upWaveSmoothness": 0.8011034156005818,
+        "yangDominance": 0.5777777777777777,
+        "upperShadowClean": 0.47465243539638613,
+        "stageGain": 126.78311373835567,
+        "crashAvoidance": 0.6362329665768103,
+        "windowLen": 90,
+        "passesGate": true
+      },
+      "detail": {
+        "swingDensity": 4.166666666666667,
+        "lag1Autocorr": 0.03387820643742408,
+        "maSupportRaw": 0.6811453030746105,
+        "upWaveSmoothnessRaw": 0.8011034156005818,
+        "yangDominanceRaw": 0.5777777777777777,
+        "upperShadowCleanRaw": 0.47465243539638613,
+        "stageGainRaw": 126.78311373835567,
+        "rWindow": 121.2392312789927,
+        "crashAvoidanceRaw": 0.6362329665768103,
+        "windowLen": 90,
+        "passesGate": true
+      }
+    },
+    {
+      "code": "688048",
+      "gain60dPct": 146.30511281308222,
+      "wcmiComposite": 314,
+      "wcmiPct": {
+        "rhythm": 0.165,
+        "maSupport": 0.725,
+        "upWaveSmoothness": 0.445,
+        "yangDominance": 0.485,
+        "upperShadowClean": 0.305,
+        "stageGain": 0.665,
+        "crashAvoidance": 0.115
+      },
+      "labelComposite": 59.75729331371177,
+      "labels": {
+        "rhythm": 70,
+        "aesthetic": 44.52189108562574,
+        "stageGain": 100,
+        "crashAvoid": 46.1122116259009,
+        "composite": 59.75729331371177
+      },
+      "raw": {
+        "rhythm": 0.12158009171588469,
+        "maSupport": 0.8009487366649296,
+        "upWaveSmoothness": 0.791736254594916,
+        "yangDominance": 0.5555555555555556,
+        "upperShadowClean": 0.42557434590790855,
+        "stageGain": 174.79497206849334,
+        "crashAvoidance": 0.1916831743885135,
+        "windowLen": 90,
+        "passesGate": true
+      },
+      "detail": {
+        "swingDensity": 3.8333333333333335,
+        "lag1Autocorr": -0.08201659023676282,
+        "maSupportRaw": 0.8009487366649296,
+        "upWaveSmoothnessRaw": 0.791736254594916,
+        "yangDominanceRaw": 0.5555555555555556,
+        "upperShadowCleanRaw": 0.42557434590790855,
+        "stageGainRaw": 174.79497206849334,
+        "rWindow": 184.77861986437978,
+        "crashAvoidanceRaw": 0.1916831743885135,
+        "windowLen": 90,
+        "passesGate": true
+      }
+    },
+    {
+      "code": "688069",
+      "gain60dPct": 143.2950191570881,
+      "wcmiComposite": 798.45,
+      "wcmiPct": {
+        "rhythm": 0.905,
+        "maSupport": 0.765,
+        "upWaveSmoothness": 0.265,
+        "yangDominance": 0.64,
+        "upperShadowClean": 0.825,
+        "stageGain": 0.645,
+        "crashAvoidance": 0.905
+      },
+      "labelComposite": 71.95324362959896,
+      "labels": {
+        "rhythm": 86.24100276122428,
+        "aesthetic": 46.41902922754154,
+        "stageGain": 100,
+        "crashAvoid": 90.64265031510813,
+        "composite": 71.95324362959896
+      },
+      "raw": {
+        "rhythm": 0.38510796686530857,
+        "maSupport": 0.8092805066956166,
+        "upWaveSmoothness": 0.7608041438759089,
+        "yangDominance": 0.5777777777777777,
+        "upperShadowClean": 0.510086442381019,
+        "stageGain": 169.48040701183044,
+        "crashAvoidance": 0.8596397547266219,
+        "windowLen": 90,
+        "passesGate": true
+      },
+      "detail": {
+        "swingDensity": 3.1666666666666665,
+        "lag1Autocorr": 0.16241002761224285,
+        "maSupportRaw": 0.8092805066956166,
+        "upWaveSmoothnessRaw": 0.7608041438759089,
+        "yangDominanceRaw": 0.5777777777777777,
+        "upperShadowCleanRaw": 0.510086442381019,
+        "stageGainRaw": 169.48040701183044,
+        "rWindow": 183.10298707088722,
+        "crashAvoidanceRaw": 0.8596397547266219,
+        "windowLen": 90,
+        "passesGate": true
+      }
+    },
+    {
+      "code": "688072",
+      "gain60dPct": 91.29666445769828,
+      "wcmiComposite": 595.2,
+      "wcmiPct": {
+        "rhythm": 0.135,
+        "maSupport": 0.215,
+        "upWaveSmoothness": 0.555,
+        "yangDominance": 0.185,
+        "upperShadowClean": 0.245,
+        "stageGain": 0.015,
+        "crashAvoidance": 0.925
+      },
+      "labelComposite": 61.41898328134431,
+      "labels": {
+        "rhythm": 70,
+        "aesthetic": 44.20798287290501,
+        "stageGain": 59.57139938712973,
+        "crashAvoid": 95.55555555555556,
+        "composite": 61.41898328134431
+      },
+      "raw": {
+        "rhythm": 0.10006343729541345,
+        "maSupport": 0.5971348855773874,
+        "upWaveSmoothness": 0.8200214002889823,
+        "yangDominance": 0.5222222222222223,
+        "upperShadowClean": 0.4201043435492223,
+        "stageGain": 89.3570990806946,
+        "crashAvoidance": 0.9333333333333333,
+        "windowLen": 90,
+        "passesGate": true
+      },
+      "detail": {
+        "swingDensity": 3.8333333333333335,
+        "lag1Autocorr": -0.09994713558715548,
+        "maSupportRaw": 0.5971348855773874,
+        "upWaveSmoothnessRaw": 0.8200214002889823,
+        "yangDominanceRaw": 0.5222222222222223,
+        "upperShadowCleanRaw": 0.4201043435492223,
+        "stageGainRaw": 89.3570990806946,
+        "rWindow": 83.69696969696972,
+        "crashAvoidanceRaw": 0.9333333333333333,
+        "windowLen": 90,
+        "passesGate": true
+      }
+    },
+    {
+      "code": "688127",
+      "gain60dPct": 93.64372469635627,
+      "wcmiComposite": 684.2500000000001,
+      "wcmiPct": {
+        "rhythm": 0.045,
+        "maSupport": 0.955,
+        "upWaveSmoothness": 0.965,
+        "yangDominance": 0.93,
+        "upperShadowClean": 0.105,
+        "stageGain": 0.445,
+        "crashAvoidance": 0.785
+      },
+      "labelComposite": 67.77334498209567,
+      "labels": {
+        "rhythm": 70,
+        "aesthetic": 48.60553706418163,
+        "stageGain": 92.89177170494463,
+        "crashAvoid": 84.11249481112499,
+        "composite": 67.77334498209567
+      },
+      "raw": {
+        "rhythm": -0.016869673392614526,
+        "maSupport": 0.8781760083501728,
+        "upWaveSmoothness": 0.9132709628513768,
+        "yangDominance": 0.6222222222222222,
+        "upperShadowClean": 0.39994653741016495,
+        "stageGain": 139.33765755741695,
+        "crashAvoidance": 0.7616874221668748,
+        "windowLen": 90,
+        "passesGate": true
+      },
+      "detail": {
+        "swingDensity": 3.6666666666666665,
+        "lag1Autocorr": -0.19739139449384546,
+        "maSupportRaw": 0.8781760083501728,
+        "upWaveSmoothnessRaw": 0.9132709628513768,
+        "yangDominanceRaw": 0.6222222222222222,
+        "upperShadowCleanRaw": 0.39994653741016495,
+        "stageGainRaw": 139.33765755741695,
+        "rWindow": 148.5320862561704,
+        "crashAvoidanceRaw": 0.7616874221668748,
+        "windowLen": 90,
+        "passesGate": true
+      }
+    },
+    {
+      "code": "688141",
+      "gain60dPct": 88.59126984126983,
+      "wcmiComposite": 587.8999999999999,
+      "wcmiPct": {
+        "rhythm": 0.665,
+        "maSupport": 0.475,
+        "upWaveSmoothness": 0.035,
+        "yangDominance": 0.375,
+        "upperShadowClean": 0.005,
+        "stageGain": 0.215,
+        "crashAvoidance": 0.835
+      },
+      "labelComposite": 62.23815885184142,
+      "labels": {
+        "rhythm": 77.41079757770841,
+        "aesthetic": 40.55711089991554,
+        "stageGain": 76.6228446360608,
+        "crashAvoid": 85.25635191505498,
+        "composite": 62.23815885184142
+      },
+      "raw": {
+        "rhythm": 0.30892957093250095,
+        "maSupport": 0.6999416220940096,
+        "upWaveSmoothness": 0.6983640894004397,
+        "yangDominance": 0.5444444444444444,
+        "upperShadowClean": 0.37247648593079763,
+        "stageGain": 114.9342669540912,
+        "crashAvoidance": 0.7788452787258248,
+        "windowLen": 90,
+        "passesGate": true
+      },
+      "detail": {
+        "swingDensity": 3.6666666666666665,
+        "lag1Autocorr": 0.07410797577708411,
+        "maSupportRaw": 0.6999416220940096,
+        "upWaveSmoothnessRaw": 0.6983640894004397,
+        "yangDominanceRaw": 0.5444444444444444,
+        "upperShadowCleanRaw": 0.37247648593079763,
+        "stageGainRaw": 114.9342669540912,
+        "rWindow": 118.8579323048584,
+        "crashAvoidanceRaw": 0.7788452787258248,
+        "windowLen": 90,
+        "passesGate": true
+      }
+    },
+    {
+      "code": "688146",
+      "gain60dPct": 187.34831460674158,
+      "wcmiComposite": 589.6500000000001,
+      "wcmiPct": {
+        "rhythm": 0.915,
+        "maSupport": 0.345,
+        "upWaveSmoothness": 0.295,
+        "yangDominance": 0.28,
+        "upperShadowClean": 0.015,
+        "stageGain": 0.795,
+        "crashAvoidance": 0.565
+      },
+      "labelComposite": 66.11064580718718,
+      "labels": {
+        "rhythm": 83.80670630798609,
+        "aesthetic": 42.02429864296423,
+        "stageGain": 100,
+        "crashAvoid": 73.14352735827686,
+        "composite": 66.11064580718718
+      },
+      "raw": {
+        "rhythm": 0.38568047569583314,
+        "maSupport": 0.6566135684294777,
+        "upWaveSmoothness": 0.7673094113090128,
+        "yangDominance": 0.5333333333333333,
+        "upperShadowClean": 0.3737630653919285,
+        "stageGain": 193.0671519348665,
+        "crashAvoidance": 0.597152910374153,
+        "windowLen": 90,
+        "passesGate": true
+      },
+      "detail": {
+        "swingDensity": 3.5,
+        "lag1Autocorr": 0.1380670630798609,
+        "maSupportRaw": 0.6566135684294777,
+        "upWaveSmoothnessRaw": 0.7673094113090128,
+        "yangDominanceRaw": 0.5333333333333333,
+        "upperShadowCleanRaw": 0.3737630653919285,
+        "stageGainRaw": 193.0671519348665,
+        "rWindow": 216.50990099009903,
+        "crashAvoidanceRaw": 0.597152910374153,
+        "windowLen": 90,
+        "passesGate": true
+      }
+    },
+    {
+      "code": "688150",
+      "gain60dPct": 108.67033322549338,
+      "wcmiComposite": 546.9499999999999,
+      "wcmiPct": {
+        "rhythm": 0.285,
+        "maSupport": 0.785,
+        "upWaveSmoothness": 0.955,
+        "yangDominance": 0.83,
+        "upperShadowClean": 0.075,
+        "stageGain": 0.395,
+        "crashAvoidance": 0.595
+      },
+      "labelComposite": 64.53928896503847,
+      "labels": {
+        "rhythm": 70,
+        "aesthetic": 47.80478156100145,
+        "stageGain": 88.4408673861614,
+        "crashAvoid": 74.19481892677767,
+        "composite": 64.53928896503847
+      },
+      "raw": {
+        "rhythm": 0.17902456891204502,
+        "maSupport": 0.8116724050959998,
+        "upWaveSmoothness": 0.9078483341618246,
+        "yangDominance": 0.6,
+        "upperShadowClean": 0.39622620422727306,
+        "stageGain": 132.6613010792421,
+        "crashAvoidance": 0.6129222839016651,
+        "windowLen": 90,
+        "passesGate": true
+      },
+      "detail": {
+        "swingDensity": 3.8333333333333335,
+        "lag1Autocorr": -0.03414619257329584,
+        "maSupportRaw": 0.8116724050959998,
+        "upWaveSmoothnessRaw": 0.9078483341618246,
+        "yangDominanceRaw": 0.6,
+        "upperShadowCleanRaw": 0.39622620422727306,
+        "stageGainRaw": 132.6613010792421,
+        "rWindow": 138.62375138734737,
+        "crashAvoidanceRaw": 0.6129222839016651,
+        "windowLen": 90,
+        "passesGate": true
+      }
+    },
+    {
+      "code": "688218",
+      "gain60dPct": 96.65612291007683,
+      "wcmiComposite": 650.65,
+      "wcmiPct": {
+        "rhythm": 0.925,
+        "maSupport": 0.105,
+        "upWaveSmoothness": 0.755,
+        "yangDominance": 0.9,
+        "upperShadowClean": 0.215,
+        "stageGain": 0.055,
+        "crashAvoidance": 0.96
+      },
+      "labelComposite": 66.87637561176514,
+      "labels": {
+        "rhythm": 84.18930765157093,
+        "aesthetic": 47.53460244493983,
+        "stageGain": 66.5092640412551,
+        "crashAvoid": 97.77777777777779,
+        "composite": 66.87637561176514
+      },
+      "raw": {
+        "rhythm": 0.39027169181885113,
+        "maSupport": 0.5518642675514446,
+        "upWaveSmoothness": 0.8659978399744288,
+        "yangDominance": 0.6111111111111112,
+        "upperShadowClean": 0.41875650403653863,
+        "stageGain": 99.76389606188265,
+        "crashAvoidance": 0.9666666666666667,
+        "windowLen": 90,
+        "passesGate": true
+      },
+      "detail": {
+        "swingDensity": 3.3333333333333335,
+        "lag1Autocorr": 0.14189307651570926,
+        "maSupportRaw": 0.5518642675514446,
+        "upWaveSmoothnessRaw": 0.8659978399744288,
+        "yangDominanceRaw": 0.6111111111111112,
+        "upperShadowCleanRaw": 0.41875650403653863,
+        "stageGainRaw": 99.76389606188265,
+        "rWindow": 90.70990359333919,
+        "crashAvoidanceRaw": 0.9666666666666667,
+        "windowLen": 90,
+        "passesGate": true
+      }
+    },
+    {
+      "code": "688260",
+      "gain60dPct": 106.01836110166612,
+      "wcmiComposite": 299.04999999999995,
+      "wcmiPct": {
+        "rhythm": 0.745,
+        "maSupport": 0.025,
+        "upWaveSmoothness": 0.435,
+        "yangDominance": 0.56,
+        "upperShadowClean": 0.175,
+        "stageGain": 0.265,
+        "crashAvoidance": 0.315
+      },
+      "labelComposite": 59.232747138689774,
+      "labels": {
+        "rhythm": 78.53628685509032,
+        "aesthetic": 44.29334007459332,
+        "stageGain": 79.36746109681401,
+        "crashAvoid": 58.234044287482135,
+        "composite": 59.232747138689774
+      },
+      "raw": {
+        "rhythm": 0.3224354422610839,
+        "maSupport": 0.3439053303583507,
+        "upWaveSmoothness": 0.7901738950988197,
+        "yangDominance": 0.5666666666666667,
+        "upperShadowClean": 0.4114539879146629,
+        "stageGain": 119.05119164522101,
+        "crashAvoidance": 0.373510664312232,
+        "windowLen": 90,
+        "passesGate": true
+      },
+      "detail": {
+        "swingDensity": 3.6666666666666665,
+        "lag1Autocorr": 0.0853628685509032,
+        "maSupportRaw": 0.3439053303583507,
+        "upWaveSmoothnessRaw": 0.7901738950988197,
+        "yangDominanceRaw": 0.5666666666666667,
+        "upperShadowCleanRaw": 0.4114539879146629,
+        "stageGainRaw": 119.05119164522101,
+        "rWindow": 110.38194444444444,
+        "crashAvoidanceRaw": 0.373510664312232,
+        "windowLen": 90,
+        "passesGate": true
+      }
+    },
+    {
+      "code": "688268",
+      "gain60dPct": 143.28632740649908,
+      "wcmiComposite": 249.45,
+      "wcmiPct": {
+        "rhythm": 0.625,
+        "maSupport": 0.715,
+        "upWaveSmoothness": 0.695,
+        "yangDominance": 0.64,
+        "upperShadowClean": 0.505,
+        "stageGain": 0.585,
+        "crashAvoidance": 0.015
+      },
+      "labelComposite": 60.469284015531414,
+      "labels": {
+        "rhythm": 76.15164883270413,
+        "aesthetic": 47.66147513195469,
+        "stageGain": 100,
+        "crashAvoid": 37.99436440623092,
+        "composite": 60.469284015531414
+      },
+      "raw": {
+        "rhythm": 0.2938197859924495,
+        "maSupport": 0.7973830988458082,
+        "upWaveSmoothness": 0.8549591676492594,
+        "yangDominance": 0.5777777777777777,
+        "upperShadowClean": 0.4657482288626925,
+        "stageGain": 158.23533967399928,
+        "crashAvoidance": 0.06991546609346388,
+        "windowLen": 90,
+        "passesGate": true
+      },
+      "detail": {
+        "swingDensity": 3.6666666666666665,
+        "lag1Autocorr": 0.06151648832704122,
+        "maSupportRaw": 0.7973830988458082,
+        "upWaveSmoothnessRaw": 0.8549591676492594,
+        "yangDominanceRaw": 0.5777777777777777,
+        "upperShadowCleanRaw": 0.4657482288626925,
+        "stageGainRaw": 158.23533967399928,
+        "rWindow": 176.56386129987803,
+        "crashAvoidanceRaw": 0.06991546609346388,
+        "windowLen": 90,
+        "passesGate": true
+      }
+    },
+    {
+      "code": "688307",
+      "gain60dPct": 163.35219544858055,
+      "wcmiComposite": 378.8,
+      "wcmiPct": {
+        "rhythm": 0.085,
+        "maSupport": 0.655,
+        "upWaveSmoothness": 0.515,
+        "yangDominance": 0.485,
+        "upperShadowClean": 0.345,
+        "stageGain": 0.635,
+        "crashAvoidance": 0.235
+      },
+      "labelComposite": 61.49695288140185,
+      "labels": {
+        "rhythm": 70,
+        "aesthetic": 45.122713121765884,
+        "stageGain": 100,
+        "crashAvoid": 53.458659883036,
+        "composite": 61.49695288140185
+      },
+      "raw": {
+        "rhythm": 0.04551992320085352,
+        "maSupport": 0.7792971662750793,
+        "upWaveSmoothness": 0.8074784783355127,
+        "yangDominance": 0.5555555555555556,
+        "upperShadowClean": 0.4340815193168164,
+        "stageGain": 168.05972987999235,
+        "crashAvoidance": 0.30187989824553996,
+        "windowLen": 90,
+        "passesGate": true
+      },
+      "detail": {
+        "swingDensity": 3.8333333333333335,
+        "lag1Autocorr": -0.14540006399928873,
+        "maSupportRaw": 0.7792971662750793,
+        "upWaveSmoothnessRaw": 0.8074784783355127,
+        "yangDominanceRaw": 0.5555555555555556,
+        "upperShadowCleanRaw": 0.4340815193168164,
+        "stageGainRaw": 168.05972987999235,
+        "rWindow": 186.32993919145105,
+        "crashAvoidanceRaw": 0.30187989824553996,
+        "windowLen": 90,
+        "passesGate": true
+      }
+    },
+    {
+      "code": "688308",
+      "gain60dPct": 110.13824884792625,
+      "wcmiComposite": 328,
+      "wcmiPct": {
+        "rhythm": 0.075,
+        "maSupport": 0.815,
+        "upWaveSmoothness": 0.825,
+        "yangDominance": 0.955,
+        "upperShadowClean": 0.165,
+        "stageGain": 0.865,
+        "crashAvoidance": 0.005
+      },
+      "labelComposite": 58.95578272146636,
+      "labels": {
+        "rhythm": 70,
+        "aesthetic": 48.42025789955488,
+        "stageGain": 100,
+        "crashAvoid": 33.33333333333333,
+        "composite": 58.95578272146636
+      },
+      "raw": {
+        "rhythm": 0.01856489328446137,
+        "maSupport": 0.8316434285268518,
+        "upWaveSmoothness": 0.8837786018642151,
+        "yangDominance": 0.6333333333333333,
+        "upperShadowClean": 0.4113819464993784,
+        "stageGain": 226.7245027456741,
+        "crashAvoidance": 0,
+        "windowLen": 90,
+        "passesGate": true
+      },
+      "detail": {
+        "swingDensity": 3.6666666666666665,
+        "lag1Autocorr": -0.16786258892961556,
+        "maSupportRaw": 0.8316434285268518,
+        "upWaveSmoothnessRaw": 0.8837786018642151,
+        "yangDominanceRaw": 0.6333333333333333,
+        "upperShadowCleanRaw": 0.4113819464993784,
+        "stageGainRaw": 226.7245027456741,
+        "rWindow": 260.30341340075853,
+        "crashAvoidanceRaw": 0,
+        "windowLen": 90,
+        "passesGate": true
+      }
+    },
+    {
+      "code": "688309",
+      "gain60dPct": 116.68632075471699,
+      "wcmiComposite": 462.65,
+      "wcmiPct": {
+        "rhythm": 0.385,
+        "maSupport": 0.945,
+        "upWaveSmoothness": 0.795,
+        "yangDominance": 0.9,
+        "upperShadowClean": 0.515,
+        "stageGain": 0.725,
+        "crashAvoidance": 0.275
+      },
+      "labelComposite": 63.73964333510055,
+      "labels": {
+        "rhythm": 70,
+        "aesthetic": 49.1522469782391,
+        "stageGain": 100,
+        "crashAvoid": 55.60566097446479,
+        "composite": 63.73964333510055
+      },
+      "raw": {
+        "rhythm": 0.21594363566358293,
+        "maSupport": 0.8752932046991577,
+        "upWaveSmoothness": 0.880259896722589,
+        "yangDominance": 0.6111111111111112,
+        "upperShadowClean": 0.4659659392488721,
+        "stageGain": 184.25228863319938,
+        "crashAvoidance": 0.3340849146169719,
+        "windowLen": 90,
+        "passesGate": true
+      },
+      "detail": {
+        "swingDensity": 3,
+        "lag1Autocorr": -0.003380303613680906,
+        "maSupportRaw": 0.8752932046991577,
+        "upWaveSmoothnessRaw": 0.880259896722589,
+        "yangDominanceRaw": 0.6111111111111112,
+        "upperShadowCleanRaw": 0.4659659392488721,
+        "stageGainRaw": 184.25228863319938,
+        "rWindow": 204.60008288437632,
+        "crashAvoidanceRaw": 0.3340849146169719,
+        "windowLen": 90,
+        "passesGate": true
+      }
+    },
+    {
+      "code": "688313",
+      "gain60dPct": 90.81609456694702,
+      "wcmiComposite": 143.5,
+      "wcmiPct": {
+        "rhythm": 0.325,
+        "maSupport": 0.055,
+        "upWaveSmoothness": 0.095,
+        "yangDominance": 0.485,
+        "upperShadowClean": 0.255,
+        "stageGain": 0.085,
+        "crashAvoidance": 0.155
+      },
+      "labelComposite": 53.29190251601612,
+      "labels": {
+        "rhythm": 70,
+        "aesthetic": 42.712938360846714,
+        "stageGain": 68.2553747016074,
+        "crashAvoid": 49.600026566568125,
+        "composite": 53.29190251601612
+      },
+      "raw": {
+        "rhythm": 0.1896367370337016,
+        "maSupport": 0.4851559035934635,
+        "upWaveSmoothness": 0.7263618432221763,
+        "yangDominance": 0.5555555555555556,
+        "upperShadowClean": 0.4217485766202018,
+        "stageGain": 102.38306205241109,
+        "crashAvoidance": 0.24400039849852184,
+        "windowLen": 90,
+        "passesGate": true
+      },
+      "detail": {
+        "swingDensity": 4.333333333333333,
+        "lag1Autocorr": -0.025302719138582046,
+        "maSupportRaw": 0.4851559035934635,
+        "upWaveSmoothnessRaw": 0.7263618432221763,
+        "yangDominanceRaw": 0.5555555555555556,
+        "upperShadowCleanRaw": 0.4217485766202018,
+        "stageGainRaw": 102.38306205241109,
+        "rWindow": 89.09664338815048,
+        "crashAvoidanceRaw": 0.24400039849852184,
+        "windowLen": 90,
+        "passesGate": true
+      }
+    },
+    {
+      "code": "688328",
+      "gain60dPct": 113.02828325901757,
+      "wcmiComposite": 176.14999999999998,
+      "wcmiPct": {
+        "rhythm": 0.345,
+        "maSupport": 0.615,
+        "upWaveSmoothness": 0.325,
+        "yangDominance": 0.56,
+        "upperShadowClean": 0.465,
+        "stageGain": 0.365,
+        "crashAvoidance": 0.025
+      },
+      "labelComposite": 55.91238812416775,
+      "labels": {
+        "rhythm": 70,
+        "aesthetic": 45.33496285373173,
+        "stageGain": 86.94515119654545,
+        "crashAvoid": 38.11312300339689,
+        "composite": 55.91238812416775
+      },
+      "raw": {
+        "rhythm": 0.1980393745475316,
+        "maSupport": 0.7597141134844778,
+        "upWaveSmoothness": 0.7769002700952312,
+        "yangDominance": 0.5666666666666667,
+        "upperShadowClean": 0.4622344362525266,
+        "stageGain": 130.41772679481818,
+        "crashAvoidance": 0.07169684505095347,
+        "windowLen": 90,
+        "passesGate": true
+      },
+      "detail": {
+        "swingDensity": 4,
+        "lag1Autocorr": -0.01830052121039037,
+        "maSupportRaw": 0.7597141134844778,
+        "upWaveSmoothnessRaw": 0.7769002700952312,
+        "yangDominanceRaw": 0.5666666666666667,
+        "upperShadowCleanRaw": 0.4622344362525266,
+        "stageGainRaw": 130.41772679481818,
+        "rWindow": 136.75507491749286,
+        "crashAvoidanceRaw": 0.07169684505095347,
+        "windowLen": 90,
+        "passesGate": true
+      }
+    },
+    {
+      "code": "688485",
+      "gain60dPct": 110.99999999999999,
+      "wcmiComposite": 559.45,
+      "wcmiPct": {
+        "rhythm": 0.545,
+        "maSupport": 0.925,
+        "upWaveSmoothness": 0.185,
+        "yangDominance": 0.64,
+        "upperShadowClean": 0.445,
+        "stageGain": 0.745,
+        "crashAvoidance": 0.475
+      },
+      "labelComposite": 64.2117947457203,
+      "labels": {
+        "rhythm": 73.89726966878429,
+        "aesthetic": 44.46420361957488,
+        "stageGain": 100,
+        "crashAvoid": 65.59156333296981,
+        "composite": 64.2117947457203
+      },
+      "raw": {
+        "rhythm": 0.2667672360254115,
+        "maSupport": 0.8524648443395001,
+        "upWaveSmoothness": 0.7424570976564634,
+        "yangDominance": 0.5777777777777777,
+        "upperShadowClean": 0.4498086209053591,
+        "stageGain": 187.81019126439855,
+        "crashAvoidance": 0.4838734499945472,
+        "windowLen": 90,
+        "passesGate": true
+      },
+      "detail": {
+        "swingDensity": 3.1666666666666665,
+        "lag1Autocorr": 0.03897269668784292,
+        "maSupportRaw": 0.8524648443395001,
+        "upWaveSmoothnessRaw": 0.7424570976564634,
+        "yangDominanceRaw": 0.5777777777777777,
+        "upperShadowCleanRaw": 0.4498086209053591,
+        "stageGainRaw": 187.81019126439855,
+        "rWindow": 207.5112107623318,
+        "crashAvoidanceRaw": 0.4838734499945472,
+        "windowLen": 90,
+        "passesGate": true
+      }
+    },
+    {
+      "code": "688498",
+      "gain60dPct": 95.54900150461434,
+      "wcmiComposite": 438.05000000000007,
+      "wcmiPct": {
+        "rhythm": 0.055,
+        "maSupport": 0.905,
+        "upWaveSmoothness": 0.235,
+        "yangDominance": 0.98,
+        "upperShadowClean": 0.055,
+        "stageGain": 0.335,
+        "crashAvoidance": 0.465
+      },
+      "labelComposite": 60.780140068517255,
+      "labels": {
+        "rhythm": 70,
+        "aesthetic": 44.77403187999318,
+        "stageGain": 85.58977842473378,
+        "crashAvoid": 65.06935018786784,
+        "composite": 60.780140068517255
+      },
+      "raw": {
+        "rhythm": -0.014042790204841393,
+        "maSupport": 0.8445413842349571,
+        "upWaveSmoothness": 0.7467505484529375,
+        "yangDominance": 0.6444444444444445,
+        "upperShadowClean": 0.3913208684599957,
+        "stageGain": 128.38466763710068,
+        "crashAvoidance": 0.4760402528180176,
+        "windowLen": 90,
+        "passesGate": true
+      },
+      "detail": {
+        "swingDensity": 4.166666666666667,
+        "lag1Autocorr": -0.19503565850403454,
+        "maSupportRaw": 0.8445413842349571,
+        "upWaveSmoothnessRaw": 0.7467505484529375,
+        "yangDominanceRaw": 0.6444444444444445,
+        "upperShadowCleanRaw": 0.3913208684599957,
+        "stageGainRaw": 128.38466763710068,
+        "rWindow": 134.3304333614083,
+        "crashAvoidanceRaw": 0.4760402528180176,
+        "windowLen": 90,
+        "passesGate": true
+      }
+    },
+    {
+      "code": "688531",
+      "gain60dPct": 108.3624667878618,
+      "wcmiComposite": 659.3000000000001,
+      "wcmiPct": {
+        "rhythm": 0.465,
+        "maSupport": 0.155,
+        "upWaveSmoothness": 0.335,
+        "yangDominance": 0.375,
+        "upperShadowClean": 0.645,
+        "stageGain": 0.425,
+        "crashAvoidance": 0.825
+      },
+      "labelComposite": 70.20040282240613,
+      "labels": {
+        "rhythm": 97.14565467496911,
+        "aesthetic": 45.22562533284261,
+        "stageGain": 91.4735837214419,
+        "crashAvoid": 84.91153238546603,
+        "composite": 70.20040282240613
+      },
+      "raw": {
+        "rhythm": 0.25425214390037065,
+        "maSupport": 0.5845377156651788,
+        "upWaveSmoothness": 0.7770071121315167,
+        "yangDominance": 0.5444444444444444,
+        "upperShadowClean": 0.4817280795810913,
+        "stageGain": 137.21037558216284,
+        "crashAvoidance": 0.7736729857819907,
+        "windowLen": 90,
+        "passesGate": true
+      },
+      "detail": {
+        "swingDensity": 3.8333333333333335,
+        "lag1Autocorr": 0.27145654674969116,
+        "maSupportRaw": 0.5845377156651788,
+        "upWaveSmoothnessRaw": 0.7770071121315167,
+        "yangDominanceRaw": 0.5444444444444444,
+        "upperShadowCleanRaw": 0.4817280795810913,
+        "stageGainRaw": 137.21037558216284,
+        "rWindow": 143.34476563775928,
+        "crashAvoidanceRaw": 0.7736729857819907,
+        "windowLen": 90,
+        "passesGate": true
+      }
+    },
+    {
+      "code": "688610",
+      "gain60dPct": 131.31616782119983,
+      "wcmiComposite": 468.25,
+      "wcmiPct": {
+        "rhythm": 0.155,
+        "maSupport": 0.455,
+        "upWaveSmoothness": 0.105,
+        "yangDominance": 0.74,
+        "upperShadowClean": 0.095,
+        "stageGain": 0.655,
+        "crashAvoidance": 0.405
+      },
+      "labelComposite": 62.55448682397416,
+      "labels": {
+        "rhythm": 70,
+        "aesthetic": 43.09672519358999,
+        "stageGain": 100,
+        "crashAvoid": 63.304802434293315,
+        "composite": 62.55448682397416
+      },
+      "raw": {
+        "rhythm": 0.11274638641380968,
+        "maSupport": 0.6942157570701049,
+        "upWaveSmoothness": 0.7298441245635044,
+        "yangDominance": 0.5888888888888889,
+        "upperShadowClean": 0.39819383672050535,
+        "stageGain": 170.72060508435288,
+        "crashAvoidance": 0.4495720365143998,
+        "windowLen": 90,
+        "passesGate": true
+      },
+      "detail": {
+        "swingDensity": 4.166666666666667,
+        "lag1Autocorr": -0.08937801132182531,
+        "maSupportRaw": 0.6942157570701049,
+        "upWaveSmoothnessRaw": 0.7298441245635044,
+        "yangDominanceRaw": 0.5888888888888889,
+        "upperShadowCleanRaw": 0.39819383672050535,
+        "stageGainRaw": 170.72060508435288,
+        "rWindow": 186.32907296553952,
+        "crashAvoidanceRaw": 0.4495720365143998,
+        "windowLen": 90,
+        "passesGate": true
+      }
+    },
+    {
+      "code": "688628",
+      "gain60dPct": 142.10658622423327,
+      "wcmiComposite": 704.25,
+      "wcmiPct": {
+        "rhythm": 0.805,
+        "maSupport": 0.665,
+        "upWaveSmoothness": 0.995,
+        "yangDominance": 0.83,
+        "upperShadowClean": 0.705,
+        "stageGain": 0.705,
+        "crashAvoidance": 0.685
+      },
+      "labelComposite": 72.0392062467611,
+      "labels": {
+        "rhythm": 89.85932270293722,
+        "aesthetic": 51.293125453620114,
+        "stageGain": 100,
+        "crashAvoid": 77.3920069359573,
+        "composite": 72.0392062467611
+      },
+      "raw": {
+        "rhythm": 0.3416881275647533,
+        "maSupport": 0.7801216590312106,
+        "upWaveSmoothness": 0.9537499661475274,
+        "yangDominance": 0.6,
+        "upperShadowClean": 0.49017383540696513,
+        "stageGain": 182.5362895770471,
+        "crashAvoidance": 0.6608801040393594,
+        "windowLen": 90,
+        "passesGate": true
+      },
+      "detail": {
+        "swingDensity": 2.6666666666666665,
+        "lag1Autocorr": 0.19859322702937224,
+        "maSupportRaw": 0.7801216590312106,
+        "upWaveSmoothnessRaw": 0.9537499661475274,
+        "yangDominanceRaw": 0.6,
+        "upperShadowCleanRaw": 0.49017383540696513,
+        "stageGainRaw": 182.5362895770471,
+        "rWindow": 202.48115577889445,
+        "crashAvoidanceRaw": 0.6608801040393594,
+        "windowLen": 90,
+        "passesGate": true
+      }
+    },
+    {
+      "code": "688655",
+      "gain60dPct": 193.35629921259843,
+      "wcmiComposite": 453,
+      "wcmiPct": {
+        "rhythm": 0.675,
+        "maSupport": 0.735,
+        "upWaveSmoothness": 0.875,
+        "yangDominance": 0.485,
+        "upperShadowClean": 0.125,
+        "stageGain": 0.855,
+        "crashAvoidance": 0.245
+      },
+      "labelComposite": 63.22377475360406,
+      "labels": {
+        "rhythm": 77.5564029846936,
+        "aesthetic": 46.35214793480437,
+        "stageGain": 100,
+        "crashAvoid": 53.659238676190256,
+        "composite": 63.22377475360406
+      },
+      "raw": {
+        "rhythm": 0.31067683581632327,
+        "maSupport": 0.8027528757077376,
+        "upWaveSmoothness": 0.886783182682746,
+        "yangDominance": 0.5555555555555556,
+        "upperShadowClean": 0.4037196503967956,
+        "stageGain": 219.7102187728981,
+        "crashAvoidance": 0.3048885801428538,
+        "windowLen": 90,
+        "passesGate": true
+      },
+      "detail": {
+        "swingDensity": 3.8333333333333335,
+        "lag1Autocorr": 0.07556402984693603,
+        "maSupportRaw": 0.8027528757077376,
+        "upWaveSmoothnessRaw": 0.886783182682746,
+        "yangDominanceRaw": 0.5555555555555556,
+        "upperShadowCleanRaw": 0.4037196503967956,
+        "stageGainRaw": 219.7102187728981,
+        "rWindow": 247.98598949211913,
+        "crashAvoidanceRaw": 0.3048885801428538,
+        "windowLen": 90,
+        "passesGate": true
+      }
+    },
+    {
+      "code": "688677",
+      "gain60dPct": 162.25,
+      "wcmiComposite": 470.55,
+      "wcmiPct": {
+        "rhythm": 0.635,
+        "maSupport": 0.185,
+        "upWaveSmoothness": 0.785,
+        "yangDominance": 0.28,
+        "upperShadowClean": 0.195,
+        "stageGain": 0.765,
+        "crashAvoidance": 0.355
+      },
+      "labelComposite": 66.87056397373601,
+      "labels": {
+        "rhythm": 93.18171702524631,
+        "aesthetic": 45.870784151787156,
+        "stageGain": 100,
+        "crashAvoid": 61.25726775822425,
+        "composite": 66.87056397373601
+      },
+      "raw": {
+        "rhythm": 0.30181939569704436,
+        "maSupport": 0.5912767930397121,
+        "upWaveSmoothness": 0.879669228951896,
+        "yangDominance": 0.5333333333333333,
+        "upperShadowClean": 0.4159160358558598,
+        "stageGain": 189.12730722822022,
+        "crashAvoidance": 0.41885901637336376,
+        "windowLen": 90,
+        "passesGate": true
+      },
+      "detail": {
+        "swingDensity": 3.1666666666666665,
+        "lag1Autocorr": 0.23181717025246307,
+        "maSupportRaw": 0.5912767930397121,
+        "upWaveSmoothnessRaw": 0.879669228951896,
+        "yangDominanceRaw": 0.5333333333333333,
+        "upperShadowCleanRaw": 0.4159160358558598,
+        "stageGainRaw": 189.12730722822022,
+        "rWindow": 191.65894346617242,
+        "crashAvoidanceRaw": 0.41885901637336376,
+        "windowLen": 90,
+        "passesGate": true
+      }
+    },
+    {
+      "code": "688693",
+      "gain60dPct": 177.11419015766842,
+      "wcmiComposite": 449.95000000000005,
+      "wcmiPct": {
+        "rhythm": 0.715,
+        "maSupport": 0.505,
+        "upWaveSmoothness": 0.395,
+        "yangDominance": 0.28,
+        "upperShadowClean": 0.685,
+        "stageGain": 0.775,
+        "crashAvoidance": 0.295
+      },
+      "labelComposite": 63.32536435799742,
+      "labels": {
+        "rhythm": 77.87955123379739,
+        "aesthetic": 45.333632960289066,
+        "stageGain": 100,
+        "crashAvoid": 56.21648420398867,
+        "composite": 63.32536435799742
+      },
+      "raw": {
+        "rhythm": 0.3145546148055687,
+        "maSupport": 0.7088533479173907,
+        "upWaveSmoothness": 0.7885856031511003,
+        "yangDominance": 0.5333333333333333,
+        "upperShadowClean": 0.48433784844795513,
+        "stageGain": 191.05859031867385,
+        "crashAvoidance": 0.3432472630598301,
+        "windowLen": 90,
+        "passesGate": true
+      },
+      "detail": {
+        "swingDensity": 3.5,
+        "lag1Autocorr": 0.07879551233797388,
+        "maSupportRaw": 0.7088533479173907,
+        "upWaveSmoothnessRaw": 0.7885856031511003,
+        "yangDominanceRaw": 0.5333333333333333,
+        "upperShadowCleanRaw": 0.48433784844795513,
+        "stageGainRaw": 191.05859031867385,
+        "rWindow": 210.49250535331905,
+        "crashAvoidanceRaw": 0.3432472630598301,
+        "windowLen": 90,
+        "passesGate": true
+      }
+    },
+    {
+      "code": "688702",
+      "gain60dPct": 88.91749340700743,
+      "wcmiComposite": 201.7,
+      "wcmiPct": {
+        "rhythm": 0.255,
+        "maSupport": 0.465,
+        "upWaveSmoothness": 0.315,
+        "yangDominance": 0.485,
+        "upperShadowClean": 0.045,
+        "stageGain": 0.205,
+        "crashAvoidance": 0.175
+      },
+      "labelComposite": 55.12857737494594,
+      "labels": {
+        "rhythm": 70,
+        "aesthetic": 42.99162041693698,
+        "stageGain": 76.59086039685805,
+        "crashAvoid": 49.820880539763436,
+        "composite": 55.12857737494594
+      },
+      "raw": {
+        "rhythm": 0.16769071005379557,
+        "maSupport": 0.6951267267612695,
+        "upWaveSmoothness": 0.7705264455213077,
+        "yangDominance": 0.5555555555555556,
+        "upperShadowClean": 0.3866315483330033,
+        "stageGain": 114.88629059528708,
+        "crashAvoidance": 0.24731320809645152,
+        "windowLen": 90,
+        "passesGate": true
+      },
+      "detail": {
+        "swingDensity": 4,
+        "lag1Autocorr": -0.04359107495517039,
+        "maSupportRaw": 0.6951267267612695,
+        "upWaveSmoothnessRaw": 0.7705264455213077,
+        "yangDominanceRaw": 0.5555555555555556,
+        "upperShadowCleanRaw": 0.3866315483330033,
+        "stageGainRaw": 114.88629059528708,
+        "rWindow": 112.34384924835909,
+        "crashAvoidanceRaw": 0.24731320809645152,
+        "windowLen": 90,
+        "passesGate": true
+      }
+    },
+    {
+      "code": "688807",
+      "gain60dPct": 119.42907078357123,
+      "wcmiComposite": 335.99999999999994,
+      "wcmiPct": {
+        "rhythm": 0.025,
+        "maSupport": 0.595,
+        "upWaveSmoothness": 0.525,
+        "yangDominance": 0.185,
+        "upperShadowClean": 0.415,
+        "stageGain": 0.405,
+        "crashAvoidance": 0.285
+      },
+      "labelComposite": 59.61391755104514,
+      "labels": {
+        "rhythm": 70,
+        "aesthetic": 44.65165165135036,
+        "stageGain": 89.0008775548796,
+        "crashAvoid": 56.10249398480778,
+        "composite": 59.61391755104514
+      },
+      "raw": {
+        "rhythm": -0.03950918474379106,
+        "maSupport": 0.7527737564020393,
+        "upWaveSmoothness": 0.8113392235879167,
+        "yangDominance": 0.5222222222222223,
+        "upperShadowClean": 0.44497688267985547,
+        "stageGain": 133.5013163323194,
+        "crashAvoidance": 0.3415374097721167,
+        "windowLen": 90,
+        "passesGate": true
+      },
+      "detail": {
+        "swingDensity": 4.5,
+        "lag1Autocorr": -0.21625765395315927,
+        "maSupportRaw": 0.7527737564020393,
+        "upWaveSmoothnessRaw": 0.8113392235879167,
+        "yangDominanceRaw": 0.5222222222222223,
+        "upperShadowCleanRaw": 0.44497688267985547,
+        "stageGainRaw": 133.5013163323194,
+        "rWindow": 141.31340096102508,
+        "crashAvoidanceRaw": 0.3415374097721167,
+        "windowLen": 90,
+        "passesGate": true
+      }
+    }
+  ]
+}

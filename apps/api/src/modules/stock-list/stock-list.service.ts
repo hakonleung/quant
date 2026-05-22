@@ -140,6 +140,13 @@ function buildRow(
     ret90d: parseDecimal(returns?.ret_90d),
     ret250d: parseDecimal(returns?.ret_250d),
     wcmi: parseDecimal(derived?.wcmi),
+    wcmiRhythm: parseDecimal(derived?.wcmi_rhythm),
+    wcmiMaSupport: parseDecimal(derived?.wcmi_ma_support),
+    wcmiUpWave: parseDecimal(derived?.wcmi_up_wave),
+    wcmiYangDom: parseDecimal(derived?.wcmi_yang_dom),
+    wcmiShadowClean: parseDecimal(derived?.wcmi_shadow_clean),
+    wcmiStageGain: parseDecimal(derived?.wcmi_stage_gain),
+    wcmiCrashAvoid: parseDecimal(derived?.wcmi_crash_avoid),
     mktCap: parseDecimal(derived?.mkt_cap),
     floatMktCap: parseDecimal(derived?.float_mkt_cap),
     peTtm: parseDecimal(derived?.pe_ttm),
@@ -174,6 +181,13 @@ function metasToSnapshotShells(metas: readonly StockMetaDto[]): readonly StockSn
       peg: null,
       gross_margin_ttm: null,
       wcmi: null,
+      wcmi_rhythm: null,
+      wcmi_ma_support: null,
+      wcmi_up_wave: null,
+      wcmi_yang_dom: null,
+      wcmi_shadow_clean: null,
+      wcmi_stage_gain: null,
+      wcmi_crash_avoid: null,
     },
     returns: {
       ret_1d: null,
@@ -260,6 +274,20 @@ function pickSortValue(row: StockListRow, key: StockListColumnKey): number | str
       return row.ret250d;
     case 'wcmi':
       return row.wcmi;
+    case 'wcmiRhythm':
+      return row.wcmiRhythm;
+    case 'wcmiMaSupport':
+      return row.wcmiMaSupport;
+    case 'wcmiUpWave':
+      return row.wcmiUpWave;
+    case 'wcmiYangDom':
+      return row.wcmiYangDom;
+    case 'wcmiShadowClean':
+      return row.wcmiShadowClean;
+    case 'wcmiStageGain':
+      return row.wcmiStageGain;
+    case 'wcmiCrashAvoid':
+      return row.wcmiCrashAvoid;
     case 'mktCap':
       return row.mktCap;
     case 'floatMktCap':

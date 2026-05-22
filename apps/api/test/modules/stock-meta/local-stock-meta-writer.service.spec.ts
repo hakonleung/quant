@@ -142,6 +142,13 @@ describe('LocalStockMetaWriterService', () => {
     peg: '0.6',
     gross_margin_ttm: '0.916',
     wcmi: '0.1',
+    wcmi_rhythm: null,
+    wcmi_ma_support: null,
+    wcmi_up_wave: null,
+    wcmi_yang_dom: null,
+    wcmi_shadow_clean: null,
+    wcmi_stage_gain: null,
+    wcmi_crash_avoid: null,
   });
 
   it('populates metrics columns for the targeted code', async () => {

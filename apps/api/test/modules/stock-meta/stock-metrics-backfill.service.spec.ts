@@ -1,6 +1,7 @@
 import type { KlineBar, StockMetaDto, StockSnapshotDto } from '@quant/shared';
 
 import type { KlineReaderService } from '../../../src/modules/kline/kline-reader.service.js';
+import type { WcmiScore } from '../../../src/modules/stock-meta/domain/pure/wcmi-scoring.js';
 import type {
   LocalStockMetaWriterService,
   StockMetricsRow,
@@ -37,6 +38,13 @@ function snap(code: string): StockSnapshotDto {
       peg: null,
       gross_margin_ttm: null,
       wcmi: null,
+      wcmi_rhythm: null,
+      wcmi_ma_support: null,
+      wcmi_up_wave: null,
+      wcmi_yang_dom: null,
+      wcmi_shadow_clean: null,
+      wcmi_stage_gain: null,
+      wcmi_crash_avoid: null,
     },
     returns: {
       ret_1d: null,
@@ -81,7 +89,7 @@ function trendingBars(n: number, daily: number, start = 100): KlineBar[] {
 interface FakeBundle {
   readonly service: StockMetricsBackfillService;
   readonly upserted: StockMetricsRow[][];
-  readonly seenScores: Array<{ code: string; score: number | null }>;
+  readonly seenScores: Array<{ code: string; score: WcmiScore | null }>;
 }
 
 function makeFakes(opts: {
@@ -89,7 +97,7 @@ function makeFakes(opts: {
   readonly klineByCode: Record<string, readonly KlineBar[]>;
 }): FakeBundle {
   const upserted: StockMetricsRow[][] = [];
-  const seenScores: Array<{ code: string; score: number | null }> = [];
+  const seenScores: Array<{ code: string; score: WcmiScore | null }> = [];
   const meta = { snapshotAll: async () => opts.snapshots } as unknown as StockMetaService;
   const kline = {
     lastNBulk: async (codes: readonly string[]) => {
@@ -102,7 +110,7 @@ function makeFakes(opts: {
     },
   } as unknown as KlineReaderService;
   const compute = {
-    toRowWithWcmi: (m: StockMetaDto, _bars: readonly KlineBar[], score: number | null) => {
+    toRowWithWcmi: (m: StockMetaDto, _bars: readonly KlineBar[], score: WcmiScore | null) => {
       seenScores.push({ code: m.code, score });
       const row: StockMetricsRow = {
         code: m.code,
@@ -121,7 +129,14 @@ function makeFakes(opts: {
         pb: null,
         peg: null,
         gross_margin_ttm: null,
-        wcmi: score === null ? null : score.toString(),
+        wcmi: score === null ? null : score.composite.toString(),
+        wcmi_rhythm: null,
+        wcmi_ma_support: null,
+        wcmi_up_wave: null,
+        wcmi_yang_dom: null,
+        wcmi_shadow_clean: null,
+        wcmi_stage_gain: null,
+        wcmi_crash_avoid: null,
       };
       return row;
     },
@@ -165,7 +180,7 @@ describe('StockMetricsBackfillService.runAll (batch wcmi scoring)', () => {
     const weak = seenScores.find((s) => s.code === 'weak')!.score;
     expect(strong).not.toBeNull();
     expect(weak).not.toBeNull();
-    expect(strong!).toBeGreaterThan(weak!);
+    expect(strong!.composite).toBeGreaterThan(weak!.composite);
   });
 
   it('gate-failed codes get wcmi = null but still receive a snapshot row', async () => {

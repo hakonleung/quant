@@ -1,56 +1,56 @@
-# Quant 项目工程规约（多语言版）
+# Quant Project Engineering Spec (Multi-language)
 
-> 本文件是 Claude Code 在本仓库中工作的最高指令。所有代码生成、修改、审查必须严格遵循此规约。
-> 违反任一硬性规则视为任务未完成，必须立即修复。
+> This file is the highest-authority instruction for Claude Code in this repo. All code generation, modification, and review must strictly follow this spec.
+> Violating any hard rule counts as task-not-done and must be fixed immediately.
 
-项目同时存在 **TypeScript（前端 Next.js + 后端 NestJS）** 和 **Python（计算/LangGraph）** 两套技术栈，跨语言通过 **Apache Arrow Flight (gRPC)** 通信。详见 `docs/architecture.md` 与 `docs/integrations/ipc-py-ts.md`。
-
----
-
-## 0. 工作流（强制）
-
-每次执行编码任务按以下顺序：
-
-1. **理解 → 设计**：先读相关文件与 `docs/` 中相关模块文档，明确边界与依赖；非平凡任务先列计划再动手。
-2. **实现**：按本文档"代码风格"与"模块化"规则写代码。涉及跨进程时同步检查/更新 `docs/integrations/ipc-py-ts.md` 中的契约。
-3. **测试**：对**新增/修改的业务逻辑**调用 `test-generator` 生成测试并跑 `run-tests`；失败必须修到全绿。脚手架/配置/纯文档变更可豁免。
-4. **自审**：满足以下任一条件才调用 `code-reviewer`：① 用户显式要求 review；② milestone / feature 收尾且包含非平凡业务逻辑；③ 跨进程契约（`proto/` / Arrow schema）变更。**单纯脚手架、配置调整、格式化、文档改动不要触发 reviewer。** 其它情况依赖 `pnpm check` 作为常驻门禁即可。
-5. **交付**：终末汇报包含变更文件清单、测试结果；如跑了 review 则附结论。
-
-跳过步骤 3 / 4 时主动说明原因（例："本次仅改 README，无需测试与 reviewer"）。
+The project uses two stacks: **TypeScript (Next.js frontend + NestJS backend)** and **Python (compute / LangGraph)**. Cross-language communication is via **Apache Arrow Flight (gRPC)**. See `docs/architecture.md` and `docs/integrations/ipc-py-ts.md`.
 
 ---
 
-## 1. 代码风格（硬性，不可妥协）
+## 0. Workflow (mandatory)
 
-### 1.1 Python 通用
+For every coding task, follow this order:
 
-- **格式化**：`ruff format` 与 `ruff check --fix`，行宽 100。
-- **类型注解**：所有函数签名、公有属性、模块级常量必须有完整类型注解；`mypy --strict` 必须通过。
-- **命名**：
-  - 模块/包：`snake_case`
-  - 类：`PascalCase`
-  - 函数/变量：`snake_case`
-  - 常量：`UPPER_SNAKE_CASE`
-  - 私有：单下划线 `_name`
-- **禁止**：
+1. **Understand → Design**: read the relevant files and module docs under `docs/`. Make boundaries and dependencies explicit. For non-trivial tasks, draft a plan before coding.
+2. **Implement**: write code per "Code style" and "Modularity" rules in this doc. When crossing process boundaries, check/update the contract in `docs/integrations/ipc-py-ts.md`.
+3. **Test**: for **new/modified business logic**, invoke `test-generator` to generate tests and run `run-tests`; failures must be fixed to green. Pure scaffolding / config / docs changes are exempt.
+4. **Self-review**: invoke `code-reviewer` only if one of: ① user explicitly requested review; ② milestone / feature wrap-up containing non-trivial business logic; ③ cross-process contract (`proto/` / Arrow schema) change. **Do NOT trigger reviewer for pure scaffolding, config tweaks, formatting, or docs.** Otherwise, `pnpm check` is the standing gate.
+5. **Delivery**: final report lists changed files and test results; if review ran, include verdict.
+
+If you skip step 3 / 4, state the reason explicitly (e.g. "README-only change, no tests/reviewer needed").
+
+---
+
+## 1. Code style (hard, non-negotiable)
+
+### 1.1 Python general
+
+- **Formatting**: `ruff format` and `ruff check --fix`, line width 100.
+- **Type annotations**: every function signature, public attribute, and module-level constant must be fully annotated; `mypy --strict` must pass.
+- **Naming**:
+  - modules/packages: `snake_case`
+  - classes: `PascalCase`
+  - functions/variables: `snake_case`
+  - constants: `UPPER_SNAKE_CASE`
+  - private: single leading underscore `_name`
+- **Forbidden**:
   - `from x import *`
-  - 裸 `except:`（必须捕获具体异常）
-  - 可变默认参数
-  - 在循环里反复构造同一不变对象
-  - `print` 用于业务日志（用 `logging`）
-  - 单字母变量名（除 `i/j/k` 在小循环作下标，或数学公式中 `x/y`）
-- **必须**：
-  - 函数 ≤ 50 行；超过即应拆分
-  - 单文件 ≤ 400 行；超过即应拆模块
-  - 圈复杂度 ≤ 10
-  - 公共 API 必须有 Google 风格 docstring（Args / Returns / Raises）
-  - I/O、网络、磁盘等副作用集中在边界层（adapters / io / repository）
+  - bare `except:` (must catch specific exceptions)
+  - mutable default arguments
+  - repeatedly constructing the same invariant object inside a loop
+  - `print` for business logging (use `logging`)
+  - single-letter names (except `i/j/k` as loop indices, or `x/y` in math formulas)
+- **Required**:
+  - functions ≤ 50 lines; split if longer
+  - single file ≤ 400 lines; split into modules if longer
+  - cyclomatic complexity ≤ 10
+  - public APIs must have Google-style docstrings (Args / Returns / Raises)
+  - I/O, network, disk and other side effects confined to boundary layers (adapters / io / repository)
 
-### 1.2 TypeScript 通用（Next.js + NestJS 共用）
+### 1.2 TypeScript general (shared by Next.js + NestJS)
 
-- **格式化**：`prettier`（行宽 100，单引号，trailing comma all），`eslint --fix`。
-- **tsconfig 强约束**（违反一律拒收）：
+- **Formatting**: `prettier` (line width 100, single quotes, trailing comma all), `eslint --fix`.
+- **tsconfig strict constraints** (violations always rejected):
   ```json
   {
     "strict": true,
@@ -68,68 +68,68 @@
     "noPropertyAccessFromIndexSignature": true
   }
   ```
-- **类型安全硬规则（零容忍）**：
-  - 禁 `any`、`as any`、`as unknown as T`（双重断言）
-  - 禁 `// @ts-ignore`，必要时用 `// @ts-expect-error <reason: 一句话原因>`，且必须能在 lint 中被周期性扫描清理
-  - 禁裸 `as T` 类型断言；类型收窄必须用：① 类型守卫函数 `is T`（带 runtime 检查） ② `zod.parse` ③ 用户定义的 discriminated union 的 `switch` 收窄
-  - 禁 `Function`、`Object`、`{}` 作类型；用具体的函数签名或 `Record<K, V>`
-  - 禁不带约束的泛型：`<T>` 必须有 `extends ...` 或在签名中被多个位置使用以体现关联
-  - 禁 `non-null assertion` `!`；用类型守卫或显式抛错
-  - 跨进程/外部输入必须 `zod` 校验后才进入业务代码，禁止"信任"外部 JSON
-  - 三方库类型缺失时写 `*.d.ts` 而不是 `as any`
-- **命名**：
-  - 文件/目录：`kebab-case.ts`
-  - 类/类型/接口：`PascalCase`（接口不加 `I` 前缀）
-  - 变量/函数：`camelCase`
-  - 常量：`UPPER_SNAKE_CASE`
-  - React 组件文件：`PascalCase.tsx`
-- **禁止**：
-  - `console.log` 走业务日志（用 NestJS `Logger` / `pino`）
-  - 默认导出（除非框架强制：Next.js page、layout 等）
-  - `enum`（用 `as const` 对象 + 字面量联合类型）
-  - `require()`（统一 ESM `import`）
-  - 在组件函数体里 `new Date()` / `Math.random()`——通过 props/hook 注入
-- **必须**：
-  - 函数 ≤ 50 行；React 组件 ≤ 150 行（含 JSX）
-  - 单文件 ≤ 400 行
-  - 异步函数返回类型显式标注 `Promise<T>`
-  - 跨进程边界的入参/出参用 `zod` schema 校验，schema 与类型同源（`z.infer`）
-  - DTO 与领域类型分离：`*.dto.ts`（边界）/ `*.entity.ts` 或 `*.model.ts`（域）
+- **Type-safety hard rules (zero tolerance)**:
+  - No `any`, `as any`, `as unknown as T` (double assertion)
+  - No `// @ts-ignore`; when necessary use `// @ts-expect-error <reason: one-line cause>`, and it must be periodically scannable in lint for cleanup
+  - No bare `as T` cast; narrow types via: ① type-guard function `is T` (with runtime check) ② `zod.parse` ③ `switch` narrowing on a user-defined discriminated union
+  - No `Function`, `Object`, `{}` as types; use concrete function signatures or `Record<K, V>`
+  - No unconstrained generics: `<T>` must have `extends ...` or appear in multiple positions of the signature to express a relationship
+  - No non-null assertion `!`; use type guards or explicit throws
+  - Cross-process / external input must be validated via `zod` before entering business code; never "trust" external JSON
+  - When third-party types are missing, write `*.d.ts` rather than `as any`
+- **Naming**:
+  - files/directories: `kebab-case.ts`
+  - classes/types/interfaces: `PascalCase` (no `I` prefix on interfaces)
+  - variables/functions: `camelCase`
+  - constants: `UPPER_SNAKE_CASE`
+  - React component files: `PascalCase.tsx`
+- **Forbidden**:
+  - `console.log` for business logging (use NestJS `Logger` / `pino`)
+  - default exports (unless framework-mandated: Next.js pages, layouts, etc.)
+  - `enum` (use `as const` objects + literal union types)
+  - `require()` (use ESM `import`)
+  - `new Date()` / `Math.random()` inside a component body — inject via props/hook
+- **Required**:
+  - functions ≤ 50 lines; React components ≤ 150 lines (including JSX)
+  - single file ≤ 400 lines
+  - async function return types explicitly annotated `Promise<T>`
+  - cross-process boundary inputs/outputs validated by `zod` schemas; schema and types share the same source (`z.infer`)
+  - DTO and domain types separated: `*.dto.ts` (boundary) / `*.entity.ts` or `*.model.ts` (domain)
 
-### 1.2.1 Python 类型安全补强
+### 1.2.1 Python type-safety reinforcement
 
-- 禁 `Any`（确需用 `object` 或受约束的 `TypeVar`）
-- 禁 `# type: ignore` 不带原因；必须 `# type: ignore[error-code]  # reason`
-- 禁 `cast(T, x)` 当 `x` 来自外部输入；走 `pydantic` 校验
-- 泛型必须用 `TypeVar(... bound=...)` 或 `Protocol`，禁裸 `TypeVar("T")`
-- `mypy --strict` 必须零警告通过
+- No `Any` (use `object` or a bounded `TypeVar` when truly needed)
+- No bare `# type: ignore`; must be `# type: ignore[error-code]  # reason`
+- No `cast(T, x)` when `x` is from external input; go through `pydantic` validation
+- Generics must use `TypeVar(... bound=...)` or `Protocol`; no bare `TypeVar("T")`
+- `mypy --strict` must pass with zero warnings
 
-### 1.3 错误处理（两语言共用）
+### 1.3 Error handling (shared by both languages)
 
-- 内部纯函数互相调用：信任契约，不做防御性校验。
-- 系统边界（用户输入、外部 API、文件、网络、跨进程）：必须显式校验并抛出领域异常。
-- Python 异常基类 `QuantError`（`packages/py/quant_core/errors.py`）；TS 异常基类 `QuantError`（`packages/shared/errors.ts`）。两边异常**类型字符串**必须一致（`code: "DATA_SOURCE_TIMEOUT"` 等），跨进程序列化通过 RPC 错误码表（见 `docs/integrations/ipc-py-ts.md`）。
-- 不允许 `except Exception` / `catch (e)` 后吞掉错误；至少要日志 + 重抛或转换为领域异常。
+- Internal pure-function calls: trust the contract, no defensive checks.
+- System boundaries (user input, external API, files, network, cross-process): must validate explicitly and raise domain exceptions.
+- Python base exception `QuantError` (`packages/py/quant_core/errors.py`); TS base exception `QuantError` (`packages/shared/errors.ts`). The exception **type string** must match across sides (`code: "DATA_SOURCE_TIMEOUT"`, etc.); cross-process serialization uses the RPC error-code table (see `docs/integrations/ipc-py-ts.md`).
+- Never `except Exception` / `catch (e)` and swallow the error; at minimum log + rethrow or convert to a domain exception.
 
-### 1.4 日志
+### 1.4 Logging
 
-- Python：`logging.getLogger(__name__)`；禁止 `print`。
-- TS：NestJS `Logger`（后端）/ `pino`（前端 server-side）；禁止 `console.log`。
-- 等级语义：`DEBUG` 开发期细节 / `INFO` 业务里程碑 / `WARN` 可恢复 / `ERROR` 业务失败 / `FATAL/CRITICAL` 进程级故障。
-- **结构化字段优先**（Python：`logger.info("trade_filled", extra={...})`；TS：`logger.info({ symbol, qty }, "trade_filled")`），不要拼字符串。
-- 跨进程调用必须带 `trace_id`，由入口生成、向下游透传。
-- **LLM 调用日志强制结构化**：每次 NestJS `LlmService` 调用必须输出 `provider`、`model`、`scope`（agent/screen/analyze/...）、`usage`（input/output/total tokens）、`durationMs`、`traceId`、`userId` 字段。失败路径同样记录（usage 字段允许缺失）。配套写入 `UserLlmLedgerStore` 由 recorder 完成，不要在调用点手写双份。
+- Python: `logging.getLogger(__name__)`; no `print`.
+- TS: NestJS `Logger` (backend) / `pino` (server-side frontend); no `console.log`.
+- Level semantics: `DEBUG` dev detail / `INFO` business milestone / `WARN` recoverable / `ERROR` business failure / `FATAL/CRITICAL` process-level failure.
+- **Structured fields preferred** (Python: `logger.info("trade_filled", extra={...})`; TS: `logger.info({ symbol, qty }, "trade_filled")`); don't build strings.
+- Cross-process calls must carry `trace_id`, generated at the entry and propagated downstream.
+- **LLM call logs must be structured**: every NestJS `LlmService` call must emit `provider`, `model`, `scope` (agent/screen/analyze/...), `usage` (input/output/total tokens), `durationMs`, `traceId`, `userId`. Failure paths log too (usage may be missing). Companion writes to `UserLlmLedgerStore` are done by the recorder — do not hand-write a second copy at the call site.
 
-### 1.5 注释
+### 1.5 Comments
 
-- 默认不写注释。只在"为什么"非显而易见时写一行：隐藏约束、特定 bug 的 workaround、与文档冲突的取舍。
-- 禁止：复述代码做了什么；无负责人/日期的 TODO；引用当前任务/PR/issue。
+- Default: no comments. Only write one line where the "why" is non-obvious: hidden constraints, workarounds for a specific bug, trade-offs at odds with the docs.
+- Forbidden: restating what the code does; ownerless/dateless TODOs; references to the current task / PR / issue.
 
 ---
 
-## 2. 模块化与解耦（硬性）
+## 2. Modularity and decoupling (hard)
 
-### 2.1 进程拓扑
+### 2.1 Process topology
 
 ```
 ┌─────────────┐    HTTP/SSE     ┌──────────────┐  Arrow Flight (gRPC)  ┌──────────────┐
@@ -139,253 +139,253 @@
                                                                        └──────────────┘
 ```
 
-- **Next.js**：UI、用户交互、SSR 渲染、SSE/WS 接收长任务进度。**不直接调外部数据源/LLM**。
-- **NestJS**：HTTP API 网关、参数校验、任务编排（短任务）、**所有持久化写入**（含 `data/kline/*.parquet` / `data/stock_metas.parquet` / `data/sectors/*` / `data/users/**/*` 等）、调度 Python 服务、**外部 LLM 客户端**（OpenAI 兼容协议；DeepSeek / Moonshot / Qwen / Doubao / OpenAI）。LLM provider 注册表与 token ledger 持久化都在 NestJS 侧；上层 service 通过 `LlmService` 统一调用。v1 不做鉴权（监听 127.0.0.1）。
-- **Python service**：行情/新闻外部源拉取（tushare / akshare）、筛选/形态/舆情计算、LangGraph 工作流。**Python 是 compute-only**：所有 Flight op 把算出来的结果回传 NestJS，由 NestJS 写盘（详见 `docs/perf/storage-unify-rollout.md`）。读盘允许（共享本地磁盘 + DuckDB 列裁剪），因为读不构成跨进程竞争；写盘只有 NestJS 一个 owner。**Python 不再持有外部 LLM 客户端**；如未来 LangGraph 节点需要 LLM 推理，反向 RPC 调 NestJS `LlmService`。
+- **Next.js**: UI, user interaction, SSR rendering, SSE/WS for long-task progress. **Does not call external data sources / LLMs directly.**
+- **NestJS**: HTTP API gateway, request validation, short-task orchestration, **all persistence writes** (including `data/kline/*.parquet` / `data/stock_metas.parquet` / `data/sectors/*` / `data/users/**/*` etc.), scheduling Python services, and the **external LLM client** (OpenAI-compatible protocol; DeepSeek / Moonshot / Qwen / Doubao / OpenAI). LLM provider registry and token-ledger persistence live on the NestJS side; upper-layer services call through a unified `LlmService`. v1 has no auth (binds to 127.0.0.1).
+- **Python service**: external data fetch (tushare / akshare) for quotes/news, screening / pattern / sentiment compute, LangGraph workflows. **Python is compute-only**: every Flight op returns computed results to NestJS, which writes to disk (see `docs/perf/storage-unify-rollout.md`). Reads from disk are allowed (shared local disk + DuckDB column pruning), since reads do not create cross-process contention; NestJS is the sole writer. **Python does not hold an external LLM client**; if a future LangGraph node needs LLM inference, it makes a reverse RPC to NestJS `LlmService`.
 
-### 2.2 仓库结构（monorepo, pnpm workspaces + uv）
+### 2.2 Repo layout (monorepo, pnpm workspaces + uv)
 
 ```
 apps/
-  web/                          # Next.js 前端
-  api/                          # NestJS 后端
+  web/                          # Next.js frontend
+  api/                          # NestJS backend
 packages/
-  shared/                       # TS 共享：类型、zod schema、错误码、API client SDK
-  ui/                           # React 共享组件
+  shared/                       # TS shared: types, zod schemas, error codes, API client SDK
+  ui/                           # Shared React components
 services/
-  py/                           # Python 服务根
-    quant_core/                 # 域 + 业务（详见 §2.3）
-    quant_compute/              # 计算密集模块（screening / pattern / sentiment）
-    quant_io/                   # 数据源 adapters
-    quant_cache/                # 缓存 adapters
-    quant_workflow/             # LangGraph 编排（v2，反向 RPC 调 NestJS LlmService 取 LLM 推理）
+  py/                           # Python service root
+    quant_core/                 # Domain + business (see §2.3)
+    quant_compute/              # Compute-intensive modules (screening / pattern / sentiment)
+    quant_io/                   # Data-source adapters
+    quant_cache/                # Cache adapters
+    quant_workflow/             # LangGraph orchestration (v2; reverse-RPC to NestJS LlmService for LLM inference)
     quant_rpc/                  # Arrow Flight server
-proto/                          # Arrow schema (.fbs) + RPC 契约（共享）
-docs/                           # 工程文档
-tests/                          # 镜像 src 路径
+proto/                          # Arrow schemas (.fbs) + RPC contracts (shared)
+docs/                           # Engineering docs
+tests/                          # Mirrors src paths
 ```
 
-### 2.3 Python 内部分层（强制）
+### 2.3 Python internal layering (mandatory)
 
 ```
-domain/        # 纯领域模型与规则（K线/股票/筛选条件 AST/形态/舆情主题）；不依赖外部框架/IO
-services/      # 业务编排；只依赖 domain 与 ports
-ports/         # 抽象接口（Protocol / ABC）
-adapters/      # ports 的具体实现：tushare/akshare、Parquet、Redis、LLM
-io/            # 数据读写边界：parser/serializer/HTTP 客户端
-config/        # 配置加载（pydantic-settings）
-rpc/           # Arrow Flight server 入口
-workflow/      # LangGraph 节点与图
+domain/        # Pure domain models and rules (K-line / stock / screen-condition AST / pattern / sentiment topic); no external framework / IO
+services/      # Business orchestration; depends only on domain and ports
+ports/         # Abstract interfaces (Protocol / ABC)
+adapters/      # Concrete implementations of ports: tushare/akshare, Parquet, Redis, LLM
+io/            # Read/write boundary: parser/serializer/HTTP client
+config/        # Configuration loading (pydantic-settings)
+rpc/           # Arrow Flight server entry
+workflow/      # LangGraph nodes and graphs
 ```
 
-**依赖方向**：`rpc/workflow → services → domain`，`services → ports ← adapters`。
-`domain` 禁止 import `adapters/io` 或任何具体 SDK。
+**Dependency direction**: `rpc/workflow → services → domain`, `services → ports ← adapters`.
+`domain` may not import `adapters/io` or any concrete SDK.
 
-### 2.4 NestJS 内部分层（强制）
+### 2.4 NestJS internal layering (mandatory)
 
 ```
 modules/
   <feature>/
-    <feature>.controller.ts     # 路由，只做参数校验（zod-pipe）+ 转 service
-    <feature>.service.ts        # 业务编排，调 ports
-    <feature>.module.ts         # 依赖装配
-    dto/                        # zod schema + 类型
-    domain/                     # 纯领域类型 + 函数（无装饰器、无 nest 依赖）
-ports/                          # 抽象接口（pure TS）
-adapters/                       # ports 具体实现（含 Arrow Flight client）
-common/                         # 守卫、拦截器、过滤器、logger
-config/                         # @nestjs/config + zod 校验
+    <feature>.controller.ts     # Route; only param validation (zod-pipe) + delegate to service
+    <feature>.service.ts        # Business orchestration; calls ports
+    <feature>.module.ts         # DI wiring
+    dto/                        # zod schema + types
+    domain/                     # Pure domain types + functions (no decorators, no nest deps)
+ports/                          # Abstract interfaces (pure TS)
+adapters/                       # Concrete port implementations (incl. Arrow Flight client)
+common/                         # Guards, interceptors, filters, logger
+config/                         # @nestjs/config + zod validation
 ```
 
-**依赖方向**：`controller → service → ports ← adapters`。
-`domain/` 子目录纯函数 + 不可变类型，不依赖 NestJS 装饰器，便于复用与测试。
+**Dependency direction**: `controller → service → ports ← adapters`.
+The `domain/` subdirectory holds pure functions + immutable types, free of NestJS decorators, for easy reuse and testing.
 
-### 2.5 Next.js 约束
+### 2.5 Next.js constraints
 
-- 路由用 App Router（`app/`）。
-- **服务端组件优先**；仅交互必要的叶子组件用 `"use client"`。
-- 数据获取：服务端组件直接 `fetch`（带缓存策略）调 NestJS；客户端用 `@tanstack/react-query`。
-- 长任务进度：SSE（`EventSource`）或 WebSocket，在 NestJS 侧 fan-out。
-- UI 状态用 Zustand（轻）；表单 `react-hook-form` + zod。
-- 业务逻辑禁止写在组件里，抽到 `lib/` 纯函数。
+- Routing uses the App Router (`app/`).
+- **Server components preferred**; only interaction-leaf components use `"use client"`.
+- Data fetching: server components call NestJS directly with `fetch` (with caching strategy); clients use `@tanstack/react-query`.
+- Long-task progress: SSE (`EventSource`) or WebSocket, fanned out from NestJS.
+- UI state with Zustand (lightweight); forms with `react-hook-form` + zod.
+- No business logic inside components — extract to `lib/` pure functions.
 
-#### Feat 组件强制规约
+#### Feat component rules (mandatory)
 
-- **Feat = pane 级别的功能单元**，命名空间为 `[MODULE].[FEATURE]`（见 `apps/web/lib/eqty/feat.ts`）。
-- 每个 Feat 在 `apps/web/components/` 下有独立目录 `feat-<module>-<feature>/`（kebab-case，如 `feat-sys-stat/`、`feat-eq-chart/`）；目录主组件文件与目录同名（`feat-sys-stat.tsx`），导出函数命名为 `Feat<Module><Feature>`（如 `FeatSysStat`）。Feat 私有的子组件 / 对话框 / 表单放在同一目录下。
-- **所有 Feat 组件的根节点必须使用 `<FeatView feat={Feat.X}>` 包裹**（来自 `components/feat-view/feat-view.tsx`）。`FeatView` 统一负责 pane chrome、`featViewMode`（normal / minimized / fullscreen）持久化、overlay / 默认最小化等行为。直接渲染裸 DOM 或自行实现 pane 外壳的 Feat 组件一律拒收。
-- `feat-view/` 下的 `FeatView`、`FeatViewStatus`、`FeatViewAction`、`FeatViewHeaderRight` 是唯一被允许跨 Feat 共享的 pane 原语；其它 Feat 之间不得互相 import 私有子组件，需要复用就抽到 `packages/ui/` 或 `apps/web/lib/`。
+- **Feat = pane-level functional unit**, namespaced as `[MODULE].[FEATURE]` (see `apps/web/lib/eqty/feat.ts`).
+- Every Feat lives in its own directory under `apps/web/components/` as `feat-<module>-<feature>/` (kebab-case, e.g. `feat-sys-stat/`, `feat-eq-chart/`); the main component file matches the directory name (`feat-sys-stat.tsx`); the exported function is `Feat<Module><Feature>` (e.g. `FeatSysStat`). Feat-private sub-components / dialogs / forms live in the same directory.
+- **Every Feat's root must be wrapped in `<FeatView feat={Feat.X}>`** (from `components/feat-view/feat-view.tsx`). `FeatView` uniformly handles pane chrome, `featViewMode` (normal / minimized / fullscreen) persistence, overlay / default-minimized behavior. Feats that render raw DOM directly or roll their own pane shell are rejected.
+- `FeatView`, `FeatViewStatus`, `FeatViewAction`, `FeatViewHeaderRight` under `feat-view/` are the only pane primitives allowed to be shared across Feats; Feats must not import each other's private sub-components — promote shared pieces to `packages/ui/` or `apps/web/lib/`.
 
-### 2.5.1 类型与纯函数 = 核心资产（强制）
+### 2.5.1 Types and pure functions = core assets (mandatory)
 
-**类型定义和纯函数是项目的核心资产，必须独立维护、与框架解耦、随时可被其它模块/服务复用。**
+**Type definitions and pure functions are the project's core assets; they must be maintained independently, decoupled from frameworks, and reusable by any module/service at any time.**
 
-每个进程内必须有专门目录承载这两类资产，且这些目录：
+Each process must have dedicated directories carrying these two asset classes. These directories:
 
-- 不依赖任何框架（NestJS 装饰器、Next.js 钩子、pydantic 之外的运行时基类等）
-- 不做 IO（不 import adapters、io、http 客户端、数据库驱动）
-- 不依赖配置（不读 env / 不用全局 settings）
-- 可以被任何其它目录 import；它们 **不能** import 同进程的非核心目录
+- Do not depend on any framework (NestJS decorators, Next.js hooks, runtime base classes other than pydantic, etc.)
+- Do not do IO (no import of adapters, io, http clients, DB drivers)
+- Do not depend on config (no env reads / no global settings)
+- May be imported by any other directory; they **may not** import any non-core directory in the same process.
 
-**Python 侧**（`services/py/quant_core/`）：
+**Python side** (`services/py/quant_core/`):
 
 ```
 domain/
-  types/        # 纯类型定义（@dataclass(frozen=True, slots=True) / TypedDict / Protocol）
-  pure/         # 纯函数（无副作用、无 IO、参数确定 → 返回值确定）
-  rules/        # 业务规则函数（同样纯，但聚焦业务语义，如"计算前复权"、"判断涨停"）
+  types/        # Pure type definitions (@dataclass(frozen=True, slots=True) / TypedDict / Protocol)
+  pure/         # Pure functions (no side effects, no IO, deterministic in→out)
+  rules/        # Business-rule functions (also pure, but business-semantic, e.g. "compute forward-adjusted price", "detect limit-up")
 ```
 
-**TypeScript 侧**：
+**TypeScript side**:
 
 ```
 packages/shared/
-  types/        # 跨 app 共享类型（zod schema + z.infer 类型）
-  fp/           # 跨 app 共享纯函数（数学、日期、字符串、不可变容器）
+  types/        # Cross-app shared types (zod schema + z.infer types)
+  fp/           # Cross-app shared pure functions (math, dates, strings, immutable containers)
 apps/api/src/modules/<feature>/
   domain/
-    types.ts    # 该 feature 的领域类型
-    pure.ts     # 该 feature 的纯计算函数
+    types.ts    # Feature domain types
+    pure.ts     # Feature pure computation functions
 apps/web/lib/
-  types/        # 前端专用类型（UI state、视图模型）
-  fp/           # 前端专用纯函数（formatters、selectors）
+  types/        # Frontend-only types (UI state, view models)
+  fp/           # Frontend-only pure functions (formatters, selectors)
 ```
 
-**强制约束**：
+**Hard constraints**:
 
-- `domain/`、`packages/shared/`、`lib/fp/`、`lib/types/` 中**禁止**出现：`fetch`、`axios`、`fs`、`db`、`Logger`、`@Injectable()`、`useEffect`、`useState`、任何 `*.adapter.ts` 的 import。
-- 任何"看似纯但偷偷读了全局"的函数（如 `Date.now()`、`Math.random()`、`process.env`）必须把依赖作为参数传入。
-- 这些目录的测试**只用** unit 测试，零 mock，零 fixture（除了输入数据）。如果要 mock 才能测，说明它不纯，应当移出。
-- code-reviewer 在审查时必须显式检查"是否有不该出现在 core 目录的依赖"，违反 = MAJOR。
+- `domain/`, `packages/shared/`, `lib/fp/`, `lib/types/` **must not** contain: `fetch`, `axios`, `fs`, `db`, `Logger`, `@Injectable()`, `useEffect`, `useState`, or any import of `*.adapter.ts`.
+- Any function that "looks pure but secretly reads global state" (e.g. `Date.now()`, `Math.random()`, `process.env`) must take its dependency as a parameter.
+- Tests for these directories are **unit-only**, zero mocks, zero fixtures (other than input data). If you need mocks to test, it isn't pure — move it out.
+- code-reviewer must explicitly check "any dependencies that don't belong in a core directory"; violation = MAJOR.
 
-### 2.5.2 复用性（强制原则，但要避免过度抽象）
+### 2.5.2 Reusability (mandatory principle, but avoid over-abstraction)
 
-- **复用优先于复制**：同一逻辑在 ≥ 2 处出现且未来可能再出现 → 抽到核心目录。但**不要**为单一调用点造抽象。
-- **Rule of three**：第三次重复出现时再抽象；第二次先标记 `// REUSE-CANDIDATE: <ref>`，第三次出现时一并抽走。
-- **跨语言可复用的逻辑必须放 `proto/` 或脚本生成**：避免 TS 与 Py 各写一份对账逻辑——schema 由 `proto/` 生成、纯算法（如前复权计算）以 Python 为唯一实现，TS 通过 RPC 调用，禁止手写第二份。
-- **抽象的代价高于重复**：当抽象本身需要 ≥ 3 个参数才能覆盖差异，或抽象的实现里出现 if-else 分支区分调用者，说明抽象错了——退回去保持重复。
-- **禁止"先抽象再使用"**：不允许写一个工具函数但当前没有调用者；除非是被生成代码占位。
+- **Reuse beats copy-paste**: the same logic in ≥ 2 places that's likely to recur → extract to a core directory. But **don't** build an abstraction for a single call site.
+- **Rule of three**: only abstract on the third repetition; mark the second with `// REUSE-CANDIDATE: <ref>`, then extract all on the third.
+- **Cross-language reusable logic must live in `proto/` or be script-generated**: avoid TS and Py each rolling their own reconciliation logic — schemas are generated from `proto/`, pure algorithms (e.g. forward adjustment) have Python as the single implementation, TS calls them via RPC; a hand-written second copy is forbidden.
+- **Abstraction costs more than repetition**: when the abstraction needs ≥ 3 parameters to cover the differences, or its body has if-else branches keyed on the caller, the abstraction is wrong — fall back to repetition.
+- **No "abstract before use"**: never write a utility that has no caller; the only exception is generated-code placeholders.
 
-### 2.6 函数与类（共用）
+### 2.6 Functions and classes (shared)
 
-- **单一职责**：函数只做一件事；类只有一个变化原因。
-- **纯函数优先**：能写成纯函数就不要写成方法；能不持有状态就不持有状态。
-- **依赖注入**：外部依赖（client、session、clock、随机源）必须通过参数/构造函数传入；禁止函数体内直接 import 全局单例。
-- **禁止上帝对象**：超过 7 个公共方法或 200 行的类必须拆。
-- **禁止隐式时间/随机**：用 `Clock` / `Rng` 端口注入；测试必须可复现。
+- **Single responsibility**: a function does one thing; a class has one reason to change.
+- **Pure functions preferred**: if it can be a pure function, don't make it a method; if it can be stateless, don't hold state.
+- **Dependency injection**: external dependencies (client, session, clock, randomness source) must be passed in via parameters / constructor; do not import global singletons inside function bodies.
+- **No god objects**: a class with > 7 public methods or > 200 lines must be split.
+- **No implicit time/randomness**: inject `Clock` / `Rng` ports; tests must be reproducible.
 
-### 2.7 数据流与类型
+### 2.7 Data flow and types
 
-- Python 边界用 `pydantic.BaseModel`，域内部用 `@dataclass(frozen=True, slots=True)`。
-- TS 边界用 `zod` schema + `z.infer<typeof S>`；域内部 `readonly` 类型 + `Object.freeze`（或用 `immer`）。
-- 优先不可变；更新返回新对象（Python `model_copy(update=...)` / `dataclasses.replace`；TS 展开运算符或 `immer`）。
-- 不在多个层之间传裸 `dict` / `Record<string, unknown>`；传强类型对象。
+- Python boundary: `pydantic.BaseModel`; domain internal: `@dataclass(frozen=True, slots=True)`.
+- TS boundary: `zod` schema + `z.infer<typeof S>`; domain internal: `readonly` types + `Object.freeze` (or `immer`).
+- Prefer immutability; updates return new objects (Python `model_copy(update=...)` / `dataclasses.replace`; TS spread or `immer`).
+- Do not pass raw `dict` / `Record<string, unknown>` across layers; pass strongly typed objects.
 
-### 2.8 量化领域专项
+### 2.8 Quant domain specifics
 
-- 价格、数量、金额：Python 用 `Decimal`；TS 用 `decimal.js` 或 `bignumber.js`，**禁止用 `number` 表示金额**。
-- 时间统一 `datetime` 带 tz（UTC），存储 ISO8601；禁止 naive datetime。前端展示再转 `Asia/Shanghai`。
-- 回测 / 实盘共享同一 `Strategy` 接口，区别只在 adapter（`BacktestBroker` vs `LiveBroker`）。
-- 所有随机性必须接受 `seed` 参数；默认无种子的随机调用视为 bug。
-- **日线数据入库时**必须预计算并落库：前复权价（`open_qfq/high_qfq/low_qfq/close_qfq`）、基于前复权 close 的 `ma5/ma10/ma20/ma60`。详见 `docs/modules/02-stock-kline.md`。
+- Price, quantity, amount: Python uses `Decimal`; TS uses `decimal.js` or `bignumber.js`. **Never use `number` for money.**
+- Time uniformly `datetime` with tz (UTC), stored as ISO8601; no naive datetimes. Convert to `Asia/Shanghai` only for frontend display.
+- Backtest / live share the same `Strategy` interface; the only difference is the adapter (`BacktestBroker` vs `LiveBroker`).
+- All randomness must accept a `seed` parameter; an unseeded random call by default is a bug.
+- **When daily K-line data is ingested**, the following must be precomputed and persisted: forward-adjusted prices (`open_qfq/high_qfq/low_qfq/close_qfq`) and `ma5/ma10/ma20/ma60` based on adjusted close. See `docs/modules/02-stock-kline.md`.
 
-### 2.9 多用户与鉴权（强制）
+### 2.9 Multi-user and auth (mandatory)
 
-- **用户态文件存储统一走 `apps/api/src/common/user-scoped-store.ts` 的 `UserScopedJsonStore<T>`**——按 `data/users/{userId}/...` 分区。新增"用户态"模块（个人账本、自选、个人偏好等）必须复用该工具，不得另写一套 mutex / atomic-write / throttle。
-- **shared market data 留在 `data/<module>/...` 共享目录**：kline / sectors / blacklist / sentiment / ta / meta / watch universe 不按用户分区。
-- **NestJS 控制器获取用户**：始终通过 `@CurrentUser()`（`modules/auth/current-user.decorator.ts`）取 `AuthenticatedUser.id`，**不要**让客户端在 body / query 里传 userId。
-- **Service 方法签名**：所有用户态 service 方法第一参数为 `userId: string`；DTO 不含 userId。
-- **`AUTH_MODE` 开关**：`disabled`（默认）注入 `admin` 用户，`oauth` 走 Feishu。两端共用同一份代码，差异只在 env。
-- **userId 派生**：单一函数 `deriveUserId(provider, externalId, tenantKey)`（在 `modules/auth/ports/oauth-provider.port.ts`）。Web 登录与 IM 入口必须经此派生，保证同一人 → 同一 userId。
-- **IM 命令入口不走 `AuthGuard`**：`AuthService.resolveFromIm` 直接产出 `AuthenticatedUser`，dispatcher 调 service 时第一参数即为 `userId`。详见 `docs/integrations/auth.md`。
-- **Python 服务用户无关**：`services/py/quant_rpc/*` 永远不应出现 `userId` 字段。所有用户分区在 NestJS 帧内完成。
+- **User-scoped file storage uniformly uses `UserScopedJsonStore<T>` from `apps/api/src/common/user-scoped-store.ts`** — partitioned by `data/users/{userId}/...`. Any new "user-scoped" module (personal ledger, watchlist, personal preferences, etc.) must reuse this utility; do not roll your own mutex / atomic-write / throttle.
+- **Shared market data stays in `data/<module>/...` shared directories**: kline / sectors / blacklist / sentiment / ta / meta / watch universe are not user-partitioned.
+- **NestJS controllers obtain the user**: always via `@CurrentUser()` (`modules/auth/current-user.decorator.ts`) to get `AuthenticatedUser.id`; **never** let clients pass userId in body / query.
+- **Service method signatures**: every user-scoped service method takes `userId: string` as its first parameter; DTOs do not contain userId.
+- **`AUTH_MODE` switch**: `disabled` (default) injects an `admin` user; `oauth` uses Feishu. Both ends share the same code; the difference is in env.
+- **userId derivation**: a single function `deriveUserId(provider, externalId, tenantKey)` (in `modules/auth/ports/oauth-provider.port.ts`). Both web login and IM entry must go through this so that the same person → the same userId.
+- **IM command entry does not go through `AuthGuard`**: `AuthService.resolveFromIm` produces `AuthenticatedUser` directly; the dispatcher passes `userId` as the first arg to services. See `docs/integrations/auth.md`.
+- **Python services are user-agnostic**: `services/py/quant_rpc/*` must never carry a `userId` field. All user partitioning happens in the NestJS frame.
 
-### 2.10 配置项 / env（强制）
+### 2.10 Configuration / env (mandatory)
 
-- **凡新增任何运行时读取的 env 变量（NestJS / Next.js / Python 任一进程）必须同步加进仓库根的 `.env.example`**——这是 onboarding 唯一可信来源。漏写视为本提交未完成。
-- 模板条目结构：① 上方一行注释指明用途 + 关联文档（`see docs/...`），② 默认值 / 是否必填，③ 可选枚举或取值范围。**不要**把真实 key / token 写进示例。
-- 同主题的变量分组放在同一个 `# ---- <module> ---- ` 区段下，保持表头一致；新区段紧贴最相关的老区段后。
-- 删除 / 改名一个 env 变量时一并更新 `.env.example` 与所有引用它的文档（`docs/architecture.md` / `docs/integrations/*` / `README.md`）。CI 不会自动 catch 漏改。
-- 共享给前端的变量必须以 `NEXT_PUBLIC_` 开头并双写 NestJS + Next.js（参考 `AUTH_MODE` / `NEXT_PUBLIC_AUTH_MODE` 模式）。
-- 仅供生成密钥 / 长 token 的项写明生成方式（如 `openssl rand -hex 32`）；不要让用户去搜命令。
-
----
-
-## 3. 测试（硬性）
-
-### 3.1 覆盖率与结构
-
-- **新增/修改的代码行覆盖率 ≥ 90%**，分支覆盖率 ≥ 80%。
-- 测试目录镜像源码目录：
-  - Python：`services/py/quant_core/foo.py` ↔ `services/py/tests/quant_core/test_foo.py`
-  - NestJS：`apps/api/src/modules/foo/foo.service.ts` ↔ `apps/api/test/modules/foo/foo.service.spec.ts`
-  - Next.js：`apps/web/lib/foo.ts` ↔ `apps/web/__tests__/lib/foo.test.ts`
-- 命名：`test_<函数>_<场景>_<期望>` / `it("<scenario> should <expected>")`。
-
-### 3.2 测试分类
-
-| 类型        | Python 标记                | TS 标记                        | 范围                   | 速度   |
-| ----------- | -------------------------- | ------------------------------ | ---------------------- | ------ |
-| unit        | `@pytest.mark.unit`        | `*.test.ts`                    | 单函数/类，纯逻辑      | < 50ms |
-| integration | `@pytest.mark.integration` | `*.spec.ts`                    | 跨模块，含真实 adapter | < 1s   |
-| e2e         | `@pytest.mark.e2e`         | `*.e2e-spec.ts` / `playwright` | 完整入口               | 不限   |
-| property    | `@pytest.mark.property`    | `fast-check`                   | 性质测试               | < 1s   |
-
-CI 默认跑 unit + integration；e2e 单独触发。
-
-### 3.3 必备测试场景
-
-对每个新增/修改的公共函数，必须覆盖：
-
-1. **golden path**：典型输入 → 预期输出
-2. **边界**：空、零、最大、最小、单元素、负数（如适用）
-3. **异常路径**：每个 `raises` / `throws` 都要触发
-4. **不变量**：对偶/可逆/幂等（如适用）
-5. **回归**：每修一个 bug 必须先写复现该 bug 的失败测试
-
-### 3.4 测试质量规则
-
-- 一个测试只断言一件事；用参数化 / `it.each` 覆盖多组数据，不要 if/else 分支。
-- **禁止 mock 数据库**——用真实 sqlite / 内存 / testcontainer；mock 仅用于外部网络与不可控时间/随机。
-- **跨进程契约测试**：Python 与 TS 共享 `proto/` 下的 schema；契约变更必须同时更新两侧测试。
-- **时间与随机必须可控**：注入 `FrozenClock` / `SeededRng`，避免全局 patch。
-- 每个测试 ≤ 30 行；超过即拆 fixture / helper。
-- 共用 fixture 放就近的 `conftest.py` / `test-utils/`。
-- 禁止测试间共享可变状态。
-
-### 3.5 命令
-
-- Python 全部：`pytest -q`
-- Python 覆盖率：`pytest --cov=services/py --cov-branch --cov-report=term-missing --cov-fail-under=90`
-- NestJS：`pnpm --filter api test` / `... test:cov`
-- Next.js：`pnpm --filter web test`
-- 全量门禁：`pnpm check` （脚本聚合：prettier check + eslint + tsc + jest + vitest + ruff format check + ruff check + mypy strict + pytest cov）
+- **Every newly added runtime env variable (NestJS / Next.js / Python — any process) must be added to `.env.example` at the repo root**. It is the single source of truth for onboarding. Missing it = task incomplete.
+- Template entry structure: ① one comment line above stating purpose + linked doc (`see docs/...`), ② default value / required-or-not, ③ optional enum or value range. **Do not** put real keys / tokens in the example.
+- Variables of the same topic are grouped under one `# ---- <module> ----` section with a consistent header; new sections go right after the most related existing one.
+- When deleting / renaming an env variable, also update `.env.example` and every doc referencing it (`docs/architecture.md` / `docs/integrations/*` / `README.md`). CI will not catch the misses for you.
+- Variables shared with the frontend must start with `NEXT_PUBLIC_` and be dual-written in NestJS + Next.js (see the `AUTH_MODE` / `NEXT_PUBLIC_AUTH_MODE` pattern).
+- Variables that require generating a key / long token must spell out the generation command (e.g. `openssl rand -hex 32`); don't make the user search for it.
 
 ---
 
-## 4. 自动 Review 机制（硬性）
+## 3. Testing (hard)
 
-### 4.1 触发时机
+### 3.1 Coverage and structure
 
-按 §0 步骤 4 的策略触发，不要无差别介入。摘要：
+- **New/modified code: line coverage ≥ 90%**, branch coverage ≥ 80%.
+- Test directory mirrors the source directory:
+  - Python: `services/py/quant_core/foo.py` ↔ `services/py/tests/quant_core/test_foo.py`
+  - NestJS: `apps/api/src/modules/foo/foo.service.ts` ↔ `apps/api/test/modules/foo/foo.service.spec.ts`
+  - Next.js: `apps/web/lib/foo.ts` ↔ `apps/web/__tests__/lib/foo.test.ts`
+- Naming: `test_<function>_<scenario>_<expectation>` / `it("<scenario> should <expected>")`.
 
-- **必须触发**：用户显式要求（`/review` / "审一下"）；milestone / feature 收尾且含非平凡业务逻辑；跨进程契约（`proto/` / Arrow schema）变更。
-- **不要触发**：脚手架、配置调整、格式化、文档/注释改动、单文件且 `pnpm check` 已绿的小重构。
-- 常驻门禁是 `pnpm check`，reviewer 是抽样而非每次。
+### 3.2 Test categories
 
-### 4.2 Review 维度
+| Type        | Python marker              | TS marker                      | Scope                              | Speed  |
+| ----------- | -------------------------- | ------------------------------ | ---------------------------------- | ------ |
+| unit        | `@pytest.mark.unit`        | `*.test.ts`                    | Single function/class, pure logic  | < 50ms |
+| integration | `@pytest.mark.integration` | `*.spec.ts`                    | Cross-module, with real adapters   | < 1s   |
+| e2e         | `@pytest.mark.e2e`         | `*.e2e-spec.ts` / `playwright` | Full entry                         | no cap |
+| property    | `@pytest.mark.property`    | `fast-check`                   | Property tests                     | < 1s   |
 
-reviewer 必须按以下维度逐项检查并打分（pass / minor / major / blocker）：
+CI runs unit + integration by default; e2e is triggered separately.
 
-1. 是否违反第 1 章代码风格（含语言专属）
-2. 是否违反第 2 章模块化分层（含进程拓扑、跨语言契约）
-3. 测试是否齐全（第 3 章）
-4. 是否引入安全问题（注入、未校验输入、密钥/凭据硬编码、时间/随机不可控、CORS/CSRF/SSRF）
-5. 是否引入性能陷阱（O(n²) on 主路径、循环内 IO、未释放资源、N+1、跨进程多次小调用）
-6. 是否破坏既有契约（HTTP API、Arrow schema、Python public API）
-7. 文档与日志是否同步更新（特别是 `docs/integrations/*` 和 `docs/modules/*`）
+### 3.3 Required test scenarios
 
-### 4.3 Verdict 格式
+For every new/modified public function, cover:
+
+1. **Golden path**: typical input → expected output
+2. **Boundaries**: empty, zero, max, min, single element, negative (where applicable)
+3. **Exception paths**: trigger every `raises` / `throws`
+4. **Invariants**: dual / reversible / idempotent (where applicable)
+5. **Regression**: every bug fix starts with a failing test that reproduces the bug
+
+### 3.4 Test-quality rules
+
+- One assertion per test; use parameterization / `it.each` to cover multiple datasets — no if/else branches.
+- **No mocking the database** — use real sqlite / in-memory / testcontainer; mocks are only for external network and uncontrollable time/randomness.
+- **Cross-process contract tests**: Python and TS share the schemas under `proto/`; any contract change updates tests on both sides.
+- **Time and randomness must be controlled**: inject `FrozenClock` / `SeededRng`; avoid global patching.
+- Each test ≤ 30 lines; split into fixtures / helpers if longer.
+- Shared fixtures live in the nearest `conftest.py` / `test-utils/`.
+- No mutable state shared between tests.
+
+### 3.5 Commands
+
+- All Python: `pytest -q`
+- Python coverage: `pytest --cov=services/py --cov-branch --cov-report=term-missing --cov-fail-under=90`
+- NestJS: `pnpm --filter api test` / `... test:cov`
+- Next.js: `pnpm --filter web test`
+- Full gate: `pnpm check` (aggregate script: prettier check + eslint + tsc + jest + vitest + ruff format check + ruff check + mypy strict + pytest cov)
+
+---
+
+## 4. Automatic review mechanism (hard)
+
+### 4.1 Triggers
+
+Trigger per §0 step 4 — do not engage indiscriminately. Summary:
+
+- **Must trigger**: explicit user request (`/review` / "审一下"); milestone / feature wrap-up containing non-trivial business logic; cross-process contract (`proto/` / Arrow schema) change.
+- **Do not trigger**: scaffolding, config tweaks, formatting, docs/comments, single-file small refactors where `pnpm check` is already green.
+- The standing gate is `pnpm check`; reviewer is sampled, not invoked every time.
+
+### 4.2 Review dimensions
+
+The reviewer must check and grade each (pass / minor / major / blocker):
+
+1. Violations of Chapter 1 code style (including language-specific)
+2. Violations of Chapter 2 modularity layering (including process topology and cross-language contracts)
+3. Test completeness (Chapter 3)
+4. Security issues introduced (injection, unvalidated input, hard-coded keys/credentials, uncontrolled time/randomness, CORS/CSRF/SSRF)
+5. Performance traps introduced (O(n²) on the hot path, IO in loops, unreleased resources, N+1, many small cross-process calls)
+6. Breaking existing contracts (HTTP API, Arrow schema, Python public API)
+7. Docs and logs updated in sync (especially `docs/integrations/*` and `docs/modules/*`)
+
+### 4.3 Verdict format
 
 ```
 Review of <files>:
@@ -402,115 +402,115 @@ Required fixes (if any):
 1. ...
 ```
 
-`MAJOR` 与 `BLOCKER` 必须修复后再次 review，直到 `APPROVE` 才视为完成。
+`MAJOR` and `BLOCKER` must be fixed and re-reviewed until `APPROVE` — only then is the task done.
 
 ---
 
-## 5. 工具与命令
+## 5. Tools and commands
 
 ### Python
 
-| 任务     | 命令                                                        |
-| -------- | ----------------------------------------------------------- |
-| 格式化   | `ruff format . && ruff check --fix .`                       |
-| 类型检查 | `mypy --strict services/py`                                 |
-| 单测     | `pytest -q -m "unit or integration"`                        |
-| 覆盖率   | `pytest --cov=services/py --cov-branch --cov-fail-under=90` |
+| Task           | Command                                                     |
+| -------------- | ----------------------------------------------------------- |
+| Format         | `ruff format . && ruff check --fix .`                       |
+| Type check     | `mypy --strict services/py`                                 |
+| Unit test      | `pytest -q -m "unit or integration"`                        |
+| Coverage       | `pytest --cov=services/py --cov-branch --cov-fail-under=90` |
 
 ### TypeScript
 
-| 任务        | 命令                                             |
-| ----------- | ------------------------------------------------ |
-| 格式化      | `pnpm prettier --write . && pnpm eslint --fix .` |
-| 类型检查    | `pnpm -r tsc --noEmit`                           |
-| 单测（API） | `pnpm --filter api test`                         |
-| 单测（Web） | `pnpm --filter web test`                         |
-| E2E         | `pnpm --filter web test:e2e`（playwright）       |
+| Task             | Command                                          |
+| ---------------- | ------------------------------------------------ |
+| Format           | `pnpm prettier --write . && pnpm eslint --fix .` |
+| Type check       | `pnpm -r tsc --noEmit`                           |
+| Unit test (API)  | `pnpm --filter api test`                         |
+| Unit test (Web)  | `pnpm --filter web test`                         |
+| E2E              | `pnpm --filter web test:e2e` (playwright)        |
 
-### 全量门禁
+### Full gate
 
-- `pnpm check`：根 `package.json` 中聚合脚本，依次跑 TS 栈（prettier check + eslint + tsc + jest + vitest）和 Py 栈（`uv run` 包装的 ruff format check + ruff check + mypy --strict + pytest --cov`），任一失败即非 0 退出。
-
----
-
-## 6. Git 与提交
-
-- 一次提交只做一件事；标题 ≤ 72 字符，祈使句。约定式 prefix：`feat:` / `fix:` / `refactor:` / `test:` / `docs:` / `chore:`。
-- 不允许 `git commit --no-verify`（除非用户显式要求）。
-- 不允许 `git push --force` 到 `main` / `master`。
-- 提交信息正文写"为什么"，不写"做了什么"——后者看 diff。
-- 跨进程契约变更（`proto/`、Arrow schema、HTTP API）必须独立提交，标题前缀 `contract:`。
+- `pnpm check`: aggregate script in the root `package.json`. Runs TS stack (prettier check + eslint + tsc + jest + vitest) and Py stack (`uv run`-wrapped ruff format check + ruff check + mypy --strict + pytest --cov) in sequence; any failure exits non-zero.
 
 ---
 
-## 7. 当本规约与请求冲突时
+## 6. Git and commits
 
-- 用户的具体指令 > 本规约通用条款；但**安全/正确性条款不可让步**（密钥硬编码、测试为空、跳过类型检查等永远要拒绝并说明）。
-- 不确定时先问，不要默默偏离。
-
----
-
-## 8. 跨进程契约（强制）
-
-### 8.1 Schema 单一源
-
-- 所有 Python ↔ NestJS 数据结构定义在 `proto/` 目录下：
-  - Arrow schema（`.fbs` 或 `pyarrow.Schema` 生成的 JSON）用于批量列存（K线、新闻列表等大对象）
-  - 控制平面消息（请求、参数、错误）用 protobuf `.proto`
-- 由代码生成器同时产出 Python（pydantic 类）和 TS（zod schema + 类型）。两侧手写 schema 一律拒收。
-
-### 8.2 错误码表
-
-- 所有跨进程错误码集中在 `proto/errors.proto`（或同等 JSON），双侧通过生成器引入。
-- 错误必须带 `code`（机读，UPPER_SNAKE_CASE）、`message`（人读）、`details`（结构化字段，可选）、`trace_id`。
-
-### 8.3 版本与兼容
-
-- Schema 变更遵守语义版本：新增字段（向后兼容）走 minor；删除/重命名字段走 major，必须配迁移说明 + 双写期。
-- 每次 schema 变更必须新增契约测试：用旧 client 调新 server / 反向，断言行为符合兼容性声明。
-
-### 8.4 调用规范
-
-- 长任务（>2s）必须返回 `task_id`，用 SSE / 轮询查进度，不要长 hold HTTP 连接。
-- 大数据集（>1MB）必须走 Arrow Flight 列存通道，不要塞进 JSON。
-- 频繁小调用必须批量化（一次传一组 symbol，不要 N 次循环调）。
+- One commit does one thing; title ≤ 72 chars, imperative. Conventional prefixes: `feat:` / `fix:` / `refactor:` / `test:` / `docs:` / `chore:`.
+- No `git commit --no-verify` (unless the user explicitly asks).
+- No `git push --force` to `main` / `master`.
+- Commit body explains "why", not "what" — the latter is in the diff.
+- Cross-process contract changes (`proto/`, Arrow schema, HTTP API) must be in their own commit, with title prefix `contract:`.
 
 ---
 
-## 9. 通用工程原则（强制）
+## 7. When this spec conflicts with the request
 
-### 9.1 数据归一化
+- A user's specific instruction > this spec's generic clauses; but **safety/correctness clauses are non-negotiable** (hard-coded keys, empty tests, skipping type checks, etc. must always be refused with explanation).
+- When unsure, ask — do not silently drift.
 
-- 同一概念在系统内只允许一种规范表示，进入业务层前完成归一化：
-  - 金额 / 价格 / 数量：`Decimal` / `decimal.js`，统一精度与四舍五入策略。
-  - 枚举：定义在 `proto/` 或核心 types 目录中，禁止散落字面量。
-- 归一化函数放在核心目录（`domain/pure/` 或 `packages/shared/fp/`），并被边界层（adapters / dto）唯一调用；业务层假设数据已归一化，不做二次清洗。
-- 外部输入（HTTP / RPC / 文件）必须在边界一次完成校验 + 归一化，再进入域，禁止"边用边修"。
+---
 
-### 9.2 模块可插拔与测试替身
+## 8. Cross-process contracts (mandatory)
 
-- 业务模块对外部依赖（数据源、缓存、LLM、broker、clock、rng 等）必须通过 **ports（Protocol / 抽象接口）** 而非具体 SDK 编程；adapter 注册在装配层（NestJS `Module` / Python `services` 工厂 / Next.js DI 容器）。
-- 切换实现的成本必须 = 0：替换一个 adapter 不需要改动 service / domain / 调用方。
-- 每个 port 必须同时存在生产 adapter 与至少一个测试替身（`FakeXxx` / `InMemoryXxx`）；测试替身放在 `tests/fakes/` 或 `test-utils/`，对外行为与真实 adapter 一致。
-- 禁止在 service / domain 中 `import` 具体 adapter 模块或具体 SDK；违反 = MAJOR。
-- 配置驱动切换：`adapter` 选择由 env / config 决定，代码路径不要写 `if env === 'test'` 这类分支。
+### 8.1 Single source of schema
 
-### 9.3 性能是第一优先级
+- All Python ↔ NestJS data structures are defined under `proto/`:
+  - Arrow schemas (`.fbs` or JSON generated from `pyarrow.Schema`) for bulk columnar payloads (K-lines, news lists, etc.)
+  - Control-plane messages (requests, params, errors) in protobuf `.proto`
+- A code generator emits both Python (pydantic classes) and TS (zod schema + types). Hand-written schemas on either side are rejected.
 
-- 写代码前先估算主路径的复杂度与数据规模，挑选合适的数据结构与算法；不要先写再优化。
-- 主路径禁止：循环内 IO、N+1 查询、未必要的 JSON 反复 parse、跨进程多次小调用（参考 §8.4 批量化）、列表 / 表格 UI 不走虚拟化。
-- **Parquet 不要按业务主键分到 ≥ 1000 文件**：DuckDB `read_parquet(list-of-N-paths)` 在 N > 几百时调度开销显著；A 股 5500 个 per-code parquet 是反例。改为按 prefix 分到 ≤ 50 个 `<prefix>.parquet` 扁平文件 + 整 partition rewrite 写。基准：`docs/perf/kline-write.md`。
-- **每天跑一次的 batch 任务不要为"写延迟"加 LSM/delta**：实测 50 ms 整文件 rewrite 已经够快，delta+compaction 多出的运维（delta 失控告警、compaction cron、文件夹层级）不划算。除非写 QPS 高到单次 rewrite 撑不住，否则始终 rewrite。同上基准。
-- 大对象走列存（Arrow）；热点查询走索引 / 预计算（如日线前复权与 `ma*` 入库时即算好，详见 §2.8）；幂等结果走缓存。
-- 任何"看起来无所谓"的循环、map、filter 在 N ≥ 1e4 时都要重新评估；优先 streaming / 分块处理而非整表加载。
-- 性能相关代码必须有可复现的基准（micro-benchmark / load test），改动需对比前后数据，禁止凭感觉判断"更快了"。
+### 8.2 Error-code table
 
-### 9.4 性能优化记录
+- All cross-process error codes are centralized in `proto/errors.proto` (or equivalent JSON), pulled into both sides via the generator.
+- Errors must carry `code` (machine-readable, UPPER_SNAKE_CASE), `message` (human-readable), `details` (structured fields, optional), `trace_id`.
 
-- 任何性能优化改动必须在 `docs/perf/<topic>.md` 留档，内容含：
-  1. 背景与瓶颈定位（profile 截图 / 日志 / 指标）
-  2. 方案与权衡（为何选 A 不选 B）
-  3. 量化结果（前后对比：p50 / p95 / 吞吐 / 内存，越具体越好）
-  4. 回归风险与监控点
-- 文档落地后，把可复用的经验、踩坑与"下次别再这么干"以一行规则形式回写到本 `CLAUDE.md` 的相应章节（通常是 §9.3 或 §2 模块化章节），保持本文件是真理之源。
-- 没有量化结果的优化视为未完成；不允许仅凭"我觉得更快了"合入主干。
+### 8.3 Versioning and compatibility
+
+- Schema changes follow semantic versioning: additive fields (backward-compatible) → minor; deletions/renames → major, requiring a migration note + dual-write window.
+- Every schema change requires new contract tests: old client against new server / vice versa, asserting behavior matches the compatibility statement.
+
+### 8.4 Call conventions
+
+- Long tasks (> 2s) must return a `task_id`; poll via SSE / polling — do not hold an HTTP connection open.
+- Large payloads (> 1MB) must go through the Arrow Flight columnar channel; do not stuff into JSON.
+- Frequent small calls must be batched (pass a list of symbols once; don't call N times in a loop).
+
+---
+
+## 9. General engineering principles (mandatory)
+
+### 9.1 Data normalization
+
+- A concept has exactly one canonical representation system-wide; normalize before entering the business layer:
+  - Amount / price / quantity: `Decimal` / `decimal.js` with uniform precision and rounding strategy.
+  - Enums: defined in `proto/` or core types directories; no scattered literals.
+- Normalization functions live in core directories (`domain/pure/` or `packages/shared/fp/`) and are called solely from the boundary layer (adapters / dto); the business layer assumes data is normalized and does not re-clean.
+- External input (HTTP / RPC / file) is validated + normalized in one shot at the boundary before entering the domain; no "fix as you use".
+
+### 9.2 Pluggable modules and test doubles
+
+- Business modules program against external dependencies (data sources, caches, LLMs, brokers, clock, rng, etc.) via **ports (Protocol / abstract interfaces)** rather than concrete SDKs; adapters are registered at the wiring layer (NestJS `Module` / Python `services` factory / Next.js DI container).
+- Cost of swapping an implementation must be 0: replacing one adapter requires no changes to service / domain / callers.
+- Every port has a production adapter AND at least one test double (`FakeXxx` / `InMemoryXxx`); doubles live in `tests/fakes/` or `test-utils/` and behave equivalently to the real adapter at the boundary.
+- Importing a concrete adapter or SDK in service / domain is forbidden; violation = MAJOR.
+- Config-driven selection: which adapter is chosen is decided by env / config — do not write `if env === 'test'` branches in code.
+
+### 9.3 Performance is the top priority
+
+- Before writing code, estimate the hot-path complexity and data scale; pick the right data structure and algorithm — don't write first and optimize later.
+- The hot path must not contain: IO in loops, N+1 queries, unnecessary repeated JSON parsing, many small cross-process calls (see §8.4 for batching), or list/table UI without virtualization.
+- **Do not shard Parquet by business key into ≥ 1000 files**: DuckDB `read_parquet(list-of-N-paths)` scheduling overhead becomes significant for N > a few hundred; 5500 per-code parquet files for A-shares is the anti-pattern. Instead, shard by prefix into ≤ 50 flat `<prefix>.parquet` files + whole-partition rewrite on write. Benchmark: `docs/perf/kline-write.md`.
+- **Daily batch jobs don't need LSM/delta for "write latency"**: a measured 50 ms whole-file rewrite is fast enough; the ops cost of delta + compaction (runaway-delta alerts, compaction cron, deeper folder hierarchy) is not worth it. Unless write QPS exceeds what a single rewrite can sustain, always rewrite. Same benchmark.
+- Large objects go through columnar (Arrow); hot queries go through indexes / precomputation (e.g. daily forward-adjusted prices and `ma*` computed at ingest time — see §2.8); idempotent results go through cache.
+- Any "seemingly innocuous" loop / map / filter must be re-evaluated when N ≥ 1e4; prefer streaming / chunked processing over loading the full table.
+- Performance-related code must have a reproducible benchmark (micro-benchmark / load test); changes need before/after numbers — no "feels faster" judgments.
+
+### 9.4 Performance optimization log
+
+- Every performance change must leave a record under `docs/perf/<topic>.md` containing:
+  1. Context and bottleneck identification (profile screenshots / logs / metrics)
+  2. Approach and trade-offs (why A, not B)
+  3. Quantified results (before/after: p50 / p95 / throughput / memory — the more specific the better)
+  4. Regression risk and monitoring points
+- After the doc is in place, write back any reusable lesson, gotcha, or "never do this again" as a one-line rule into the appropriate section of this `CLAUDE.md` (usually §9.3 or §2 modularity), keeping this file the source of truth.
+- An optimization without quantified results counts as incomplete; "I think it's faster" is not grounds for merging to main.

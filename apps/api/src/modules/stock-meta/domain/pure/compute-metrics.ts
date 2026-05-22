@@ -29,6 +29,13 @@ export interface BarLike {
   readonly volume: number;
   /** Daily turnover in 元 (akshare convention). Same guard as above. */
   readonly turnover: number;
+  /** Pre-computed MAs from `KlineBar` (qfq close). `null` when the
+   *  trailing window is shorter than the MA period. Consumed by the
+   *  WCMI sub-score engine (see `wcmi-subscores/`). */
+  readonly ma5: number | null;
+  readonly ma10: number | null;
+  readonly ma20: number | null;
+  readonly ma60: number | null;
 }
 
 export interface StockMetrics {
@@ -48,12 +55,21 @@ export interface StockMetrics {
   readonly pb: Dec | null;
   readonly peg: Dec | null;
   readonly gross_margin_ttm: Dec | null;
-  /** Cross-sectional swing-momentum score in `[-1, +1]`. Computed
-   *  only by the batch backfill (needs universe-wide percentile
-   *  tables — see `wcmi-scoring.ts` + `StockMetricsBackfillService`).
-   *  Per-code projection leaves this field `null`; the next batch
-   *  pass fills it in. */
+  /** Wave-quality composite ∈ [0, 1000]. Computed only by the batch
+   *  backfill (needs universe-wide percentile tables — see
+   *  `wcmi-scoring.ts` + `StockMetricsBackfillService`). Per-code
+   *  projection leaves this field `null`; the next batch pass fills
+   *  it in. */
   readonly wcmi: Dec | null;
+  /** Per-sub-score cross-sectional percentile × 100. All `null` when
+   *  `wcmi` is null. */
+  readonly wcmi_rhythm: Dec | null;
+  readonly wcmi_ma_support: Dec | null;
+  readonly wcmi_up_wave: Dec | null;
+  readonly wcmi_yang_dom: Dec | null;
+  readonly wcmi_shadow_clean: Dec | null;
+  readonly wcmi_stage_gain: Dec | null;
+  readonly wcmi_crash_avoid: Dec | null;
 }
 
 const RETURN_WINDOWS: readonly (readonly [keyof StockMetrics, number])[] = [
@@ -92,6 +108,13 @@ export function computeMetrics(meta: StockMetaDto, bars: readonly BarLike[]): St
       peg: null,
       gross_margin_ttm: null,
       wcmi: null,
+      wcmi_rhythm: null,
+      wcmi_ma_support: null,
+      wcmi_up_wave: null,
+      wcmi_yang_dom: null,
+      wcmi_shadow_clean: null,
+      wcmi_stage_gain: null,
+      wcmi_crash_avoid: null,
     };
   }
   const latest = bars[bars.length - 1]!;
@@ -107,6 +130,13 @@ export function computeMetrics(meta: StockMetaDto, bars: readonly BarLike[]): St
     // wcmi is universe-rank-based — only the batch backfill knows
     // every code's raw features and can compute percentiles.
     wcmi: null,
+    wcmi_rhythm: null,
+    wcmi_ma_support: null,
+    wcmi_up_wave: null,
+    wcmi_yang_dom: null,
+    wcmi_shadow_clean: null,
+    wcmi_stage_gain: null,
+    wcmi_crash_avoid: null,
   };
 }
 

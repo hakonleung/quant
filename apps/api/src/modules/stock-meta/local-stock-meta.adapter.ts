@@ -112,7 +112,25 @@ export class LocalStockMetaAdapter implements StockMetaPort {
     this.snapshot = null;
     this.loadedAtMs = 0;
     this.loadedMtimeMs = -1;
+    for (const cb of this.onInvalidateCallbacks) {
+      try {
+        cb();
+      } catch {
+        // Callbacks must not break the write hot path. Errors are
+        // expected to be re-surfaced by the callback's own logger.
+      }
+    }
   }
+
+  /** Subscribe to invalidate() calls. Lets downstream SWR caches
+   *  (e.g. `StockMetaService.snapshotAllCache`) drop their state right
+   *  after a write — without this, list-route reads stay stale for up
+   *  to the service-level TTL (60 s) regardless of the on-disk state. */
+  onInvalidate(cb: () => void): void {
+    this.onInvalidateCallbacks.push(cb);
+  }
+
+  private readonly onInvalidateCallbacks: (() => void)[] = [];
 
   private async fresh(): Promise<Snapshot> {
     const now = Date.now();
@@ -233,6 +251,13 @@ function rowToSnapshot(meta: StockMetaDto, row: Record<string, unknown>): StockS
       peg: optionalString(row['peg']),
       gross_margin_ttm: optionalString(row['gross_margin_ttm']),
       wcmi: optionalString(row['wcmi']),
+      wcmi_rhythm: optionalString(row['wcmi_rhythm']),
+      wcmi_ma_support: optionalString(row['wcmi_ma_support']),
+      wcmi_up_wave: optionalString(row['wcmi_up_wave']),
+      wcmi_yang_dom: optionalString(row['wcmi_yang_dom']),
+      wcmi_shadow_clean: optionalString(row['wcmi_shadow_clean']),
+      wcmi_stage_gain: optionalString(row['wcmi_stage_gain']),
+      wcmi_crash_avoid: optionalString(row['wcmi_crash_avoid']),
     },
     returns: {
       ret_1d: optionalString(row['ret_1d']),

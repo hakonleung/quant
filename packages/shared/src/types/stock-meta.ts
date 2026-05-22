@@ -127,12 +127,18 @@ export const StockDerivedMetricsSchema = z
     peg: decimalStringOrNull,
     gross_margin_ttm: decimalStringOrNull,
     /**
-     * Weighted Composite Momentum Index — `(4·ret_5d + 3·ret_10d +
-     * 2·ret_20d + 1·ret_90d) / 10`. Decimal string in the same scale
-     * as the `ret_*` inputs (fractional). `null` when any of the four
-     * stage returns is missing.
+     * Wave-quality composite ∈ [0, 1000]. `null` when bars < 30 or the
+     * net-down survivor gate fails. See `docs/perf/wcmi-redesign.md`.
      */
     wcmi: decimalStringOrNull,
+    /** Per-dimension cross-sectional percentile × 100. `null` when `wcmi` is null. */
+    wcmi_rhythm: decimalStringOrNull,
+    wcmi_ma_support: decimalStringOrNull,
+    wcmi_up_wave: decimalStringOrNull,
+    wcmi_yang_dom: decimalStringOrNull,
+    wcmi_shadow_clean: decimalStringOrNull,
+    wcmi_stage_gain: decimalStringOrNull,
+    wcmi_crash_avoid: decimalStringOrNull,
   })
   .strict();
 

@@ -42,6 +42,13 @@ const SNAP_A: StockSnapshotDto = {
     peg: null,
     gross_margin_ttm: null,
     wcmi: null,
+    wcmi_rhythm: null,
+    wcmi_ma_support: null,
+    wcmi_up_wave: null,
+    wcmi_yang_dom: null,
+    wcmi_shadow_clean: null,
+    wcmi_stage_gain: null,
+    wcmi_crash_avoid: null,
   },
   returns: {
     ret_1d: '0.0123',
