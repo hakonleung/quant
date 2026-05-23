@@ -14,9 +14,12 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useEffect, useState, type ReactNode } from 'react';
 
+import { FeatHotkeyHint } from '../components/feat-hotkey-hint/feat-hotkey-hint.js';
 import { getClientConfig } from './config/config-center-next-client-getter.js';
 import { registerStoreExportGlobal } from './storage/export-stores.js';
 import { ThemeProvider } from './theme/provider.js';
+import { UiCmdEngine } from './ui-cmd/engine/install.js';
+import { installGlobalCells } from './ui-cmd/global-cells.js';
 import { startWebVitals } from './web-vitals/store.js';
 
 interface ProvidersProps {
@@ -41,10 +44,15 @@ export function Providers({ children }: ProvidersProps): ReactNode {
     // registered before the user's first interaction — see
     // `lib/web-vitals/store.ts` for the reasoning.
     startWebVitals();
+    // Register the FE-only UI command set (module switching, view-mode
+    // toggles, hint window). Idempotent — safe across Fast Refresh.
+    installGlobalCells();
   }, []);
   return (
     <ThemeProvider>
       <QueryClientProvider client={client}>{children}</QueryClientProvider>
+      <UiCmdEngine />
+      <FeatHotkeyHint />
     </ThemeProvider>
   );
 }
