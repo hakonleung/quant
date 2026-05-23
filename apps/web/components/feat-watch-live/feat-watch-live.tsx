@@ -295,6 +295,7 @@ export function FeatWatchLive({ bare }: FeatWatchLiveProps = {}): React.ReactEle
           {isMobile && !formOpen ? (
             <Flex
               as="button"
+              role="button"
               w="100%"
               h="36px"
               align="center"
@@ -309,6 +310,9 @@ export function FeatWatchLive({ bare }: FeatWatchLiveProps = {}): React.ReactEle
               letterSpacing="0.18em"
               cursor="pointer"
               _hover={{ bg: 'term.panel2' }}
+              _focusVisible={{ outline: '2px solid', outlineColor: 'term.green', outlineOffset: '-2px' }}
+              aria-expanded={false}
+              aria-label="open new watch form"
               onClick={(): void => {
                 setFormOpen(true);
               }}
@@ -436,9 +440,19 @@ function BodyStatus({
   onOverrideGroup,
   onToggleEnabled,
 }: BodyStatusProps): React.ReactElement {
-  if (state.kind === 'connecting') return <Text>connecting…</Text>;
+  if (state.kind === 'connecting') {
+    return (
+      <Text role="status" aria-live="polite">
+        connecting…
+      </Text>
+    );
+  }
   if (state.kind === 'error') {
-    return <Text color="term.red">stream error: {state.message}</Text>;
+    return (
+      <Text role="status" aria-live="polite" color="term.red">
+        stream error: {state.message}
+      </Text>
+    );
   }
   if (groups.length === 0) {
     return <Text color="term.ink3">no tasks. fill the form above to add.</Text>;

@@ -230,7 +230,16 @@ function SectorChip({
     <Flex
       as="li"
       role="button"
+      tabIndex={0}
+      aria-pressed={selected}
+      aria-label={`select sector ${sector.name}`}
       onClick={onClick}
+      onKeyDown={(e: React.KeyboardEvent<HTMLDivElement>): void => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onClick();
+        }
+      }}
       direction="column"
       align="flex-start"
       justify="center"
@@ -244,6 +253,7 @@ function SectorChip({
       borderTopColor="accent"
       cursor="pointer"
       _hover={selected ? {} : { bg: 'hover' }}
+      _focusVisible={{ outline: '2px solid', outlineColor: 'accent', outlineOffset: '-2px' }}
       flexShrink={0}
       whiteSpace="nowrap"
       data-testid={`sector-chip-${sector.id}`}
