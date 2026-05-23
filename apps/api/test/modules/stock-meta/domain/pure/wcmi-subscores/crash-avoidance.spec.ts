@@ -1,6 +1,6 @@
 import type { BarLike } from '../../../../../../src/modules/stock-meta/domain/pure/compute-metrics.js';
 import { computeCrashAvoidance } from '../../../../../../src/modules/stock-meta/domain/pure/wcmi-subscores/crash-avoidance.js';
-import { WCMI_CONFIG } from '../../../../../../src/modules/stock-meta/domain/pure/wcmi-subscores/types.js';
+import { WCMI_CONFIG } from '../../../../../../src/modules/stock-meta/domain/pure/wcmi-subscores/config.js';
 
 function makeBar(prevClose: number, open: number, close: number): BarLike[] {
   const prev: BarLike = {

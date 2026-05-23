@@ -1,6 +1,6 @@
 import type { BarLike } from '../../../../../../src/modules/stock-meta/domain/pure/compute-metrics.js';
 import { computeMaSupport } from '../../../../../../src/modules/stock-meta/domain/pure/wcmi-subscores/ma-support.js';
-import { WCMI_CONFIG } from '../../../../../../src/modules/stock-meta/domain/pure/wcmi-subscores/types.js';
+import { WCMI_CONFIG } from '../../../../../../src/modules/stock-meta/domain/pure/wcmi-subscores/config.js';
 
 function makeBar(close: number, ma20: number | null, opts?: {
   ma5?: number | null; ma10?: number | null; ma60?: number | null;

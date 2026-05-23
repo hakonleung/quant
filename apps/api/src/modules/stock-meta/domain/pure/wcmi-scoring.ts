@@ -20,7 +20,7 @@ export type {
   WcmiScore,
   ScoringInput,
 } from './wcmi-subscores/types.js';
-export { WCMI_CONFIG } from './wcmi-subscores/types.js';
+export { WCMI_CONFIG } from './wcmi-subscores/config.js';
 export { extractWcmiSubscores } from './wcmi-subscores/extract.js';
 export { extractWcmiSubscoreDetail } from './wcmi-subscores/detail.js';
 export type { WcmiSubscoreDetail } from './wcmi-subscores/detail.js';

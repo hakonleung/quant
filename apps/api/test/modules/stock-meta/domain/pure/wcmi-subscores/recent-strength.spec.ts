@@ -1,6 +1,6 @@
 import { computeRecentStrength } from '../../../../../../src/modules/stock-meta/domain/pure/wcmi-subscores/recent-strength.js';
 import type { WcmiConfig } from '../../../../../../src/modules/stock-meta/domain/pure/wcmi-subscores/types.js';
-import { WCMI_CONFIG } from '../../../../../../src/modules/stock-meta/domain/pure/wcmi-subscores/types.js';
+import { WCMI_CONFIG } from '../../../../../../src/modules/stock-meta/domain/pure/wcmi-subscores/config.js';
 import type { BarLike } from '../../../../../../src/modules/stock-meta/domain/pure/compute-metrics.js';
 
 function bar(o: number, h: number, l: number, c: number): BarLike {

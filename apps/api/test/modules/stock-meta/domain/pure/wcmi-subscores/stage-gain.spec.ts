@@ -1,6 +1,6 @@
 import type { BarLike } from '../../../../../../src/modules/stock-meta/domain/pure/compute-metrics.js';
 import { computeStageGain } from '../../../../../../src/modules/stock-meta/domain/pure/wcmi-subscores/stage-gain.js';
-import { WCMI_CONFIG } from '../../../../../../src/modules/stock-meta/domain/pure/wcmi-subscores/types.js';
+import { WCMI_CONFIG } from '../../../../../../src/modules/stock-meta/domain/pure/wcmi-subscores/config.js';
 
 function makeBars(closes: number[]): BarLike[] {
   return closes.map((c, i) => ({

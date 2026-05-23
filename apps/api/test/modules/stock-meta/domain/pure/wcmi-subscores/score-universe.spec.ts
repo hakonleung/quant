@@ -1,7 +1,8 @@
 import type { BarLike } from '../../../../../../src/modules/stock-meta/domain/pure/compute-metrics.js';
 import { extractWcmiSubscores } from '../../../../../../src/modules/stock-meta/domain/pure/wcmi-subscores/extract.js';
 import { scoreUniverse } from '../../../../../../src/modules/stock-meta/domain/pure/wcmi-subscores/score-universe.js';
-import { WCMI_CONFIG, type ScoringInput } from '../../../../../../src/modules/stock-meta/domain/pure/wcmi-subscores/types.js';
+import { WCMI_CONFIG } from '../../../../../../src/modules/stock-meta/domain/pure/wcmi-subscores/config.js';
+import type { ScoringInput } from '../../../../../../src/modules/stock-meta/domain/pure/wcmi-subscores/types.js';
 
 function makeBars(n: number, closeFn: (i: number) => number): BarLike[] {
   return Array.from({ length: n }, (_, i) => {

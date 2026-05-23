@@ -1,6 +1,6 @@
 import type { BarLike } from '../../../../../../src/modules/stock-meta/domain/pure/compute-metrics.js';
 import { computeRhythm } from '../../../../../../src/modules/stock-meta/domain/pure/wcmi-subscores/rhythm.js';
-import { WCMI_CONFIG } from '../../../../../../src/modules/stock-meta/domain/pure/wcmi-subscores/types.js';
+import { WCMI_CONFIG } from '../../../../../../src/modules/stock-meta/domain/pure/wcmi-subscores/config.js';
 
 function makeBars(n: number, closeFn: (i: number) => number): BarLike[] {
   return Array.from({ length: n }, (_, i) => {

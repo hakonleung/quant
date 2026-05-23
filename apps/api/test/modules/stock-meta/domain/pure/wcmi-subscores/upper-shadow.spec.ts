@@ -1,6 +1,6 @@
 import type { BarLike } from '../../../../../../src/modules/stock-meta/domain/pure/compute-metrics.js';
 import { computeUpperShadowClean } from '../../../../../../src/modules/stock-meta/domain/pure/wcmi-subscores/upper-shadow.js';
-import { WCMI_CONFIG } from '../../../../../../src/modules/stock-meta/domain/pure/wcmi-subscores/types.js';
+import { WCMI_CONFIG } from '../../../../../../src/modules/stock-meta/domain/pure/wcmi-subscores/config.js';
 
 function bar(prevClose: number, open: number, high: number, low: number, close: number): BarLike[] {
   const prev: BarLike = {
