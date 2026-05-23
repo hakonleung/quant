@@ -213,6 +213,22 @@ function registerStockNavCells(): void {
   uiRegistry.bind('ui.stock-prev', () => advanceStock(-1));
 }
 
+/**
+ * Local cell registered without a default handler — Feat-internal UI
+ * state mutators (open form / dialog) need a Feat-bound handler via
+ * `useFeatHotkeys`. We declare the cell metadata centrally so the hint
+ * window sees it under the right scope, but leave binding to the Feat.
+ */
+function registerOpenNewSectorCell(): void {
+  registerLocalCell('ui.sector-new-open', {
+    scope: Feat.Mkt,
+    keys: ['N'],
+    label: 'New sector',
+    group: 'edit',
+  });
+  // Handler bound by FeatMkt via useFeatHotkeys.
+}
+
 function registerRemoveStockCell(): void {
   registerLocalCell('ui.sector-remove-stock', {
     scope: Feat.Mkt,
@@ -288,6 +304,7 @@ export function installGlobalCells(): void {
   registerSectorNavCells();
   registerStockNavCells();
   registerRemoveStockCell();
+  registerOpenNewSectorCell();
 }
 
 /** Test-only escape hatch. */

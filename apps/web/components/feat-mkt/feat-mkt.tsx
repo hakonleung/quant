@@ -22,6 +22,7 @@ import { useBlacklistQuery } from '../../lib/hooks/use-blacklist.js';
 import { useStockList } from '../../lib/hooks/use-stock-list.js';
 import { useSectorsStore } from '../../lib/stores/sectors.store.js';
 import { ALL_SECTOR_ID, useUiStore } from '../../lib/stores/ui.store.js';
+import { useFeatHotkeys } from '../../lib/ui-cmd/hooks/use-feat-hotkeys.js';
 import { FeatEqList } from '../feat-eq-list/feat-eq-list.js';
 import { NewSectorDialog } from '../feat-sec-list/new-sector-dialog.js';
 import { FeatSecList } from '../feat-sec-list/feat-sec-list.js';
@@ -46,6 +47,13 @@ export function FeatMkt(): React.ReactElement {
   const isLoading = stocks.isLoading || blacklist.isLoading || eqtyFetching > 0;
   const tone = stocks.error !== null ? 'red' : isLoading ? 'amber' : 'green';
   const [dialogOpen, setDialogOpen] = useState(false);
+
+  // `N` keyboard equivalent of the header's "+ new sector" button.
+  // Cell metadata lives in global-cells.ts under MKT scope; we bind
+  // the handler here because the dialog state is component-local.
+  useFeatHotkeys(Feat.Mkt, {
+    'ui.sector-new-open': () => setDialogOpen(true),
+  });
 
   const activeSectorId = useUiStore((s) => s.activeSectorId);
   const sectors = useSectorsStore((s) => s.sectors);
