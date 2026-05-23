@@ -1,4 +1,9 @@
-import { EMPTY_BLACKLIST, type BlacklistSnapshot } from '@quant/shared';
+import { EMPTY_BLACKLIST, PERMANENT_BLACKLIST, type BlacklistSnapshot } from '@quant/shared';
+
+/** Sorted union of `extra ∪ PERMANENT_BLACKLIST`. */
+function mergedCodes(extra: readonly string[]): readonly string[] {
+  return [...new Set<string>([...extra, ...PERMANENT_BLACKLIST])].sort();
+}
 
 import {
   BlacklistStore,
@@ -29,8 +34,12 @@ describe('BlacklistStore', () => {
 
     await store.load();
 
-    expect(store.snapshot()).toEqual(EMPTY_BLACKLIST);
+    expect(store.snapshot()).toEqual({
+      ...EMPTY_BLACKLIST,
+      codes: mergedCodes([]),
+    });
     expect(store.has('000001')).toBe(false);
+    for (const c of PERMANENT_BLACKLIST) expect(store.has(c)).toBe(true);
   });
 
   it('loads + parses a valid snapshot from the record store', async () => {
@@ -45,7 +54,7 @@ describe('BlacklistStore', () => {
 
     await store.load();
 
-    expect(store.snapshot()).toEqual(fixture);
+    expect(store.snapshot()).toEqual({ ...fixture, codes: mergedCodes(fixture.codes) });
     expect(store.has('000001')).toBe(true);
     expect(store.has('600519')).toBe(true);
     expect(store.has('999999')).toBe(false);
@@ -57,11 +66,14 @@ describe('BlacklistStore', () => {
 
     const out = await store.replace(fixture);
 
-    expect(out).toEqual(fixture);
-    expect(store.snapshot()).toEqual(fixture);
+    const expected: BlacklistSnapshot = { ...fixture, codes: mergedCodes(fixture.codes) };
+    expect(out).toEqual(expected);
+    expect(store.snapshot()).toEqual(expected);
     expect(store.has('000001')).toBe(true);
     const row = await record.get('singleton');
     expect(row).not.toBeNull();
+    // Persistence keeps the cron-computed list verbatim; permanent codes
+    // are merged in memory only.
     expect(row?.codes_json).toEqual(JSON.stringify(fixture.codes));
     expect(row?.asof).toEqual(fixture.asof);
   });
@@ -87,7 +99,7 @@ describe('BlacklistStore', () => {
     });
     await store.load();
 
-    expect(store.snapshot().codes).toEqual(['000001', '600519']);
+    expect(store.snapshot().codes).toEqual(mergedCodes(['000001', '600519']));
   });
 
   it('snapshot is a stable reference between load and replace', async () => {
@@ -111,7 +123,7 @@ describe('BlacklistStore', () => {
 
     await store.load();
 
-    expect(store.snapshot().codes).toEqual([]);
+    expect(store.snapshot().codes).toEqual(mergedCodes([]));
     expect(store.snapshot().asof).toEqual(fixture.asof);
   });
 });

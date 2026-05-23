@@ -50,6 +50,15 @@ export const ColumnFilterSchema = z.object({
 });
 export type ColumnFilter = z.infer<typeof ColumnFilterSchema>;
 
+/**
+ * Where column filters apply:
+ *   - `all-sectors` : every sector view (default; legacy behaviour).
+ *   - `all-only`    : only the synthetic "All" sector — user sectors and
+ *                     dynamic / screened sectors are rendered unfiltered.
+ */
+export const ColumnFilterScopeSchema = z.enum(['all-sectors', 'all-only']);
+export type ColumnFilterScope = z.infer<typeof ColumnFilterScopeSchema>;
+
 export const SysCfgSchema = z.object({
   theme: ThemeModeSchema,
   slackTargets: z.array(SlackTargetSchema),
@@ -61,6 +70,7 @@ export const SysCfgSchema = z.object({
    * couple Sys.Cfg to the column catalog, which is owned by the web app.
    */
   columnFilters: z.record(z.string(), ColumnFilterSchema).default({}),
+  columnFilterScope: ColumnFilterScopeSchema.default('all-sectors'),
 });
 export type SysCfg = z.infer<typeof SysCfgSchema>;
 
@@ -70,4 +80,5 @@ export const DEFAULT_SYS_CFG: SysCfg = {
   appliedColumns: [],
   dragDirection: 'inverted',
   columnFilters: {},
+  columnFilterScope: 'all-sectors',
 };

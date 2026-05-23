@@ -33,10 +33,11 @@ export function scoreUniverse(
 ): Map<string, WcmiScore | null> {
   const out = new Map<string, WcmiScore | null>();
   if (items.length === 0) return out;
+  const blacklist = new Set(config.PERMANENT_BLACKLIST);
   const survivors: ScoringInput[] = [];
   for (const item of items) {
-    if (item.raw.passesGate) survivors.push(item);
-    else out.set(item.code, null);
+    if (blacklist.has(item.code) || !item.raw.passesGate) out.set(item.code, null);
+    else survivors.push(item);
   }
   if (survivors.length === 0) return out;
   const sortedByKey = buildSortedTables(survivors.map((s) => s.raw));

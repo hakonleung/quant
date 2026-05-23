@@ -164,6 +164,11 @@ function FeatEqListInner({ bare, onCountsChange }: FeatEqListProps = {}): React.
 
   const appliedColumns = useSettingsStore((s) => s.appliedColumns);
   const columnFilters = useSettingsStore((s) => s.columnFilters);
+  const columnFilterScope = useSettingsStore((s) => s.columnFilterScope);
+  // When the user pinned filters to the synthetic "All" sector only,
+  // suppress the per-column predicate pass on every other view so user /
+  // dynamic sectors render untouched.
+  const filtersActive = columnFilterScope === 'all-sectors' || isAll;
   // Columns read every value (including derived/return fields) straight
   // from the row — list-columns no longer needs a parallel snapshot map.
   const columns: readonly ColumnDef[] = useMemo(
@@ -177,6 +182,7 @@ function FeatEqListInner({ bare, onCountsChange }: FeatEqListProps = {}): React.
   // the same numeric the user sorts by. `null` from the evaluator means
   // "no opinion" (列值为空跳过) and the row passes that predicate.
   const filterEntries: readonly { col: ColumnDef; filter: ColumnFilter }[] = useMemo(() => {
+    if (!filtersActive) return [];
     const out: { col: ColumnDef; filter: ColumnFilter }[] = [];
     for (const col of columns) {
       const f = columnFilters[col.key as keyof typeof columnFilters];
@@ -184,7 +190,7 @@ function FeatEqListInner({ bare, onCountsChange }: FeatEqListProps = {}): React.
       out.push({ col, filter: f });
     }
     return out;
-  }, [columns, columnFilters]);
+  }, [columns, columnFilters, filtersActive]);
   const predicateRows: readonly ListRow[] = useMemo(() => {
     if (filterEntries.length === 0) return filteredRows;
     return filteredRows.filter((row) => {

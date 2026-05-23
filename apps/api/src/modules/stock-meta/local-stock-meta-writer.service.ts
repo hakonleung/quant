@@ -31,8 +31,10 @@ import type { QuarterlyFinancials, StockMetaDto } from '@quant/shared';
 
 import { CLOCK, type Clock } from '../../common/clock.js';
 import { LocalStockMetaAdapter, STOCK_META_DATA_DIR } from './local-stock-meta.adapter.js';
+import { WCMI_CONFIG } from './domain/pure/wcmi-subscores/config.js';
 
 const META_FILE = 'stock_metas.parquet';
+const PERMANENT_BLACKLIST = new Set<string>(WCMI_CONFIG.PERMANENT_BLACKLIST);
 
 const METRIC_DECIMAL_COLUMNS = [
   'metrics_price',
@@ -149,10 +151,11 @@ export class LocalStockMetaWriterService {
    * No-op when ``rows`` is empty.
    */
   async upsertMetrics(rows: readonly StockMetricsRow[]): Promise<void> {
-    if (rows.length === 0) return;
+    const filtered = rows.filter((r) => !PERMANENT_BLACKLIST.has(r.code));
+    if (filtered.length === 0) return;
     const next = this.writeChain.then(
-      () => this.runUpsertMetrics(rows),
-      () => this.runUpsertMetrics(rows),
+      () => this.runUpsertMetrics(filtered),
+      () => this.runUpsertMetrics(filtered),
     );
     this.writeChain = next.catch(() => undefined);
     await next;
@@ -168,10 +171,11 @@ export class LocalStockMetaWriterService {
    * No-op when ``rows`` is empty.
    */
   async upsertMetas(rows: readonly StockMetaDto[]): Promise<void> {
-    if (rows.length === 0) return;
+    const filtered = rows.filter((r) => !PERMANENT_BLACKLIST.has(r.code));
+    if (filtered.length === 0) return;
     const next = this.writeChain.then(
-      () => this.runUpsertMetas(rows),
-      () => this.runUpsertMetas(rows),
+      () => this.runUpsertMetas(filtered),
+      () => this.runUpsertMetas(filtered),
     );
     this.writeChain = next.catch(() => undefined);
     await next;
@@ -189,10 +193,11 @@ export class LocalStockMetaWriterService {
    * No-op when ``rows`` is empty.
    */
   async upsertFundFlow(rows: readonly StockFundFlowRow[]): Promise<void> {
-    if (rows.length === 0) return;
+    const filtered = rows.filter((r) => !PERMANENT_BLACKLIST.has(r.code));
+    if (filtered.length === 0) return;
     const next = this.writeChain.then(
-      () => this.runUpsertFundFlow(rows),
-      () => this.runUpsertFundFlow(rows),
+      () => this.runUpsertFundFlow(filtered),
+      () => this.runUpsertFundFlow(filtered),
     );
     this.writeChain = next.catch(() => undefined);
     await next;

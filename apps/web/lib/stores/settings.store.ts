@@ -11,7 +11,14 @@
 
 'use client';
 
-import type { ColumnFilter, DragDirection, SlackTarget, SysCfg, ThemeMode } from '@quant/shared';
+import type {
+  ColumnFilter,
+  ColumnFilterScope,
+  DragDirection,
+  SlackTarget,
+  SysCfg,
+  ThemeMode,
+} from '@quant/shared';
 import { useEffect, useRef } from 'react';
 import { create } from 'zustand';
 
@@ -24,7 +31,7 @@ import {
 } from '../eqty/columns.catalog.js';
 import { jsonEqual } from './remote-sync.js';
 
-export type { ThemeMode, SlackTarget, DragDirection };
+export type { ThemeMode, SlackTarget, DragDirection, ColumnFilterScope };
 
 interface SettingsState {
   readonly theme: ThemeMode;
@@ -37,12 +44,15 @@ interface SettingsState {
    * null / undefined are skipped (no opinion).
    */
   readonly columnFilters: Readonly<Partial<Record<ColumnKey, ColumnFilter>>>;
+  /** Scope in which `columnFilters` predicates are applied. */
+  readonly columnFilterScope: ColumnFilterScope;
   readonly dragDirection: DragDirection;
   setTheme(theme: ThemeMode): void;
   addSlackTarget(target: SlackTarget): void;
   removeSlackTarget(channel: string): void;
   setAppliedColumns(keys: readonly ColumnKey[]): void;
   setColumnFilter(key: ColumnKey, filter: ColumnFilter | null): void;
+  setColumnFilterScope(scope: ColumnFilterScope): void;
   setDragDirection(direction: DragDirection): void;
 }
 
@@ -51,6 +61,7 @@ export const useSettingsStore = create<SettingsState>()((set) => ({
   slackTargets: [],
   appliedColumns: DEFAULT_APPLIED_COLUMNS,
   columnFilters: {},
+  columnFilterScope: 'all-sectors',
   dragDirection: 'inverted',
   setTheme: (theme) => {
     set({ theme });
@@ -92,6 +103,9 @@ export const useSettingsStore = create<SettingsState>()((set) => ({
       return { appliedColumns: cleaned, columnFilters: keep };
     });
   },
+  setColumnFilterScope: (scope) => {
+    set({ columnFilterScope: scope });
+  },
   setColumnFilter: (key, filter) => {
     set((state) => {
       const next: Partial<Record<ColumnKey, ColumnFilter>> = { ...state.columnFilters };
@@ -114,6 +128,7 @@ function snapshotCfg(): SysCfg {
     appliedColumns: [...s.appliedColumns],
     dragDirection: s.dragDirection,
     columnFilters: filters,
+    columnFilterScope: s.columnFilterScope,
   };
 }
 
@@ -142,6 +157,7 @@ function applyCfg(cfg: SysCfg): void {
     appliedColumns: appliedFinal,
     dragDirection: cfg.dragDirection,
     columnFilters: filters,
+    columnFilterScope: cfg.columnFilterScope,
   });
 }
 

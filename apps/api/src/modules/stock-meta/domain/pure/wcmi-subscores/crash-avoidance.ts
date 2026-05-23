@@ -17,12 +17,14 @@ export function computeCrashAvoidance(
     if (bar === undefined || prev === undefined) continue;
     const prevClose = prev.close_qfq;
     if (prevClose <= 0) continue;
-    const change = ((bar.close_qfq - prevClose) / prevClose) * 100;
-    const gap = ((bar.open_qfq - prevClose) / prevClose) * 100;
+    const open = bar.open_qfq;
+    const base = Math.max(open, prevClose);
+    const drop = base > 0 ? ((bar.close_qfq - base) / base) * 100 : 0;
+    const gap = ((open - prevClose) / prevClose) * 100;
     const yang = bar.close_qfq > bar.open_qfq;
-    if (change < -config.CRASH_DAY_THR) {
+    if (drop < -config.CRASH_DAY_THR) {
       crashDays += 1;
-      crashAbsSum += Math.abs(change);
+      crashAbsSum += Math.abs(drop);
     }
     if (gap < config.GAP_DOWN_THR && !yang) gapDownDays += 1;
   }

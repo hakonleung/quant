@@ -25,13 +25,14 @@ import { Feat } from '../../lib/eqty/feat.js';
 import { BUILTIN_PRESETS, useLayoutStore } from '../../lib/stores/layout.store.js';
 import {
   useSettingsStore,
+  type ColumnFilterScope,
   type DragDirection,
   type ThemeMode,
 } from '../../lib/stores/settings.store.js';
 import { ColumnManager } from '../feat-eq-list/column-manager.js';
 import { FeatView } from '../feat-view/feat-view.js';
 
-type Section = 'theme' | 'gestures' | 'presets' | 'columns';
+type Section = 'theme' | 'gestures' | 'presets' | 'columns' | 'filters';
 
 const SECTIONS: ReadonlyArray<{
   readonly id: Section;
@@ -41,6 +42,7 @@ const SECTIONS: ReadonlyArray<{
   { id: 'gestures', label: 'gestures' },
   { id: 'presets', label: 'presets' },
   { id: 'columns', label: 'columns' },
+  { id: 'filters', label: 'filters' },
 ];
 
 interface FeatSysCfgProps {
@@ -68,6 +70,7 @@ export function FeatSysCfg({ bare }: FeatSysCfgProps = {}): React.ReactElement {
           {section === 'gestures' && <GesturesSection />}
           {section === 'presets' && <PresetsSection />}
           {section === 'columns' && <ColumnManager />}
+          {section === 'filters' && <FiltersSection />}
         </Box>
       </Flex>
     </FeatView>
@@ -279,6 +282,81 @@ function PresetsSection(): React.ReactElement {
       <Text fontSize="10px" color="term.ink3" mt="4px" lineHeight="1.5">
         // 提示：拖动列宽或最小化任意面板会清掉 ACTIVE 标记 — //
         预设只是一次性的状态注入，之后是用户自由布局。
+      </Text>
+    </Flex>
+  );
+}
+
+interface FilterScopeOption {
+  readonly id: ColumnFilterScope;
+  readonly label: string;
+  readonly description: string;
+}
+
+const FILTER_SCOPE_OPTIONS: readonly FilterScopeOption[] = [
+  {
+    id: 'all-sectors',
+    label: '所有板块（默认）',
+    description: '列筛选预设对每一个板块视图都生效——用户板块 / 动态筛选板块同样会被过滤。',
+  },
+  {
+    id: 'all-only',
+    label: '仅 sector all 生效',
+    description:
+      '列筛选只作用于合成的 “All” 板块；用户板块与动态板块保持原样、不被前端过滤。',
+  },
+];
+
+function FiltersSection(): React.ReactElement {
+  const scope = useSettingsStore((s) => s.columnFilterScope);
+  const setScope = useSettingsStore((s) => s.setColumnFilterScope);
+  return (
+    <Flex direction="column" p="12px" gap="8px">
+      <Text
+        fontSize="9px"
+        letterSpacing="0.18em"
+        color="term.ink3"
+        textTransform="uppercase"
+        fontWeight="700"
+      >
+        column filter scope
+      </Text>
+      {FILTER_SCOPE_OPTIONS.map((opt) => {
+        const selected = scope === opt.id;
+        return (
+          <Box
+            key={opt.id}
+            as="button"
+            onClick={(): void => {
+              setScope(opt.id);
+            }}
+            textAlign="left"
+            p="10px"
+            borderWidth="1px"
+            borderColor={selected ? 'term.green' : 'term.line'}
+            bg={selected ? 'term.bgElev' : 'transparent'}
+            color="term.ink"
+            cursor="pointer"
+            _hover={{ borderColor: 'term.green', color: 'term.green' }}
+          >
+            <Flex align="baseline" gap="8px">
+              <Text fontSize="12px" fontWeight="700" color={selected ? 'term.green' : 'term.ink'}>
+                {opt.label}
+              </Text>
+              {selected && (
+                <Text fontSize="9px" color="term.green" letterSpacing="0.18em" ml="auto">
+                  ACTIVE
+                </Text>
+              )}
+            </Flex>
+            <Text fontSize="11px" color="term.ink2" mt="4px" lineHeight="1.5">
+              {opt.description}
+            </Text>
+          </Box>
+        );
+      })}
+      <Text fontSize="10px" color="term.ink3" mt="4px" lineHeight="1.5">
+        // 在 columns 区域配置的列筛选阈值，按此作用域应用到 EQ.LIST。
       </Text>
     </Flex>
   );

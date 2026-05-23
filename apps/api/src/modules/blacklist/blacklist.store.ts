@@ -8,7 +8,7 @@
  */
 
 import { Inject, Injectable, Logger, type OnModuleInit } from '@nestjs/common';
-import { EMPTY_BLACKLIST, type BlacklistSnapshot } from '@quant/shared';
+import { EMPTY_BLACKLIST, PERMANENT_BLACKLIST, type BlacklistSnapshot } from '@quant/shared';
 import { z } from 'zod';
 
 import type { RecordStore, RecordTableSpec } from '../../common/storage/ports/record-store.port.js';
@@ -69,10 +69,11 @@ export class BlacklistStore implements OnModuleInit {
         this.logger.log(`loaded blacklist size=${String(this.codeSet.size)}`);
         return;
       }
-      this.snap = EMPTY_BLACKLIST;
-      this.codeSet = new Set();
+      this.adoptSnapshot(EMPTY_BLACKLIST);
       this.loaded = true;
-      this.logger.log('blacklist empty (no record store row)');
+      this.logger.log(
+        `blacklist empty (no record store row); permanent size=${String(this.codeSet.size)}`,
+      );
     });
   }
 
@@ -94,8 +95,14 @@ export class BlacklistStore implements OnModuleInit {
   }
 
   private adoptSnapshot(snap: BlacklistSnapshot): void {
-    this.snap = snap;
-    this.codeSet = new Set(snap.codes);
+    // Union the hard-coded permanent blacklist into both the cached
+    // snapshot exposed to readers and the O(1) `has()` set. Sort to keep
+    // codes monotonically ordered for callers that compare snapshots.
+    const merged = new Set<string>(snap.codes);
+    for (const c of PERMANENT_BLACKLIST) merged.add(c);
+    const sorted = [...merged].sort();
+    this.snap = { ...snap, codes: Object.freeze(sorted) };
+    this.codeSet = merged;
   }
 
   private adoptRow(row: BlacklistRow): void {

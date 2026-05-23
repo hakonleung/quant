@@ -13,6 +13,8 @@
  * 接口消费此对象；模块内部不得持有任何 module-level 静态常量。
  */
 
+import { PERMANENT_BLACKLIST } from '@quant/shared';
+
 import type { WcmiConfig } from './types.js';
 
 export const WCMI_CONFIG: WcmiConfig = {
@@ -170,20 +172,20 @@ export const WCMI_CONFIG: WcmiConfig = {
    * 早已修复的孤立长影稀释。20 ≈ 一个月，捕捉当前阶段的抛压。
    * `bars.length < SHADOW_WINDOW` 时退化为全部可用历史。
    */
-  SHADOW_WINDOW: 40,
+  SHADOW_WINDOW: 20,
 
   /**
    * "长上影线"判定阈值（单位：% of prevClose）。
    * `upper_shadow >= SHADOW_LONG_PCT` 视为一根长上影 K，单根惩罚 = 1；
    * 否则惩罚 = 0。
    */
-  SHADOW_LONG_PCT: 3.5,
+  SHADOW_LONG_PCT: 4,
 
   /**
    * 阳线（close > open）上影线惩罚的加权。
    * 默认 1.5——阳线长上影是"冲高回落、失败上攻"的强负信号。
    */
-  SHADOW_YANG_WEIGHT: 1.2,
+  SHADOW_YANG_WEIGHT: 1,
 
   /**
    * 阴线（close ≤ open）上影线惩罚的加权。
@@ -347,7 +349,7 @@ export const WCMI_CONFIG: WcmiConfig = {
    * `up_wave_smoothness` 子分权重。
    * 调到 3——同样是"美学组"打破平局角色。
    */
-  W_UP_WAVE: 8,
+  W_UP_WAVE: 20,
 
   /**
    * `yang_dominance` 子分权重。
@@ -391,4 +393,12 @@ export const WCMI_CONFIG: WcmiConfig = {
    * 区间 [0, 1000]，中位数 ≈ 500。
    */
   WCMI_TOTAL_SCALE: 1000,
+
+  // ═══════════════════════════════════════════════════════════════════
+  // 永久黑名单
+  //   命中即直接当作 gate-failed，分数返回 null，不进入横截面排名。
+  //   当前列入的均为长期高波动 / 高风险标的（科创板 CDR / 退市风险 / 长期
+  //   连续亏损），手工维护。
+  // ═══════════════════════════════════════════════════════════════════
+  PERMANENT_BLACKLIST,
 } as const;

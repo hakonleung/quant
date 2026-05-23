@@ -66,6 +66,9 @@ export interface WcmiConfig {
   readonly RECENT_W_YIN_RUN: number;
   readonly RECENT_W_PULLBACK: number;
 
+  // 永久黑名单（任何情形下都不参与打分，直接判定为 null）
+  readonly PERMANENT_BLACKLIST: readonly string[];
+
   // 组合权重 & 输出标度
   readonly W_RHYTHM: number;
   readonly W_MA_SUPPORT: number;

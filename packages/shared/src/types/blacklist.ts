@@ -28,3 +28,17 @@ export const EMPTY_BLACKLIST: BlacklistSnapshot = {
   universeSize: 0,
   computedAt: '1970-01-01T00:00:00.000Z',
 };
+
+/**
+ * Hard-coded permanent blacklist — codes that should be filtered out of
+ * every list / screen / refresh path regardless of the cron-computed
+ * stage-return result. Long-term high-risk / suspended / delisting-watch
+ * tickers maintained by hand. Unioned into `BlacklistStore` so that
+ * `has()` and `snapshot().codes` always cover them.
+ */
+export const PERMANENT_BLACKLIST: readonly string[] = Object.freeze([
+  '688089',
+  '688143',
+  '688173',
+  '689009',
+]);

@@ -30,6 +30,7 @@ import {
 } from '@quant/shared';
 
 import type { StockMetaPort } from './domain/stock-meta-port.js';
+import { WCMI_CONFIG } from './domain/pure/wcmi-subscores/config.js';
 
 export const STOCK_META_DATA_DIR = Symbol('STOCK_META_DATA_DIR');
 
@@ -187,10 +188,12 @@ export class LocalStockMetaAdapter implements StockMetaPort {
     const snapshots = new Map<string, StockSnapshotDto>();
     const sortedAll: StockMetaDto[] = [];
     const byIndustry = new Map<string, StockMetaDto[]>();
+    const blacklist = new Set(WCMI_CONFIG.PERMANENT_BLACKLIST);
 
     for (const raw of rows) {
       const obj = raw as Record<string, unknown>;
       const meta = rowToMeta(obj);
+      if (blacklist.has(meta.code)) continue;
       metas.set(meta.code, meta);
       sortedAll.push(meta);
       snapshots.set(meta.code, rowToSnapshot(meta, obj));
