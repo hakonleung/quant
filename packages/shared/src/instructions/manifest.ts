@@ -396,6 +396,12 @@ const ENTRIES = [
     help: 'Owner-only. Makes the sector visible to every user.',
     argsSchema: SectorPublishArgsSchema,
     resultSchema: SectorAckResultSchema,
+    ui: {
+      scope: 'MKT',
+      keys: ['P'],
+      label: 'Toggle publish on focused sector',
+      group: 'action',
+    },
   },
   {
     id: 'sector.unpublish',

@@ -163,6 +163,18 @@ export function FeatSecList({ bare }: FeatSecListProps = {}): React.ReactElement
       if (currentUserId === null || target.createdBy !== currentUserId) return;
       onDelete(target);
     },
+    // `P` (shift+p) — toggle the active sector's published flag. The
+    // handler reuses the same confirm-guarded mutation the chip's
+    // publish icon-button fires. Single hotkey covers both publish AND
+    // unpublish (the underlying mutation flips the flag); the manifest
+    // entry is on `sector.publish` because that's the more common verb.
+    'sector.publish': () => {
+      const target = sectors.find((r) => r.id === activeSectorId);
+      if (target === undefined) return;
+      if (target.id === ALL_SECTOR_ID) return;
+      if (currentUserId === null || target.createdBy !== currentUserId) return;
+      onTogglePublish(target);
+    },
   });
 
   // The "+ new sector" trigger lives in the parent MKT pane's
