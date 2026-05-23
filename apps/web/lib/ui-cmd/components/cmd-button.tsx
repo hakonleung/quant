@@ -40,7 +40,9 @@ export const CmdButton = forwardRef(function CmdButton(
   const ui = entry?.ui;
   const label = ui?.label ?? cmd;
   const firstKey = ui?.keys?.[0];
-  const disabled = !uiRegistry.hasHandler(cmd);
+  // Enabled if EITHER a local handler is bound (useFeatHotkeys / global)
+  // OR the cell has a manifest entry that useCommand can dispatch over HTTP.
+  const disabled = !uiRegistry.hasHandler(cmd) && entry === undefined;
 
   const onActivate = (): void => {
     if (disabled) return;

@@ -1,4 +1,5 @@
 import { ChakraProvider, defaultSystem } from '@chakra-ui/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -11,7 +12,12 @@ import { CmdButton } from './cmd-button.js';
 const TEST_CELL = 'sector.rm';
 
 function Wrapper({ children }: { children: React.ReactNode }): React.ReactElement {
-  return <ChakraProvider value={defaultSystem}>{children}</ChakraProvider>;
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return (
+    <QueryClientProvider client={qc}>
+      <ChakraProvider value={defaultSystem}>{children}</ChakraProvider>
+    </QueryClientProvider>
+  );
 }
 
 beforeEach(() => {
@@ -58,25 +64,16 @@ describe('CmdButton', () => {
     expect(handler).toHaveBeenCalledWith({ id: 's1' });
   });
 
-  it('renders aria-disabled when no handler is bound', () => {
+  it('stays enabled when no local handler is bound but a manifest entry exists', () => {
+    // No uiRegistry.bind here — the cell has a manifest entry, so the
+    // button can still dispatch over HTTP via useCommand's fallback.
     render(
       <Wrapper>
         <CmdButton cmd={TEST_CELL} />
       </Wrapper>,
     );
     const btn = screen.getByRole('button', { name: 'Delete focused sector' });
-    expect(btn.getAttribute('aria-disabled')).toBe('true');
-  });
-
-  it('does not dispatch when disabled', () => {
-    const handler = vi.fn();
-    render(
-      <Wrapper>
-        <CmdButton cmd={TEST_CELL} />
-      </Wrapper>,
-    );
-    fireEvent.click(screen.getByRole('button', { name: 'Delete focused sector' }));
-    expect(handler).not.toHaveBeenCalled();
+    expect(btn.getAttribute('aria-disabled')).toBe('false');
   });
 
   it('asMenuItem renders an anchor with role=button + tabIndex', () => {
