@@ -544,6 +544,12 @@ const ENTRIES = [
     help: '`fresh=1` bypasses cache. `windowDays` (1–30) sets the news-recency window; defaults to the cached value.',
     argsSchema: AnalyzeArgsSchema,
     resultSchema: SentimentSchema,
+    ui: {
+      scope: 'AI.EQ',
+      keys: ['R'],
+      label: 'Run single-stock sentiment analysis',
+      group: 'action',
+    },
   },
   {
     id: 'analyze.sector',

@@ -221,6 +221,32 @@ function registerStockNavCells(): void {
  * window sees it under the right scope, but leave binding to the Feat.
  */
 /**
+ * AI.EQ `R` → analyze(code=focusCode). Same pattern as AI.SEC's
+ * binding — manifest cell with doubleConfirm:llm, local handler owns
+ * its own confirmGuard call. Skips when no stock is focused.
+ */
+function registerAnalyzeBinding(): void {
+  uiRegistry.bind('analyze', async (args) => {
+    const argsObj = (args ?? {}) as { code?: string; confirm?: boolean };
+    const code = argsObj.code ?? useUiStore.getState().focusCode;
+    if (code === null || code === undefined) return;
+    if (argsObj.confirm !== true) {
+      try {
+        await confirmGuard({
+          title: 'analyze stock',
+          message: `Run sentiment analysis for ${code}? This triggers a paid LLM call.`,
+          confirmLabel: 'PROCEED',
+        });
+      } catch (e: unknown) {
+        if (e instanceof ConfirmCancelled) return;
+        throw e;
+      }
+    }
+    await invokeInstruction('analyze' as never, { code, confirm: true } as never);
+  });
+}
+
+/**
  * AI.SEC `R` → analyze.sector(id=activeSectorId). Manifest cell with
  * `doubleConfirm: llm`; the handler fires `confirmGuard` manually
  * because useCommand's auto-confirm gate only kicks in on the BE-
@@ -347,6 +373,7 @@ export function installGlobalCells(): void {
   registerStockNavCells();
   registerRemoveStockCell();
   registerOpenNewSectorCell();
+  registerAnalyzeBinding();
   registerAnalyzeSectorBinding();
 }
 
