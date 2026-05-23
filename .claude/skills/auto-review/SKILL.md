@@ -89,6 +89,12 @@ Invoke the `code-reviewer` agent with a clear prompt:
 
 Capture its output verbatim.
 
+**If the change set touches any `.tsx` / `.jsx` file under `apps/web/` or `packages/ui/`, OR any CSS that affects focus/contrast, ALSO invoke the `a11y-reviewer` agent in parallel** (single message, two Agent tool calls):
+
+> Review the UI changes in the current change set against CLAUDE.md §10. Files: <UI subset>. Return verdict per the format in your agent definition.
+
+Capture both agents' outputs verbatim. If `a11y-reviewer` returns REQUEST_CHANGES with any `MAJOR` or `BLOCKER`, the overall verdict is REQUEST_CHANGES regardless of code-reviewer's result.
+
 ### 5. Verdict aggregation
 
 ```
@@ -114,6 +120,9 @@ Capture its output verbatim.
 
 ## Reviewer agent
 <verbatim verdict block>
+
+## A11y reviewer (UI changes only; n/a otherwise)
+<verbatim verdict block or "n/a — no UI files changed">
 
 ## Final: APPROVE | REQUEST_CHANGES
 

@@ -514,3 +514,53 @@ Required fixes (if any):
   4. Regression risk and monitoring points
 - After the doc is in place, write back any reusable lesson, gotcha, or "never do this again" as a one-line rule into the appropriate section of this `CLAUDE.md` (usually §9.3 or §2 modularity), keeping this file the source of truth.
 - An optimization without quantified results counts as incomplete; "I think it's faster" is not grounds for merging to main.
+
+---
+
+## 10. Accessibility (a11y) — hard rules for any UI change
+
+The frontend is keyboard-first. Every interactive surface must be reachable, operable, and announceable without a mouse. Violations are MAJOR by default; a control that is mouse-only is BLOCKER.
+
+### 10.1 Keyboard reachability (mandatory)
+
+- Every action a user can perform with a click must also be triggerable via the UI command set (see §10.5). No exception for "small" buttons, icon buttons, popovers, or dropdown items.
+- Tab order must follow visual order. Do NOT set `tabIndex > 0`. Use `tabIndex={0}` only on non-native interactive elements (`div` with `role="button"`, etc.) and `tabIndex={-1}` for programmatic focus targets.
+- Custom keyboard handlers must not swallow `Tab` / `Shift+Tab` / `Escape` unless the surface is a modal / menu / combobox that legitimately traps focus.
+- Every Feat that captures keyboard input must register its bindings through `useFeatHotkeys` (§10.5); ad-hoc `window.addEventListener('keydown', ...)` in components is forbidden.
+
+### 10.2 Semantics and ARIA
+
+- Prefer native semantic elements: `<button>` for actions, `<a>` for navigation, `<input>`/`<label>` for fields, `<nav>`/`<main>`/`<aside>` for landmarks. Reach for `role="..."` only when no native element fits.
+- Icon-only controls must have `aria-label` (or visually-hidden text). Decorative icons must have `aria-hidden="true"`.
+- Live regions (`role="status"` / `aria-live="polite"`) are required for async progress, toast-style notifications, and SSE-driven updates.
+- Dialogs use `role="dialog"` + `aria-modal="true"` + initial focus on the first interactive element + focus restore on close.
+
+### 10.3 Visible focus + motion
+
+- Every focusable element must have a visible focus ring with contrast ≥ 3:1 against the adjacent background. `outline: none` without a replacement style is BLOCKER.
+- All non-essential motion must respect `@media (prefers-reduced-motion: reduce)` — disable transforms / opacity transitions > 200 ms.
+- Color must never be the sole carrier of meaning (use icon + text + color). Text/background contrast WCAG AA (≥ 4.5:1 body, ≥ 3:1 large text).
+
+### 10.4 Forms and errors
+
+- Every input has a programmatically-associated `<label>` (or `aria-labelledby`). Placeholder-only labelling is forbidden.
+- Validation errors are announced via `aria-describedby` referencing the error element, and the error element has `role="alert"` when it appears.
+- Disabled buttons are NOT the default — prefer enabled + run validation on click, so screen-reader users can hear the error.
+
+### 10.5 The UI command set (single source of truth for all UI actions)
+
+The frontend exposes every user-actionable operation as a **cell** in [apps/web/lib/instructions/](apps/web/lib/instructions/) — the same registry used by Terminal and AI. The instruction registry is the **superset**: it powers Terminal input, AI tool calls, mouse clicks, AND keyboard shortcuts. Hand-rolled parallel registries are rejected.
+
+- Every cell that has a UI affordance carries a `ui` block: `{ scope, keys?, label, group, when? }`. `scope` is `'global'` or a `Feat` value (see [feat.ts](apps/web/lib/eqty/feat.ts)).
+- Keystrokes follow the **Vim sequence style**: lowercase letter sequences (`g m`, `d d`, `y y`), no modifiers for navigation/view ops, `shift+letter` only for destructive operations (`D` = delete-with-confirm). `Esc` cancels the in-progress sequence. `?` opens the shortcut hint window.
+- Module switching is a global scope cell (e.g. `g m` → focus `MKT`, `g e` → focus `EQ`). Focused module = `activeFeat` in the store.
+- A Feat receives its module-scope keymap on focus and releases it on blur — wire via `useFeatHotkeys(feat, handlers)`. Never bind a module-scope key globally.
+- Buttons / menu items in JSX must dispatch through the command system (`<CmdButton cmd="sector.remove-stock" />` or `useCommand('sector.remove-stock')`). Direct `onClick={() => service.remove(...)}` for an operation that already exists as a cell is a MAJOR — it diverges mouse path from AI/keyboard path.
+- The floating shortcut hint window (`FeatHotkeyHint`) is required: it subscribes to the active scope and renders the available bindings grouped by `group`. It must itself be keyboard-accessible and minimizable.
+- Pure UI-only operations (focus next module, toggle fullscreen, minimize, open hint) are also cells — their dispatcher runs purely on the frontend (`fe-center.ts`); they do not call the API.
+
+### 10.6 Testing and review
+
+- The `a11y-reviewer` subagent runs on every UI-touching change set (auto-fired by the `auto-review` skill). It is a static check; failing it blocks merge of UI work.
+- For each new interactive component, the author must list in the PR description: (a) the cell(s) backing it, (b) the keystroke (if any), (c) the `aria-label` of any icon-only control.
+- When CLAUDE asks the user to "test the UI", testing must include: tab through the surface with keyboard only; trigger the cell via the shortcut; verify the hint window lists it. Mouse-only verification is insufficient.
