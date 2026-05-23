@@ -30,6 +30,7 @@ import type { z } from 'zod';
 import { SentimentSchema } from '../types/eqty.js';
 import type { InstructionId } from './id.js';
 import { InstructionOutputSchema } from './result.js';
+import type { UiCellBlock } from './ui.js';
 import {
   AgentArgsSchema,
   AgentConfirmArgsSchema,
@@ -233,6 +234,14 @@ export interface CommandManifestEntry {
    * sector form, not the terminal", argv quirks, post-conditions.
    */
   readonly help?: string;
+  /**
+   * UI affordance metadata. When present, the frontend keyboard engine
+   * and `<CmdButton>` expose this cell as a mouse + keyboard action;
+   * the hint window lists it under `ui.group` scoped to `ui.scope`.
+   * Absent = the cell is reachable only via Terminal / AI. See
+   * `docs/rfcs/0004-ui-cmd-keyboard-engine.md` and CLAUDE.md §10.5.
+   */
+  readonly ui?: UiCellBlock;
 }
 
 const ENTRIES = [
