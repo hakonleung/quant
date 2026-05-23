@@ -2,76 +2,33 @@
 
 /**
  * TERM.MAIN — keyboard-driven command surface, redesigned around the
- * CRT-terminal layout (docs/CRT Terminal - standalone.html) with the
- * project-specific differences requested by the user:
- *
- *   ┌─────────────────────────────────────────────┬─────────────────────┐
- *   │  qX//OS _  ASCII pixel logo + cursor        │  meta  N/M          │
- *   │                                             │  kline N/M          │
- *   │                                             │  MEM   xxxM         │
- *   │                                             │  FPS   xx           │
- *   ├─────────────────────────────────────────────┼─────────────────────┤
- *   │  xterm command surface                      │  ◆ <code> 90D       │
- *   │  (existing useTerminal bridge)              │  ▸ FOCUS  600519    │
- *   │                                             │  two-col metric grid│
- *   │                                             │  ◆ SENTIMENT (cache)│
- *   ├─────────────────────────────────────────────┴─────────────────────┤
- *   │  ● READY ·  Tab complete  ↑/↓ history  Ctrl+L clear  help cmds   │
- *   └───────────────────────────────────────────────────────────────────┘
- *
- * Differences vs. the HTML reference (per user request):
- *   - no INDEX ticker row
- *   - sys capsules (meta/kline/MEM/FPS) move to the header right column
- *     and lay out vertically
- *   - K-line moves to the TOP of the right dashboard
- *   - SIGNALS panel removed
- *   - tips bar replaces the previous F-keys bottom row, and replaces
- *     the in-xterm DECSTBM status row
+ * CRT-terminal layout. Consumes the shared `TermConsole` component for
+ * the xterm pane; this file owns only the surrounding chrome (logo,
+ * sys-stat header, stock dashboard, tips bar) and the mobile stack
+ * layout. See `components/term-console/` for the engine + xterm bridge.
  */
 
 import { Box, Flex } from '@chakra-ui/react';
-import { useCallback, useRef } from 'react';
+import { initialState, type TerminalState } from '@quant/terminal';
+import { useState } from 'react';
 
 import { useViewport } from '../../lib/hooks/use-viewport.js';
 import { useUiStore } from '../../lib/stores/ui.store.js';
+import { TermConsole } from '../term-console/index.js';
 
 import { BigLogo } from './big-logo.js';
 import { CrtOverlay } from './crt-overlay.js';
 import { HeaderSysStat } from './header-sys-stat.js';
 import { StockDashboard } from './stock-dashboard.js';
 import { TipsBar } from './tips-bar.js';
-import { useTerminal } from './use-terminal.js';
 
 export function FeatTermMain(): React.ReactElement {
-  const { mount, unmount, state } = useTerminal();
+  const [state, setState] = useState<TerminalState>(initialState);
   const focusCode = useUiStore((s) => s.focusCode);
   const previewCode = peekListCode(state.active?.state) ?? focusCode;
-  const lastNodeRef = useRef<HTMLDivElement | null>(null);
-  // Mobile term mode is keyboard-driven and the soft keyboard already
-  // claims half the viewport once the user focuses the prompt. Stack
-  // the dashboard *above* the xterm at a compact height instead of
-  // splitting horizontally — at <768 px the side-by-side layout left
-  // the prompt with ~75 px (≈ 7 chars) of usable width.
   const { mode: vpMode } = useViewport();
   const isMobile = vpMode === 'mobile';
 
-  const hostRefCallback = useCallback(
-    (node: HTMLDivElement | null): void => {
-      if (node === lastNodeRef.current) return;
-      if (lastNodeRef.current !== null) {
-        unmount();
-      }
-      lastNodeRef.current = node;
-      if (node !== null) {
-        mount(node);
-      }
-    },
-    [mount, unmount],
-  );
-
-  // Term mode is the whole-app surface in this layout — no FeatView
-  // chrome. The BigLogo doubles as the exit affordance (click to
-  // return to the regular workbench).
   return (
     <Flex
       direction="column"
@@ -83,7 +40,6 @@ export function FeatTermMain(): React.ReactElement {
     >
       <CrtOverlay />
 
-      {/* TOP — logo (left) + vertical sys.stat (right) */}
       <Flex
         position="relative"
         zIndex={2}
@@ -99,9 +55,6 @@ export function FeatTermMain(): React.ReactElement {
         <HeaderSysStat />
       </Flex>
 
-      {/* MAIN — xterm | dashboard. Mobile stacks vertically (dashboard
-          on top, terminal below) so the prompt stays full-width above
-          the soft keyboard; desktop keeps the side-by-side split. */}
       <Flex
         flex="1"
         minH={0}
@@ -120,19 +73,9 @@ export function FeatTermMain(): React.ReactElement {
             <StockDashboard code={previewCode} />
           </Box>
         )}
-        <Box
-          ref={hostRefCallback}
-          flex="1"
-          minW={0}
-          minH={0}
-          position="relative"
-          tabIndex={0}
-          onClick={(): void => {
-            lastNodeRef.current
-              ?.querySelector<HTMLTextAreaElement>('.xterm-helper-textarea')
-              ?.focus();
-          }}
-        />
+        <Box flex="1" minW={0} minH={0} position="relative">
+          <TermConsole fontSize={15} autoFocus onState={setState} />
+        </Box>
         {!isMobile && (
           <Box w={{ base: '300px', xl: '360px' }} flexShrink={0} minH="100%">
             <StockDashboard code={previewCode} />
@@ -140,7 +83,6 @@ export function FeatTermMain(): React.ReactElement {
         )}
       </Flex>
 
-      {/* BOTTOM — tips bar (driven by terminal widget hints) */}
       <Box position="relative" zIndex={2}>
         <TipsBar state={state} />
       </Box>

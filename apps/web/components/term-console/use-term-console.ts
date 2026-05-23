@@ -1,22 +1,10 @@
 'use client';
 
 /**
- * React glue between xterm.js and the engine reducer.
- *
- * Painting model — designed to eliminate flicker and stale renders:
- *
- *  - The xterm scrollback is treated as **append-only** for permanent
- *    history entries (prompts, outputs, frozen widget snapshots). Each
- *    new entry is written exactly once.
- *  - The "footer" — current prompt line(s) or the active interactive
- *    widget — lives below the committed lines. It is redrawn in place
- *    by clearing the lines it occupies (no full-screen `\x1b[2J`).
- *  - Multiple synchronous `dispatch()` calls collapse into one paint via
- *    a microtask, so a chain like `widget submit → submit cmd → run` only
- *    paints once with the *latest* state — fixing the "press Enter,
- *    nothing changes until the next key" bug.
- *  - Hints are rendered by each widget itself; the bridge does NOT add a
- *    second copy.
+ * React glue between xterm.js and the engine reducer — generalised over
+ * font-size / banner / auto-run from `feat-term-main/use-terminal.ts`.
+ * See that file for the painting model commentary; the logic here is
+ * identical, only the host-config knobs are lifted out.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -57,34 +45,57 @@ import { installRunner } from '../../lib/term/install-runner.js';
 const PROMPT = paint('$ ', ANSI.cyan, ANSI.bold);
 const SPINNER_FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'] as const;
 
-/** Per-instance render memory — what the bridge has already committed to xterm. */
 interface RenderMem {
-  /** Number of `state.history` entries already written into scrollback. */
   committedHistory: number;
-  /** Number of *physical* footer lines currently on screen (after the last write). */
   footerRows: number;
-  /**
-   * Net upward cursor displacement that the previous footer's trailing
-   * cursor-positioning escape ended on. Widgets like form-prompt place
-   * the user's typing cursor inside the body via `\x1b[<n>F`, so after
-   * a paint the cursor sits N rows above the body's last row. The next
-   * paint must move the cursor back down by N before its "up
-   * `footerRows - 1`" clear, otherwise it erases into the scrollback.
-   */
   cursorUpFromBottom: number;
-  /** True while the very first paint hasn't happened yet. */
   initial: boolean;
-  /** Frame index for the running-state spinner. */
   spinnerTick: number;
 }
 
-export interface TerminalApi {
-  readonly mount: (host: HTMLDivElement) => void;
-  readonly unmount: () => void;
-  readonly state: TerminalState;
+export type InitialOutputStatus = 'ok' | 'cached' | 'err' | 'info';
+
+export interface InitialOutput {
+  readonly body: string;
+  readonly status: InitialOutputStatus;
 }
 
-export function useTerminal(): TerminalApi {
+export interface UseTermConsoleConfig {
+  readonly fontSize: number;
+  readonly banner: string;
+  /**
+   * Steal keyboard focus on mount. Required for full-screen surfaces
+   * (TERM.MAIN) where the terminal IS the page. Must be false for panes
+   * embedded alongside other interactive widgets — otherwise the xterm
+   * helper textarea hijacks every keystroke from neighbouring features
+   * (MKT search etc.). Default: false.
+   */
+  readonly autoFocus?: boolean;
+  /**
+   * Optional initial command-line buffer. Pre-filled — NOT executed.
+   * The user presses Enter to submit. Use for "no cache — let the
+   * operator confirm" surfaces.
+   */
+  readonly initialBuffer?: string;
+  /**
+   * Optional pre-rendered cached result. Injected as a history `output`
+   * entry on mount with no command run. Use for the "we already have a
+   * cache, paint it" surface.
+   */
+  readonly initialOutput?: InitialOutput;
+}
+
+export interface TermConsoleBridge {
+  readonly mount: (host: HTMLDivElement) => void;
+  readonly unmount: () => void;
+  readonly runCommand: (line: string) => void;
+  readonly focus: () => void;
+  readonly state: TerminalState;
+  /** Live xterm instance — null until `mount()` has been called. */
+  readonly termRef: React.MutableRefObject<Terminal | null>;
+}
+
+export function useTermConsole(config: UseTermConsoleConfig): TermConsoleBridge {
   const [state, setState] = useState<TerminalState>(initialState);
   const stateRef = useRef<TerminalState>(state);
   stateRef.current = state;
@@ -102,13 +113,10 @@ export function useTerminal(): TerminalApi {
   });
   const paintScheduledRef = useRef<boolean>(false);
   const spinnerTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const initialAppliedRef = useRef<boolean>(false);
 
   const queryClient = useQueryClient();
 
-  // Revalidator is installed at mount-time alongside the runner so the
-  // first ref is non-null. It's also threaded into ctxStores below so
-  // commands (e.g. `update`) can call it directly without going via
-  // the runner.
   const revalidateRef = useRef<((scope: import('@quant/terminal').RevalidateScope) => void) | null>(
     null,
   );
@@ -126,9 +134,6 @@ export function useTerminal(): TerminalApi {
     [],
   );
 
-  // Forward ref so `buildCtx` can hand `dispatch` into command ctx
-  // without depending on declaration order (the actual `dispatch`
-  // useCallback is defined further down the file).
   const dispatchRef = useRef<((ev: Event) => void) | null>(null);
 
   const buildCtx = useCallback((): CommandCtx => {
@@ -139,16 +144,12 @@ export function useTerminal(): TerminalApi {
       stockIndex: indexRef.current,
       stores: ctxStores,
       signal: ac.signal,
-      // Streaming commands (e.g. /agent) push streamOpen/Chunk/Close
-      // events here as socket frames arrive; the host pumps them into
-      // the engine via the same `dispatch` the bridge uses for keys.
       dispatchEvent: (ev: Event): void => {
         dispatchRef.current?.(ev);
       },
     };
   }, [ctxStores]);
 
-  /** Schedule one paint at microtask boundary (collapses chain dispatches). */
   const schedulePaint = useCallback((): void => {
     if (paintScheduledRef.current) return;
     paintScheduledRef.current = true;
@@ -173,12 +174,10 @@ export function useTerminal(): TerminalApi {
       }
       schedulePaint();
     },
-    // applyEffect is stable through the same memoization closure
+    // applyEffect closes over schedulePaint; we intentionally exclude it
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [schedulePaint],
   );
-  // Hook the forward ref `buildCtx` reads from; refreshed every render
-  // so `dispatchEvent` always points at the latest `dispatch`.
   dispatchRef.current = dispatch;
 
   const applyEffect = useCallback(
@@ -210,7 +209,6 @@ export function useTerminal(): TerminalApi {
       }
     },
     [buildCtx, dispatch /* applyCompletion */],
-    // applyCompletion is stable below
   );
 
   const applyCompletion = useCallback((): void => {
@@ -226,7 +224,6 @@ export function useTerminal(): TerminalApi {
       dispatch({ kind: 'setBuffer', buffer: next, cursor });
       return;
     }
-    // Multiple — insert the longest common prefix beyond the user fragment
     if (r.commonPrefix.length > fragmentText.length) {
       const next =
         cur.buffer.slice(0, r.tokenStart) + r.commonPrefix + cur.buffer.slice(r.tokenEnd);
@@ -234,7 +231,6 @@ export function useTerminal(): TerminalApi {
       dispatch({ kind: 'setBuffer', buffer: next, cursor });
       return;
     }
-    // Display candidates inline
     dispatch({
       kind: 'setCandidates',
       candidates: r.candidates.map((c) => c.label).slice(0, 16),
@@ -249,45 +245,36 @@ export function useTerminal(): TerminalApi {
         try {
           termRef.current.dispose();
         } catch {
-          /* no-op */
+          /* */
         }
         termRef.current = null;
       }
-      // Geek-style font (Monaspace Neon, with sensible fallbacks) and
-      // cyber theme palette pulled from `lib/theme/tokens.ts:term.*`.
       const term = new Terminal({
         fontFamily:
           '"Monaspace Neon", "Monaspace Krypton", "Monaspace Argon", "JetBrains Mono", "SF Mono", ui-monospace, Menlo, monospace',
-        fontSize: 15,
+        fontSize: config.fontSize,
         letterSpacing: 0,
         lineHeight: 1.2,
         cursorBlink: true,
-        // `block` reads as a chunky, fully-filled cell — the closest xterm
-        // can render to "bold cursor". `cursorStyle: 'underline'` is too
-        // thin a line at typical font sizes; bumping fontSize alone doesn't
-        // thicken it enough.
         cursorStyle: 'block',
         cursorWidth: 2,
         convertEol: true,
         scrollback: 1000,
-        // Bridge the cyber palette to xterm's ANSI slots so paint() output
-        // (ANSI.green / ANSI.cyan / ANSI.red / ANSI.gray / ANSI.yellow) maps
-        // onto our neon colors instead of xterm's default washed-out hues.
         theme: {
-          background: '#06080a', // term.bg
-          foreground: '#cfead8', // term.ink
-          cursor: '#5eff9c', // term.green
+          background: '#06080a',
+          foreground: '#cfead8',
+          cursor: '#5eff9c',
           cursorAccent: '#06080a',
-          selectionBackground: '#1f8a4f', // term.greenDark
-          black: '#0a0e10', // term.panel
-          red: '#ff4d6d', // term.red
-          green: '#5eff9c', // term.green
-          yellow: '#ffc14d', // term.amber
-          blue: '#5cf2ff', // term.cyan (no real blue in palette → use cyan)
-          magenta: '#ff5cd1', // term.magenta
-          cyan: '#5cf2ff', // term.cyan
-          white: '#cfead8', // term.ink
-          brightBlack: '#4d6c61', // term.ink3
+          selectionBackground: '#1f8a4f',
+          black: '#0a0e10',
+          red: '#ff4d6d',
+          green: '#5eff9c',
+          yellow: '#ffc14d',
+          blue: '#5cf2ff',
+          magenta: '#ff5cd1',
+          cyan: '#5cf2ff',
+          white: '#cfead8',
+          brightBlack: '#4d6c61',
           brightRed: '#ff4d6d',
           brightGreen: '#5eff9c',
           brightYellow: '#ffc14d',
@@ -303,7 +290,7 @@ export function useTerminal(): TerminalApi {
       try {
         fit.fit();
       } catch {
-        /* host not laid out yet */
+        /* */
       }
       term.onData((data) => {
         const key = toKeySpec(data);
@@ -311,8 +298,6 @@ export function useTerminal(): TerminalApi {
           dispatch({ kind: 'key', key });
         }
       });
-      // Catch shortcuts the browser swallows before xterm sees them
-      // (Cmd+Arrow on macOS, Alt+Arrow on every platform).
       term.attachCustomKeyEventHandler((ev) => {
         const key = fromBrowserEvent(ev);
         if (key === null) return true;
@@ -330,10 +315,6 @@ export function useTerminal(): TerminalApi {
         spinnerTick: 0,
       };
 
-      // Install the active action runner BEFORE preloadIndex (which is
-      // the first call into `getRunner()`). The selector reads
-      // `localStorage['tm.runner']` first — set it to `'mock'` to fall
-      // back to fixtures for isolation testing.
       const installed = installRunner({
         lookupName: (code) => indexRef.current.byCode(code)?.name ?? null,
         queryClient,
@@ -341,26 +322,40 @@ export function useTerminal(): TerminalApi {
       const { kind } = installed;
       revalidateRef.current = installed.revalidate;
 
-      const banner =
-        kind === 'mock'
-          ? 'qX//OS terminal · MOCK runner · type `help` to get started'
-          : 'qX//OS terminal · type `help` to get started';
-      term.writeln(paint(banner, ANSI.gray));
+      if (config.banner.length > 0) {
+        const banner =
+          kind === 'mock' ? `${config.banner} · MOCK runner` : config.banner;
+        term.writeln(paint(banner, ANSI.gray));
+      }
       paintTerminal(term, stateRef.current, memRef.current, useUiStore.getState().focusCode);
-      // Term mode is keyboard-driven — give xterm focus on mount so the
-      // block cursor is immediately visible. Browsers tie programmatic
-      // focus to the live user-activation context, so we call this
-      // synchronously inside the mount path that the user's click
-      // triggered (logo → setAppMode('term') → ref-callback → mount).
-      try {
-        term.focus();
-      } catch {
-        /* host may not be in the layout tree yet on the very first
-           mount — the click handler in feat-term-main.tsx will give
-           focus on the next user interaction. */
+      if (config.autoFocus === true) {
+        try {
+          term.focus();
+        } catch {
+          /* */
+        }
       }
 
       void preloadIndex(indexRef);
+
+      if (!initialAppliedRef.current) {
+        initialAppliedRef.current = true;
+        const initialOutput = config.initialOutput;
+        const initialBuffer = config.initialBuffer;
+        // Defer to a microtask so xterm's initial paint has committed
+        // the empty prompt line before we inject history / buffer.
+        queueMicrotask(() => {
+          if (initialOutput !== undefined) {
+            dispatch({
+              kind: 'result',
+              entry: { status: initialOutput.status, body: initialOutput.body },
+            });
+          }
+          if (initialBuffer !== undefined && initialBuffer.length > 0) {
+            dispatch({ kind: 'setBuffer', buffer: initialBuffer, cursor: initialBuffer.length });
+          }
+        });
+      }
 
       const ro = new ResizeObserver(() => {
         try {
@@ -373,7 +368,16 @@ export function useTerminal(): TerminalApi {
       ro.observe(host);
       observerRef.current = ro;
     },
-    [dispatch, schedulePaint, queryClient],
+    [
+      dispatch,
+      schedulePaint,
+      queryClient,
+      config.fontSize,
+      config.banner,
+      config.autoFocus,
+      config.initialBuffer,
+      config.initialOutput,
+    ],
   );
 
   const unmount = useCallback((): void => {
@@ -384,16 +388,22 @@ export function useTerminal(): TerminalApi {
     fitRef.current = null;
   }, []);
 
-  // The ref-callback in `feat-term-main.tsx` is the authoritative
-  // mount/unmount driver: it fires with `null` when the host node
-  // detaches (component unmount, mode toggle), at which point we tear
-  // down xterm. A separate `useEffect` cleanup would call `unmount`
-  // again under React 18 strict mode and during fast refresh, racing
-  // with the next ref-attach and leaving the host empty.
+  const runCommand = useCallback(
+    (line: string): void => {
+      if (line.length === 0) return;
+      dispatch({ kind: 'submit', line });
+    },
+    [dispatch],
+  );
 
-  // Repaint when the global focus code changes — the bottom status bar
-  // shows `FOCUS <code>` and reads from `ui.store` at paint time, so it
-  // would otherwise stay stale until the next engine event.
+  const focus = useCallback((): void => {
+    try {
+      termRef.current?.focus();
+    } catch {
+      /* */
+    }
+  }, []);
+
   useEffect(() => {
     const unsub = useUiStore.subscribe((s, prev) => {
       if (s.focusCode !== prev.focusCode) schedulePaint();
@@ -403,7 +413,6 @@ export function useTerminal(): TerminalApi {
     };
   }, [schedulePaint]);
 
-  // Spinner ticker — animates the running/cancelling/fetching footer.
   useEffect(() => {
     const animating = state.phase === 'running' || state.phase === 'cancelling';
     if (animating && spinnerTimerRef.current === null) {
@@ -423,7 +432,10 @@ export function useTerminal(): TerminalApi {
     };
   }, [state.phase, schedulePaint]);
 
-  return useMemo<TerminalApi>(() => ({ mount, unmount, state }), [mount, unmount, state]);
+  return useMemo<TermConsoleBridge>(
+    () => ({ mount, unmount, runCommand, focus, state, termRef }),
+    [mount, unmount, runCommand, focus, state],
+  );
 }
 
 async function preloadIndex(ref: React.MutableRefObject<StockIndex>): Promise<void> {
@@ -438,7 +450,7 @@ async function preloadIndex(ref: React.MutableRefObject<StockIndex>): Promise<vo
   }
 }
 
-/* ---------- incremental rendering ---------- */
+/* ---------- incremental rendering (verbatim from feat-term-main) ---------- */
 
 function paintTerminal(
   term: Terminal | null,
@@ -448,10 +460,6 @@ function paintTerminal(
 ): void {
   if (term === null) return;
 
-  // History shrunk (e.g. `clear` / `clear last N` reset state.history): we
-  // can't selectively erase past `writeln`s in xterm's scrollback, so wipe
-  // the screen + scrollback and re-write what remains. Reset `initial` so
-  // the next "clear footer" branch falls through to the initial-paint path.
   const histShrunk = state.history.length < mem.committedHistory;
   if (histShrunk) {
     term.clear();
@@ -462,14 +470,6 @@ function paintTerminal(
     mem.initial = true;
   }
 
-  // 1. Clear the previous footer in place. After the last paint the cursor
-  //    can be ANYWHERE inside the footer — widgets like form-prompt move
-  //    it up to position the typing caret inside an input row. We have
-  //    to undo that displacement first (`cursorUpFromBottom` rows down)
-  //    so we land on the body's last row, then move up `footerRows - 1`
-  //    to land on the body's first row. `\x1b[J` erases everything from
-  //    cursor down. Without the displacement undo, repeated repaints
-  //    drift further into the scrollback and eat committed history.
   if (!mem.initial && mem.footerRows > 0) {
     if (mem.cursorUpFromBottom > 0) {
       term.write(`\x1b[${String(mem.cursorUpFromBottom)}B`);
@@ -483,18 +483,12 @@ function paintTerminal(
     mem.initial = false;
   }
 
-  // 2. Append any new history entries to scrollback (committed forever).
   while (mem.committedHistory < state.history.length) {
     const entry = state.history[mem.committedHistory];
     if (entry !== undefined) writeHistoryEntry(term, entry);
     mem.committedHistory += 1;
   }
 
-  // 3. Render the active footer (prompt / widget body) and remember its row
-  //    count so the next paint can clear it. We re-enable the cursor before
-  //    painting so that, after a previous frame hid it (e.g. an enum field
-  //    in form-prompt), the next text-input footer shows it again. Widgets
-  //    that need it hidden append `\x1b[?25l` at the very end of their body.
   term.write('\x1b[?25h');
   const footer = renderFooter(term, state, mem);
   if (footer.length > 0) {
@@ -505,10 +499,6 @@ function paintTerminal(
     mem.footerRows = 0;
     mem.cursorUpFromBottom = 0;
   }
-
-  // The dedicated status bar at the bottom of the viewport is now
-  // rendered as React (TipsBar) outside xterm — see feat-term-main.tsx.
-  // No DECSTBM / absolute-positioned status row needed here anymore.
 }
 
 function writeHistoryEntry(term: Terminal, entry: TerminalState['history'][number]): void {
@@ -522,7 +512,6 @@ function writeHistoryEntry(term: Terminal, entry: TerminalState['history'][numbe
     term.writeln(`${tag}${body}`);
     return;
   }
-  // frozen interactive entry
   term.writeln(paint(`╭ ${entry.title}`, ANSI.gray));
   for (const line of entry.body.split('\n')) {
     term.writeln(`${paint('│', ANSI.gray)} ${line}`);
@@ -535,9 +524,6 @@ function renderFooter(term: Terminal, state: TerminalState, mem: RenderMem): str
   const spin = SPINNER_FRAMES[mem.spinnerTick % SPINNER_FRAMES.length] ?? '·';
 
   if (state.phase === 'interactive' && state.active !== null) {
-    // Pass live `term.rows` so size-aware widgets (pager) can fit
-    // their body to the actual viewport instead of the historical
-    // hard-coded 16-row default.
     return state.active.widget.render(state.active.state, cols, term.rows);
   }
   if (state.phase === 'cancelling') {
@@ -551,7 +537,6 @@ function renderFooter(term: Terminal, state: TerminalState, mem: RenderMem): str
       paint('  fetching', ANSI.gray)
     );
   }
-  // idle
   const tail =
     state.cursor < state.buffer.length ? `\x1b[${String(state.buffer.length - state.cursor)}D` : '';
   const promptLine = `${PROMPT}${state.buffer}${tail}`;
@@ -562,7 +547,6 @@ function renderFooter(term: Terminal, state: TerminalState, mem: RenderMem): str
   return promptLine;
 }
 
-/** Count the number of physical rows a string occupies given current cols. */
 function countWrappedRows(text: string, cols: number): number {
   const lines = text.split('\n');
   let rows = 0;

@@ -3,27 +3,33 @@
 /**
  * AI.EQ — Single-stock LLM sentiment.
  *
- * Default render path is the cached `useSentiment` query; the FETCH
- * button fires the LLM-backed `analyze_one` mutation. The stdout pane
- * renders the multi-section "full" view assembled from the structured
- * `Sentiment` (via `sentimentLines()`), and the collapsed AI.MD pane
- * below renders the one-paragraph `brief` as markdown.
+ * Body is the shared `TermConsole`. We wait for the cache-only query
+ * (`useSentiment`) to settle, then mount the term with either:
+ *   - `initialOutput`  — cached `sentimentLines()` baked into a single
+ *                        `[cached]` history entry (no LLM call), or
+ *   - `initialBuffer`  — `analyze code=<code> fresh=1` pre-filled at the
+ *                        prompt so a single Enter triggers the paid
+ *                        fetch via the term cell's confirm-required
+ *                        flow.
+ * FETCH and push-to-slack live in the header; FETCH forces the same
+ * `… fresh=1` command via the ref.
  */
 
 import { Box, Flex, Text } from '@chakra-ui/react';
 import { sentimentLines } from '@quant/shared';
-import { useMemo } from 'react';
+import type { TerminalState } from '@quant/terminal';
+import { useMemo, useRef, useState } from 'react';
 
 import { Feat } from '../../lib/eqty/feat.js';
-import {
-  useAnalyzeSentiment,
-  useSentiment,
-  useStockMetaQuery,
-} from '../../lib/hooks/use-eqty-data.js';
+import { useSentiment, useStockMetaQuery } from '../../lib/hooks/use-eqty-data.js';
 import { usePushPayload } from '../../lib/hooks/use-push-payload.js';
-import { FeatAiMd } from '../feat-ai-md/feat-ai-md.js';
 import { FeatView } from '../feat-view/feat-view.js';
 import { FeatViewHeaderRight } from '../feat-view/feat-view-header.js';
+import {
+  TermConsole,
+  type InitialOutput,
+  type TermConsoleHandle,
+} from '../term-console/index.js';
 import { MonoButton } from '../ui/mono-button.js';
 
 interface Props {
@@ -32,23 +38,23 @@ interface Props {
 
 export function FeatAiEq({ code }: Props): React.ReactElement {
   const cached = useSentiment(code);
-  const analyze = useAnalyzeSentiment(code);
   const meta = useStockMetaQuery(code);
   const push = usePushPayload();
+  const termRef = useRef<TermConsoleHandle>(null);
+  const [phase, setPhase] = useState<TerminalState['phase']>('idle');
   const sentiment = cached.data ?? null;
   const stockLabel =
     meta.data !== null && meta.data !== undefined ? `${meta.data.name} ${code}` : code;
 
-  const lines: readonly string[] = useMemo(() => {
-    if (sentiment === null) {
-      return [`$ sentiment.analyze_one --code ${code}`, '// awaiting trigger'];
-    }
-    const head = `$ sentiment.analyze_one --code ${code} --cached ${sentiment.cachedAt.slice(0, 10)}`;
-    return [head, ...sentimentLines(sentiment)];
+  const initialOutput: InitialOutput | undefined = useMemo(() => {
+    if (sentiment === null) return undefined;
+    const head = `$ analyze code=${code}  cache=${sentiment.cachedAt.slice(0, 10)}`;
+    const body = `${head}\n${sentimentLines(sentiment).join('\n')}`;
+    return { body, status: 'cached' };
   }, [sentiment, code]);
 
   const onFetch = (): void => {
-    analyze.mutate();
+    termRef.current?.runCommand(`analyze code=${code} fresh=1`);
   };
 
   const onPush = (): void => {
@@ -62,25 +68,22 @@ export function FeatAiEq({ code }: Props): React.ReactElement {
     push.mutate({ payload });
   };
 
-  const tone = analyze.isPending
+  const isRunning = phase === 'running' || phase === 'cancelling';
+  const tone = isRunning
     ? 'amber'
-    : analyze.isError
-      ? 'red'
-      : push.isPending
-        ? 'amber'
-        : push.isError
-          ? 'red'
-          : sentiment === null
-            ? 'idle'
-            : 'green';
-
-  const briefMarkdown = sentiment?.brief ?? '';
+    : push.isPending
+      ? 'amber'
+      : push.isError
+        ? 'red'
+        : sentiment === null
+          ? 'idle'
+          : 'green';
 
   return (
     <FeatView
       feat={Feat.AIEq}
       status={tone}
-      statusBlink={analyze.isPending || push.isPending}
+      statusBlink={isRunning || push.isPending}
       titleSlot={
         <Text
           fontFamily="mono"
@@ -94,12 +97,7 @@ export function FeatAiEq({ code }: Props): React.ReactElement {
       }
       right={
         <FeatViewHeaderRight>
-          <MonoButton
-            icon="refresh"
-            label="fetch sentiment"
-            onClick={onFetch}
-            disabled={analyze.isPending}
-          />
+          <MonoButton icon="refresh" label="fetch sentiment" onClick={onFetch} disabled={isRunning} />
           <MonoButton
             icon="push"
             label="push sentiment to slack"
@@ -110,58 +108,23 @@ export function FeatAiEq({ code }: Props): React.ReactElement {
       }
     >
       <Flex direction="column" h="100%" minH={0}>
-        <Box
-          position="relative"
-          px="18px"
-          py="14px"
-          bg="term.panel"
-          color="term.ink2"
-          fontFamily="mono"
-          fontSize="12px"
-          lineHeight="1.7"
-          flex="1"
-          minH={0}
-          overflow="auto"
-          _after={{
-            content: '""',
-            position: 'absolute',
-            inset: 0,
-            pointerEvents: 'none',
-            background:
-              'repeating-linear-gradient(to bottom, rgba(255,255,255,0.012) 0 1px, transparent 1px 3px)',
-          }}
-        >
-          {lines.map((line, i) => (
-            <Flex key={i} gap="10px" position="relative" zIndex={1}>
-              <Text
-                color="term.ink3"
-                minW="34px"
-                textAlign="right"
-                userSelect="none"
-                fontSize="11px"
-              >
-                {String(i + 1).padStart(3, '0')}
-              </Text>
-              <Text color="term.ink2">{line}</Text>
-            </Flex>
-          ))}
-          <Flex gap="10px" position="relative" zIndex={1}>
-            <Text color="term.ink3" minW="34px" textAlign="right" fontSize="11px">
-              {String(lines.length + 1).padStart(3, '0')}
-            </Text>
-            <Text>
-              <Box as="span" color="term.green">
-                $
-              </Box>{' '}
-              <Box as="span" className="blink" color="term.green">
-                ▌
-              </Box>
-            </Text>
-          </Flex>
+        <Box flex="1" minH={0}>
+          {cached.isFetched && (
+            <TermConsole
+              ref={termRef}
+              key={code}
+              fontSize={12}
+              showLineNumbers
+              banner=""
+              {...(initialOutput !== undefined
+                ? { initialOutput }
+                : { initialBuffer: `analyze code=${code} fresh=1` })}
+              onState={(s): void => {
+                setPhase(s.phase);
+              }}
+            />
+          )}
         </Box>
-        {/* AI.MD: shows the brief paragraph (one-line "上涨核心动因分析").
-            Collapsed by default — click ▢ to expand. */}
-        <FeatAiMd source={briefMarkdown} subject={stockLabel} />
       </Flex>
     </FeatView>
   );

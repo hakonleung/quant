@@ -3,26 +3,31 @@
 /**
  * AI.SEC — Sector sentiment.
  *
- * Mirrors AI.EQ stdout, but operates on the active sector's member codes
- * via analyze_many. Cached read (`useMarketSentiment`) is the default
- * render path; the FETCH button fires the LLM-backed `analyze_many`
- * mutation behind a confirm guard (paid call). The "full" multi-section
- * view is assembled via `marketSentimentLines()`; `brief` is the
- * one-paragraph 市场综述.
+ * Mirrors AI.EQ on the shared `TermConsole`: wait for the cache query
+ * to settle, then mount with either a `[cached]` history entry
+ * (cache hit) or a pre-filled `analyze.sector id=<id> fresh=1` buffer
+ * (cache miss). FETCH forces the same `… fresh=1` command via the
+ * ref; the term cell's confirm-required widget handles the paid
+ * confirm.
  */
 
 import { Box, Flex, Text } from '@chakra-ui/react';
 import { marketSentimentLines } from '@quant/shared';
-import { useMemo } from 'react';
+import type { TerminalState } from '@quant/terminal';
+import { useMemo, useRef, useState } from 'react';
 
 import { Feat } from '../../lib/eqty/feat.js';
-import { ConfirmCancelled, useConfirm } from '../../lib/hooks/use-confirm.js';
-import { useAnalyzeMany, useMarketSentiment } from '../../lib/hooks/use-eqty-data.js';
+import { useMarketSentiment } from '../../lib/hooks/use-eqty-data.js';
 import { usePushPayload } from '../../lib/hooks/use-push-payload.js';
 import { useSectorsStore } from '../../lib/stores/sectors.store.js';
 import { ALL_SECTOR_ID, useUiStore } from '../../lib/stores/ui.store.js';
 import { FeatView } from '../feat-view/feat-view.js';
 import { FeatViewHeaderRight } from '../feat-view/feat-view-header.js';
+import {
+  TermConsole,
+  type InitialOutput,
+  type TermConsoleHandle,
+} from '../term-console/index.js';
 import { MonoButton } from '../ui/mono-button.js';
 import { ANALYZE_MAX_CODES } from '../feat-sec-list/feat-sec-list.js';
 
@@ -32,73 +37,26 @@ export function FeatAiSec(): React.ReactElement | null {
   const sector = sectors.find((s) => s.id === activeSectorId) ?? null;
   const codes = sector?.codes ?? [];
   const cached = useMarketSentiment(codes);
-  const analyze = useAnalyzeMany(codes);
   const push = usePushPayload();
+  const termRef = useRef<TermConsoleHandle>(null);
+  const [phase, setPhase] = useState<TerminalState['phase']>('idle');
   const data = cached.data ?? null;
-  const { guard, comp: confirmComp } = useConfirm();
 
   const tooLarge = codes.length > ANALYZE_MAX_CODES;
-
   const sectorLabel =
     sector === null ? '-' : activeSectorId === ALL_SECTOR_ID ? 'All' : sector.name;
 
-  const lines: readonly string[] = useMemo(() => {
-    if (data === null) {
-      return [
-        `$ sentiment.analyze_many --sector ${sectorLabel} --members ${String(codes.length)}`,
-        codes.length === 0 ? '// no members' : '// awaiting trigger',
-      ];
-    }
-    const head = `$ sentiment.analyze_many --asof ${data.asof} --window ${String(data.windowDays)}d`;
-    return [head, ...marketSentimentLines(data)];
-  }, [data, codes.length, sectorLabel]);
+  const initialOutput: InitialOutput | undefined = useMemo(() => {
+    if (data === null) return undefined;
+    const head = `$ analyze.sector id=${sector?.id ?? '-'}  asof=${data.asof}  window=${String(data.windowDays)}d  members=${String(data.codes.length)}`;
+    const body = `${head}\n${marketSentimentLines(data).join('\n')}`;
+    return { body, status: 'cached' };
+  }, [data, sector?.id]);
 
   const onFetch = (): void => {
-    if (codes.length === 0 || analyze.isPending || tooLarge) return;
-    guard({
-      title: 'confirm analyze_many',
-      message: (
-        <>
-          <Text fontFamily="mono" fontSize="12px" color="ink2" lineHeight="1.7">
-            sentiment.analyze_many is a high-cost LLM job.
-          </Text>
-          <Text fontFamily="mono" fontSize="12px" color="ink2" lineHeight="1.7" mt="8px">
-            sector{' '}
-            <Text as="span" color="accent">
-              {sectorLabel}
-            </Text>{' '}
-            · members{' '}
-            <Text as="span" color="accent">
-              {String(codes.length)}
-            </Text>
-          </Text>
-          <Text fontFamily="mono" fontSize="11px" color="ink3" mt="10px">
-            // each call burns paid LLM tokens. proceed?
-          </Text>
-        </>
-      ),
-      confirmLabel: 'CONFIRM ⟳',
-    })
-      .then(() => {
-        analyze.mutate();
-      })
-      .catch((e: unknown) => {
-        if (e instanceof ConfirmCancelled) return;
-        throw e;
-      });
+    if (sector === null || codes.length === 0 || tooLarge) return;
+    termRef.current?.runCommand(`analyze.sector id=${sector.id} fresh=1`);
   };
-
-  const tone = analyze.isPending
-    ? 'amber'
-    : analyze.isError
-      ? 'red'
-      : push.isPending
-        ? 'amber'
-        : push.isError
-          ? 'red'
-          : data === null
-            ? 'idle'
-            : 'green';
 
   const onPush = (): void => {
     if (data === null) return;
@@ -111,11 +69,25 @@ export function FeatAiSec(): React.ReactElement | null {
     push.mutate({ payload });
   };
 
+  const isRunning = phase === 'running' || phase === 'cancelling';
+  const tone = isRunning
+    ? 'amber'
+    : push.isPending
+      ? 'amber'
+      : push.isError
+        ? 'red'
+        : data === null
+          ? 'idle'
+          : 'green';
+
+  const canPrefill = sector !== null && codes.length > 0 && !tooLarge;
+  const initialBuffer = canPrefill ? `analyze.sector id=${sector.id} fresh=1` : undefined;
+
   return (
     <FeatView
       feat={Feat.AISec}
       status={tone}
-      statusBlink={analyze.isPending || push.isPending}
+      statusBlink={isRunning || push.isPending}
       titleSlot={
         <Text
           fontFamily="mono"
@@ -137,7 +109,7 @@ export function FeatAiSec(): React.ReactElement | null {
                 : `analyze ${sectorLabel}`
             }
             onClick={onFetch}
-            disabled={codes.length === 0 || tooLarge || analyze.isPending}
+            disabled={sector === null || codes.length === 0 || tooLarge || isRunning}
           />
           <MonoButton
             icon="push"
@@ -148,26 +120,26 @@ export function FeatAiSec(): React.ReactElement | null {
         </FeatViewHeaderRight>
       }
     >
-      <Box
-        position="relative"
-        px="18px"
-        py="14px"
-        bg="term.panel"
-        color="term.ink2"
-        fontFamily="mono"
-        fontSize="12px"
-        lineHeight="1.7"
-      >
-        {lines.map((line, i) => (
-          <Flex key={i} gap="10px">
-            <Text color="term.ink3" minW="34px" textAlign="right" fontSize="11px" userSelect="none">
-              {String(i + 1).padStart(3, '0')}
-            </Text>
-            <Text color="term.ink2">{line === '' ? ' ' : line}</Text>
-          </Flex>
-        ))}
-      </Box>
-      {confirmComp}
+      <Flex direction="column" h="100%" minH={0}>
+        <Box flex="1" minH={0}>
+          {cached.isFetched && (
+            <TermConsole
+              ref={termRef}
+              key={sector?.id ?? '-'}
+              fontSize={12}
+              showLineNumbers
+              banner=""
+              {...(initialOutput !== undefined ? { initialOutput } : {})}
+              {...(initialOutput === undefined && initialBuffer !== undefined
+                ? { initialBuffer }
+                : {})}
+              onState={(s): void => {
+                setPhase(s.phase);
+              }}
+            />
+          )}
+        </Box>
+      </Flex>
     </FeatView>
   );
 }

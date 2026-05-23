@@ -34,7 +34,6 @@ export const Feat = {
   // AI — LLM surface (AI.SEC = sector aggregate, AI.EQ = single stock)
   AIEq: 'AI.EQ',
   AISec: 'AI.SEC',
-  AIMd: 'AI.MD',
 
   // SYS — unified status + IM activity + watch outputs
   SysMain: 'SYS',
@@ -81,7 +80,6 @@ export const FEAT_CONFIG_MAP: Readonly<Record<Feat, FeatConfig>> = {
 
   [Feat.AIEq]: { cyber: true, gridArea: 'CBOT' },
   [Feat.AISec]: { cyber: true, gridArea: 'R1' },
-  [Feat.AIMd]: { cyber: true, defaultMinimized: true },
 
   [Feat.SysMain]: { cyber: true, defaultMinimized: true, bodyOverlay: true },
   // USR lives only in the topbar — narrow chrome with no inline space,

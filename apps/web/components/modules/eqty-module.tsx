@@ -12,7 +12,7 @@
  *   │              │                               │              │
  *   │  EQ.LIST     │  EQ.CHART (with SCR.PAT       │  AI.SEC      │
  *   │              │  embedded inline)             │  AI.EQ       │
- *   │              │                               │  AI.MD       │
+ *   │              │                               │              │
  *   │              │                               │  WATCH.LIVE  │
  *   │              │                               │              │
  *   └──────────────┴───────────────────────────────┴──────────────┘

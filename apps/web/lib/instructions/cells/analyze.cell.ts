@@ -4,21 +4,26 @@
  * Two phases via `confirm-required`: without `args.confirm`, the
  * handler throws and the renderer surfaces a paid-confirm widget
  * that re-dispatches with `confirm=1`. With confirm, invoke the BE
- * cell and render the typed `Sentiment` payload (new schema —
- * coreDrivers / hotThemes / brief; no more topTheme / topDriver).
+ * cell and render the typed `Sentiment` payload.
+ *
+ * Output body uses the shared `sentimentLines()` formatter so that
+ * the term surface, the IM/channel surface, and the AI.EQ pane all
+ * render the same structured content (score / brief / drivers /
+ * themes / products / signals / m&a / supply / research /
+ * competitive / gaps / caveats). See CLAUDE.md §9.1 normalization —
+ * one canonical representation, fanned out by surface chrome only.
  */
 
 import {
   InstructionDispatchError,
+  sentimentLines,
   type InstructionCell,
   type ResultOf,
 } from '@quant/shared';
 import {
-  ANSI,
   canceledResolution,
   confirmPrompt,
   interactive,
-  paint,
   textErr,
   textOk,
 } from '@quant/terminal';
@@ -75,33 +80,6 @@ function safeParse(raw: string): { code: string; fresh: boolean } {
   }
 }
 
-function formatScore(score: number): string {
-  if (score > 0.66) return paint(score.toFixed(2), ANSI.green);
-  if (score < 0.34) return paint(score.toFixed(2), ANSI.red);
-  return paint(score.toFixed(2), ANSI.yellow);
-}
-
 function formatSentiment(s: Sentiment): string {
-  const themes = s.hotThemes
-    .slice(0, 3)
-    .map((t) => t.label)
-    .join(', ');
-  const drivers = s.coreDrivers
-    .slice(0, 3)
-    .map((d) => d.summary)
-    .join('; ');
-  const lines: string[] = [
-    paint(`${s.code} sentiment`, ANSI.bold, ANSI.cyan),
-    `score:   ${formatScore(s.score)}`,
-    `themes:  ${themes.length > 0 ? themes : '—'}`,
-    `drivers: ${drivers.length > 0 ? drivers : '—'}`,
-    `brief:   ${s.brief.length > 0 ? s.brief : '—'}`,
-    `cached:  ${s.cachedAt}`,
-  ];
-  if (s.caveats.length > 0) {
-    lines.push('');
-    lines.push(paint('caveats:', ANSI.bold));
-    for (const c of s.caveats) lines.push(`  ! ${c}`);
-  }
-  return lines.join('\n');
+  return sentimentLines(s).join('\n');
 }
