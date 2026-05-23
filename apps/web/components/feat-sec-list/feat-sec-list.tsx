@@ -12,6 +12,7 @@ import { useKlineBulk } from '../../lib/hooks/use-eqty-data.js';
 import { useStockList } from '../../lib/hooks/use-stock-list.js';
 import { useSectorsStore, type Sector } from '../../lib/stores/sectors.store.js';
 import { ALL_SECTOR_ID, useUiStore } from '../../lib/stores/ui.store.js';
+import { useCommand } from '../../lib/ui-cmd/hooks/use-command.js';
 import { useFeatHotkeys } from '../../lib/ui-cmd/hooks/use-feat-hotkeys.js';
 import { useFocusStore } from '../../lib/ui-cmd/store/focus.js';
 import { FeatView } from '../feat-view/feat-view.js';
@@ -155,27 +156,33 @@ export function FeatSecList({ bare }: FeatSecListProps = {}): React.ReactElement
   // market pane is the active Feat. Reuses the same confirm guard the
   // mouse path uses, satisfying CLAUDE.md §10.5 "mouse and keyboard
   // must produce the same action via the same dispatch path".
+  // Shared dispatch path for keyboard AND chip icon-button clicks.
+  // `args.id` (when present, from the chip click) targets that specific
+  // sector; absent (keyboard `D`/`P`) falls back to activeSectorId.
+  // Per CLAUDE.md §10.5, mouse and keyboard must run through the same
+  // command handler — closing this loop is the point of the refactor.
   useFeatHotkeys(Feat.Mkt, {
-    'sector.rm': () => {
-      const target = sectors.find((r) => r.id === activeSectorId);
+    'sector.rm': (args) => {
+      const id = (args as { id?: string } | undefined)?.id ?? activeSectorId;
+      const target = sectors.find((r) => r.id === id);
       if (target === undefined) return;
       if (target.id === ALL_SECTOR_ID) return;
       if (currentUserId === null || target.createdBy !== currentUserId) return;
       onDelete(target);
     },
-    // `P` (shift+p) — toggle the active sector's published flag. The
-    // handler reuses the same confirm-guarded mutation the chip's
-    // publish icon-button fires. Single hotkey covers both publish AND
-    // unpublish (the underlying mutation flips the flag); the manifest
-    // entry is on `sector.publish` because that's the more common verb.
-    'sector.publish': () => {
-      const target = sectors.find((r) => r.id === activeSectorId);
+    'sector.publish': (args) => {
+      const id = (args as { id?: string } | undefined)?.id ?? activeSectorId;
+      const target = sectors.find((r) => r.id === id);
       if (target === undefined) return;
       if (target.id === ALL_SECTOR_ID) return;
       if (currentUserId === null || target.createdBy !== currentUserId) return;
       onTogglePublish(target);
     },
   });
+
+  // useCommand dispatchers — same registry hops mouse → keyboard.
+  const dispatchRm = useCommand('sector.rm');
+  const dispatchPublish = useCommand('sector.publish');
 
   // The "+ new sector" trigger lives in the parent MKT pane's
   // FeatView header (parent owns the dialog state); this component
@@ -200,14 +207,14 @@ export function FeatSecList({ bare }: FeatSecListProps = {}): React.ReactElement
                 ownerActions
                   ? undefined
                   : (): void => {
-                      onDelete(s);
+                      void dispatchRm({ id: s.id });
                     }
               }
               onTogglePublish={
                 ownerActions
                   ? undefined
                   : (): void => {
-                      onTogglePublish(s);
+                      void dispatchPublish({ id: s.id });
                     }
               }
             />
