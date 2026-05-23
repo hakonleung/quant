@@ -24,7 +24,10 @@ export function computeRhythm(bars: readonly BarLike[], config: WcmiConfig): num
   const swingCount = Math.min(peaks, troughs);
   const expectedSwings = n / config.SWING_PERIOD_BARS;
   const swingDensity = expectedSwings > 0 ? swingCount / expectedSwings : 0;
-  return 0.6 * clip(autocorrScore / 0.5, -1, 1) + 0.4 * (clip(swingDensity, 0, 2) - 1);
+  return (
+    config.RHYTHM_W_AUTOCORR * clip(autocorrScore / config.RHYTHM_AUTOCORR_SCALE, -1, 1) +
+    config.RHYTHM_W_SWING * (clip(swingDensity, 0, config.RHYTHM_SWING_DENSITY_CAP) - 1)
+  );
 }
 
 function computeReturns(closes: readonly number[]): number[] {

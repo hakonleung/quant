@@ -14,10 +14,10 @@
  *      `RECENT_PULLBACK_CAP` (default 15%). A stock 20% off its
  *      90-day high has this term zeroed.
  *
- * Component weights (0.40 / 0.35 / 0.25) front-load the recent-return
- * signal but give the yin-run almost the same say. Tweak the cap
- * constants in `WCMI_CONFIG` to change relative harshness without
- * touching this file.
+ * 三项内部权重由 `RECENT_W_RET / RECENT_W_YIN_RUN / RECENT_W_PULLBACK`
+ * 控制；饱和阈值由 `RECENT_RET_SCALE / RECENT_YIN_RUN_CAP /
+ * RECENT_PULLBACK_CAP` 控制。所有可调参数集中在 `WCMI_CONFIG`，本文件
+ * 不再持有任何 module-level 静态常量。
  *
  * Pure — no side effects, no IO; tested via golden + boundary cases
  * in `recent-strength.spec.ts`.

@@ -42,9 +42,9 @@ export function computeMaSupport(bars: readonly BarLike[], config: WcmiConfig): 
   const alignmentRate = nAll4 > 0 ? aligned / nAll4 : 0;
   const meanDistMa20 = nDist > 0 ? distSum / nDist : 0;
   return (
-    0.35 * aboveMa20Rate +
-    0.2 * aboveMa60Rate +
-    0.3 * alignmentRate +
-    0.15 * clip(meanDistMa20 / config.MA20_DIST_CAP, -1, 1)
+    config.MA_W_ABOVE_MA20 * aboveMa20Rate +
+    config.MA_W_ABOVE_MA60 * aboveMa60Rate +
+    config.MA_W_ALIGNMENT * alignmentRate +
+    config.MA_W_MEAN_DIST * clip(meanDistMa20 / config.MA20_DIST_CAP, -1, 1)
   );
 }

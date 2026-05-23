@@ -10,7 +10,7 @@
  */
 
 import { Box, Button, Flex, Text } from '@chakra-ui/react';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 
 import { useFocusStore } from '../store/focus.js';
 import { useConfirmHubStore, type ConfirmOptions } from './store.js';
@@ -42,6 +42,12 @@ function Dialog({ opts, onConfirm, onCancel }: DialogProps): React.ReactElement 
   const title = opts.title ?? 'confirm';
   const confirmLabel = opts.confirmLabel ?? 'CONFIRM';
   const cancelLabel = opts.cancelLabel ?? 'CANCEL';
+  // Initial focus on Cancel — Enter then commits to "do nothing", a safer
+  // default for both `destructive` and `llm` confirms.
+  const cancelBtnRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    cancelBtnRef.current?.focus();
+  }, []);
   return (
     <Box
       role="dialog"
@@ -109,6 +115,7 @@ function Dialog({ opts, onConfirm, onCancel }: DialogProps): React.ReactElement 
           bg="panel3"
         >
           <Button
+            ref={cancelBtnRef}
             onClick={onCancel}
             bg="transparent"
             color="ink2"

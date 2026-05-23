@@ -30,8 +30,8 @@ export function computeCrashAvoidance(
   const excessSeverity = Math.max(0, crashSeverity - config.CRASH_DAY_THR);
   return (
     1 -
-    0.5 * clip(crashDays / config.CRASH_COUNT_CAP, 0, 1) -
-    0.3 * clip(excessSeverity / config.CRASH_SEVERITY_SPAN_PCT, 0, 1) -
-    0.2 * clip(gapDownDays / config.GAP_DOWN_CAP, 0, 1)
+    config.CRASH_W_COUNT * clip(crashDays / config.CRASH_COUNT_CAP, 0, 1) -
+    config.CRASH_W_SEVERITY * clip(excessSeverity / config.CRASH_SEVERITY_SPAN_PCT, 0, 1) -
+    config.CRASH_W_GAP_DOWN * clip(gapDownDays / config.GAP_DOWN_CAP, 0, 1)
   );
 }

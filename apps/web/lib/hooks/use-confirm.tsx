@@ -1,7 +1,7 @@
 'use client';
 
 import { Box, Button, Flex, Text } from '@chakra-ui/react';
-import { useCallback, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 
 export interface ConfirmOptions {
   readonly title?: string;
@@ -75,8 +75,18 @@ function ConfirmDialog({ opts, onConfirm, onCancel }: DialogProps): React.ReactE
   const title = opts.title ?? 'confirm';
   const confirmLabel = opts.confirmLabel ?? 'CONFIRM';
   const cancelLabel = opts.cancelLabel ?? 'CANCEL';
+  // Auto-focus the Cancel button on mount so keyboard users land in a
+  // predictable position. Cancel (not Confirm) is the safer default for
+  // destructive prompts — accidental Enter cancels rather than commits.
+  const cancelBtnRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    cancelBtnRef.current?.focus();
+  }, []);
   return (
     <Box
+      role="dialog"
+      aria-modal="true"
+      aria-label={title}
       position="fixed"
       inset={0}
       bg="rgba(0,0,0,0.45)"
@@ -139,6 +149,7 @@ function ConfirmDialog({ opts, onConfirm, onCancel }: DialogProps): React.ReactE
           bg="panel3"
         >
           <Button
+            ref={cancelBtnRef}
             onClick={onCancel}
             bg="transparent"
             color="ink2"

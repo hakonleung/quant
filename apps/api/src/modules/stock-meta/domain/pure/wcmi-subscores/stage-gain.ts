@@ -36,6 +36,9 @@ export function computeStageGain(bars: readonly BarLike[], config: WcmiConfig): 
     windowLow > 0 && Number.isFinite(windowLow) ? ((endClose - windowLow) / windowLow) * 100 : 0;
   const denom = bars.length - 1;
   const recencyScore = denom > 0 ? argMaxClose / denom : 0;
-  const value = 0.5 * rWindow + 0.3 * rangeGain + config.STAGE_RECENCY_BIAS * recencyScore;
+  const value =
+    config.STAGE_W_R_WINDOW * rWindow +
+    config.STAGE_W_RANGE_GAIN * rangeGain +
+    config.STAGE_RECENCY_BIAS * recencyScore;
   return { value, rWindow };
 }

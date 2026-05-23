@@ -21,10 +21,10 @@ export function computeUpWaveSmoothness(
   const meanSlopeR2 =
     slopeR2Values.length === 0 ? config.DEFAULT_SLOPE_R2 : mean(slopeR2Values);
   return (
-    0.35 * clip(maxYangRun / config.MAX_YANG_RUN_CAP, 0, 1) +
-    0.25 * clip(meanYangRun / config.MEAN_YANG_RUN_CAP, 0, 1) +
-    0.25 * (1 - clip(meanSwingDd / config.MEAN_SWING_DD_CAP, 0, 1)) +
-    0.15 * meanSlopeR2
+    config.UP_WAVE_W_MAX_YANG * clip(maxYangRun / config.MAX_YANG_RUN_CAP, 0, 1) +
+    config.UP_WAVE_W_MEAN_YANG * clip(meanYangRun / config.MEAN_YANG_RUN_CAP, 0, 1) +
+    config.UP_WAVE_W_SWING_DD * (1 - clip(meanSwingDd / config.MEAN_SWING_DD_CAP, 0, 1)) +
+    config.UP_WAVE_W_SLOPE_R2 * meanSlopeR2
   );
 }
 

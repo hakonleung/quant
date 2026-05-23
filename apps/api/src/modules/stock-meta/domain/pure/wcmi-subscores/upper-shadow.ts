@@ -33,9 +33,9 @@ export function computeUpperShadowClean(
     const shadowBodyRatio = upperShadow / Math.max(body, config.SHADOW_MIN_DIVISOR_PCT);
     const shadowRangeRatio = upperShadow / Math.max(range, config.SHADOW_MIN_DIVISOR_PCT);
     const penalty =
-      0.5 * clip(shadowBodyRatio / config.SHADOW_BODY_THR, 0, 1) +
-      0.5 * clip(shadowRangeRatio / config.SHADOW_RANGE_THR, 0, 1);
-    const weight = close > open ? 1.5 : 1.0;
+      config.SHADOW_W_BODY * clip(shadowBodyRatio / config.SHADOW_BODY_THR, 0, 1) +
+      config.SHADOW_W_RANGE * clip(shadowRangeRatio / config.SHADOW_RANGE_THR, 0, 1);
+    const weight = close > open ? config.SHADOW_YANG_WEIGHT : config.SHADOW_YIN_WEIGHT;
     weightedPenalty += penalty * weight;
     totalWeight += weight;
   }
