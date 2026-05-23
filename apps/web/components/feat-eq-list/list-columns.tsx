@@ -314,7 +314,7 @@ function wcmiSubColumn(key: ColumnKey, label: string): ColumnDef {
   return {
     key,
     label,
-    w: 80,
+    w: 40,
     align: 'right',
     render: (r) => <WcmiSubCell value={readNumber(r, key)} />,
     sortValue: (r) => readNumber(r, key),
