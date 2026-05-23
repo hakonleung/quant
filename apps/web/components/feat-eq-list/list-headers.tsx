@@ -95,53 +95,20 @@ export function EditableTitle({ value, editable, onSave }: EditableTitleProps): 
   );
 }
 
-interface FilterHeaderProps {
-  readonly filter: string;
-  readonly setFilter: (v: string) => void;
-  readonly total: number;
-  readonly hits: number;
+interface AllSectorHeaderProps {
+  readonly onPick: (code: string) => void;
 }
 
-export function FilterHeader({
-  filter,
-  setFilter,
-  total,
-  hits,
-}: FilterHeaderProps): React.ReactElement {
+export function AllSectorHeader({ onPick }: AllSectorHeaderProps): React.ReactElement {
   return (
-    <Flex
-      align="center"
-      gap="10px"
-      px="14px"
-      py="8px"
-      borderBottomWidth="1px"
-      borderColor="line"
-      bg="panel3"
-      flexShrink={0}
-    >
-      <Text color="prompt" fontFamily="mono" fontSize="12px" fontWeight="700">
-        $
-      </Text>
-      <Input
-        value={filter}
-        onChange={(e): void => {
-          setFilter(e.target.value);
+    <Box flexShrink={0}>
+      <FeatScrNl
+        marketFilter="a"
+        onPick={(s): void => {
+          onPick(s.code);
         }}
-        placeholder="filter --code|name"
-        bg="panel"
-        borderWidth="1px"
-        borderColor="line"
-        h="28px"
-        px="10px"
-        fontFamily="mono"
-        fontSize="12px"
-        borderRadius="0"
-        _focus={{ borderColor: 'accent', boxShadow: 'none' }}
       />
-      <Text fontFamily="mono" fontSize="10px" color="ink3" letterSpacing="0.14em">
-        {hits}/{total}
-      </Text>
-    </Flex>
+    </Box>
   );
 }
 

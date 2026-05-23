@@ -13,13 +13,15 @@
  * column behaviour the user had before, just under one frame.
  */
 
-import { Flex } from '@chakra-ui/react';
+import { Box, Flex, Text } from '@chakra-ui/react';
 import { useIsFetching } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 
 import { Feat } from '../../lib/eqty/feat.js';
 import { useBlacklistQuery } from '../../lib/hooks/use-blacklist.js';
 import { useStockList } from '../../lib/hooks/use-stock-list.js';
+import { useSectorsStore } from '../../lib/stores/sectors.store.js';
+import { ALL_SECTOR_ID, useUiStore } from '../../lib/stores/ui.store.js';
 import { FeatEqList } from '../feat-eq-list/feat-eq-list.js';
 import { NewSectorDialog } from '../feat-sec-list/new-sector-dialog.js';
 import { FeatSecList } from '../feat-sec-list/feat-sec-list.js';
@@ -44,11 +46,63 @@ export function FeatMkt(): React.ReactElement {
   const isLoading = stocks.isLoading || blacklist.isLoading || eqtyFetching > 0;
   const tone = stocks.error !== null ? 'red' : isLoading ? 'amber' : 'green';
   const [dialogOpen, setDialogOpen] = useState(false);
+
+  const activeSectorId = useUiStore((s) => s.activeSectorId);
+  const sectors = useSectorsStore((s) => s.sectors);
+  const activeSector = sectors.find((s) => s.id === activeSectorId) ?? null;
+  const isAll = activeSectorId === ALL_SECTOR_ID;
+  const sectorName = isAll ? 'all' : (activeSector?.name ?? '—');
+
+  const [counts, setCounts] = useState<{ total: number; matched: number } | null>(null);
+  const onCountsChange = useCallback((c: { total: number; matched: number }): void => {
+    setCounts((prev) =>
+      prev !== null && prev.total === c.total && prev.matched === c.matched
+        ? prev
+        : { total: c.total, matched: c.matched },
+    );
+  }, []);
+
+  const countLabel =
+    counts === null
+      ? null
+      : counts.matched === counts.total
+        ? String(counts.total)
+        : `${String(counts.matched)}/${String(counts.total)}`;
+
   return (
     <FeatView
       feat={Feat.Mkt}
       status={tone}
       statusBlink={isLoading}
+      titleSlot={
+        <Flex align="baseline" gap="8px" minW={0}>
+          <Text
+            fontFamily="mono"
+            fontSize="10px"
+            letterSpacing="0.18em"
+            textTransform="uppercase"
+            fontWeight="600"
+            color="ink2"
+            whiteSpace="nowrap"
+            overflow="hidden"
+            textOverflow="ellipsis"
+          >
+            {sectorName}
+          </Text>
+          {countLabel !== null && (
+            <Box
+              as="span"
+              fontFamily="mono"
+              fontSize="10px"
+              color="ink3"
+              letterSpacing="0.12em"
+              whiteSpace="nowrap"
+            >
+              {countLabel}
+            </Box>
+          )}
+        </Flex>
+      }
       right={
         <MonoButton
           icon="add"
@@ -62,7 +116,7 @@ export function FeatMkt(): React.ReactElement {
       <Flex direction="column" h="100%" minH={0}>
         <FeatSecList bare />
         <Flex flex="1" minH={0} direction="column">
-          <FeatEqList bare />
+          <FeatEqList bare onCountsChange={onCountsChange} />
         </Flex>
       </Flex>
       <NewSectorDialog

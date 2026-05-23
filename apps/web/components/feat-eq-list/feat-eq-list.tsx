@@ -37,7 +37,7 @@ import { ConfirmCancelled, useConfirm } from '../../lib/hooks/use-confirm.js';
 
 import { BasicList } from './basic-list.js';
 import { buildColumns } from './list-columns.js';
-import { DynamicHeader, EditableTitle, FilterHeader, UserSectorHeader } from './list-headers.js';
+import { AllSectorHeader, DynamicHeader, EditableTitle, UserSectorHeader } from './list-headers.js';
 import type { ColumnDef, SortState } from './list-types.js';
 import { ScrollGrid } from './scroll-grid.js';
 
@@ -50,9 +50,14 @@ interface FeatEqListProps {
   /** Hosted inside MKT as the lower body — render content only, no
    *  FeatView chrome (the parent owns the pane frame). */
   readonly bare?: boolean;
+  /** When hosted in MKT, the parent owns the title slot — this callback
+   *  surfaces `{total, matched}` so MKT can show the count next to the
+   *  sector name. `total` is post-blacklist universe size for All, or
+   *  the sector's member count; `matched` is after column-filter pass. */
+  readonly onCountsChange?: (counts: { readonly total: number; readonly matched: number }) => void;
 }
 
-export function FeatEqList({ bare }: FeatEqListProps = {}): React.ReactElement {
+export function FeatEqList({ bare, onCountsChange }: FeatEqListProps = {}): React.ReactElement {
   const activeSectorId = useUiStore((s) => s.activeSectorId);
   const sectors = useSectorsStore((s) => s.sectors);
   const activeSector = sectors.find((x) => x.id === activeSectorId) ?? null;
@@ -65,10 +70,15 @@ export function FeatEqList({ bare }: FeatEqListProps = {}): React.ReactElement {
   ) {
     return <BasicList sector={activeSector} market={activeSector.market} bare={bare ?? false} />;
   }
-  return <FeatEqListInner bare={bare ?? false} />;
+  return (
+    <FeatEqListInner
+      bare={bare ?? false}
+      {...(onCountsChange !== undefined ? { onCountsChange } : {})}
+    />
+  );
 }
 
-function FeatEqListInner({ bare }: FeatEqListProps = {}): React.ReactElement {
+function FeatEqListInner({ bare, onCountsChange }: FeatEqListProps = {}): React.ReactElement {
   const activeSectorId = useUiStore((s) => s.activeSectorId);
   const setFocusCode = useUiStore((s) => s.setFocusCode);
   const focusCode = useUiStore((s) => s.focusCode);
@@ -140,24 +150,17 @@ function FeatEqListInner({ bare }: FeatEqListProps = {}): React.ReactElement {
     [stockListRows, sector?.evidence],
   );
 
-  const [filter, setFilter] = useState('');
   // Drop rows whose rank_metric is null when the dynamic sector ranks by
   // a metric — the screen pipeline will eventually filter these server-
   // side, but legacy cached results may still carry them.
   const hasRankMetric = isDynamic && sector?.rank != null;
   const filteredRows: readonly ListRow[] = useMemo(() => {
-    let rows: readonly ListRow[] = baseRows;
-    if (hasRankMetric) {
-      rows = rows.filter((r) => {
-        const v = r['rank_metric'];
-        return v !== null && v !== undefined;
-      });
-    }
-    if (isDynamic || isUserSector) return rows;
-    const q = filter.trim().toLowerCase();
-    if (q === '') return rows;
-    return rows.filter((r) => r.code.startsWith(q) || r.name.toLowerCase().includes(q));
-  }, [baseRows, filter, isDynamic, isUserSector, hasRankMetric]);
+    if (!hasRankMetric) return baseRows;
+    return baseRows.filter((r) => {
+      const v = r['rank_metric'];
+      return v !== null && v !== undefined;
+    });
+  }, [baseRows, hasRankMetric]);
 
   const appliedColumns = useSettingsStore((s) => s.appliedColumns);
   const columnFilters = useSettingsStore((s) => s.columnFilters);
@@ -196,6 +199,10 @@ function FeatEqListInner({ bare }: FeatEqListProps = {}): React.ReactElement {
       return true;
     });
   }, [filteredRows, filterEntries, isDynamic]);
+
+  useEffect(() => {
+    onCountsChange?.({ total: baseRows.length, matched: predicateRows.length });
+  }, [baseRows.length, predicateRows.length, onCountsChange]);
 
   // Default sort: dynamic sectors with a rank metric sort by rank_metric
   // (using the rank's order); otherwise mirror the BE's response sort
@@ -358,14 +365,7 @@ function FeatEqListInner({ bare }: FeatEqListProps = {}): React.ReactElement {
       }
     >
       <Flex direction="column" h="100%" minH={0}>
-        {isAll && (
-          <FilterHeader
-            filter={filter}
-            setFilter={setFilter}
-            total={baseRows.length}
-            hits={predicateRows.length}
-          />
-        )}
+        {isAll && <AllSectorHeader onPick={setFocusCode} />}
         {isUserSector && sector !== null && (
           <UserSectorHeader sector={sector} onAdd={onUserAddCode} onBatchAdd={onUserAddCodes} />
         )}
