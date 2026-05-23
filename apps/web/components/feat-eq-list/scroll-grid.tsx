@@ -18,7 +18,7 @@
 
 import { Box, Text } from '@chakra-ui/react';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { memo, useCallback, useMemo, useRef, type KeyboardEvent } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, type KeyboardEvent } from 'react';
 
 import type { ListRow } from '../../lib/fp/eq-list-fp.js';
 import { MonoButton } from '../ui/mono-button.js';
@@ -87,6 +87,15 @@ export function ScrollGrid({
     if (focusedCode === null) return -1;
     return rows.findIndex((r) => r.code === focusedCode);
   }, [rows, focusedCode]);
+
+  // External focus changes (J/K hotkeys from the ui-cmd engine mutate
+  // useUiStore.focusCode out-of-band) must auto-scroll the new row into
+  // view. The grid's own ArrowDown/Up handler already calls scrollToIndex
+  // — this mirrors that for the external path.
+  useEffect(() => {
+    if (focusedIndex < 0) return;
+    rowVirtualizer.scrollToIndex(focusedIndex, { align: 'auto' });
+  }, [focusedIndex, rowVirtualizer]);
 
   // ArrowUp/Down step focus through the sorted rows when the grid (or
   // any of its descendants) has keyboard focus. PageUp/Down jump 10
@@ -233,15 +242,18 @@ function ColumnHeader({
               }
             }}
             w={`${String(c.w)}px`}
-            px="8px"
+            px={c.w <= 50 ? '2px' : '8px'}
             py="4px"
             textAlign={c.align}
             color={active ? 'accent' : 'ink3'}
             fontFamily="mono"
             fontSize="10px"
-            letterSpacing="0.16em"
+            letterSpacing={c.w <= 50 ? '0.04em' : '0.16em'}
             textTransform="uppercase"
             fontWeight="700"
+            whiteSpace="normal"
+            wordBreak="break-word"
+            lineHeight="1.1"
             bg="panel3"
             cursor={sortable ? 'pointer' : 'default'}
             _hover={sortable ? { color: 'accent' } : {}}
