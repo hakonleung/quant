@@ -290,8 +290,19 @@ function registerSectorNavCells(): void {
 let installed = false;
 
 /**
- * Idempotent registration entry point. Call once from `providers.tsx`
- * (or any client-only top-level effect) before mounting `<UiCmdEngine />`.
+ * Idempotent registration entry point.
+ *
+ * **Called as a module-level side effect at the bottom of this file** so
+ * registration completes before any component renders. The earlier
+ * approach of calling it from a `useEffect` in `providers.tsx` raced
+ * with child components: React fires child `useEffect`s before parent
+ * `useEffect`s, so `useFeatHotkeys` (in e.g. `FeatMkt`) ran before the
+ * provider effect that registered the cells, throwing
+ * `unknown cell or no ui block`. Module-time registration eliminates
+ * that race while staying idempotent for HMR / fast refresh.
+ *
+ * Safe at module import time: registration only touches in-memory maps
+ * and zustand stores; no DOM / window access. SSR-safe.
  */
 export function installGlobalCells(): void {
   if (installed) return;
@@ -311,6 +322,10 @@ export function installGlobalCells(): void {
 export function __resetGlobalCellsForTest(): void {
   installed = false;
 }
+
+// Module-time registration — runs once on first import, before any
+// component that imports the ui-cmd surface can render.
+installGlobalCells();
 
 /** Convenience reference for unit tests + Phase 2.5 hint window. */
 export const MODULE_HOTKEY_MAP: ReadonlyArray<readonly [string, Feat]> = MODULE_KEYS.map(

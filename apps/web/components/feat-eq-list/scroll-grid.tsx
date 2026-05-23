@@ -227,12 +227,12 @@ function ColumnHeader({
         const sortable = c.sortable !== false;
         const active = sortable && sort?.key === c.key;
         const arrow = !active ? '' : sort.dir === 'asc' ? ' ▲' : ' ▼';
-        return (
-          <Box
-            as="button"
-            key={c.key}
-            onClick={(): void => {
-              if (!sortable) return;
+        // Non-sortable columns render as a plain Box so keyboard users
+        // don't Tab onto an inert button (a11y MINOR from the Phase 3
+        // review). Sortable columns keep their <button> semantics.
+        const isInteractive = sortable;
+        const onHeaderClick = isInteractive
+          ? (): void => {
               if (!active) {
                 setSort({ key: c.key, dir: 'asc' });
               } else if (sort.dir === 'asc') {
@@ -240,7 +240,12 @@ function ColumnHeader({
               } else {
                 setSort(null);
               }
-            }}
+            }
+          : undefined;
+        return (
+          <Box
+            {...(isInteractive ? { as: 'button' as const, onClick: onHeaderClick } : {})}
+            key={c.key}
             w={`${String(c.w)}px`}
             px={c.w <= 50 ? '2px' : '8px'}
             py="4px"

@@ -100,6 +100,7 @@ export const MonoButton = forwardRef<HTMLButtonElement, MonoButtonProps>(functio
       {...rest}
     >
       <Span
+        aria-hidden="true"
         style={{
           display: 'inline-block',
           transform: `scale(${String('scale' in cfg ? cfg.scale : 1)})`,
