@@ -632,6 +632,12 @@ const ENTRIES = [
     examples: ['ledger.analyze', 'ledger.analyze fresh=1', '复盘'],
     argsSchema: LedgerAnalyzeArgsSchema,
     resultSchema: LedgerAnalyzeResultSchema,
+    ui: {
+      scope: 'USR',
+      keys: ['i'],
+      label: 'Insight: analyze ledger',
+      group: 'action',
+    },
   },
   {
     id: 'ledger.add',
