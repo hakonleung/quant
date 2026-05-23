@@ -121,6 +121,50 @@ describe('installGlobalCells is idempotent', () => {
   });
 });
 
+describe('global cells — stock navigation (MKT scope)', () => {
+  it('J advances focusCode through the active sector codes with wrap', async () => {
+    useSectorsStore.setState({
+      sectors: [
+        {
+          ...sectorFixture('s1', 'user'),
+          codes: ['600519', '000001', '300750'],
+          count: 3,
+        },
+      ],
+    });
+    useUiStore.setState({ activeSectorId: 's1', focusCode: null });
+    await uiRegistry.dispatch('ui.stock-next');
+    expect(useUiStore.getState().focusCode).toBe('600519');
+    await uiRegistry.dispatch('ui.stock-next');
+    expect(useUiStore.getState().focusCode).toBe('000001');
+    await uiRegistry.dispatch('ui.stock-next');
+    expect(useUiStore.getState().focusCode).toBe('300750');
+    await uiRegistry.dispatch('ui.stock-next');
+    expect(useUiStore.getState().focusCode).toBe('600519');
+  });
+
+  it('K walks backwards through the active sector codes', async () => {
+    useSectorsStore.setState({
+      sectors: [
+        {
+          ...sectorFixture('s1', 'user'),
+          codes: ['600519', '000001', '300750'],
+          count: 3,
+        },
+      ],
+    });
+    useUiStore.setState({ activeSectorId: 's1', focusCode: '600519' });
+    await uiRegistry.dispatch('ui.stock-prev');
+    expect(useUiStore.getState().focusCode).toBe('300750');
+  });
+
+  it('J no-ops when active sector is ALL', async () => {
+    useUiStore.setState({ activeSectorId: ALL_SECTOR_ID, focusCode: null });
+    await uiRegistry.dispatch('ui.stock-next');
+    expect(useUiStore.getState().focusCode).toBeNull();
+  });
+});
+
 describe('global cells — sector navigation (MKT scope)', () => {
   it('j advances through ordered list (ALL → user → dynamic) with wrap-around', async () => {
     useSectorsStore.setState({

@@ -10,10 +10,12 @@
  * manifest-backed cells.
  */
 
+import { putSectors } from '../api/sectors.js';
 import { Feat, FEAT_CONFIG_MAP } from '../eqty/feat.js';
 import { useLayoutStore } from '../stores/layout.store.js';
 import { useSectorsStore } from '../stores/sectors.store.js';
 import { ALL_SECTOR_ID, useUiStore } from '../stores/ui.store.js';
+import { confirmGuard, ConfirmCancelled } from './confirm/store.js';
 import { uiRegistry, registerLocalCell } from './registry.js';
 import { useFocusStore } from './store/focus.js';
 import {
@@ -159,6 +161,98 @@ function advanceSector(delta: number): void {
   useUiStore.getState().setActiveSector(nextId);
 }
 
+/**
+ * Stocks in the currently-active sector, in the order the equity list
+ * renders them. Defers to the universe (all codes) when active sector
+ * is the ALL pseudo-sector.
+ */
+function currentSectorCodes(): readonly string[] {
+  const active = useUiStore.getState().activeSectorId;
+  if (active === ALL_SECTOR_ID) {
+    // ALL: no in-list ordering at this layer; the actual stock list
+    // pages do their own filtering / sorting. Bail to an empty list
+    // rather than guess — the user already has 'g s'-style global nav
+    // for switching modules, and stock-level nav inside ALL is rarely
+    // useful.
+    return [];
+  }
+  const sector = useSectorsStore.getState().sectors.find((s) => s.id === active);
+  return sector?.codes ?? [];
+}
+
+function advanceStock(delta: number): void {
+  const codes = currentSectorCodes();
+  if (codes.length === 0) return;
+  const cur = useUiStore.getState().focusCode;
+  const idx = cur === null ? -1 : codes.indexOf(cur);
+  // No focus yet → land on the natural endpoint for the direction.
+  // J (delta=+1) → first row; K (delta=-1) → last row.
+  let next: number;
+  if (idx === -1) next = delta > 0 ? 0 : codes.length - 1;
+  else next = (idx + delta + codes.length) % codes.length;
+  const nextCode = codes[next];
+  if (nextCode === undefined) return;
+  useUiStore.getState().setFocusCode(nextCode);
+}
+
+function registerStockNavCells(): void {
+  registerLocalCell('ui.stock-next', {
+    scope: Feat.Mkt,
+    keys: ['J'],
+    label: 'Next stock',
+    group: 'nav',
+  });
+  uiRegistry.bind('ui.stock-next', () => advanceStock(1));
+
+  registerLocalCell('ui.stock-prev', {
+    scope: Feat.Mkt,
+    keys: ['K'],
+    label: 'Previous stock',
+    group: 'nav',
+  });
+  uiRegistry.bind('ui.stock-prev', () => advanceStock(-1));
+}
+
+function registerRemoveStockCell(): void {
+  registerLocalCell('ui.sector-remove-stock', {
+    scope: Feat.Mkt,
+    keys: ['X'],
+    label: 'Remove focused stock from sector',
+    group: 'action',
+  });
+  uiRegistry.bind('ui.sector-remove-stock', async () => {
+    const activeId = useUiStore.getState().activeSectorId;
+    if (activeId === ALL_SECTOR_ID) return;
+    const focusCode = useUiStore.getState().focusCode;
+    if (focusCode === null) return;
+    const sectors = useSectorsStore.getState().sectors;
+    const target = sectors.find((s) => s.id === activeId);
+    if (target === undefined) return;
+    if (!target.codes.includes(focusCode)) return;
+    try {
+      await confirmGuard({
+        title: 'remove stock',
+        message: `Remove ${focusCode} from ${target.name}? Sector membership will be updated.`,
+        confirmLabel: 'REMOVE',
+      });
+    } catch (e: unknown) {
+      if (e instanceof ConfirmCancelled) return;
+      throw e;
+    }
+    const updated = {
+      ...target,
+      codes: target.codes.filter((c) => c !== focusCode),
+      count: target.codes.length - 1,
+    };
+    const nextList = sectors.map((s) => (s.id === activeId ? updated : s));
+    const persisted = await putSectors(nextList);
+    useSectorsStore.getState().setSectors(persisted);
+    // Advance focusCode to a neighbour or clear it.
+    const remaining = updated.codes;
+    useUiStore.getState().setFocusCode(remaining[0] ?? null);
+  });
+}
+
 function registerSectorNavCells(): void {
   registerLocalCell('ui.sector-next', {
     scope: Feat.Mkt,
@@ -192,6 +286,8 @@ export function installGlobalCells(): void {
   registerModuleCells();
   registerViewModeCells();
   registerSectorNavCells();
+  registerStockNavCells();
+  registerRemoveStockCell();
 }
 
 /** Test-only escape hatch. */
