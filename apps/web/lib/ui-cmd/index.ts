@@ -8,3 +8,10 @@ export { useFeatHotkeys, type FeatHandlerMap } from './hooks/use-feat-hotkeys.js
 export { useCommand } from './hooks/use-command.js';
 export { useActiveScope } from './hooks/use-active-scope.js';
 export { CmdButton, type CmdButtonProps } from './components/cmd-button.js';
+export {
+  confirmGuard,
+  ConfirmCancelled,
+  useConfirmHubStore,
+  type ConfirmOptions,
+} from './confirm/store.js';
+export { ConfirmHub } from './confirm/confirm-hub.js';

@@ -18,6 +18,7 @@ import { FeatHotkeyHint } from '../components/feat-hotkey-hint/feat-hotkey-hint.
 import { getClientConfig } from './config/config-center-next-client-getter.js';
 import { registerStoreExportGlobal } from './storage/export-stores.js';
 import { ThemeProvider } from './theme/provider.js';
+import { ConfirmHub } from './ui-cmd/confirm/confirm-hub.js';
 import { UiCmdEngine } from './ui-cmd/engine/install.js';
 import { installGlobalCells } from './ui-cmd/global-cells.js';
 import { startWebVitals } from './web-vitals/store.js';
@@ -53,6 +54,7 @@ export function Providers({ children }: ProvidersProps): ReactNode {
       <QueryClientProvider client={client}>{children}</QueryClientProvider>
       <UiCmdEngine />
       <FeatHotkeyHint />
+      <ConfirmHub />
     </ThemeProvider>
   );
 }

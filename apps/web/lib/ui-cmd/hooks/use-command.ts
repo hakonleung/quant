@@ -31,6 +31,7 @@ import {
 
 import { invokeInstruction } from '../../instructions/client.js';
 import { createRevalidate } from '../../term/revalidate.js';
+import { confirmGuard, ConfirmCancelled } from '../confirm/store.js';
 import { uiRegistry } from '../registry.js';
 
 export function useCommand(cellId: string): (args?: unknown) => Promise<void> {
@@ -45,9 +46,31 @@ export function useCommand(cellId: string): (args?: unknown) => Promise<void> {
       if (entry === undefined) {
         throw new Error(`useCommand: unknown cellId "${cellId}"`);
       }
+      const argsObj = (args ?? {}) as Record<string, unknown>;
+      // Auto-fire confirm gate when the manifest declares it and the
+      // caller has not already short-circuited via `args.confirm`. On
+      // cancel, return silently so the click is a no-op (matches how
+      // existing Feat code with useConfirm behaves).
+      if (entry.doubleConfirm !== undefined && argsObj['confirm'] !== true) {
+        try {
+          await confirmGuard({
+            title: entry.summary.toLowerCase(),
+            message:
+              entry.doubleConfirm === 'destructive'
+                ? `${entry.summary}? this cannot be undone.`
+                : `${entry.summary}? this triggers a paid LLM call.`,
+            confirmLabel:
+              entry.doubleConfirm === 'destructive' ? 'CONFIRM' : 'PROCEED',
+          });
+        } catch (e: unknown) {
+          if (e instanceof ConfirmCancelled) return;
+          throw e;
+        }
+        argsObj['confirm'] = true;
+      }
       const envelope = await invokeInstruction(
         cellId as never,
-        (args ?? {}) as never,
+        argsObj as never,
       );
       if (!envelope.ok) {
         throw new Error(
