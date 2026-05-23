@@ -27,14 +27,14 @@ export const WCMI_CONFIG: WcmiConfig = {
    * `MIN_BARS ≤ length < WINDOW` 区间则退化到全部可用历史，
    * `WcmiSubscores` 中的 `windowLen` 字段会记录真正使用的根数。
    */
-  WINDOW: 50,
+  WINDOW: 35,
 
   /**
    * 进入打分流程所需的最小 K 线根数。
    * `bars.length < MIN_BARS` 的标的直接判定为样本不足、跳过本期排名；
    * 30 根 ≈ 6 个交易周，足够估计自相关、yang 比例、回撤等基础统计量。
    */
-  MIN_BARS: 30,
+  MIN_BARS: 15,
 
   // ═══════════════════════════════════════════════════════════════════
   // 子分 1: rhythm（节奏）
@@ -87,30 +87,20 @@ export const WCMI_CONFIG: WcmiConfig = {
 
   // ═══════════════════════════════════════════════════════════════════
   // 子分 2: ma_support（均线支撑）
-  //   raw = MA_W_ABOVE_MA20 × rate(close>ma20)
-  //       + MA_W_ABOVE_MA60 × rate(close>ma60)
-  //       + MA_W_ALIGNMENT  × rate(ma5>ma10>ma20>ma60)
-  //       + MA_W_MEAN_DIST  × clip(mean((close-ma20)/ma20) / MA20_DIST_CAP, -1, 1)
+  //   raw = MA_W_ABOVE_MA5  × rate(close>ma5)
+  //       + MA_W_ABOVE_MA10 × rate(close>ma10)
+  //       + MA_W_ABOVE_MA20 × rate(close>ma20)
+  //   按"站上更短均线信号更强"的次序递减加权；ma60 不参与。
   // ═══════════════════════════════════════════════════════════════════
 
-  /**
-   * 收盘价相对 ma20 平均涨幅的归一上限。
-   * `mean(close − ma20) / ma20` 达到该阈值即给满分（+15% 视为充分远离
-   * ma20 的强势状态）。阈值越大对"贴均线"风格越宽容。
-   */
-  MA20_DIST_CAP: 0.15,
+  /** ma_support 内部权重：收盘站上 ma5 比例。默认 0.5（主项，最快均线）。 */
+  MA_W_ABOVE_MA5: 0.5,
 
-  /** ma_support 内部权重：收盘站上 ma20 比例。默认 0.35（主项）。 */
-  MA_W_ABOVE_MA20: 0.35,
+  /** ma_support 内部权重：收盘站上 ma10 比例。默认 0.3。 */
+  MA_W_ABOVE_MA10: 0.3,
 
-  /** ma_support 内部权重：收盘站上 ma60 比例。默认 0.2。 */
-  MA_W_ABOVE_MA60: 0.2,
-
-  /** ma_support 内部权重：ma5>ma10>ma20>ma60 多头排列频率。默认 0.3。 */
-  MA_W_ALIGNMENT: 0.3,
-
-  /** ma_support 内部权重：平均距 ma20 的归一距离。默认 0.15。 */
-  MA_W_MEAN_DIST: 0.15,
+  /** ma_support 内部权重：收盘站上 ma20 比例。默认 0.2。 */
+  MA_W_ABOVE_MA20: 0.2,
 
   // ═══════════════════════════════════════════════════════════════════
   // 子分 3: up_wave_smoothness（上行波平滑度）
@@ -125,7 +115,7 @@ export const WCMI_CONFIG: WcmiConfig = {
    * 计算窗口内最长连续阳线长度，与该上限相除并 clip 到 [0,1]，达到 8 根
    * 即给满分。降低意味着对"短连阳"也愿意打高分。
    */
-  MAX_YANG_RUN_CAP: 8,
+  MAX_YANG_RUN_CAP: 10,
 
   /**
    * 平均 yang 连阳根数的归一上限。
@@ -138,7 +128,7 @@ export const WCMI_CONFIG: WcmiConfig = {
    * 平均 swing 回撤 / 该上限 → 越大越糟。0.05 表示平均 5% 的段内回撤
    * 即扣满分；调高则容忍较深的中途调整。
    */
-  MEAN_SWING_DD_CAP: 0.05,
+  MEAN_SWING_DD_CAP: 0.06,
 
   /**
    * 上行子波段 OLS 拟合 R² 的默认值。
@@ -155,10 +145,10 @@ export const WCMI_CONFIG: WcmiConfig = {
   MIN_SEGMENT_BARS: 5,
 
   /** up_wave 内部权重：最长连阳。默认 0.35（最大项）。 */
-  UP_WAVE_W_MAX_YANG: 0.35,
+  UP_WAVE_W_MAX_YANG: 0.2,
 
   /** up_wave 内部权重：平均连阳。默认 0.25。 */
-  UP_WAVE_W_MEAN_YANG: 0.25,
+  UP_WAVE_W_MEAN_YANG: 0.4,
 
   /** up_wave 内部权重：段内回撤的"反向"得分。默认 0.25。 */
   UP_WAVE_W_SWING_DD: 0.25,
@@ -168,50 +158,38 @@ export const WCMI_CONFIG: WcmiConfig = {
 
   // ═══════════════════════════════════════════════════════════════════
   // 子分 5: upper_shadow_clean（上影线"干净度"）
-  //   per_bar_penalty = SHADOW_W_BODY  × clip(shadow/body  / SHADOW_BODY_THR, 0, 1)
-  //                   + SHADOW_W_RANGE × clip(shadow/range / SHADOW_RANGE_THR, 0, 1)
+  //   bars_used       = tail(SHADOW_WINDOW)
+  //   per_bar_penalty = (upper_shadow >= SHADOW_LONG_PCT) ? 1 : 0
   //   weight          = (close > open) ? SHADOW_YANG_WEIGHT : SHADOW_YIN_WEIGHT
   //   raw             = 1 - Σ(weight × penalty) / Σ(weight)
   // ═══════════════════════════════════════════════════════════════════
 
   /**
-   * `upper_shadow / body` 的饱和阈值。
-   * 比值达到该阈值，单根 K 的惩罚饱和至 1.0（即"上影线 ≥ 实体 1.5 倍"
-   * 算作完全坏点），低于该阈值线性缩放。阈值越大越宽松。
+   * upper_shadow_clean 独立观察窗口（尾部 K 线根数）。
+   * 与全局 WINDOW 解耦——长上影"冲高失败"是短期形态信号，过长窗口会被
+   * 早已修复的孤立长影稀释。20 ≈ 一个月，捕捉当前阶段的抛压。
+   * `bars.length < SHADOW_WINDOW` 时退化为全部可用历史。
    */
-  SHADOW_BODY_THR: 1.5,
+  SHADOW_WINDOW: 40,
 
   /**
-   * `upper_shadow / day_range` 的饱和阈值。
-   * 比值达到该阈值，单根 K 的惩罚饱和至 1.0。0.4 表示上影线占当日振幅
-   * ≥ 40% 即完全扣分。
+   * "长上影线"判定阈值（单位：% of prevClose）。
+   * `upper_shadow >= SHADOW_LONG_PCT` 视为一根长上影 K，单根惩罚 = 1；
+   * 否则惩罚 = 0。
    */
-  SHADOW_RANGE_THR: 0.4,
-
-  /**
-   * 上影线惩罚计算时 body / range 的最小除数（单位：% of prevClose）。
-   * 防止极小实体 / 振幅触发除以接近 0 的数值放大噪声。0.5% 是 A 股一档
-   * 价差的典型量级。
-   */
-  SHADOW_MIN_DIVISOR_PCT: 0.5,
-
-  /** upper_shadow 内部权重：body-比值项。默认 0.5（与 RANGE 各半）。 */
-  SHADOW_W_BODY: 0.5,
-
-  /** upper_shadow 内部权重：range-比值项。默认 0.5。 */
-  SHADOW_W_RANGE: 0.5,
+  SHADOW_LONG_PCT: 3.5,
 
   /**
    * 阳线（close > open）上影线惩罚的加权。
    * 默认 1.5——阳线长上影是"冲高回落、失败上攻"的强负信号。
    */
-  SHADOW_YANG_WEIGHT: 1.5,
+  SHADOW_YANG_WEIGHT: 1.2,
 
   /**
    * 阴线（close ≤ open）上影线惩罚的加权。
    * 默认 1.0——阴线的长上影意义弱于阳线，仍计入但权重正常。
    */
-  SHADOW_YIN_WEIGHT: 1.0,
+  SHADOW_YIN_WEIGHT: 1,
 
   // ═══════════════════════════════════════════════════════════════════
   // 子分 6: stage_gain（区间涨幅）
@@ -253,7 +231,7 @@ export const WCMI_CONFIG: WcmiConfig = {
    * `change_pct < -CRASH_DAY_THR` 的根计入 `crash_days` 并喂入烈度项。
    * 7% 能捕捉真正的恐慌日，又不会把成长股常规 3–5% 波动误判为崩盘。
    */
-  CRASH_DAY_THR: 5,
+  CRASH_DAY_THR: 6,
 
   /**
    * 崩盘日数量的归一上限。
@@ -267,7 +245,7 @@ export const WCMI_CONFIG: WcmiConfig = {
    * 满足 `open < prev_close × (1 + GAP_DOWN_THR/100)` 且当日未收阳的根
    * 被标记；-2 能捕捉有意义的跳空，不会被 -0.5% 的常规低开触发。
    */
-  GAP_DOWN_THR: -2.5,
+  GAP_DOWN_THR: -2,
 
   /**
    * 跳空低开日数量的归一上限，与 `CRASH_COUNT_CAP` 同义。
@@ -280,13 +258,13 @@ export const WCMI_CONFIG: WcmiConfig = {
    * `mean(|change|) − CRASH_DAY_THR` 再除以该跨度并 clip 到 1。5% 意味着
    * 平均比阈值再深 5%（如 -12% vs 阈值 7%）即烈度饱和。
    */
-  CRASH_SEVERITY_SPAN_PCT: 3,
+  CRASH_SEVERITY_SPAN_PCT: 2,
 
   /** crash_avoidance 内部权重：崩盘日"数量"扣分。默认 0.5（主项）。 */
-  CRASH_W_COUNT: 0.6,
+  CRASH_W_COUNT: 0.5,
 
   /** crash_avoidance 内部权重：崩盘日"烈度"扣分。默认 0.3。 */
-  CRASH_W_SEVERITY: 0.2,
+  CRASH_W_SEVERITY: 0.3,
 
   /** crash_avoidance 内部权重：未收复跳空低开"数量"扣分。默认 0.2。 */
   CRASH_W_GAP_DOWN: 0.2,
@@ -303,7 +281,7 @@ export const WCMI_CONFIG: WcmiConfig = {
    * 默认 10 ≈ 最近两周，足以识别多日回调而又不会被单根噪声主导。
    * 必须满足 2 ≤ RECENT_WINDOW ≤ WINDOW。
    */
-  RECENT_WINDOW: 10,
+  RECENT_WINDOW: 5,
 
   /**
    * 近端"最长连阴根数"的归一上限。
@@ -317,14 +295,14 @@ export const WCMI_CONFIG: WcmiConfig = {
    * `(window_high − close[-1]) / window_high` 达到该比例即完全清零回撤项。
    * 0.15 ≈ 15% 即"我不应该追入"的常用阈值。
    */
-  RECENT_PULLBACK_CAP: 0.15,
+  RECENT_PULLBACK_CAP: 0.2,
 
   /**
    * 近端 `RECENT_WINDOW` 根尾部收益的归一跨度。
    * `recent_ret ≥ +RECENT_RET_SCALE` 给满分 1.0；`≤ -RECENT_RET_SCALE` 给
    * 0.0，中间线性。0.10 表示 ±10% 即两端饱和。
    */
-  RECENT_RET_SCALE: 0.1,
+  RECENT_RET_SCALE: 0.15,
 
   /**
    * 近端强度子分中"recent_ret 分量"的内部权重。
@@ -363,40 +341,40 @@ export const WCMI_CONFIG: WcmiConfig = {
    * `ma_support` 子分权重。
    * 调到 3——小而非零的"美学组"打破平局用。
    */
-  W_MA_SUPPORT: 3,
+  W_MA_SUPPORT: 12,
 
   /**
    * `up_wave_smoothness` 子分权重。
    * 调到 3——同样是"美学组"打破平局角色。
    */
-  W_UP_WAVE: 3,
+  W_UP_WAVE: 8,
 
   /**
    * `yang_dominance` 子分权重。
    * 调到 3——同 W_MA_SUPPORT。
    */
-  W_YANG_DOM: 3,
+  W_YANG_DOM: 8,
 
   /**
    * `upper_shadow_clean` 子分权重。
    * 调到 3——原设计中最重的"美学组"权重（20），但回测表明顶部档位与
    * label_aesthetic 相关性弱甚至为负，故并入 4×3 平局组。
    */
-  W_SHADOW_CLEAN: 3,
+  W_SHADOW_CLEAN: 10,
 
   /**
    * `stage_gain` 子分权重。
    * 调到 28——stage_gain 是过滤意图的主轴，但顶部档位原始涨幅会饱和，
    * 需要 crash_avoidance 进一步辨别。
    */
-  W_STAGE_GAIN: 28,
+  W_STAGE_GAIN: 25,
 
   /**
    * `crash_avoidance` 子分权重。
    * 从 60 → 30：增加 recent_strength 后，crash_avoidance 专注于单日尾部
    * 事件，慢慢"阴跌"由 recent_strength 接管。
    */
-  W_CRASH_AVOID: 30,
+  W_CRASH_AVOID: 15,
 
   /**
    * `recent_strength` 子分权重。
@@ -404,7 +382,7 @@ export const WCMI_CONFIG: WcmiConfig = {
    * 连续阴跌"的股票排名低于同样涨幅且仍在上行的股票。调高可进一步压制
    * 任何形式的近端弱势。
    */
-  W_RECENT_STRENGTH: 30,
+  W_RECENT_STRENGTH: 20,
 
   /**
    * 组合 WCMI 分数的输出上限。

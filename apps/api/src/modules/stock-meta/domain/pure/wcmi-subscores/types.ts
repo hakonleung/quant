@@ -21,11 +21,9 @@ export interface WcmiConfig {
   readonly RHYTHM_W_SWING: number;
 
   // 子分 2: ma_support（均线支撑）
-  readonly MA20_DIST_CAP: number;
+  readonly MA_W_ABOVE_MA5: number;
+  readonly MA_W_ABOVE_MA10: number;
   readonly MA_W_ABOVE_MA20: number;
-  readonly MA_W_ABOVE_MA60: number;
-  readonly MA_W_ALIGNMENT: number;
-  readonly MA_W_MEAN_DIST: number;
 
   // 子分 3: up_wave_smoothness（上行波平滑度）
   readonly MAX_YANG_RUN_CAP: number;
@@ -39,11 +37,8 @@ export interface WcmiConfig {
   readonly UP_WAVE_W_SLOPE_R2: number;
 
   // 子分 5: upper_shadow_clean（上影线"干净度"）
-  readonly SHADOW_BODY_THR: number;
-  readonly SHADOW_RANGE_THR: number;
-  readonly SHADOW_MIN_DIVISOR_PCT: number;
-  readonly SHADOW_W_BODY: number;
-  readonly SHADOW_W_RANGE: number;
+  readonly SHADOW_WINDOW: number;
+  readonly SHADOW_LONG_PCT: number;
   readonly SHADOW_YANG_WEIGHT: number;
   readonly SHADOW_YIN_WEIGHT: number;
 

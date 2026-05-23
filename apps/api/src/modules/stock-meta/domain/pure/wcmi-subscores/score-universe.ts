@@ -92,11 +92,28 @@ function computePct(raw: WcmiSubscores, sortedByKey: SortedTables): WcmiPctBreak
     maSupport: percentileNorm(sortedByKey.maSupport, raw.maSupport),
     upWaveSmoothness: percentileNorm(sortedByKey.upWaveSmoothness, raw.upWaveSmoothness),
     yangDominance: percentileNorm(sortedByKey.yangDominance, raw.yangDominance),
-    upperShadowClean: percentileNorm(sortedByKey.upperShadowClean, raw.upperShadowClean),
+    upperShadowClean: compressRange(
+      percentileNorm(sortedByKey.upperShadowClean, raw.upperShadowClean),
+      0.4,
+    ),
     stageGain: percentileNorm(sortedByKey.stageGain, raw.stageGain),
-    crashAvoidance: percentileNorm(sortedByKey.crashAvoidance, raw.crashAvoidance),
+    crashAvoidance: compressRange(
+      percentileNorm(sortedByKey.crashAvoidance, raw.crashAvoidance),
+      0.4,
+    ),
     recentStrength: percentileNorm(sortedByKey.recentStrength, raw.recentStrength),
   };
+}
+
+/**
+ * Linearly map `pct ∈ [0, 1]` into `[floor, 1]` so this dimension can
+ * only ever drag the composite down by `(1 - floor)` of its weight.
+ * Used for upper_shadow_clean and crash_avoidance — both are heavy-tail
+ * "penalty" signals where the bottom of the cross-section is mostly
+ * noise we don't want to fully zero out.
+ */
+function compressRange(pct: number, floor: number): number {
+  return floor + (1 - floor) * pct;
 }
 
 interface SubscoreWeights {
