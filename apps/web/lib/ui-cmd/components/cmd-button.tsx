@@ -85,7 +85,6 @@ export const CmdButton = forwardRef(function CmdButton(
     <Box
       as="button"
       ref={ref}
-      role="button"
       aria-label={label}
       aria-disabled={disabled}
       title={firstKey}
