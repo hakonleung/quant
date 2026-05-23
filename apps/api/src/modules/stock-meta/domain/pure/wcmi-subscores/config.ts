@@ -27,7 +27,7 @@ export const WCMI_CONFIG: WcmiConfig = {
    * `MIN_BARS ≤ length < WINDOW` 区间则退化到全部可用历史，
    * `WcmiSubscores` 中的 `windowLen` 字段会记录真正使用的根数。
    */
-  WINDOW: 90,
+  WINDOW: 60,
 
   /**
    * 进入打分流程所需的最小 K 线根数。
@@ -253,14 +253,14 @@ export const WCMI_CONFIG: WcmiConfig = {
    * `change_pct < -CRASH_DAY_THR` 的根计入 `crash_days` 并喂入烈度项。
    * 7% 能捕捉真正的恐慌日，又不会把成长股常规 3–5% 波动误判为崩盘。
    */
-  CRASH_DAY_THR: 7,
+  CRASH_DAY_THR: 5,
 
   /**
    * 崩盘日数量的归一上限。
    * `crash_days / CRASH_COUNT_CAP` 先除后 clip 到 1，4 个崩盘日即饱和——
    * 防止某一只极端波动股霸占整个百分位排名。
    */
-  CRASH_COUNT_CAP: 4,
+  CRASH_COUNT_CAP: 10,
 
   /**
    * 未被收复的跳空低开阈值（负数，单位 %）。
@@ -273,7 +273,7 @@ export const WCMI_CONFIG: WcmiConfig = {
    * 跳空低开日数量的归一上限，与 `CRASH_COUNT_CAP` 同义。
    * 90 根窗口内 6 个未收复低开即饱和。
    */
-  GAP_DOWN_CAP: 6,
+  GAP_DOWN_CAP: 10,
 
   /**
    * 崩盘烈度（平均超额跌幅）的归一跨度（单位 %）。

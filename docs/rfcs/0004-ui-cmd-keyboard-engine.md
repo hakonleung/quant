@@ -211,16 +211,30 @@ When in doubt: if the same action exists as a Terminal command or an AI tool, th
 1. **Leader timeout**: 1200ms.
 2. **Editable-target rule**: engine no-ops when `document.activeElement` is `<input>` / `<textarea>` / `[contenteditable]`. Opt-in via ancestor `data-allow-hotkeys="true"`.
 3. **View-mode keys**: `z f` toggles fullscreen, `z m` toggles minimize, `Esc` exits fullscreen first if active.
-4. **Confirm-gate**: untouched in Phase 2. Existing `useConfirm()` hooks stay; `<CmdButton>` click path runs the same guard. Manifest-driven consolidation deferred to Phase 3.
-5. **A11y red flags from the survey**: fixed in Phase 2.7, before Phase 3 begins.
+4. **Confirm-gate**: a global `ConfirmHub` mounts in `providers.tsx`. `useCommand`'s BE-fallback path auto-fires `confirmGuard()` when `manifest.doubleConfirm` is set and the caller did not pass `confirm: true`. Existing `useConfirm()` hooks stay for context-rich confirms; both paths now have proper ARIA + autoFocus + focus-restore (a11y reviewer signed off Phase 3.19).
+5. **A11y red flags from the survey**: fixed in Phase 2.7, before Phase 3 begins. Two more reviews ran during Phase 3 (3.15 + 3.19); the last verdict is APPROVE.
+6. **`<CmdButton>` for backend cells**: `useCommand` falls through to `feCenter.invokeInstruction` when no local handler is bound; revalidate scopes fire automatically. `CmdButton.disabled` reflects the union (no local handler AND no manifest entry).
+7. **Registration order**: `installGlobalCells()` is a module-level side effect — child component `useEffect`s would otherwise race the provider's `useEffect`. Idempotent via the `installed` flag.
 
-## 10. Out of scope for this RFC
+## 10. Implemented in Phase 3 (per the rollout playbook)
 
-- Refactoring all existing `onClick` handlers to `<CmdButton>` — tracked as Phase 3, separate rollout.
-- Centralising the confirm-gate (today's dispersed `useConfirm()` hooks) into a manifest-driven middleware — separate RFC.
-- Adding new cells for batch-delete-watch / ledger-export / etc. — tracked alongside Phase 3.
+See [docs/modules/ui-cmd-rollout.md](../modules/ui-cmd-rollout.md) for the per-Feat onboarding recipe and [docs/modules/ui-cmd-status.md](../modules/ui-cmd-status.md) for the live keymap.
 
-## 11. Test plan
+- MKT scope: `j`/`k` sector nav, `J`/`K` stock nav, `D` delete sector, `P` toggle publish, `X` remove stock from sector, `N` new sector.
+- USR scope: `i` runs `ledger.analyze`.
+- AI.EQ / AI.SEC: `R` runs `analyze` / `analyze.sector` against the focused stock / active sector.
+- SectorChip mouse icon-buttons now route through `useCommand` to satisfy §10.5 mouse-parity.
+- `ScopeBadge` shows the active Feat persistently so users know which keymap is live.
+- `ConfirmHub` provides global auto-confirm + Esc cancel + focus restore.
+
+## 11. Still out of scope
+
+- `feat-watch-live` row-delete migration — requires backend route consolidation (`/api/watch/{market}/{code}` → `watch.remove` cell).
+- `feat-ledger` `A` (open add form) — needs sub-focus tracking inside `Feat.UsrMain` so the hotkey only fires when the ledger tab is active.
+- `focus` cell stock picker as a standalone widget (currently terminal-only).
+- Batch cells (`watch.remove.batch`, `ledger.export`) — present mouse paths loop the single cell.
+
+## 12. Test plan
 
 | File | Coverage |
 |---|---|
