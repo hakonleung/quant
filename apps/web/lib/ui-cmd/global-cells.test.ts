@@ -2,6 +2,8 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { Feat } from '../eqty/feat.js';
 import { useLayoutStore } from '../stores/layout.store.js';
+import { useSectorsStore, type Sector } from '../stores/sectors.store.js';
+import { ALL_SECTOR_ID, useUiStore } from '../stores/ui.store.js';
 import {
   __resetGlobalCellsForTest,
   installGlobalCells,
@@ -10,6 +12,23 @@ import {
 import { uiRegistry } from './registry.js';
 import { useFocusStore } from './store/focus.js';
 import { HINT_TOGGLE_CELL_ID } from './types.js';
+
+const sectorFixture = (
+  id: string,
+  kind: 'user' | 'dynamic',
+  name: string = id,
+): Sector => ({
+  id,
+  name,
+  kind,
+  market: 'a',
+  count: 0,
+  meta: '',
+  chgPct: null,
+  codes: [],
+  createdBy: 'tester',
+  published: false,
+});
 
 beforeEach(() => {
   uiRegistry.__reset();
@@ -99,5 +118,60 @@ describe('installGlobalCells is idempotent', () => {
     installGlobalCells();
     installGlobalCells();
     expect(uiRegistry.hasHandler('ui.go-mkt')).toBe(true);
+  });
+});
+
+describe('global cells — sector navigation (MKT scope)', () => {
+  it('j advances through ordered list (ALL → user → dynamic) with wrap-around', async () => {
+    useSectorsStore.setState({
+      sectors: [sectorFixture('s1', 'user'), sectorFixture('d1', 'dynamic')],
+    });
+    useUiStore.setState({ activeSectorId: ALL_SECTOR_ID });
+    await uiRegistry.dispatch('ui.sector-next');
+    expect(useUiStore.getState().activeSectorId).toBe('s1');
+    await uiRegistry.dispatch('ui.sector-next');
+    expect(useUiStore.getState().activeSectorId).toBe('d1');
+    await uiRegistry.dispatch('ui.sector-next');
+    expect(useUiStore.getState().activeSectorId).toBe(ALL_SECTOR_ID);
+  });
+
+  it('k walks backwards with wrap-around', async () => {
+    useSectorsStore.setState({
+      sectors: [sectorFixture('s1', 'user'), sectorFixture('d1', 'dynamic')],
+    });
+    useUiStore.setState({ activeSectorId: ALL_SECTOR_ID });
+    await uiRegistry.dispatch('ui.sector-prev');
+    expect(useUiStore.getState().activeSectorId).toBe('d1');
+    await uiRegistry.dispatch('ui.sector-prev');
+    expect(useUiStore.getState().activeSectorId).toBe('s1');
+    await uiRegistry.dispatch('ui.sector-prev');
+    expect(useUiStore.getState().activeSectorId).toBe(ALL_SECTOR_ID);
+  });
+
+  it('lands on ALL when the current sector was removed mid-navigation', async () => {
+    useSectorsStore.setState({ sectors: [sectorFixture('s1', 'user')] });
+    useUiStore.setState({ activeSectorId: 'gone' });
+    await uiRegistry.dispatch('ui.sector-next');
+    // ordered = [ALL, s1]; missing current → base=0, delta=+1 → s1
+    expect(useUiStore.getState().activeSectorId).toBe('s1');
+  });
+
+  it('only visible under MKT scope', () => {
+    const globalCtx = {
+      activeFeat: null,
+      fullscreen: null,
+      subFocus: [],
+      modalOpen: false,
+      hintOpen: false,
+    };
+    const visibleGlobal = uiRegistry
+      .visible(globalCtx)
+      .filter((b) => b.cellId === 'ui.sector-next');
+    expect(visibleGlobal.length).toBe(0);
+    const mktCtx = { ...globalCtx, activeFeat: Feat.Mkt };
+    const visibleMkt = uiRegistry
+      .visible(mktCtx)
+      .filter((b) => b.cellId === 'ui.sector-next');
+    expect(visibleMkt.length).toBe(1);
   });
 });

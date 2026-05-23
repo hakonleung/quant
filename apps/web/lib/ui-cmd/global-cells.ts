@@ -12,6 +12,8 @@
 
 import { Feat, FEAT_CONFIG_MAP } from '../eqty/feat.js';
 import { useLayoutStore } from '../stores/layout.store.js';
+import { useSectorsStore } from '../stores/sectors.store.js';
+import { ALL_SECTOR_ID, useUiStore } from '../stores/ui.store.js';
 import { uiRegistry, registerLocalCell } from './registry.js';
 import { useFocusStore } from './store/focus.js';
 import {
@@ -132,6 +134,49 @@ function registerViewModeCells(): void {
   });
 }
 
+/**
+ * MKT-scoped sector navigation. The ordered list mirrors what the chip
+ * swiper renders (ALL pseudo-sector first, then user sectors, then
+ * dynamic sectors) so j/k visit chips in visual order.
+ */
+function orderedSectorIds(): readonly string[] {
+  const sectors = useSectorsStore.getState().sectors;
+  const userRows = sectors.filter((r) => r.kind === 'user').map((r) => r.id);
+  const dynRows = sectors.filter((r) => r.kind === 'dynamic').map((r) => r.id);
+  return [ALL_SECTOR_ID, ...userRows, ...dynRows];
+}
+
+function advanceSector(delta: number): void {
+  const ordered = orderedSectorIds();
+  if (ordered.length === 0) return;
+  const cur = useUiStore.getState().activeSectorId;
+  const idx = ordered.indexOf(cur);
+  // Wrap-around: when current is missing (e.g. just deleted) fall to ALL.
+  const base = idx === -1 ? 0 : idx;
+  const next = (base + delta + ordered.length) % ordered.length;
+  const nextId = ordered[next];
+  if (nextId === undefined) return;
+  useUiStore.getState().setActiveSector(nextId);
+}
+
+function registerSectorNavCells(): void {
+  registerLocalCell('ui.sector-next', {
+    scope: Feat.Mkt,
+    keys: ['j'],
+    label: 'Next sector',
+    group: 'nav',
+  });
+  uiRegistry.bind('ui.sector-next', () => advanceSector(1));
+
+  registerLocalCell('ui.sector-prev', {
+    scope: Feat.Mkt,
+    keys: ['k'],
+    label: 'Previous sector',
+    group: 'nav',
+  });
+  uiRegistry.bind('ui.sector-prev', () => advanceSector(-1));
+}
+
 let installed = false;
 
 /**
@@ -146,6 +191,7 @@ export function installGlobalCells(): void {
   registerCloseModalCell();
   registerModuleCells();
   registerViewModeCells();
+  registerSectorNavCells();
 }
 
 /** Test-only escape hatch. */
