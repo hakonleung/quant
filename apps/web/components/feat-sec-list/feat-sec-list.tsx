@@ -12,6 +12,8 @@ import { useKlineBulk } from '../../lib/hooks/use-eqty-data.js';
 import { useStockList } from '../../lib/hooks/use-stock-list.js';
 import { useSectorsStore, type Sector } from '../../lib/stores/sectors.store.js';
 import { ALL_SECTOR_ID, useUiStore } from '../../lib/stores/ui.store.js';
+import { useFeatHotkeys } from '../../lib/ui-cmd/hooks/use-feat-hotkeys.js';
+import { useFocusStore } from '../../lib/ui-cmd/store/focus.js';
 import { FeatView } from '../feat-view/feat-view.js';
 import { MonoButton } from '../ui/mono-button.js';
 import { SectorSwiper } from './sector-swiper.js';
@@ -148,6 +150,21 @@ export function FeatSecList({ bare }: FeatSecListProps = {}): React.ReactElement
   const dynRows = sectors.filter((r) => r.kind === 'dynamic');
   const orderedSectors: readonly Sector[] = [allSector, ...userRows, ...dynRows];
 
+  // `D` (shift+d) — keyboard-equivalent of the sector chip's delete
+  // button. Scoped to MKT so it fires only while the workbench's
+  // market pane is the active Feat. Reuses the same confirm guard the
+  // mouse path uses, satisfying CLAUDE.md §10.5 "mouse and keyboard
+  // must produce the same action via the same dispatch path".
+  useFeatHotkeys(Feat.Mkt, {
+    'sector.rm': () => {
+      const target = sectors.find((r) => r.id === activeSectorId);
+      if (target === undefined) return;
+      if (target.id === ALL_SECTOR_ID) return;
+      if (currentUserId === null || target.createdBy !== currentUserId) return;
+      onDelete(target);
+    },
+  });
+
   // The "+ new sector" trigger lives in the parent MKT pane's
   // FeatView header (parent owns the dialog state); this component
   // only renders the chip swiper itself.
@@ -165,6 +182,7 @@ export function FeatSecList({ bare }: FeatSecListProps = {}): React.ReactElement
               chgPctByCode={chgPctByCode}
               onClick={(): void => {
                 setActiveSector(s.id);
+                useFocusStore.getState().setActive(Feat.Mkt);
               }}
               onDelete={
                 ownerActions

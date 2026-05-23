@@ -448,6 +448,12 @@ const ENTRIES = [
     help: 'Owner-only. Permanently removes the sector record.',
     argsSchema: SectorRmArgsSchema,
     resultSchema: SectorAckResultSchema,
+    ui: {
+      scope: 'MKT',
+      keys: ['D'],
+      label: 'Delete focused sector',
+      group: 'action',
+    },
   },
 
   // ── watch ───────────────────────────────────────────────────────────
