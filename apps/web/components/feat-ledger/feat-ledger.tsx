@@ -23,6 +23,7 @@ import {
 import type { LedgerEntry } from '@quant/shared';
 import { useState } from 'react';
 
+import { useFeatHotkeys } from '../../lib/ui-cmd/hooks/use-feat-hotkeys.js';
 import { FeatView } from '../feat-view/feat-view.js';
 import { MonoButton } from '../ui/mono-button.js';
 import { LedgerAddForm } from './ledger-add-form.js';
@@ -49,6 +50,13 @@ export function FeatLedger({ bare }: FeatLedgerProps = {}): React.ReactElement {
   const [tab, setTab] = useState<Tab>('list');
   const [aiOpen, setAiOpen] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
+
+  // `A` (USR.ledger sub-scope) — open the add-entry form. Bound here
+  // rather than centrally because the form's open state is local React
+  // state. The cell metadata lives in global-cells.ts.
+  useFeatHotkeys(Feat.UsrMain, {
+    'ui.ledger-add-open': () => setAddOpen(true),
+  });
   const [editing, setEditing] = useState<LedgerEntry | null>(null);
   const [importOpen, setImportOpen] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);

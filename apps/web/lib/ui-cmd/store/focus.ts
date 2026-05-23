@@ -42,7 +42,11 @@ export const useFocusStore = create<FocusState & FocusActions>((set) => ({
   modalOpen: false,
   hintOpen: false,
   hintMinimized: false,
-  setActive: (f) => set({ activeFeat: f }),
+  // Switching Feat clears the sub-focus stack — sub-tokens belong to
+  // a specific Feat and would otherwise leak into the next scope's
+  // predicate (e.g. an MKT 'stock' sub-focus would mis-activate cells
+  // whose scope happens to be `${feat}.stock` in another Feat).
+  setActive: (f) => set({ activeFeat: f, subFocus: [] }),
   setFullscreen: (f) => set({ fullscreen: f }),
   toggleFullscreen: (f) =>
     set((s) => ({ fullscreen: s.fullscreen === f ? null : f })),

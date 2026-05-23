@@ -286,6 +286,19 @@ function registerOpenNewSectorCell(): void {
   // Handler bound by FeatMkt via useFeatHotkeys.
 }
 
+function registerOpenLedgerAddCell(): void {
+  // Sub-scope `USR.ledger` — fires only when the user has focused USR
+  // (e.g. via `g u`) AND the ledger sub-tab is on top of the sub-focus
+  // stack (pushed by FeatUsrMain's tab effect).
+  registerLocalCell('ui.ledger-add-open', {
+    scope: `${Feat.UsrMain}.ledger`,
+    keys: ['A'],
+    label: 'New ledger entry',
+    group: 'edit',
+  });
+  // Handler bound by FeatLedger via useFeatHotkeys.
+}
+
 function registerRemoveStockCell(): void {
   registerLocalCell('ui.sector-remove-stock', {
     scope: Feat.Mkt,
@@ -373,6 +386,7 @@ export function installGlobalCells(): void {
   registerStockNavCells();
   registerRemoveStockCell();
   registerOpenNewSectorCell();
+  registerOpenLedgerAddCell();
   registerAnalyzeBinding();
   registerAnalyzeSectorBinding();
 }

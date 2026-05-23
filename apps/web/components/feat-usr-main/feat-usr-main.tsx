@@ -22,9 +22,10 @@
  */
 
 import { Box, Flex } from '@chakra-ui/react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import { Feat } from '../../lib/eqty/feat.js';
+import { useFocusStore } from '../../lib/ui-cmd/store/focus.js';
 import { FeatLedger } from '../feat-ledger/feat-ledger.js';
 import { FeatSysCfg } from '../feat-sys-cfg/feat-sys-cfg.js';
 import { FeatView } from '../feat-view/feat-view.js';
@@ -49,8 +50,27 @@ interface FeatUsrMainProps {
   readonly session?: SessionChipInfo | undefined;
 }
 
+// Tab → sub-focus token mapping. Sub-focus drives `USR.ledger` /
+// `USR.watch` / `USR.cfg` scoped hotkeys (currently only `A` for the
+// ledger sub-tab; further sub-tab keys land here as Feats opt in).
+const TAB_SUBFOCUS: Readonly<Record<Tab, string>> = {
+  ldg: 'ledger',
+  watch: 'watch',
+  cfg: 'cfg',
+};
+
 export function FeatUsrMain({ embedded, session }: FeatUsrMainProps = {}): React.ReactElement {
   const [tab, setTab] = useState<Tab>('ldg');
+
+  // Push the active tab as a USR sub-focus token. Pop on tab change /
+  // unmount so the stack mirrors what's visually rendered. The store's
+  // setActive(...) clears the whole stack on Feat switch — this effect
+  // only manages the USR-local stack contribution.
+  useEffect(() => {
+    const token = TAB_SUBFOCUS[tab];
+    useFocusStore.getState().pushSubFocus(token);
+    return (): void => useFocusStore.getState().popSubFocus();
+  }, [tab]);
   const tabs = (
     <Flex gap="2px">
       {TAB_ORDER.map((t) => (
