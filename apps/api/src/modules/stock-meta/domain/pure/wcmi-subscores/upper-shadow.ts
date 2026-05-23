@@ -2,9 +2,6 @@ import type { BarLike } from '../compute-metrics.js';
 import type { WcmiConfig } from './types.js';
 import { clip } from './utils.js';
 
-/** Lower floor used to avoid divide-by-near-zero on body and range. */
-const MIN_DIVISOR_PCT = 0.5;
-
 /**
  * Returns a `[0, 1]` cleanliness score where 1 = no upper-shadow
  * rejection and 0 = saturated long shadows on every bar. Yang bars are
@@ -33,8 +30,8 @@ export function computeUpperShadowClean(
     const upperShadow = (Math.max(high - Math.max(open, close), 0) / prevClose) * 100;
     const body = (Math.abs(close - open) / prevClose) * 100;
     const range = ((high - low) / prevClose) * 100;
-    const shadowBodyRatio = upperShadow / Math.max(body, MIN_DIVISOR_PCT);
-    const shadowRangeRatio = upperShadow / Math.max(range, MIN_DIVISOR_PCT);
+    const shadowBodyRatio = upperShadow / Math.max(body, config.SHADOW_MIN_DIVISOR_PCT);
+    const shadowRangeRatio = upperShadow / Math.max(range, config.SHADOW_MIN_DIVISOR_PCT);
     const penalty =
       0.5 * clip(shadowBodyRatio / config.SHADOW_BODY_THR, 0, 1) +
       0.5 * clip(shadowRangeRatio / config.SHADOW_RANGE_THR, 0, 1);

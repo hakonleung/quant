@@ -2,12 +2,6 @@ import type { BarLike } from '../compute-metrics.js';
 import type { WcmiConfig } from './types.js';
 import { clip, olsR2 } from './utils.js';
 
-const MAX_YANG_RUN_CAP = 8;
-const MEAN_YANG_RUN_CAP = 4;
-const MEAN_SWING_DD_CAP = 0.05;
-const DEFAULT_SLOPE_R2 = 0.5;
-const MIN_SEGMENT_BARS = 5;
-
 /**
  * Up-wave smoothness sub-score: long yang runs, low intra-swing
  * drawdown, steady slope across qualifying advancing segments.
@@ -22,14 +16,14 @@ export function computeUpWaveSmoothness(
   const segments = collectUpSegments(bars);
   const meanSwingDd = segments.length === 0 ? 0 : mean(segments.map(swingDrawdown));
   const slopeR2Values = segments
-    .filter((seg) => seg.length >= MIN_SEGMENT_BARS)
+    .filter((seg) => seg.length >= config.MIN_SEGMENT_BARS)
     .map((seg) => segmentR2(seg));
-  const meanSlopeR2 = slopeR2Values.length === 0 ? DEFAULT_SLOPE_R2 : mean(slopeR2Values);
-  void config;
+  const meanSlopeR2 =
+    slopeR2Values.length === 0 ? config.DEFAULT_SLOPE_R2 : mean(slopeR2Values);
   return (
-    0.35 * clip(maxYangRun / MAX_YANG_RUN_CAP, 0, 1) +
-    0.25 * clip(meanYangRun / MEAN_YANG_RUN_CAP, 0, 1) +
-    0.25 * (1 - clip(meanSwingDd / MEAN_SWING_DD_CAP, 0, 1)) +
+    0.35 * clip(maxYangRun / config.MAX_YANG_RUN_CAP, 0, 1) +
+    0.25 * clip(meanYangRun / config.MEAN_YANG_RUN_CAP, 0, 1) +
+    0.25 * (1 - clip(meanSwingDd / config.MEAN_SWING_DD_CAP, 0, 1)) +
     0.15 * meanSlopeR2
   );
 }

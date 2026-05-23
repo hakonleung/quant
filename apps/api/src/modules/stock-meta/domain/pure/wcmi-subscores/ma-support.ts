@@ -2,9 +2,6 @@ import type { BarLike } from '../compute-metrics.js';
 import type { WcmiConfig } from './types.js';
 import { clip } from './utils.js';
 
-/** Mean-distance normalisation cap (+15% above ma20 = full credit). */
-const MA20_DIST_CAP = 0.15;
-
 /**
  * Cross-period MA-support sub-score.
  *
@@ -44,11 +41,10 @@ export function computeMaSupport(bars: readonly BarLike[], config: WcmiConfig): 
   const aboveMa60Rate = nMa60 > 0 ? aboveMa60 / nMa60 : 0;
   const alignmentRate = nAll4 > 0 ? aligned / nAll4 : 0;
   const meanDistMa20 = nDist > 0 ? distSum / nDist : 0;
-  void config;
   return (
     0.35 * aboveMa20Rate +
     0.2 * aboveMa60Rate +
     0.3 * alignmentRate +
-    0.15 * clip(meanDistMa20 / MA20_DIST_CAP, -1, 1)
+    0.15 * clip(meanDistMa20 / config.MA20_DIST_CAP, -1, 1)
   );
 }

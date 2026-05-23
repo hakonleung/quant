@@ -2,8 +2,6 @@ import type { BarLike } from '../compute-metrics.js';
 import type { WcmiConfig } from './types.js';
 import { clip } from './utils.js';
 
-const SEVERITY_SPAN_PCT = 5;
-
 /** Penalise large single-day drops and unrecovered gap-downs. */
 export function computeCrashAvoidance(
   bars: readonly BarLike[],
@@ -33,7 +31,7 @@ export function computeCrashAvoidance(
   return (
     1 -
     0.5 * clip(crashDays / config.CRASH_COUNT_CAP, 0, 1) -
-    0.3 * clip(excessSeverity / SEVERITY_SPAN_PCT, 0, 1) -
+    0.3 * clip(excessSeverity / config.CRASH_SEVERITY_SPAN_PCT, 0, 1) -
     0.2 * clip(gapDownDays / config.GAP_DOWN_CAP, 0, 1)
   );
 }

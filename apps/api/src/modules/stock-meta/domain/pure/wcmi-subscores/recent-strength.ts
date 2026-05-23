@@ -27,10 +27,6 @@ import type { BarLike } from '../compute-metrics.js';
 import type { WcmiConfig } from './types.js';
 import { clip } from './utils.js';
 
-const W_RECENT_RET = 0.4;
-const W_YIN_RUN = 0.35;
-const W_PULLBACK = 0.25;
-
 export function computeRecentStrength(bars: readonly BarLike[], config: WcmiConfig): number {
   const n = bars.length;
   if (n < 2) return 1;
@@ -67,5 +63,9 @@ export function computeRecentStrength(bars: readonly BarLike[], config: WcmiConf
   const pullback = windowHigh > 0 ? (windowHigh - latestClose) / windowHigh : 0;
   const pullbackScore = 1 - clip(pullback / config.RECENT_PULLBACK_CAP, 0, 1);
 
-  return W_RECENT_RET * retScore + W_YIN_RUN * yinScore + W_PULLBACK * pullbackScore;
+  return (
+    config.RECENT_W_RET * retScore +
+    config.RECENT_W_YIN_RUN * yinScore +
+    config.RECENT_W_PULLBACK * pullbackScore
+  );
 }

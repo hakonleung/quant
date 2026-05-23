@@ -9,22 +9,18 @@ import { computeUpperShadowClean } from './upper-shadow.js';
 import { computeUpWaveSmoothness } from './up-wave.js';
 import { computeYangDominance } from './yang-dominance.js';
 
-/** Minimum history required to score a code; below this the code is
- *  excluded from rank tables. */
-const MIN_BARS = 30;
-
 /**
  * Compute the seven raw sub-scores for a single code over the trailing
- * `config.WINDOW` bars (or all bars when history is between `MIN_BARS`
- * and `config.WINDOW`).
+ * `config.WINDOW` bars (or all bars when history is between
+ * `config.MIN_BARS` and `config.WINDOW`).
  *
- * Returns `null` when `bars.length < MIN_BARS`.
+ * Returns `null` when `bars.length < config.MIN_BARS`.
  */
 export function extractWcmiSubscores(
   bars: readonly BarLike[],
   config: WcmiConfig,
 ): WcmiSubscores | null {
-  if (bars.length < MIN_BARS) return null;
+  if (bars.length < config.MIN_BARS) return null;
   const window = bars.length > config.WINDOW ? bars.slice(-config.WINDOW) : bars.slice();
   const rhythm = computeRhythm(window, config);
   const maSupport = computeMaSupport(window, config);

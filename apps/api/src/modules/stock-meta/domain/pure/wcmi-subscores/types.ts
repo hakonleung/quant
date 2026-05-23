@@ -1,217 +1,300 @@
 /**
- * Type definitions for the WCMI v2 (90-day wave-quality) scoring
- * engine. Per `docs/perf/wcmi-redesign.md`. Tuned defaults converged
- * via `apps/api/scripts/wcmi-backtest.ts` — see
- * `docs/perf/wcmi-redesign-backtest.md` for the round-by-round log.
+ * WCMI v2（90 日波动质量）评分引擎的类型定义。
+ * 设计文档：`docs/perf/wcmi-redesign.md`；
+ * 默认参数来自 `apps/api/scripts/wcmi-backtest.ts` 的多轮回测收敛结果，
+ * 调参逐轮日志：`docs/perf/wcmi-redesign-backtest.md`。
+ *
+ * 所有可调常量统一收敛到 `WCMI_CONFIG`，子分模块不再持有任何 module-level
+ * 静态变量，便于回测脚本一处覆写参数后跑通全链路。
  */
 
 export interface WcmiConfig {
-  // ── Sampling window ────────────────────────────────────────────────
+  // ── 采样窗口 ──────────────────────────────────────────────────────
   /**
-   * Trailing-bar count over which every sub-score is computed.
-   * Default 90 trading days ≈ a quarter — long enough to expose
-   * multiple swings, short enough to react to regime changes. Codes
-   * with `bars.length < 30` get `null`; `30 ≤ bars.length < WINDOW`
-   * falls back to the available history (a `windowLen` field on
-   * `WcmiSubscores` records the actual count used).
+   * 所有子分计算所使用的尾部 K 线根数。
+   * 默认 90 个交易日 ≈ 一个季度——足以暴露多次摆动、又能对市场风格切换
+   * 保持灵敏。若个股可用历史 < `MIN_BARS` 直接返回 `null`；若处于
+   * `MIN_BARS ≤ length < WINDOW` 区间则退化到全部可用历史，`WcmiSubscores`
+   * 中的 `windowLen` 字段会记录真正使用的根数。
    */
   readonly WINDOW: number;
 
-  // ── Sub-score 1: rhythm ────────────────────────────────────────────
   /**
-   * "Ideal" lag-1 daily-return autocorrelation. We score
-   * `−|lag1_autocorr − RHYTHM_TARGET|` so stocks whose returns mildly
-   * persist day-to-day rank highest — that's the autocorrelation
-   * signature of a clean swing. Pure random walk = 0, momentum
-   * blow-off = high positive, frequent reversals = negative. 0.15
-   * is the empirical sweet spot for A-share daily bars.
+   * 进入打分流程所需的最小 K 线根数。
+   * `bars.length < MIN_BARS` 的标的直接判定为样本不足、跳过本期排名，
+   * 30 根 ≈ 6 个交易周，足够估计自相关、yang 比例、回撤等基础统计量。
+   */
+  readonly MIN_BARS: number;
+
+  // ── 子分 1：rhythm（节奏） ───────────────────────────────────────
+  /**
+   * 日收益 lag-1 自相关的"理想值"。
+   * 子分按 `−|lag1_autocorr − RHYTHM_TARGET|` 打分，使日收益弱持续的
+   * 标的得分最高——这正是干净摆动的自相关签名。纯随机游走 = 0，动量末
+   * 端 = 较大正值，频繁反转 = 负值。0.15 是 A 股日线的经验甜区。
    */
   readonly RHYTHM_TARGET: number;
 
   /**
-   * Reference period (in bars) for "one swing." `swing_density` is
-   * normalised against `WINDOW / SWING_PERIOD_BARS`, so at WINDOW=90
-   * a density of 1.0 means roughly one peak-trough cycle every 15
-   * bars (≈ 3 weeks) — visually identifiable medium-term swings.
+   * "一个完整摆动"对应的参考根数。
+   * `swing_density` 按 `WINDOW / SWING_PERIOD_BARS` 归一，因此在 WINDOW=90
+   * 下 density=1.0 意味着每约 15 根（≈ 3 周）出现一次峰谷循环——视觉上
+   * 可辨认的中期摆动。
    */
   readonly SWING_PERIOD_BARS: number;
 
-  // ── Sub-score 5: upper-shadow penalty ──────────────────────────────
+  // ── 子分 2：ma_support（均线支撑） ───────────────────────────────
   /**
-   * Threshold for `upper_shadow / body`. At this ratio the per-bar
-   * penalty saturates at 1.0 (i.e. a shadow ≥ 1.5× the body length
-   * counts as "fully bad"). Below this the penalty scales linearly.
-   * Higher value = more lenient.
+   * 收盘价相对 ma20 平均涨幅的归一上限。
+   * `mean(close − ma20) / ma20` 达到该阈值即给满分（+15% 视为充分远离
+   * ma20 的强势状态）。阈值越大对"贴均线"风格越宽容。
+   */
+  readonly MA20_DIST_CAP: number;
+
+  // ── 子分 3：up_wave_smoothness（上行波平滑度） ───────────────────
+  /**
+   * 单段最长 yang 连阳根数的归一上限。
+   * 计算窗口内最长连续阳线长度，与该上限相除并 clip 到 [0,1]，达到 8 根
+   * 即给满分。降低意味着对"短连阳"也愿意打高分。
+   */
+  readonly MAX_YANG_RUN_CAP: number;
+
+  /**
+   * 平均 yang 连阳根数的归一上限。
+   * 全窗所有 yang 连击段的均值，与该上限相除并 clip 到 [0,1]，4 根饱和。
+   */
+  readonly MEAN_YANG_RUN_CAP: number;
+
+  /**
+   * 单段上行子波段内最大回撤比例的归一上限。
+   * 平均 swing 回撤 / 该上限 → 越大越糟。0.05 表示平均 5% 的段内回撤
+   * 即扣满分；调高则容忍较深的中途调整。
+   */
+  readonly MEAN_SWING_DD_CAP: number;
+
+  /**
+   * 上行子波段 OLS 拟合 R² 的默认值。
+   * 当窗口内没有任何长度 ≥ `MIN_SEGMENT_BARS` 的合格上行段时，使用此值
+   * 占位（避免无段标的被一刀切到 0），0.5 表示"中性、不奖励也不惩罚"。
+   */
+  readonly DEFAULT_SLOPE_R2: number;
+
+  /**
+   * 参与 OLS R² 平均的最小段长度。
+   * 短于该值的上行段噪声占比过大，不纳入 R² 平均，仅参与 yang-run 与回撤
+   * 统计。5 根 ≈ 一周。
+   */
+  readonly MIN_SEGMENT_BARS: number;
+
+  // ── 子分 5：upper_shadow_clean（上影线"干净度"） ────────────────
+  /**
+   * `upper_shadow / body` 的饱和阈值。
+   * 比值达到该阈值，单根 K 的惩罚饱和至 1.0（即"上影线 ≥ 实体 1.5 倍"
+   * 算作完全坏点），低于该阈值线性缩放。阈值越大越宽松。
    */
   readonly SHADOW_BODY_THR: number;
 
   /**
-   * Threshold for `upper_shadow / day_range`. At this ratio the
-   * per-bar penalty saturates at 1.0. 0.4 means a shadow taking up
-   * ≥ 40% of the high-low range fully penalises the bar.
+   * `upper_shadow / day_range` 的饱和阈值。
+   * 比值达到该阈值，单根 K 的惩罚饱和至 1.0。0.4 表示上影线占当日振幅
+   * ≥ 40% 即完全扣分。
    */
   readonly SHADOW_RANGE_THR: number;
 
-  // ── Sub-score 7: crash avoidance ───────────────────────────────────
   /**
-   * Single-day percentage drop (positive number, in %) that counts
-   * as a "crash day." Bars with `change_pct < -CRASH_DAY_THR`
-   * contribute to `crash_days` and feed the severity term. 7%
-   * captures genuine flush days while ignoring routine ±3-5%
-   * volatility on growth names.
+   * 上影线惩罚计算时 body / range 的最小除数（单位：% of prevClose）。
+   * 防止极小实体 / 振幅触发除以接近 0 的数值放大噪声。0.5% 是 A 股一档
+   * 价差的典型量级。
+   */
+  readonly SHADOW_MIN_DIVISOR_PCT: number;
+
+  // ── 子分 6：stage_gain（区间涨幅） ──────────────────────────────
+  /**
+   * 区间涨幅子分中"近期出现历史新高"的额外加权。
+   * `argmax(close) / (n − 1)` ∈ [0, 1]，乘以该系数后加入最终得分；
+   * 20 表示在窗口最新一根创新高时直接 +20 分，奖励"涨在最近"的标的，
+   * 抑制"早涨完、近期阴跌"的形态。
+   */
+  readonly STAGE_RECENCY_BIAS: number;
+
+  // ── 子分 7：crash_avoidance（防崩盘） ───────────────────────────
+  /**
+   * 单日跌幅"崩盘日"阈值（正数，单位 %）。
+   * `change_pct < -CRASH_DAY_THR` 的根计入 `crash_days` 并喂入烈度项。
+   * 7% 能捕捉真正的恐慌日，又不会把成长股常规 3–5% 波动误判为崩盘。
    */
   readonly CRASH_DAY_THR: number;
 
   /**
-   * Cap on `crash_days / CRASH_COUNT_CAP` before clipping to 1.0.
-   * 4 crash days in the window saturates the count penalty —
-   * beyond that the dimension can't get any worse. Keeps a single
-   * super-volatile name from dominating the percentile ranking.
+   * 崩盘日数量的归一上限。
+   * `crash_days / CRASH_COUNT_CAP` 先除后 clip 到 1，4 个崩盘日即饱和——
+   * 防止某一只极端波动股霸占整个百分位排名。
    */
   readonly CRASH_COUNT_CAP: number;
 
   /**
-   * Threshold for unrecovered gap-down opens (negative %, in %).
-   * Bars where `open < prev_close × (1 + GAP_DOWN_THR/100)` AND
-   * the bar didn't close yang are flagged. -2 catches meaningful
-   * gap-downs without firing on routine -0.5% opens.
+   * 未被收复的跳空低开阈值（负数，单位 %）。
+   * 满足 `open < prev_close × (1 + GAP_DOWN_THR/100)` 且当日未收阳的根
+   * 被标记；-2 能捕捉有意义的跳空，不会被 -0.5% 的常规低开触发。
    */
   readonly GAP_DOWN_THR: number;
 
   /**
-   * Saturation cap for gap-down day count, analogous to
-   * `CRASH_COUNT_CAP`. 6 unrecovered gap-downs in 90 bars
-   * saturates the penalty.
+   * 跳空低开日数量的归一上限，与 `CRASH_COUNT_CAP` 同义。
+   * 90 根窗口内 6 个未收复低开即饱和。
    */
   readonly GAP_DOWN_CAP: number;
 
-  // ── Sub-score 8: recent-strength (short-term momentum + yin run) ───
   /**
-   * Trailing-bar count for the short-term "is the stock currently
-   * healthy" view. Defaults to 10 — captures the last ~2 weeks,
-   * enough to spot a multi-day pullback while ignoring single-bar
-   * noise. Must be ≥ 2 and ≤ WINDOW.
+   * 崩盘烈度（平均超额跌幅）的归一跨度（单位 %）。
+   * `mean(|change|) − CRASH_DAY_THR` 再除以该跨度并 clip 到 1。5% 意味着
+   * 平均比阈值再深 5%（如 -12% vs 阈值 7%）即烈度饱和。
+   */
+  readonly CRASH_SEVERITY_SPAN_PCT: number;
+
+  // ── 子分 8：recent_strength（近端强度 + 连阴 + 回撤） ───────────
+  /**
+   * 短期"当前是否健康"视图的尾部根数。
+   * 默认 10 ≈ 最近两周，足以识别多日回调而又不会被单根噪声主导。
+   * 必须满足 2 ≤ RECENT_WINDOW ≤ WINDOW。
    */
   readonly RECENT_WINDOW: number;
 
   /**
-   * Saturation cap for the longest consecutive-yin (close < open)
-   * run inside `RECENT_WINDOW`. 5 consecutive yin bars in the last
-   * 10 fully zeroes the yin-run component. Lower = harsher penalty
-   * (e.g. 3 means a 3-day red streak already saturates).
+   * 近端"最长连阴根数"的归一上限。
+   * 最近 `RECENT_WINDOW` 内最长 `close < open` 连击长度达到 5 根即
+   * 完全清零连阴项；调低意味着更严苛（例如 3 时三连阴就扣满）。
    */
   readonly RECENT_YIN_RUN_CAP: number;
 
   /**
-   * Pullback-from-window-high tolerance for the recent-strength
-   * sub-score. `(window_high − close[-1]) / window_high` of this
-   * size or larger fully zeroes the drawdown component. 0.15 ≈ 15%
-   * off the 90-day high is the "I should not buy now" threshold.
+   * 近端"距窗口高点回撤"的归一上限。
+   * `(window_high − close[-1]) / window_high` 达到该比例即完全清零回撤项。
+   * 0.15 ≈ 15% 即"我不应该追入"的常用阈值。
    */
   readonly RECENT_PULLBACK_CAP: number;
 
   /**
-   * Saturation range for the `RECENT_WINDOW`-bar trailing return
-   * component. `recent_ret` ≥ +RECENT_RET_SCALE scores 1.0;
-   * `recent_ret` ≤ -RECENT_RET_SCALE scores 0.0; linear between.
-   * 0.10 = ±10% over `RECENT_WINDOW` saturates.
+   * 近端 `RECENT_WINDOW` 根尾部收益的归一跨度。
+   * `recent_ret ≥ +RECENT_RET_SCALE` 给满分 1.0；`≤ -RECENT_RET_SCALE` 给
+   * 0.0，中间线性。0.10 表示 ±10% 即两端饱和。
    */
   readonly RECENT_RET_SCALE: number;
 
-  // ── Composite weights (need not sum to 100; the composite formula
-  //    normalises by `Σ w_k`). Tuned via 7-round backtest run; see
-  //    `docs/perf/wcmi-redesign-backtest.md` for the rationale. ──────
   /**
-   * Weight on the `rhythm` sub-score (lag-1 autocorr + swing
-   * density). Tuned to 0: at the top of the trailing-60d-gain
-   * universe `swing_density ≥ 2` saturates label_rhythm for most
-   * codes, so this dimension contributes mostly noise to the rank.
+   * 近端强度子分中"recent_ret 分量"的内部权重。
+   * 三个内部分量（recent_ret / yin_run / pullback）权重需手动保证 ≈ 1。
+   * 默认 0.40 表明近端收益的话语权最高。
+   */
+  readonly RECENT_W_RET: number;
+
+  /**
+   * 近端强度子分中"最长连阴分量"的内部权重。
+   * 默认 0.35 与 RECENT_W_RET 相当——用户特别要求的"最近连续阴线"信号
+   * 必须强势压制 90 日舞台涨幅。
+   */
+  readonly RECENT_W_YIN_RUN: number;
+
+  /**
+   * 近端强度子分中"距窗口高点回撤分量"的内部权重。
+   * 默认 0.25，比另外两项稍弱——窗口高点已被 stage_gain 间接覆盖，避免
+   * 重复扣分。
+   */
+  readonly RECENT_W_PULLBACK: number;
+
+  // ── 组合权重（不必和为 100，最终按 `Σ w_k` 归一；
+  //    调参经 7 轮回测得到，理由见 docs/perf/wcmi-redesign-backtest.md） ──
+  /**
+   * `rhythm` 子分（lag-1 autocorr + 摆动密度）权重。
+   * 调到 0：在尾部 60 日涨幅最强的 universe 中 `swing_density ≥ 2` 已让
+   * label_rhythm 饱和，对排名几乎只贡献噪声。
    */
   readonly W_RHYTHM: number;
 
   /**
-   * Weight on the `ma_support` sub-score (above-ma20/60 rates,
-   * bullish 4-MA alignment, mean distance above ma20). Tuned to 3
-   * — small but non-zero tiebreaker for the aesthetic group.
+   * `ma_support` 子分（站上 ma20/60 比例 + 多头排列 + 均距）权重。
+   * 调到 3——小而非零的"美学组"打破平局用。
    */
   readonly W_MA_SUPPORT: number;
 
   /**
-   * Weight on the `up_wave_smoothness` sub-score (yang runs,
-   * intra-swing drawdown, OLS R² on up segments). Tuned to 3 —
-   * same tiebreaker role as `W_MA_SUPPORT`.
+   * `up_wave_smoothness` 子分（yang-run + 段内回撤 + OLS R²）权重。
+   * 调到 3——同样是"美学组"打破平局角色。
    */
   readonly W_UP_WAVE: number;
 
   /**
-   * Weight on the `yang_dominance` sub-score (ratio of bars with
-   * close>open). Tuned to 3 — same tiebreaker role.
+   * `yang_dominance` 子分（close > open 根的比例）权重。
+   * 调到 3——同 W_MA_SUPPORT。
    */
   readonly W_YANG_DOM: number;
 
   /**
-   * Weight on the `upper_shadow_clean` sub-score (1 −
-   * weighted-mean per-bar shadow penalty). Tuned to 3 — initially
-   * the design's heaviest aesthetic weight (20), but backtest
-   * showed it correlated weakly (sometimes negatively) with label
-   * aesthetic in the top tier, so it joins the 4×3 tiebreaker
-   * group.
+   * `upper_shadow_clean` 子分（1 − 加权平均上影线惩罚）权重。
+   * 调到 3——原设计中最重的"美学组"权重（20），但回测表明顶部档位与
+   * label_aesthetic 相关性弱甚至为负，故并入 4×3 平局组。
    */
   readonly W_SHADOW_CLEAN: number;
 
   /**
-   * Weight on the `stage_gain` sub-score (r_window + range_gain
-   * + recency bonus). Tuned to 28 — stage-gain is the primary
-   * filter intent, but raw gain saturates within the top tier so
-   * crash_avoidance discriminates further.
+   * `stage_gain` 子分（r_window + range_gain + 近期加权）权重。
+   * 调到 28——stage_gain 是过滤意图的主轴，但顶部档位原始涨幅会饱和，
+   * 需要 crash_avoidance 进一步辨别。
    */
   readonly W_STAGE_GAIN: number;
 
   /**
-   * Weight on the `crash_avoidance` sub-score (crash-day count +
-   * severity + gap-down count). Reduced from 60 → 30 after the
-   * recent-strength sub-score was added: crash_avoidance covers
-   * tail-event single-day blows; recent_strength covers slow-bleed
-   * "stock is currently red" cases that crash_avoidance misses.
+   * `crash_avoidance` 子分（崩盘日数 + 烈度 + 跳空低开数）权重。
+   * 从 60 → 30：增加 recent_strength 后，crash_avoidance 专注于单日尾部
+   * 事件，慢慢"阴跌"由 recent_strength 接管。
    */
   readonly W_CRASH_AVOID: number;
 
   /**
-   * Weight on the `recent_strength` sub-score (recent-window
-   * return + consecutive-yin penalty + pullback-from-high). Set
-   * to 30 by default so it matches `crash_avoidance` in magnitude
-   * — together they ensure a stock with strong 90-day stage gain
-   * but a multi-day red streak right now ranks below an equally
-   * gainful stock that is still trending up. Tune higher to bias
-   * harder against any current weakness.
+   * `recent_strength` 子分（近端收益 + 连阴 + 距高点回撤）权重。
+   * 默认 30，与 crash_avoidance 同量级——一起保证"90 日涨幅强但当前正在
+   * 连续阴跌"的股票排名低于同样涨幅且仍在上行的股票。调高可进一步压制
+   * 任何形式的近端弱势。
    */
   readonly W_RECENT_STRENGTH: number;
 
-  // ── Output scaling ─────────────────────────────────────────────────
+  // ── 输出标度 ──────────────────────────────────────────────────────
   /**
-   * Output ceiling for the composite WCMI score. Composite =
-   * `(WCMI_TOTAL_SCALE / Σ w_k) × Σ (w_k × pct_k)` where each
-   * `pct_k ∈ [0, 1]` is the cross-sectional percentile. With
-   * `WCMI_TOTAL_SCALE = 1000` and any positive weight set, the
-   * composite lives in `[0, 1000]` with median ≈ 500.
+   * 组合 WCMI 分数的输出上限。
+   * 组合 = `(WCMI_TOTAL_SCALE / Σ w_k) × Σ (w_k × pct_k)`，每个
+   * `pct_k ∈ [0, 1]` 为横截面分位数。`WCMI_TOTAL_SCALE = 1000` 时分布
+   * 区间 [0, 1000]，中位数 ≈ 500。
    */
   readonly WCMI_TOTAL_SCALE: number;
 }
 
 export const WCMI_CONFIG: WcmiConfig = {
   WINDOW: 90,
+  MIN_BARS: 30,
   RHYTHM_TARGET: 0.15,
   SWING_PERIOD_BARS: 15,
+  MA20_DIST_CAP: 0.15,
+  MAX_YANG_RUN_CAP: 8,
+  MEAN_YANG_RUN_CAP: 4,
+  MEAN_SWING_DD_CAP: 0.05,
+  DEFAULT_SLOPE_R2: 0.5,
+  MIN_SEGMENT_BARS: 5,
   SHADOW_BODY_THR: 1.5,
   SHADOW_RANGE_THR: 0.4,
+  SHADOW_MIN_DIVISOR_PCT: 0.5,
+  STAGE_RECENCY_BIAS: 20,
   CRASH_DAY_THR: 7,
   CRASH_COUNT_CAP: 4,
   GAP_DOWN_THR: -2,
   GAP_DOWN_CAP: 6,
+  CRASH_SEVERITY_SPAN_PCT: 5,
   RECENT_WINDOW: 10,
   RECENT_YIN_RUN_CAP: 5,
   RECENT_PULLBACK_CAP: 0.15,
   RECENT_RET_SCALE: 0.1,
+  RECENT_W_RET: 0.4,
+  RECENT_W_YIN_RUN: 0.35,
+  RECENT_W_PULLBACK: 0.25,
   W_RHYTHM: 0,
   W_MA_SUPPORT: 3,
   W_UP_WAVE: 3,
@@ -231,8 +314,7 @@ export interface WcmiSubscores {
   readonly upperShadowClean: number;
   readonly stageGain: number;
   readonly crashAvoidance: number;
-  /** Short-term momentum + consecutive-yin penalty + pullback-from-
-   *  high. See `recent-strength.ts`. */
+  /** 近端动量 + 连阴惩罚 + 距高点回撤，详见 `recent-strength.ts`。 */
   readonly recentStrength: number;
   readonly windowLen: number;
   readonly passesGate: boolean;

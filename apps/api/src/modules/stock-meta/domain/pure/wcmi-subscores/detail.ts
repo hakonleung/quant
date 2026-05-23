@@ -17,8 +17,6 @@ import { computeUpWaveSmoothness } from './up-wave.js';
 import { computeYangDominance } from './yang-dominance.js';
 import { pearsonCorr } from './utils.js';
 
-const MIN_BARS = 30;
-
 export interface WcmiSubscoreDetail {
   readonly swingDensity: number;
   readonly lag1Autocorr: number;
@@ -37,7 +35,7 @@ export function extractWcmiSubscoreDetail(
   bars: readonly BarLike[],
   config: WcmiConfig,
 ): WcmiSubscoreDetail | null {
-  if (bars.length < MIN_BARS) return null;
+  if (bars.length < config.MIN_BARS) return null;
   const window = bars.length > config.WINDOW ? bars.slice(-config.WINDOW) : bars.slice();
   const closes = window.map((b) => b.close_qfq);
   const returns: number[] = [];

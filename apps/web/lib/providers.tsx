@@ -15,6 +15,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useEffect, useState, type ReactNode } from 'react';
 
 import { FeatHotkeyHint } from '../components/feat-hotkey-hint/feat-hotkey-hint.js';
+import { ScopeBadge } from '../components/feat-hotkey-hint/scope-badge.js';
 import { getClientConfig } from './config/config-center-next-client-getter.js';
 import { registerStoreExportGlobal } from './storage/export-stores.js';
 import { ThemeProvider } from './theme/provider.js';
@@ -54,6 +55,7 @@ export function Providers({ children }: ProvidersProps): ReactNode {
       <QueryClientProvider client={client}>{children}</QueryClientProvider>
       <UiCmdEngine />
       <FeatHotkeyHint />
+      <ScopeBadge />
       <ConfirmHub />
     </ThemeProvider>
   );
