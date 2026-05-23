@@ -1,15 +1,12 @@
 # RFC 0002 — 增量更新与错误恢复
 
-| Status | **Partially implemented**（核心模型 + 文件原子写已落地；死信 / 对账 / UI 尚未） |
-| ------ | ------------------------------------------------------------------------------- |
-| Date   | 2026-05-01                                                                      |
+| Status | Core implemented; 死信 UI / 对账采样待办 |
+| ------ | ---------------------------------------- |
+| Date   | 2026-05-01                               |
 
-> **当前状态**：
->
-> - ✅ §3 任务分层：实现于 `apps/api/src/modules/orchestration/`（cron + 内存队列 + workers）。
-> - ✅ §6 水位、§9 锁与并发、§10 一致性：通过 `quant_cache/parquet_kline_repo.py` 的 `tempfile + os.replace + FileLock` 实现。
-> - ⚠️ §5 死信存储 / §7 对账 / §12 监控：v1 仅做了 `cache-inspector` 巡检 + 日志告警；UI 死信页与抽样对账 reconciler 暂缓。
-> - 注：原 §6.2 提到的 News 水位已废弃（项目不再维护本地新闻库）。
+> 落地范围：§3 任务分层（`apps/api/src/modules/orchestration/`，cron + 内存队列 + workers）；§6 水位 / §9 锁与并发 / §10 一致性（`quant_cache/parquet_kline_repo.py` 的 `tempfile + os.replace + FileLock`）。
+> 待落地：§5 死信 UI、§7 抽样对账 reconciler。
+> 已废弃：§6.2 的 News 水位（项目不再维护本地新闻库）。
 
 ## 1. 背景
 
@@ -161,7 +158,7 @@ data/_audit/discrepancy.jsonl
 ### 8.1 数据 schema_version
 
 - 每个 parquet 文件元数据里记 `schema_version: int`
-- 读取时若版本低于代码 → 走自动迁移函数（`quant_cache/migrations/<from>_to_<to>.py`）
+- 读取时若版本低于代码 → 走自动升级函数（`quant_cache/migrations/<from>_to_<to>.py`）
 - 写入时一律新版本
 
 ### 8.2 来源 schema 漂移

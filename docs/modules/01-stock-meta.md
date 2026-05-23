@@ -13,7 +13,7 @@
 | Source  | `services/py/quant_io/sources/akshare_stock_meta.py`         | akshare 拉取沪深主板 + 创业板 + 科创板 + 北交所列表         |
 | Repo    | `services/py/quant_cache/parquet_stock_meta_repo.py`         | 单文件 Parquet 全表存储（schema 见 `stock_meta_schema.py`） |
 | Service | `services/py/quant_core/services/stock_meta_service.py`      | 查询 / 过滤 / 拼音匹配                                      |
-| Sync    | `services/py/quant_core/services/stock_meta_sync_service.py` | 拉取最新 + 全量替换 + 拼音回填（pypinyin）                  |
+| Sync    | `services/py/quant_core/services/stock_meta_sync_service.py` | 拉取最新 + 全量覆盖写 + 拼音回填（pypinyin）                |
 | RPC     | `services/py/quant_rpc/ops/stock_meta*.py`                   | 见下表                                                      |
 | API     | `apps/api/src/modules/stock-meta/`                           | `GET /api/stocks/{code}`（支持批量 `?codes=`）              |
 | Web     | `feat-sec-list`                                              | 全宇宙搜索 / 板块（sector）管理                             |
@@ -33,7 +33,7 @@
 ## 缓存策略
 
 - **存储**：`data/meta/stocks.parquet`（约 5500 行）。
-- **更新**：手动触发或 BJT 16:00 cron；写入走 `tempfile + os.replace` 原子替换 + `FileLock`。
+- **更新**：手动触发或 BJT 16:00 cron；写入走 `tempfile + os.replace` 原子写 + `FileLock`。
 - **读取**：内存缓存（首次加载 polars DataFrame，后续命中复用）；外部触发 sync 后失效重载。
 - **校验**：schema 版本写入 Parquet metadata，启动时不匹配则报 `META_STALE`。
 
@@ -77,14 +77,19 @@ WCMI（Wave-quality Composite Momentum Index）是落在 `stock_metas.parquet`
 候选。详细设计与回测见 `docs/perf/wcmi-redesign.md` 与
 `docs/perf/wcmi-redesign-backtest.md`。
 
+**计算式**：设 $\mathrm{pct}_i(c) \in [0, 1]$ 为代码 $c$ 在子分维度 $i$
+上的横截面百分位（仅在通过 survivor gate 的代码间排名），$w_i \ge 0$ 为权重，
+$\sum_i w_i = 100$，则
+
+$$\mathrm{WCMI}(c) = 10 \cdot \sum_i w_i \cdot \mathrm{pct}_i(c) \in [0, 1000]$$
+
 - **窗口**：默认 90 个交易日（`WCMI_CONFIG.WINDOW`）。`bars < 30` ⇒
   `wcmi = null` 并退出；`30 ≤ bars < 90` 用现有 bar 数作为窗口
   fallback。
-- **输出区间**：`[0, 1000]`（v2 重设计后全部非负；中位数股票 ≈ 500）。
-  v1 的 `[-1000, +1000]` 已废弃；前端、IM 表渲染、排序默认均按
-  `wcmi desc` 跑（`DEFAULT_SORT_BY_KIND`）。
-- **生存门**（survivor gate）：窗口期收益 `r_window ≤ 0` 的代码
-  `wcmi = null`，从所有排名表剔除。替代了 v1 的 `r10 ≤ 0` 门。
+- **输出区间**：$[0, 1000]$（全部非负；中位数股票 $\approx 500$）。
+  前端、IM 表渲染、排序默认均按 `wcmi desc` 跑（`DEFAULT_SORT_BY_KIND`）。
+- **生存门**（survivor gate）：窗口期收益 $r_\text{window} \le 0$ 的代码
+  `wcmi = null`，从所有排名表剔除。
 - **子分**：7 个维度（per-code 横截面百分位 × 100）一并落库，
   composite null 时子分也都为 null：
 
@@ -97,6 +102,14 @@ WCMI（Wave-quality Composite Momentum Index）是落在 `stock_metas.parquet`
   | `wcmi_shadow_clean`   | H−O / C−L 上下影线"干净"程度                      |
   | `wcmi_stage_gain`     | 自 `bars[0]` 起的阶段累计收益                     |
   | `wcmi_crash_avoid`    | 单日大跌 / 低开 / 未恢复 的避险表现               |
+
+- **合成公式**：每个子分先做横截面百分位 $\text{pct}_i \in [0, 1]$，再按权重加权后缩放到 $[0, 1000]$：
+
+  $$
+  \text{WCMI} = \frac{\text{TOTAL\_SCALE}}{\sum_i w_i} \sum_i w_i \cdot \text{pct}_i
+  $$
+
+  默认 $\text{TOTAL\_SCALE} = 1000$，$\sum_i w_i = 100$，故 $\text{SCALE} = 10$。
 
 - **默认权重**（调优后写回 `WCMI_CONFIG`，
   `apps/api/src/modules/stock-meta/domain/pure/wcmi-subscores/types.ts`）：

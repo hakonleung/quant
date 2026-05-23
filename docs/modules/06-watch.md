@@ -10,9 +10,9 @@
 
 - `WatchGroup{ name, conditions, intervalSec, pushIntervalSec, enabled, createdAt }` 是一等存储对象，保存在 `data/watch/groups.json`。
 - `WatchTask` 通过 `groupName` 外键引用一个 group。`POST /api/watch` 必须传 `groupName`，且 group 必须先于 task 存在；服务端总是用 group 自己的 conds / intervals 覆盖 task 创建请求里的对应字段——避免同 group 下 task 之间漂移。
-- `enabled` 是 group 级"通知开关"：`PATCH /api/watch/groups/:name { enabled }` 暂停或恢复整组。`enabled=false` 时调度器跳过该 group 下的全部 task（不抓行情、不推送），但 task 数据保留——重新置为 `true` 即恢复，无需重新填表。默认 `true`，旧文件迁移时一律视为开启。
+- `enabled` 是 group 级"通知开关"：`PATCH /api/watch/groups/:name { enabled }` 暂停或恢复整组。`enabled=false` 时调度器跳过该 group 下的全部 task（不抓行情、不推送），但 task 数据保留——重新置为 `true` 即恢复，无需重新填表。默认 `true`。
 - 删除 group（`DELETE /api/watch/groups/:name`）级联：先删除 group 下所有 task（调度器立即停掉），再删除 group 配置；顺序保证调度器永远不会看到 dangling task。
-- 旧 `tasks.json`（无 `groupName`）由 `migrateLegacyTasks` 按 `legacy-<sha1(conds)[0..6]>` 自动补一个组名，相同条件签名的旧 task 收敛到同一组；启动时 `WatchService.seedLegacyGroups()` 把这些组写回 `groups.json`，幂等。
+- 启动时若发现 `tasks.json` 中缺 `groupName` 的条目，由 `migrateLegacyTasks` 按 `legacy-<sha1(conds)[0..6]>` 自动补一个组名，相同条件签名的条目收敛到同一组；`WatchService.seedLegacyGroups()` 把这些组写回 `groups.json`，幂等。该规范化纯属启动期 schema 自愈，正常路径不触发。
 
 ## 实现
 
@@ -48,7 +48,7 @@ type WatchCondition =
 ### `ma` 指标（2026-05）
 
 - 仅对 A 股生效；非 A 任务静默跳过求值。
-- 调度器在每个交易日按需从 Python `list_kline_for_code(code, n=21)` 拉取最近 21 根日线，缓存 `{ma5, ma10, ma20}` 及窗口外即将"被替换"的收盘价 `dropClose[N] = close[L-N]`（`L` 为最新一根 = 昨日）。
+- 调度器在每个交易日按需从 Python `list_kline_for_code(code, n=21)` 拉取最近 21 根日线，缓存 `{ma5, ma10, ma20}` 及窗口外将滚出的收盘价 `dropClose[N] = close[L-N]`（`L` 为最新一根 = 昨日）。
 - 实时 MA：`liveMA_N = (maOfKline * N - dropClose[N] + currentPrice) / N`。
 - 边沿触发：仅当**上一笔**采样在 MA 一侧、**当前**采样在另一侧（含相等的方向）才记为 hit：
   - `crossUp`：`prev_price < prev_liveMA && curr_price >= curr_liveMA`
@@ -65,7 +65,7 @@ type WatchCondition =
 | `vwap`       | `amount / volume`（累计成交额 / 成交量）                     | `volume <= 0` 时不触发                                                                                                                   |
 | `trend`      | 当日已缓存样本中，时间戳 ≤ `latestTs - window 秒` 的最新一条 | `window` 单位为**秒**；调度器维护 `{ts, price}` 内存样本，按 `latestTs - maxWindow` 滚动裁剪；跨日重置；找不到符合 cutoff 的样本时不触发 |
 
-> 历史 `prev`（上一次盘中采样）基线已在 2026-05 移除；旧任务由 `migrateLegacyTasks` 自动改写为 `prev_close`。
+> 启动时 `migrateLegacyTasks` 顺手把 `baseline === 'prev'` 的条目重写为 `prev_close`，保证当前 schema 一致性。
 
 ## Hit 节流（2026-05）
 
@@ -74,7 +74,7 @@ type WatchCondition =
 - **价格门**：`lastHitPrice == null`（新任务 / 跨交易日重置）或 `|last - lastHitPrice| / lastHitPrice >= 2 %`。触发后写入 `lastHitPrice = last`。
 - **时间门**：`lastPushAt == null` 或 `now >= lastPushAt + pushIntervalSec * 1000`。
 
-原先的 not-match → match 边沿门已移除；`lastMatchAt` / `lastSamplePrice` 字段从 schema 删除（旧 `tasks.json` 由 `migrateLegacyTasks` 自动剥离 + 注入 `lastHitPrice: null`）。`pushIntervalSec` 仍然保留并参与节流。
+schema 中没有 not-match → match 边沿门字段；`migrateLegacyTasks` 若读到带有 `lastMatchAt` / `lastSamplePrice` 的旧文件，会剥离这两字段并注入 `lastHitPrice: null`，对齐当前 schema。`pushIntervalSec` 仍然保留并参与节流。
 
 ## 缓存策略
 

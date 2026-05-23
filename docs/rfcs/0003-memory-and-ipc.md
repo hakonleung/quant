@@ -1,16 +1,11 @@
 # RFC 0003 — 内存管理与跨进程通信优化
 
-| Status | **Implemented (v1)** — Arrow Flight + DuckDB 列裁剪已落地；多任务子进程隔离与共享内存留 v2/v3 |
-| ------ | --------------------------------------------------------------------------------------------- |
-| Date   | 2026-05-01                                                                                    |
+| Status | 列裁剪 + Arrow Flight + 前端虚拟化已落地；多进程隔离 / 共享内存留作 v2+ |
+| ------ | ----------------------------------------------------------------------- |
+| Date   | 2026-05-01                                                              |
 
-> **当前状态**：
->
-> - ✅ §3.2 列裁剪 / 谓词下推：`ParquetKlineRepo` 走 DuckDB（自动 pushdown）。
-> - ✅ §4 Arrow Flight：`apps/api/src/adapters/arrow-flight*` ↔ `services/py/quant_rpc/`。
-> - ✅ §7 前端虚拟化：`@tanstack/react-virtual` 已强制为列表规约。
-> - ⚠️ §3.5 任务隔离：v1 单进程内 + 强 GC；多进程 spawn 留 v2。
-> - ⛔ §5 共享内存：v1/v2 不做（决策同原文）。
+> 落地：§3.2 列裁剪 / 谓词下推（`ParquetKlineRepo` 走 DuckDB pushdown）、§4 Arrow Flight（`apps/api/src/adapters/arrow-flight*` ↔ `services/py/quant_rpc/`）、§7 前端虚拟化（`@tanstack/react-virtual` 为强制规约）。
+> 待评估：§3.5 多进程任务隔离；§5 共享内存暂不引入。
 
 ## 1. 背景
 

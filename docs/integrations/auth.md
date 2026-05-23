@@ -100,17 +100,16 @@ all five user-scoped stores:
 Shared (NOT user-scoped): `data/kline/`, `data/sectors/`, `data/blacklist.json`,
 `data/sentiment/`, `data/ta/`, `data/meta/`, `data/watch/universe_*.json`.
 
-## Migration
+## 启动期归位
 
-The first boot under the new code automatically relocates legacy files
-into `data/users/admin/...` (defensive migration in
-`AuthModule.onModuleInit`). For headless / scripted migration:
+`AuthModule.onModuleInit` 启动时会把历史目录下未归位的用户文件
+搬到 `data/users/admin/...`，幂等。命令行场景可手动跑：
 
 ```sh
 pnpm tsx scripts/migrate_users_v1.ts
 ```
 
-Idempotent: refuses to run if `data/users/admin` already exists.
+若 `data/users/admin` 已存在则脚本拒绝执行。
 
 ## Cross-process boundaries
 

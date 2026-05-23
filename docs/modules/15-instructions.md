@@ -17,9 +17,6 @@
 - Socket 命令 `{ id, args }` 统一走 `InstructionExecutor`，不再为每条命令
   单独写 schema 分支。
 
-迁移历史与分阶段记录见
-`docs/integrations/instruction-center-migration.md`。
-
 ## 进程拓扑
 
 ```
@@ -43,9 +40,9 @@
    completion.ts — buildCompleterEnv(stockIndex)
    feat-term-main 唯一入口；⌘K → setAppMode('term')
 
-   legacy InstructionRegistry（apps/api/src/modules/instruction/）
+   InstructionRegistry（apps/api/src/modules/instruction/）
    ─────────────────────────────────────────────────────────────────
-   仅剩 help / ping / channel.echo / channel.send（IM-only / debug 门控）
+   仅承载 help / ping / channel.echo / channel.send 四条 IM-only / debug 门控指令
    InstructionImListener  ← @OnEvent('channel.inbound')
    SocketInstructionAdapter ← SocketCommandHandler
 ```
@@ -67,7 +64,7 @@
 
 ### `instruction-center/`（主路径）
 
-`apps/api/src/modules/instruction-center/` 承载所有迁移后的指令。
+`apps/api/src/modules/instruction-center/` 承载所有 manifest 指令。
 
 | 文件                                   | 角色                                                                                                                                                       |
 | -------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -75,10 +72,10 @@
 | `be-types.ts`                          | `BeEnv`、`BeCtx`（NestJS services 注入包）、`ImHost`、`ImOutput`                                                                                           |
 | `cells/`                               | 每条 BE 指令一个 `*.cell.ts`：`handler` + `renderer`（可选 `peek`）                                                                                        |
 | `instruction-center.module.ts`         | 装配 `BeInstructionCenter` 及其 cell 所需 services                                                                                                         |
-| `async/`                               | BullMQ `instruction.async` 队列 + processor（与 legacy executor 共用）                                                                                    |
-| `handlers/{help,ping,channel-echo}.handler.ts` | 仅剩的 legacy handlers（IM-only / debug 门控；不在 manifest 里）                                                                                  |
+| `async/`                               | BullMQ `instruction.async` 队列 + processor（与 `InstructionExecutor` 共用）                                                                              |
+| `handlers/{help,ping,channel-echo}.handler.ts` | IM-only / debug 门控 handlers，不在 manifest                                                                                                       |
 
-### `instruction/`（legacy 路径，缩减中）
+### `instruction/`（IM-only / debug 入口）
 
 | 文件                            | 角色                                                                                                                                                                              |
 | ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -86,21 +83,21 @@
 | `instruction.port.ts`           | `InstructionHandler<TArgs>`；`InstructionCtx = { traceId; source; channelId?; sender?; target? }`                                                                                |
 | `instruction.registry.ts`       | `@Injectable()`：`register` / `get` / `list` / `knownIds`；只剩 `help` / `ping` / `channel.echo` / `channel.send` 四条注册项                                                    |
 | `instruction.executor.ts`       | `execute(id, args, ctx)` + `executeLine(line, ctx)`；先检查 `BeInstructionCenter.has(id)` 拦截，否则回落 `InstructionRegistry`                                                   |
-| `instruction.provider.ts`       | `InstructionRegistrarBase<TArgs>` — `onModuleInit` 自动调 `registry.register`；作用域已缩减至上述四条 legacy handlers                                                            |
+| `instruction.provider.ts`       | `InstructionRegistrarBase<TArgs>` — `onModuleInit` 自动调 `registry.register`；作用域限于上述四条 handler                                                                        |
 | `instruction.im.listener.ts`    | `@OnEvent(CHANNEL_INBOUND_EVENT)` → 解析 → executor → `ChannelService.send` 回推                                                                                                 |
-| `parse-argv.ts`                 | `tokenize(rest)` + `parseArgvToObject`：legacy 路径用；manifest 路径改用 `packages/shared/src/instructions/parse.ts`                                                             |
+| `parse-argv.ts`                 | `tokenize(rest)` + `parseArgvToObject`：本路径用；manifest 路径改用 `packages/shared/src/instructions/parse.ts`                                                                  |
 | `socket-instruction.adapter.ts` | 把 `{id, args}` 路由到 executor                                                                                                                                                   |
 | `instruction.module.ts`         | `@Global()`；注入 `INSTRUCTION_CONFIG`、BullMQ 队列；导出 Registry / Executor / AsyncBus / Adapter                                                                               |
 | `instruction.config.ts`         | `INSTRUCTION_IM_ALLOWLIST` + `INSTRUCTION_DEBUG_ENABLED`                                                                                                                          |
 
 ### Manifest 指令（`BeInstructionCenter` + `feCenter` 共享）
 
-下表中 `help` 在 FE 侧有 cell（`cells/help.cell.ts`），BE 侧另有 legacy handler 给 IM 用。
+下表中 `help` 在 FE 侧有 cell（`cells/help.cell.ts`），BE 侧另由 `instruction/handlers/help.handler.ts` 直接对接 IM。
 其余指令两侧均通过 manifest 统一定义。
 
 | Spec id            | FE cell 来源                                       | BE cell 来源（`instruction-center/cells/`）        | 模式      | 摘要                                                                                                                                              |
 | ------------------ | -------------------------------------------------- | -------------------------------------------------- | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `help`             | `cells/help.cell.ts`                               | —（legacy registry only）                          | sync      | FE：列 manifest 指令；IM：通过 legacy `help.handler.ts` 列 registry 已注册 spec                                                                  |
+| `help`             | `cells/help.cell.ts`                               | —（registry-only）                                 | sync      | FE：列 manifest 指令；IM：通过 `help.handler.ts` 列 registry 已注册 spec                                                                         |
 | `focus`            | `cells/focus.cell.ts`                              | `focus.cell.ts`                                    | sync      | 校验 6 位 A 股 code 并回 `focus = <code> <name> (<industry>)`                                                                                     |
 | `stock`            | `cells/stock.cell.ts`        | `cells/stock.cell.ts`         | sync      | 按 code / 名称 / 拼音搜索（默认 limit=10）                                                                                                        |
 | `stock.info`       | `cells/stock-info.cell.ts`   | `cells/stock-info.cell.ts`    | sync      | 单股详情                                                                                                                                          |
@@ -133,7 +130,7 @@
 | `clear`            | `cells/clear.cell.ts`        | —（BE-excluded）              | sync      | FE-only：清空 term 滚动缓存                                                                                                                        |
 | `web.search`       | —（FE-excluded）             | `cells/web-search.cell.ts`    | sync      | BE-only（`/agent` 工具集）：Qwen 付费网搜，输出中文摘要                                                                                           |
 
-#### Legacy registry 专属指令（不在 manifest 里）
+#### Registry 专属指令（不在 manifest 里）
 
 以下四条仍通过 `InstructionRegistry` / `InstructionRegistrarBase` 注册，
 不在 `INSTRUCTION_MANIFEST` 中，因此也不在 `feCenter`。
@@ -189,9 +186,7 @@
 
 - 共享 schema：`packages/shared/src/types/socket.ts` 的 `SocketCommandSchema = { id, args }`。
 - gateway：`apps/api/src/modules/socket/socket.gateway.ts` 仍用 `SOCKET_COMMAND_HANDLER` 注入，`AppModule` 把 `SocketInstructionAdapter` 通过 `SocketModule.forRoot` 接进去。
-- 加新 manifest 指令 = 参见 `docs/integrations/instruction-center-migration.md` 的
-  "Pattern for a new BE cell + manifest id"。加 legacy-only 指令（IM 调试等）= 继承
-  `InstructionRegistrarBase`，列入 feature module 的 `providers`；不需要改 schema / gateway / adapter。
+- 加新 manifest 指令：在 `packages/shared/src/instructions/manifest.ts` 注册 id + `argsSchema` + `resultSchema`，BE 写一个 `Cell` 实现并在 feature module 的 `providers` 列出；不需要改 schema / gateway / adapter。
 
 ## ACL（INSTRUCTION_IM_ALLOWLIST）
 
@@ -258,7 +253,7 @@ IM /analyze | /analyze.sector | /ta | /ta.sector | /ledger.analyze | /screen
 - `packages/shared/src/instructions/center.test.ts` —— `InstructionCenter` dispatch / coerceArgs / alias / error envelopes。
 - `packages/shared/src/instructions/manifest.test.ts` —— manifest id 唯一性 / schema 类型一致性。
 - `apps/api/test/modules/instruction/parse-argv.spec.ts` —— argv tokenize / k=v / positional / quote。
-- `apps/api/test/modules/instruction/instruction.registry.spec.ts` —— legacy registry：注册 / alias / 重复 id / alias 冲突。
+- `apps/api/test/modules/instruction/instruction.registry.spec.ts` —— registry：注册 / alias / 重复 id / alias 冲突。
 - `apps/api/test/modules/instruction/instruction.config.spec.ts` —— allowlist 空白容错 / debug 开关 boolean 解析。
 - `apps/api/test/modules/instruction/instruction.executor.spec.ts` —— execute / executeLine / dispatch / mode='async' 入队 / BeInstructionCenter 拦截。
 - `apps/api/test/modules/instruction/instruction.im.listener.spec.ts` —— `/` 前缀 / sync 回复 + meta / ACL forbidden / async started + 续推 completed。

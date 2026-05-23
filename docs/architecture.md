@@ -2,36 +2,34 @@
 
 ## 1. 进程拓扑
 
-```
-┌─────────────┐  HTTP/JSON + WebSocket(Socket.IO)  ┌────────────┐  Arrow Flight (gRPC)  ┌────────────────┐
-│ Next.js     │ ────────────────────────────────>  │ NestJS     │ ────────────────────> │ Python svc     │
-│ apps/web    │ <────────────────────────────────  │ apps/api   │ <──────────────────── │ services/py    │
-│ :3000       │                                    │ :3001      │                       │ :8815 Flight   │
-└─────────────┘                                    └────────────┘                       └────────────────┘
-                                                       │ │ │                                  │
-                                                       │ │ │ in-memory queues + cron          │ akshare / OpenAI
-                                                       │ │ ▼                                  ▼
-                                                       │ │ ┌────────────┐                ┌────────────────┐
-                                                       │ │ │orchestrator│                │ data/ (Parquet │
-                                                       │ │ └────────────┘                │ + JSON KV)     │
-                                                       │ │                               └────────────────┘
-                                                       │ ▼ BullMQ
-                                                       │ ┌────────┐
-                                                       │ │ Redis  │  channel.outbound 队列（持久化重试）
-                                                       │ └────────┘
-                                                       ▼ Web API + Socket Mode/WSClient
-                                                  ┌──────────────┐
-                                                  │ Slack/Feishu │
-                                                  └──────────────┘
+```mermaid
+flowchart LR
+  Web["Next.js<br/>apps/web :3000"]
+  API["NestJS<br/>apps/api :3001"]
+  Py["Python svc<br/>services/py :8815"]
+  Redis[("Redis<br/>BullMQ outbound")]
+  IM["Slack / Feishu"]
+  Data[("data/<br/>Parquet + JSON KV")]
+  Ext["akshare / OpenAI-compat LLM"]
+
+  Web <-- HTTP+JSON / Socket.IO --> API
+  API <-- Arrow Flight (gRPC) --> Py
+  API --> Redis
+  Redis --> IM
+  IM -- Socket Mode / WSClient --> API
+  API -- write --> Data
+  Py -- read --> Data
+  API --> Ext
+  Py --> Ext
 ```
 
-| 进程       | 职责                                                                                                                                                                                             | 不做                                             |
-| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------ |
-| Next.js    | UI、SSR、用户交互；`feat-term-main` 内嵌 xterm.js 终端宿主                                                                                                                                       | 直接调外部数据源 / LLM                           |
-| NestJS     | HTTP 路由、参数校验、BJT 16:00 cron、内存任务队列（meta/kline/watch，含池级 backoff + batch settler）、Arrow Flight client、Slack 推送、**外部 LLM 客户端（OpenAI 兼容，per-user 计费 ledger）** | 重计算、调外部数据源                             |
-| Python svc | 数据拉取与缓存写入、筛选 / 形态 / kline / financials / 黑名单计算                                                                                                                                | 直接处理 HTTP；调外部 LLM（已全量迁出到 NestJS） |
+| 进程       | 职责                                                                                                                                                  | 不做                                |
+| ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------- |
+| Next.js    | UI、SSR、用户交互；`feat-term-main` 内嵌 xterm.js 终端宿主                                                                                            | 直接调外部数据源 / LLM              |
+| NestJS     | HTTP 路由、参数校验、BJT 16:00 cron、内存任务队列（meta/kline/watch，含池级 backoff + batch settler）、Arrow Flight client、IM 推送、**外部 LLM 客户端（OpenAI 兼容，per-user 计费 ledger）** | 重计算、直接拉外部行情              |
+| Python svc | 数据拉取与缓存写入触发、筛选 / 形态 / kline / financials / 黑名单计算                                                                                 | 持有 HTTP 入口、调用外部 LLM        |
 
-> v1 单机本地，`apps/api` 监听 `127.0.0.1`，无鉴权；任务队列内存实现（NestJS 进程内），重启即清空——长任务以幂等可重入设计。
+> v1 单机本地，`apps/api` 监听 `127.0.0.1`，无鉴权；任务队列内存实现（NestJS 进程内），重启即清空——长任务以幂等可重入设计。Channel 出站通过 BullMQ + Redis 做持久重试。
 
 ## 2. 仓库结构
 
@@ -63,15 +61,26 @@ docs/              工程文档（本目录）
 
 ## 3. 数据流（举例：自然语言筛选）
 
-```
-用户输入 → web POST /api/screen/nl
-  → NestJS ScreenController（zod 校验 + 生成 trace_id + @CurrentUser）
-  → NestJS NlToDslService → LlmService.completeJson（OpenAI 兼容） → ScreenPlanAst
-  → NestJS ScreenExecService（进程内，无 Flight）
-    → UniverseFilterService（LocalStockMetaAdapter）
-    → KlineReaderService.bulkRangeForScreen（DuckDB 列裁剪 + pct_chg_qfq 合成）
-    → screen-eval 解释器（domain/pure/screen-eval.ts，Decimal.js）
-  → 返回 matches + planSignature → JSON → web 渲染
+```mermaid
+sequenceDiagram
+  participant U as 用户
+  participant Web as Next.js
+  participant API as NestJS ScreenController
+  participant NL as NlToDslService
+  participant LLM as LlmService
+  participant Exec as ScreenExecService
+  participant DB as DuckDB / Parquet
+
+  U->>Web: 输入自然语言
+  Web->>API: POST /api/screen/nl
+  API->>NL: 校验 + 生成 trace_id
+  NL->>LLM: completeJson (OpenAI 兼容)
+  LLM-->>NL: ScreenPlanAst (JSON)
+  NL->>Exec: dispatch(plan)
+  Exec->>DB: bulkRangeForScreen (列裁剪 + qfq 合成)
+  DB-->>Exec: K 线 slice
+  Exec-->>API: matches + planSignature
+  API-->>Web: JSON
 ```
 
 - 同步小调用（< 1MB）：HTTP/JSON。
@@ -86,7 +95,7 @@ docs/              工程文档（本目录）
 - `MockActionRunner` — fixtures + LRU 缓存，离线可跑全部 UX。
 - `LiveActionRunner` — 调真实 `/api/*` 端点，并通过 `REVALIDATE_AFTER` 表把 `analyze.{one,many}` / `sector.*` 等动作的副作用映射到 react-query queryKey 前缀 + zustand store，做跨缓存失效（参见 `docs/modules/10-terminal.md` §6）。
 
-切换：`localStorage.setItem('tm.runner', 'mock')` → mock；移除即 live（默认）。
+运行时选择：`localStorage.setItem('tm.runner', 'mock')` → mock；移除即 live（默认）。
 
 ## 5. 错误与追踪
 
@@ -102,8 +111,9 @@ docs/              工程文档（本目录）
 | web    | `pnpm --filter @quant/web dev` |
 | api    | `pnpm --filter @quant/api dev` |
 | python | `uv run python -m quant_rpc`   |
+| redis  | `redis-server`（dev 直接跑；channel 出站依赖）|
 
-依赖：Node 20.11+ / pnpm 10 / Python 3.11 / uv 0.5+。无 Redis、无外部 DB——纯文件缓存。
+依赖：Node 20.11+ / pnpm 10 / Python 3.11 / uv 0.5+ / Redis 7（仅 BullMQ）。其余持久化全部走本地文件缓存。
 
 ## 7. 技术栈版本（实际）
 

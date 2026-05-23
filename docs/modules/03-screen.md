@@ -14,7 +14,7 @@
 | Field 白名单    | `apps/api/src/modules/screen/domain/pure/screen-fields.ts`                                           | `SCREEN_FIELD_NAMES` / `UNIVERSE_FIELD_NAMES` / op 白名单。NestJS 端唯一真理。                                          |
 | Eval            | `apps/api/src/modules/screen/domain/pure/screen-eval.ts`、`universe-eval.ts`                         | 纯解释器；零 IO，零框架依赖；`Decimal.js` 全程不丢精度。                                                                |
 | Summarise       | `apps/api/src/modules/screen/domain/pure/screen-summarise.ts`                                        | 走一遍 AST 收集所需列 + lookback bars，驱动 DuckDB 的列投影与时间裁剪。                                                 |
-| Plan signature  | `apps/api/src/modules/screen/domain/pure/plan-signature.ts`                                          | 与 Py `screen_service.plan_signature` 字节级一致的 SHA-256（canonical JSON、键排序、无空白），迁移后缓存 key 仍然稳定。 |
+| Plan signature  | `apps/api/src/modules/screen/domain/pure/plan-signature.ts`                                          | 与 Py `screen_service.plan_signature` 字节级一致的 SHA-256（canonical JSON、键排序、无空白），跨进程缓存 key 稳定。     |
 | Evidence        | `apps/api/src/modules/screen/domain/pure/screen-evidence.ts`                                         | 每只命中股票的 window + 各 Compare scalar 4dp 量化值，结构与旧 Py 输出一致。                                            |
 | Universe filter | `apps/api/src/modules/screen/universe-filter.service.ts`                                             | 从 `LocalStockMetaAdapter` 拉全市场 meta，过 `evaluateUniverse`，返回排序代码列表。                                     |
 | Executor        | `apps/api/src/modules/screen/screen-exec.service.ts`                                                 | 编排：summarise → universe 解析 → `KlineReaderService.bulkRangeForScreen` → per-code 解释器 → evidence + rank。         |
@@ -35,4 +35,4 @@
 
 ## 性能与未来工作
 
-当前 TS 解释器与原 Py 解释器同档（同算法移植）；性能收益主要来自移除 Flight hop 和共享进程内 DuckDB 读盘。下一步是 DSL → DuckDB SQL 下推（`Compare` → WHERE，`Aggregate` → 窗口聚合，`ForAll/Exists/Consecutive` → 窗口函数），可在不改 `ScreenService` 公共契约的前提下替换 `ScreenExecService.execute`，预计带来 5–10× 提升。详见 `docs/perf/screen-migration.md`（待落地）。
+TS 解释器与 Py 解释器同档（同算法实现）；性能收益主要来自免去 Flight hop 与共享进程内 DuckDB 读盘。下一步是 DSL → DuckDB SQL 下推（`Compare` → WHERE，`Aggregate` → 窗口聚合，`ForAll/Exists/Consecutive` → 窗口函数），可在不改 `ScreenService` 公共契约的前提下重写 `ScreenExecService.execute`，预计带来 5–10× 提升。详见 `docs/perf/screen-pushdown.md`（待落地）。

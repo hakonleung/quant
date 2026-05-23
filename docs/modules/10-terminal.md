@@ -124,10 +124,7 @@ import {
 } from '@quant/terminal';
 ```
 
-`createDefaultRegistry`, `createRegistry`, `CommandRegistry`, `CommandSpec`,
-`CommandError`, and `runCommand` are **gone** — deleted as part of the
-`InstructionCenter` migration. See
-`docs/integrations/instruction-center-migration.md`.
+指令注册与分发由 `InstructionCenter` 承担（详见 `docs/modules/15-instructions.md`），terminal 包不再自持注册表。
 
 ### Sub-paths
 
@@ -386,13 +383,8 @@ pnpm --filter @quant/terminal test:cov   # 90% lines / 80% branches gate
 
 ## 12. Roadmap
 
-- **M1 ✅** — mock runner, full UX flows, Next.js host wired with cyber
-  theme + Monaspace + Tab completion.
-- **M2 ✅** — `LiveActionRunner` against `endpoints.ts` + cross-cache
-  revalidation table; `tm.runner` switch.
-- **M3 ✅** — `InstructionCenter` migration: all commands moved to FE
-  cells (`apps/web/lib/instructions/cells/`); `commands/` directory and
-  `engine/dispatcher.ts` removed; tab completion rebuilt from
-  `INSTRUCTION_MANIFEST` via `buildCompleterEnv`.
-- **M4** — script mode (`pipe`, `&&`), per-user configurable keybindings,
-  optional remote history sync.
+当前状态：
+
+- mock 与 live 双 runner，`tm.runner` 切换；
+- 所有指令以 FE cell（`apps/web/lib/instructions/cells/`）形式落地，Tab 补全由 `INSTRUCTION_MANIFEST` 通过 `buildCompleterEnv` 派生；
+- 待办：脚本模式（`pipe`, `&&`）、用户级 keybindings、可选远端 history 同步。

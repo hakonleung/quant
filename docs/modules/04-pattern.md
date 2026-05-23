@@ -16,12 +16,43 @@
 | API     | `apps/api/src/modules/pattern/`          | `POST /api/pattern/find-similar`                             |
 | Web     | `feat-scr-pat`                           | 选锚点股 + 区间 → 命中列表（含每行内嵌 50D K 线 + 期间收益） |
 
+## 算法
+
+设参考段为 $X = (x_1, \dots, x_n)$，候选段为 $Y = (y_1, \dots, y_n)$（同长 = $\text{window\_days}$）。
+
+1. **z-score 归一化**：
+
+$$\tilde{x}_i = \frac{x_i - \mu_X}{\sigma_X}, \quad \tilde{y}_i = \frac{y_i - \mu_Y}{\sigma_Y}$$
+
+2. **DTW 距离**：动态规划求允许时间轴拉伸的最小累积距离
+
+$$D(i,j) = |\tilde{x}_i - \tilde{y}_j| + \min\bigl(D(i-1,j),\ D(i,j-1),\ D(i-1,j-1)\bigr)$$
+
+$$\text{distance}(X,Y) = D(n,n)$$
+
+3. **相似度排名**：
+
+$$\text{similarity} = \frac{1}{1 + \text{distance}(X,Y)} \in (0, 1]$$
+
+## 扫描流程
+
+```mermaid
+flowchart TD
+  Q[参考段 X<br/>code + start..end] --> Norm1[z-score 归一化]
+  U[全宇宙 codes] --> Tail[Recent-tail 取 window_days 尾段]
+  Tail --> Cut["历史严格在前<br/>(尾段 end < X.start)"]
+  Cut --> Norm2[z-score 归一化]
+  Norm1 --> DTW
+  Norm2 --> DTW[逐对 DTW]
+  DTW --> Rank[similarity desc → top-N]
+```
+
 ## 行为约束
 
-- **全宇宙扫描**：`find_similar_patterns` 始终在全宇宙上跑（commit 6714700：避免用户错传 universe 漏掉真实相似股）。
-- **窗口**：`window_days` 由参考段长度推导，**不再**按 `start..end` 日期差计算（commit fcf5680）。
-- **历史严格在前**：扫描候选股的窗口严格在参考起始日之前，杜绝前视偏差（commit 5632012：`PATTERN_REFERENCE_LOOKAHEAD` 错误）。
-- **Recent-tail 扫描 + similarity rank**：候选只取每只股票最近 `window_days` 的尾段，按 z-score 归一化后比 DTW 距离，再以 `similarity = 1 / (1 + distance)` 排序输出（commit 9f08d95）。
+- **全宇宙扫描**：`find_similar_patterns` 始终在全宇宙上跑（避免用户错传 universe 漏掉真实相似股）。
+- **窗口**：`window_days` 由参考段长度推导，**不再**按 `start..end` 日期差计算。
+- **历史严格在前**：扫描候选股的窗口严格在参考起始日之前，杜绝前视偏差。
+- **Recent-tail 扫描 + similarity rank**：候选只取每只股票最近 `window_days` 的尾段。
 - **归一化**：z-score；输入 / 候选段共享同一管线。
 
 ## 缓存策略

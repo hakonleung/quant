@@ -40,7 +40,7 @@
 
 ## 持久化与 Git
 
-- 主账本 `data/_ledger/entries.json` 与 AI 缓存 `data/_ledger/ai-cache.json` 都落在 `data/_*/` 路径下；按 `.gitignore` 第 `data/_*/` 行**不入版本库**。导入 / 导出按 JSON 文件路径手动迁移。
+- 主账本 `data/_ledger/entries.json` 与 AI 缓存 `data/_ledger/ai-cache.json` 都落在 `data/_*/` 路径下；按 `.gitignore` 第 `data/_*/` 行**不入版本库**。需要跨机器同步时按 JSON 文件路径手动复制。
 
 ## 错误码（`proto/errors.json`）
 

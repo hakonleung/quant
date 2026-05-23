@@ -64,10 +64,6 @@
 - v1：Z-score 归一化 + DTW；返回距离 + 对齐路径。
 - 5000 股 × 30 日窗口扫描 < 30s。
 
-### F5.（已废弃）
-
-原"新闻 / 研报本地库"在 v2 改版合并入 F6；项目不再维护本地缓存。占位编号保留。
-
 ### F6. 消息面 — `docs/modules/05-sentiment.md`
 
 - `analyze_one(code)` / `analyze_many(codes)` 双方法。
@@ -93,13 +89,13 @@
 
 - 启动立即扫描 + 每 60 分钟一次 cron。
 - 双触发：cron 周期 + HTTP 读时按需入队。
-- v1 队列：**NestJS 进程内内存队列**（无 Redis / BullMQ）；任务幂等可重启。
+- 队列：**NestJS 进程内内存队列**（meta / kline / watch），任务幂等可重启；Redis + BullMQ 仅用于 channel 出站（IM 推送）持久重试。
 - HTTP 读路径不阻塞补齐——返回当前缓存（含 stale），后台异步追平。
 
 ### F10. 通知 — `docs/modules/09-notifications.md`
 
-- 项目内事件异步推送 IM（v1 = Slack incoming webhook）。
-- 路由可配；带去重（`(channel, dedupe_key)`）+ 限流。
+- 项目内事件异步推送 IM（Slack / Feishu，统一走 `channel` 模块）。
+- 路由可配；带去重（`(channel, dedupe_key)`）+ 限流；出站走 BullMQ 持久重试。
 
 ## 5. 非功能性需求
 
@@ -145,9 +141,9 @@
 
 - ✅ **LLM**：v1 引入 DeepSeek + Kimi；selection 由 `quant_io/llm/providers.py` 顺序 + `.env` 中实际存在的 API key 共同决定。
 - ✅ **数据源**：v1 仅 akshare（聚合 sina / eastmoney）。
-- ✅ **通知**：v1 Slack incoming webhook。
+- ✅ **通知**：Slack + Feishu Web API（`channel` 模块）。
 - ✅ **研报 PDF**：v1 仅取标题 + 摘要 + URL。
 - ✅ **鉴权**：v1 不做；NestJS 监听 127.0.0.1。
 - ✅ **市场范围**：A 股三所。
 - ✅ **构建**：pnpm（TS）+ uv（Py）。
-- ✅ **任务队列**：v1 NestJS 进程内内存队列；不引入 Redis / BullMQ。
+- ✅ **任务队列**：内存队列处理本地计算任务；Redis + BullMQ 仅用于 IM 出站持久重试。

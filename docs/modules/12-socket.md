@@ -2,7 +2,7 @@
 
 ## 功能
 
-- 统一的 FE↔BE 实时通信通道，**替换** 原 `/api/watch/stream`、`/api/orchestration/queue/stream` 两路 SSE。
+- 统一的 FE↔BE 实时通信通道（任务快照 / 队列快照 / channel activity 全部走此处）。
 - 双向：服务端推送（任务快照、队列快照、channel activity）+ 客户端命令（任意已注册的 `InstructionSpec`，参见 [`15-instructions.md`](./15-instructions.md)）。
 - 单一 Socket.IO gateway，对应客户端 `socket.io-client` 单例；按 topic 分 Room，订阅者按 `subscribe` 入 room，只收订阅过的事件。
 
@@ -64,13 +64,13 @@ CORS 通过 `apps/api/src/modules/socket/cors-origin.ts`：
 - `apps/web/lib/socket/use-socket-topic.ts`：泛型 hook，封装 subscribe / unsubscribe / 解码。
 - `apps/web/lib/socket/use-channel-activity.ts`：滚动 buffer + 折叠 pending → sent。
 
-迁移完成的消费方：
+消费方对照：
 
-| 旧 SSE                                  | 新 Socket topic  | 入口                                                           |
-| --------------------------------------- | ---------------- | -------------------------------------------------------------- |
-| `/api/watch/stream`                     | `watch.snapshot` | `feat-watch-live` 内 `useWatchStream`                          |
-| `/api/orchestration/queue/stream`       | `queue.snapshot` | `apps/web/lib/hooks/use-queue-stream.ts`                       |
-| `/api/watch/stream`（live-runner 一次） | （改为 GET）     | `apps/web/lib/term/live-runner.ts` 改用 `apiGet('/api/watch')` |
+| Socket topic     | 入口                                                           |
+| ---------------- | -------------------------------------------------------------- |
+| `watch.snapshot` | `feat-watch-live` 内 `useWatchStream`                          |
+| `queue.snapshot` | `apps/web/lib/hooks/use-queue-stream.ts`                       |
+| GET `/api/watch` | `apps/web/lib/term/live-runner.ts` 单次拉取                    |
 
 旧的 BFF SSE proxy（`apps/web/app/api/{watch,orchestration/queue}/stream/route.ts`）已删除。
 

@@ -19,6 +19,21 @@
 | Inspector    | `cache-inspector.ts`                                           | 巡检 stock_meta + kline 水位，输出每 code 是否需 `needBasic` / `needFinancials` / kline sync                                                          |
 | Trigger API  | `queue-status.controller.ts`                                   | `GET /api/orchestration/queue` 快照（feat-sys-stat 用，实时走 Socket.IO `queue.snapshot`）+ `POST .../scan?kind=meta\|kline\|blacklist\|all` 手动触发 |
 
+## BJT 16:00 收尾流程
+
+```mermaid
+flowchart TD
+  Cron[BJT 16:00 cron] --> Scan[POST /scan?kind=all]
+  Scan --> Meta[meta 队列<br/>5500 个 meta_pkg]
+  Scan --> Kline[kline 队列<br/>5500 个 kline_pkg]
+  Meta --> Settle[BatchSettler<br/>等 batchId 全部终止]
+  Kline --> Settle
+  Settle --> BL[blacklist refresh]
+  BL --> FF[stock-fund-flow<br/>(DDE 主力净流入)]
+  FF --> Sec[dynamic sectors 全量重算]
+  Sec --> Bf[stock-metrics-backfill<br/>(WCMI 横截面打分)]
+```
+
 ## Job 包
 
 每 code 一个合并任务，对应队列各一种 kind。任务 `batchId` 由 16:00 cron / 手动 scan 注入；ad-hoc push 不带 `batchId`，不进收尾计数。

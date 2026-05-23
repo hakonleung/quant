@@ -51,7 +51,7 @@ parquet。问题：
 
 | Op                                             | Latency            | Note                       |
 | ---------------------------------------------- | ------------------ | -------------------------- |
-| 冷迁移（5508 legacy files → 13 flat parquets） | **1.0 s**          | 一次性 import              |
+| 一次性导入（5508 文件 → 13 flat parquets）     | **1.0 s**          | 历史数据落库               |
 | 单 partition rewrite (existing + few new rows) | **~50 ms**         | per file                   |
 | 整 partition 全量 rewrite (13 files 并行)      | < 200 ms wallclock | 日更预估上限               |
 | 单 code 30-bar tail                            | 5-10 ms            | direct partition 命中      |
@@ -72,7 +72,7 @@ parquet。问题：
 
 ## 复现命令
 
-冷迁移 / 验证：
+一次性导入 / 验证：
 
 ```
 pnpm --filter @quant/api tsx scripts/import-kline-legacy.ts
