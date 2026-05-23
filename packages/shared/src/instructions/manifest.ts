@@ -560,6 +560,12 @@ const ENTRIES = [
     ],
     argsSchema: AnalyzeSectorArgsSchema,
     resultSchema: LegacyOutputSchema,
+    ui: {
+      scope: 'AI.SEC',
+      keys: ['R'],
+      label: 'Run sector sentiment analysis',
+      group: 'action',
+    },
   },
   {
     id: 'ta',

@@ -12,6 +12,7 @@
 
 import { putSectors } from '../api/sectors.js';
 import { Feat, FEAT_CONFIG_MAP } from '../eqty/feat.js';
+import { invokeInstruction } from '../instructions/client.js';
 import { useLayoutStore } from '../stores/layout.store.js';
 import { useSectorsStore } from '../stores/sectors.store.js';
 import { ALL_SECTOR_ID, useUiStore } from '../stores/ui.store.js';
@@ -219,6 +220,36 @@ function registerStockNavCells(): void {
  * `useFeatHotkeys`. We declare the cell metadata centrally so the hint
  * window sees it under the right scope, but leave binding to the Feat.
  */
+/**
+ * AI.SEC `R` → analyze.sector(id=activeSectorId). Manifest cell with
+ * `doubleConfirm: llm`; the handler fires `confirmGuard` manually
+ * because useCommand's auto-confirm gate only kicks in on the BE-
+ * fallback path (no local handler bound). Skip the ALL pseudo-sector.
+ */
+function registerAnalyzeSectorBinding(): void {
+  uiRegistry.bind('analyze.sector', async (args) => {
+    const argsObj = (args ?? {}) as { id?: string; confirm?: boolean };
+    const id = argsObj.id ?? useUiStore.getState().activeSectorId;
+    if (id === ALL_SECTOR_ID) return;
+    if (argsObj.confirm !== true) {
+      try {
+        await confirmGuard({
+          title: 'analyze sector',
+          message: `Run sector sentiment analysis for ${id}? This triggers a paid LLM call.`,
+          confirmLabel: 'PROCEED',
+        });
+      } catch (e: unknown) {
+        if (e instanceof ConfirmCancelled) return;
+        throw e;
+      }
+    }
+    await invokeInstruction(
+      'analyze.sector' as never,
+      { id, confirm: true } as never,
+    );
+  });
+}
+
 function registerOpenNewSectorCell(): void {
   registerLocalCell('ui.sector-new-open', {
     scope: Feat.Mkt,
@@ -316,6 +347,7 @@ export function installGlobalCells(): void {
   registerStockNavCells();
   registerRemoveStockCell();
   registerOpenNewSectorCell();
+  registerAnalyzeSectorBinding();
 }
 
 /** Test-only escape hatch. */

@@ -20,11 +20,26 @@ export function ConfirmHub(): React.ReactElement | null {
   const resolve = useConfirmHubStore((s) => s.resolvePending);
   const cancel = useConfirmHubStore((s) => s.cancelPending);
   const setModalOpen = useFocusStore((s) => s.setModalOpen);
+  // Remembers the element that had focus when the dialog opened so we
+  // can return focus there on close — a11y §10.2 dialog requirement.
+  const previousFocusRef = useRef<HTMLElement | null>(null);
 
   // Mirror dialog presence into the keyboard engine's `modalOpen` so
   // Esc → closeModal lands here when no fullscreen / sequence buffer.
   useEffect(() => {
-    setModalOpen(pending !== null);
+    if (pending !== null) {
+      previousFocusRef.current = document.activeElement as HTMLElement | null;
+      setModalOpen(true);
+    } else {
+      setModalOpen(false);
+      const prev = previousFocusRef.current;
+      previousFocusRef.current = null;
+      // Defer to next tick so the dialog's unmount completes before we
+      // move focus — otherwise React may steal it back during reconcile.
+      if (prev !== null && typeof prev.focus === 'function') {
+        queueMicrotask(() => prev.focus());
+      }
+    }
     return (): void => setModalOpen(false);
   }, [pending, setModalOpen]);
 
