@@ -319,6 +319,12 @@ const ENTRIES = [
     examples: ['update', '更新'],
     argsSchema: UpdateArgsSchema,
     resultSchema: UpdateResultSchema,
+    ui: {
+      scope: 'SYS',
+      keys: ['R'],
+      label: 'Run unified daily scan',
+      group: 'action',
+    },
   },
 
   // ── market data ─────────────────────────────────────────────────────

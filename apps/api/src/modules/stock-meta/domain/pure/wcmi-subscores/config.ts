@@ -27,7 +27,7 @@ export const WCMI_CONFIG: WcmiConfig = {
    * `MIN_BARS ≤ length < WINDOW` 区间则退化到全部可用历史，
    * `WcmiSubscores` 中的 `windowLen` 字段会记录真正使用的根数。
    */
-  WINDOW: 60,
+  WINDOW: 50,
 
   /**
    * 进入打分流程所需的最小 K 线根数。
@@ -267,7 +267,7 @@ export const WCMI_CONFIG: WcmiConfig = {
    * 满足 `open < prev_close × (1 + GAP_DOWN_THR/100)` 且当日未收阳的根
    * 被标记；-2 能捕捉有意义的跳空，不会被 -0.5% 的常规低开触发。
    */
-  GAP_DOWN_THR: -2,
+  GAP_DOWN_THR: -2.5,
 
   /**
    * 跳空低开日数量的归一上限，与 `CRASH_COUNT_CAP` 同义。
@@ -280,13 +280,13 @@ export const WCMI_CONFIG: WcmiConfig = {
    * `mean(|change|) − CRASH_DAY_THR` 再除以该跨度并 clip 到 1。5% 意味着
    * 平均比阈值再深 5%（如 -12% vs 阈值 7%）即烈度饱和。
    */
-  CRASH_SEVERITY_SPAN_PCT: 5,
+  CRASH_SEVERITY_SPAN_PCT: 3,
 
   /** crash_avoidance 内部权重：崩盘日"数量"扣分。默认 0.5（主项）。 */
-  CRASH_W_COUNT: 0.5,
+  CRASH_W_COUNT: 0.6,
 
   /** crash_avoidance 内部权重：崩盘日"烈度"扣分。默认 0.3。 */
-  CRASH_W_SEVERITY: 0.3,
+  CRASH_W_SEVERITY: 0.2,
 
   /** crash_avoidance 内部权重：未收复跳空低开"数量"扣分。默认 0.2。 */
   CRASH_W_GAP_DOWN: 0.2,

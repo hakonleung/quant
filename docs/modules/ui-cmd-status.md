@@ -53,6 +53,18 @@
 |---|---|---|
 | `R` | `analyze.sector` | Sector-aggregate sentiment analysis (paid confirm, uses activeSectorId) |
 
+### `SYS`
+
+| Keys | Cell | Action |
+|---|---|---|
+| `R` | `update` | Run the unified daily scan (destructive confirm, revalidates everything) |
+
+### `USR.ledger` (sub-scope; active when USR is focused AND the ledger tab is on top)
+
+| Keys | Cell | Action |
+|---|---|---|
+| `A` | `ui.ledger-add-open` | Open the new-ledger-entry form |
+
 ## Manifest cells with a `ui` block
 
 These cells are reachable via Terminal **and** keyboard / `<CmdButton>` because they carry a `ui` block in `packages/shared/src/instructions/manifest.ts`:
@@ -62,6 +74,7 @@ These cells are reachable via Terminal **and** keyboard / `<CmdButton>` because 
 - `ledger.analyze` (USR)
 - `analyze` (AI.EQ)
 - `analyze.sector` (AI.SEC)
+- `update` (SYS)
 
 The other ~28 manifest cells remain Terminal/AI-only — they have no `ui` block. Add one per the [rollout playbook](./ui-cmd-rollout.md) to extend keyboard reach.
 
@@ -76,11 +89,13 @@ These live in `apps/web/lib/ui-cmd/global-cells.ts`. They never hit the backend;
 - `ui.stock-next`, `ui.stock-prev` — stock nav under MKT (Phase 3.10)
 - `ui.sector-remove-stock` — remove from sector under MKT (Phase 3.10)
 - `ui.sector-new-open` — open new-sector dialog under MKT (Phase 3.12, handler bound by `FeatMkt`)
+- `ui.ledger-add-open` — open ledger add-entry form under USR.ledger sub-scope (Phase 3.21, handler bound by `FeatLedger`)
 
 ## Coverage gaps (known follow-ups)
 
 - **`feat-watch-live`** — row delete uses `/api/watch/{market}/{code}` (custom REST), not `watch.remove` cell. Backend route consolidation needed before refactor.
-- **`feat-ledger`** — `A` to open add form needs sub-focus tracking inside `Feat.UsrMain` so the hotkey only fires when the ledger tab is active (USR currently has `i`; adding `A` globally to USR could conflict with watch / config tabs).
+- ~~**`feat-ledger`** — `A` to open add form needs sub-focus tracking~~ Done in Phase 3.21 via `USR.ledger` sub-scope.
+- **`feat-watch-live`** sub-scope (`USR.watch`) — extend the same pattern: focused-group concept + `T` toggle group enabled / `D` delete group.
 - **`feat-eq-chart`** — range picker / indicator toggles are pure view-state with no Terminal counterpart, so they fall outside §10.5's "must be a cell" rule. Optional to extend.
 - **`focus` cell as a UI widget** — currently Terminal-only. A standalone keyboard-driven stock picker (`/` or `g s` global) needs its own widget design.
 - **Batch cells** — `watch.remove.batch`, `ledger.export` etc. would replace today's hand-rolled bulk handlers.
