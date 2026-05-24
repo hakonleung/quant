@@ -1,8 +1,32 @@
 {
-  "name": "quant",
+  "name": "qx-os",
   "version": "0.0.0",
-  "private": true,
   "type": "module",
+  "description": "A terminal-first quant workbench for A-share mid/short-term trading: K-line patterns, news sentiment, DDE main-fund flow and a WCMI composite score, driven by a unified command set reachable from mouse, keyboard, AI and IM.",
+  "keywords": [
+    "quant",
+    "quantitative-trading",
+    "a-share",
+    "stock-screener",
+    "technical-analysis",
+    "kline",
+    "candlestick-pattern",
+    "sentiment-analysis",
+    "backtesting",
+    "langgraph",
+    "arrow-flight",
+    "duckdb",
+    "nestjs",
+    "nextjs",
+    "monorepo",
+    "trading-terminal",
+    "ai-agent"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/hakonleung/quant.git"
+  },
   "engines": {
     "node": ">=20.11.0",
     "pnpm": ">=10"
