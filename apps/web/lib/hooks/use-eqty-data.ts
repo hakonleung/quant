@@ -16,6 +16,8 @@ import {
 } from '@tanstack/react-query';
 import { useMemo } from 'react';
 
+import { isValidWatchCode, type WatchMarket } from '@quant/shared';
+
 import {
   analyzeManySentiment,
   analyzeSentiment,
@@ -28,15 +30,36 @@ import {
   type KlineBulkResponse,
 } from '../api/endpoints.js';
 
-const sentimentKey = (code: string): readonly ['sentiment', string] => ['sentiment', code];
+/**
+ * Cheap shape-based market inference for sentiment hooks: 6 digits → 'a',
+ * 4-5 digits → 'hk', alpha (incl. `<secid>.TICKER`) → 'us'. Mirrors the
+ * binding in ui-cmd/global-cells.ts so panel button + `R` shortcut agree.
+ * Falls back to 'a' on ambiguity — the BE refine will reject with a
+ * clear message.
+ */
+function inferMarketFromCode(code: string): WatchMarket {
+  for (const m of ['a', 'hk', 'us'] as const) {
+    if (isValidWatchCode(m, code)) return m;
+  }
+  return 'a';
+}
+
+const sentimentKey = (
+  market: WatchMarket,
+  code: string,
+): readonly ['sentiment', WatchMarket, string] => ['sentiment', market, code];
 
 /**
  * Stable react-query key for an aggregate analysis. Keying on the
  * canonicalised join means re-ordered or duplicated input codes share
  * the same cache entry — same contract as the Python cache hash.
  */
-const marketSentimentKey = (codes: readonly string[]): readonly ['sentiment.many', string] => [
+const marketSentimentKey = (
+  market: WatchMarket,
+  codes: readonly string[],
+): readonly ['sentiment.many', WatchMarket, string] => [
   'sentiment.many',
+  market,
   [...new Set(codes)].sort().join(','),
 ];
 
@@ -173,9 +196,10 @@ export function useStockSnapshots(
  * here as `data === null` so the panel renders an empty state.
  */
 export function useSentiment(code: string): UseQueryResult<Sentiment | null> {
+  const market = inferMarketFromCode(code);
   return useQuery({
-    queryKey: sentimentKey(code),
-    queryFn: () => getCachedSentiment(code),
+    queryKey: sentimentKey(market, code),
+    queryFn: () => getCachedSentiment(code, market),
     enabled: code.length > 0,
     // 5 min: cache-only reads are cheap and the underlying parquet
     // updates only when the user clicks FETCH.
@@ -193,12 +217,13 @@ export function useAnalyzeSentiment(
   code: string,
 ): UseMutationResult<Sentiment, Error, void, unknown> {
   const qc = useQueryClient();
+  const market = inferMarketFromCode(code);
   return useMutation({
-    mutationKey: ['sentiment.analyze', code],
-    mutationFn: async (): Promise<Sentiment> => analyzeSentiment(code),
+    mutationKey: ['sentiment.analyze', market, code],
+    mutationFn: async (): Promise<Sentiment> => analyzeSentiment(code, market),
     onSuccess: (data) => {
-      qc.setQueryData<Sentiment | null>(sentimentKey(code), data);
-      void qc.invalidateQueries({ queryKey: sentimentKey(code) });
+      qc.setQueryData<Sentiment | null>(sentimentKey(market, code), data);
+      void qc.invalidateQueries({ queryKey: sentimentKey(market, code) });
     },
   });
 }
@@ -210,9 +235,10 @@ export function useAnalyzeSentiment(
 export function useMarketSentiment(
   codes: readonly string[],
 ): UseQueryResult<MarketSentiment | null> {
+  const market = codes.length > 0 ? inferMarketFromCode(codes[0] ?? '') : 'a';
   return useQuery({
-    queryKey: marketSentimentKey(codes),
-    queryFn: () => getCachedMarketSentiment(codes),
+    queryKey: marketSentimentKey(market, codes),
+    queryFn: () => getCachedMarketSentiment(codes, market),
     enabled: codes.length > 0,
     staleTime: 5 * 60 * 1000,
   });
@@ -227,12 +253,13 @@ export function useAnalyzeMany(
   codes: readonly string[],
 ): UseMutationResult<MarketSentiment, Error, void, unknown> {
   const qc = useQueryClient();
+  const market = codes.length > 0 ? inferMarketFromCode(codes[0] ?? '') : 'a';
   return useMutation({
-    mutationKey: ['sentiment.analyze.many', ...codes],
-    mutationFn: async (): Promise<MarketSentiment> => analyzeManySentiment(codes),
+    mutationKey: ['sentiment.analyze.many', market, ...codes],
+    mutationFn: async (): Promise<MarketSentiment> => analyzeManySentiment(codes, market),
     onSuccess: (data) => {
-      qc.setQueryData<MarketSentiment | null>(marketSentimentKey(codes), data);
-      void qc.invalidateQueries({ queryKey: marketSentimentKey(codes) });
+      qc.setQueryData<MarketSentiment | null>(marketSentimentKey(market, codes), data);
+      void qc.invalidateQueries({ queryKey: marketSentimentKey(market, codes) });
     },
   });
 }
