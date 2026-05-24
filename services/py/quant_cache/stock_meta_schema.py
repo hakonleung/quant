@@ -66,6 +66,20 @@ STOCK_META_SCHEMA: Final[pa.Schema] = pa.schema(
         ("pb", pa.string()),
         ("peg", pa.string()),
         ("gross_margin_ttm", pa.string()),
+        # WCMI composite + 8 sub-score percentile columns (docs/perf/
+        # wcmi-redesign.md). NestJS owns these — Python only carries them
+        # in the schema so reads don't trip `_project_to_schema`'s
+        # "unexpected columns on disk" guard, and so the codec round-trip
+        # stays schema-exact. All nullable.
+        ("wcmi", pa.string()),
+        ("wcmi_rhythm", pa.string()),
+        ("wcmi_ma_support", pa.string()),
+        ("wcmi_up_wave", pa.string()),
+        ("wcmi_yang_dom", pa.string()),
+        ("wcmi_shadow_clean", pa.string()),
+        ("wcmi_stage_gain", pa.string()),
+        ("wcmi_crash_avoid", pa.string()),
+        ("wcmi_recent_strength", pa.string()),
         # DDE 主力 fund-flow phase block (modules/01-stock-meta.md §5).
         # Nullable so legacy v1–v3 parquet rows read back without
         # migration; populated by NestJS ``StockFundFlowSyncService``
@@ -103,6 +117,22 @@ _METRIC_DECIMAL_FIELDS: Final[tuple[str, ...]] = (
 # colliding with a future top-level ``price`` field on stock_meta.
 _METRIC_PRICE_FIELD: Final[str] = "metrics_price"
 
+# NestJS-owned WCMI columns. Python does not compute them, but must
+# carry them in the codec output so the row-dict key set matches the
+# schema during round-trip writes (e.g. test fixtures via
+# ``ParquetRecordRepo.upsert_many``).
+_WCMI_FIELDS: Final[tuple[str, ...]] = (
+    "wcmi",
+    "wcmi_rhythm",
+    "wcmi_ma_support",
+    "wcmi_up_wave",
+    "wcmi_yang_dom",
+    "wcmi_shadow_clean",
+    "wcmi_stage_gain",
+    "wcmi_crash_avoid",
+    "wcmi_recent_strength",
+)
+
 STOCK_META_KEY_FIELD: Final[str] = "code"
 
 
@@ -138,6 +168,8 @@ def stock_meta_to_row(item: StockMeta) -> Mapping[str, object]:
     for field_name in _METRIC_DECIMAL_FIELDS:
         value = getattr(item.metrics, field_name) if item.metrics is not None else None
         row[field_name] = _decimal_to_str_or_none(value)
+    for field_name in _WCMI_FIELDS:
+        row[field_name] = None
     for field_name in (*_DDE_NET_INFLOW_FIELDS, *_DDE_RATIO_FIELDS):
         # Strip the "dde_" prefix: ``DdePhase`` attributes match the
         # column names sans prefix, by construction.

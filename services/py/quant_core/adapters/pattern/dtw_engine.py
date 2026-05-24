@@ -20,7 +20,7 @@ pure rename when ``quant_compute`` is split out.
 from __future__ import annotations
 
 from collections import defaultdict
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Final
 
 from quant_core.domain.pure.pattern import dtw_distance, z_score
@@ -185,6 +185,12 @@ def _group_by_code(table: object) -> dict[str, list[tuple[date_cls, Decimal | No
     closes = table.column("close_qfq").to_pylist()  # type: ignore[attr-defined]
     grouped: dict[str, list[tuple[date_cls, Decimal | None]]] = defaultdict(list)
     for code, d, c in zip(codes, dates, closes, strict=True):
+        # On-disk ``ts`` is a ``timestamp[us]`` aliased to ``trade_date``,
+        # so DuckDB hands back ``datetime`` values; normalise to ``date``
+        # to honour the ``PatternMatch.start_date: date`` contract that
+        # the FE response schema relies on (YYYY-MM-DD regex).
+        if isinstance(d, datetime):
+            d = d.date()
         grouped[code].append((d, c))
     for rows in grouped.values():
         rows.sort(key=lambda r: r[0])
