@@ -114,14 +114,14 @@ describe('buildAnalyzeCell.handler', () => {
   it('forwards bypassCache=true when fresh=true; omits windowDays when absent', async () => {
     const { service, analyzeCalls } = fakeSentiment();
     const cell = buildAnalyzeCell({ sentiment: service });
-    await cell.handler({ code: '600519', fresh: true, confirm: false }, ctx);
+    await cell.handler({ market: 'a', code: '600519', fresh: true, confirm: false }, ctx);
     expect(analyzeCalls[0]?.request).toEqual({ market: 'a', code: '600519', bypassCache: true });
   });
 
   it('forwards windowDays when present and omits bypassCache when fresh=false', async () => {
     const { service, analyzeCalls } = fakeSentiment();
     const cell = buildAnalyzeCell({ sentiment: service });
-    await cell.handler({ code: '600519', fresh: false, confirm: false, windowDays: 7 }, ctx);
+    await cell.handler({ market: 'a', code: '600519', fresh: false, confirm: false, windowDays: 7 }, ctx);
     expect(analyzeCalls[0]?.request).toEqual({ market: 'a', code: '600519', windowDays: 7 });
   });
 

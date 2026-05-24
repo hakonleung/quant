@@ -127,8 +127,12 @@ export async function postStockListRows(
  * when no cache row exists (404) so the panel can show "no analysis
  * yet" without throwing.
  */
-export async function getCachedSentiment(code: string): Promise<Sentiment | null> {
-  return safeOne(`/api/sentiment/analyze_one?code=${encodeURIComponent(code)}`, SentimentSchema);
+export async function getCachedSentiment(
+  code: string,
+  market: 'a' | 'hk' | 'us' = 'a',
+): Promise<Sentiment | null> {
+  const q = new URLSearchParams({ market, code });
+  return safeOne(`/api/sentiment/analyze_one?${q.toString()}`, SentimentSchema);
 }
 
 /**
@@ -138,8 +142,13 @@ export async function getCachedSentiment(code: string): Promise<Sentiment | null
  * invalidate the cached-read query on success (see
  * {@link useAnalyzeSentiment}).
  */
-export async function analyzeSentiment(code: string): Promise<Sentiment> {
-  return apiPost(`/api/sentiment/analyze_one`, { code }, (raw) => SentimentSchema.parse(raw));
+export async function analyzeSentiment(
+  code: string,
+  market: 'a' | 'hk' | 'us' = 'a',
+): Promise<Sentiment> {
+  return apiPost(`/api/sentiment/analyze_one`, { market, code }, (raw) =>
+    SentimentSchema.parse(raw),
+  );
 }
 
 /**
@@ -148,10 +157,11 @@ export async function analyzeSentiment(code: string): Promise<Sentiment> {
  */
 export async function getCachedMarketSentiment(
   codes: readonly string[],
+  market: 'a' | 'hk' | 'us' = 'a',
 ): Promise<MarketSentiment | null> {
   if (codes.length === 0) return null;
-  const q = codes.map(encodeURIComponent).join(',');
-  return safeOne(`/api/sentiment/analyze_many?codes=${q}`, MarketSentimentSchema);
+  const q = new URLSearchParams({ market, codes: codes.join(',') });
+  return safeOne(`/api/sentiment/analyze_many?${q.toString()}`, MarketSentimentSchema);
 }
 
 /**
@@ -223,8 +233,11 @@ export async function findSimilarPatterns(
   );
 }
 
-export async function analyzeManySentiment(codes: readonly string[]): Promise<MarketSentiment> {
-  return apiPost(`/api/sentiment/analyze_many`, { codes: [...codes] }, (raw) =>
+export async function analyzeManySentiment(
+  codes: readonly string[],
+  market: 'a' | 'hk' | 'us' = 'a',
+): Promise<MarketSentiment> {
+  return apiPost(`/api/sentiment/analyze_many`, { market, codes: [...codes] }, (raw) =>
     MarketSentimentSchema.parse(raw),
   );
 }

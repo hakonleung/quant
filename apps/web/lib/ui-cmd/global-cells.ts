@@ -10,6 +10,8 @@
  * manifest-backed cells.
  */
 
+import { isValidWatchCode, type WatchMarket } from '@quant/shared';
+
 import { putSectors } from '../api/sectors.js';
 import { Feat, FEAT_CONFIG_MAP } from '../eqty/feat.js';
 import { invokeInstruction } from '../instructions/client.js';
@@ -227,14 +229,19 @@ function registerStockNavCells(): void {
  */
 function registerAnalyzeBinding(): void {
   uiRegistry.bind('analyze', async (args) => {
-    const argsObj = (args ?? {}) as { code?: string; confirm?: boolean };
+    const argsObj = (args ?? {}) as {
+      code?: string;
+      market?: WatchMarket;
+      confirm?: boolean;
+    };
     const code = argsObj.code ?? useUiStore.getState().focusCode;
     if (code === null || code === undefined) return;
+    const market = argsObj.market ?? inferMarketFromCode(code);
     if (argsObj.confirm !== true) {
       try {
         await confirmGuard({
           title: 'analyze stock',
-          message: `Run sentiment analysis for ${code}? This triggers a paid LLM call.`,
+          message: `Run sentiment analysis for ${code} (${market.toUpperCase()})? This triggers a paid LLM call.`,
           confirmLabel: 'PROCEED',
         });
       } catch (e: unknown) {
@@ -242,8 +249,20 @@ function registerAnalyzeBinding(): void {
         throw e;
       }
     }
-    await invokeInstruction('analyze' as never, { code, confirm: true } as never);
+    await invokeInstruction('analyze' as never, { market, code, confirm: true } as never);
   });
+}
+
+/**
+ * Cheap shape-based market inference for the analyze binding: 6 digits
+ * → 'a', 4-5 digits → 'hk', alpha → 'us'. Falls back to 'a' on ambiguity
+ * (the BE refine will reject mismatches with a clear message).
+ */
+function inferMarketFromCode(code: string): WatchMarket {
+  for (const m of ['a', 'hk', 'us'] as const) {
+    if (isValidWatchCode(m, code)) return m;
+  }
+  return 'a';
 }
 
 /**

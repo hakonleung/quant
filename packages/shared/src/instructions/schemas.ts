@@ -21,6 +21,7 @@ import { SectorSchema } from '../types/sectors.js';
 import { StockListRowSchema } from '../types/stock-list.js';
 import { StockMetaDtoSchema, StockSnapshotDtoSchema } from '../types/stock-meta.js';
 import { TaAnalysisSchema, TaSectorAnalysisSchema } from '../types/ta.js';
+import { isValidWatchCode, WatchMarketSchema } from '../types/watch.js';
 import { AgentHistoryEntrySchema, AGENT_HISTORY_MAX_ENTRIES } from './agent-history.js';
 
 const TRUTHY = new Set(['1', 'true', 'TRUE', 'yes', 'on']);
@@ -418,18 +419,25 @@ export type WatchGroupResult = z.infer<typeof WatchGroupResultSchema>;
 
 // ── analysis ────────────────────────────────────────────────────────────
 
-const codeWith6Digits = z.string().regex(/^\d{6}$/u, 'expected 6-digit code');
+const anyMarketCode = z.string().min(1);
+const codeMismatchMsg =
+  'code does not match market (a=6 digits, hk=4-5 digits, us=letters)';
 
 export const AnalyzeArgsSchema = z
   .object({
-    code: codeWith6Digits,
+    market: WatchMarketSchema.default('a'),
+    code: anyMarketCode,
     fresh: InstructionOptionalBoolFlagSchema,
     windowDays: z.coerce.number().int().min(1).max(30).optional(),
     confirm: InstructionOptionalBoolFlagSchema.describe(
       'IM paid-confirm token, set by the card button',
     ),
   })
-  .strict();
+  .strict()
+  .refine((v) => isValidWatchCode(v.market, v.code), {
+    message: codeMismatchMsg,
+    path: ['code'],
+  });
 
 export const AnalyzeSectorArgsSchema = z
   .object({
