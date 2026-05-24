@@ -63,12 +63,87 @@ export const EnrichedLedgerEntrySchema = LedgerEntrySchema.extend({
 }).strict();
 export type EnrichedLedgerEntry = z.infer<typeof EnrichedLedgerEntrySchema>;
 
+// ---------------------------------------------------------------------------
+// LedgerAnalysis — hard-core diagnostic shape produced by the LLM.
+// Statistical percents (win rate, drawdown, contribution) carry no money
+// value and are numeric; `netCashFlow.amount` is monetary so it stays as
+// a decimal string (CLAUDE.md §2.8).
+// ---------------------------------------------------------------------------
+
+const concentrationLevel = z.enum(['high', 'medium', 'low']);
+const cashFlowStatus = z.enum(['inflow', 'outflow', 'none']);
+
+export const MaxDrawdownSchema = z
+  .object({
+    valuePct: z.number(),
+    startDate: isoDate,
+    endDate: isoDate,
+  })
+  .strict();
+
+export const ProfitConcentrationSchema = z
+  .object({
+    level: concentrationLevel,
+    corePeriod: z.string().min(1),
+    contributionPct: z.number(),
+  })
+  .strict();
+
+export const NetCashFlowSchema = z
+  .object({
+    status: cashFlowStatus,
+    amount: decimalString,
+  })
+  .strict();
+
+export const CoreMetricsSchema = z
+  .object({
+    winRatePct: z.number(),
+    pnlRatio: z.number().nullable(),
+    maxDrawdown: MaxDrawdownSchema,
+    profitConcentration: ProfitConcentrationSchema,
+    netCashFlow: NetCashFlowSchema,
+  })
+  .strict();
+
+export const DisciplineBreachSchema = z
+  .object({
+    date: isoDate,
+    pnlPct: z.number(),
+    analysis: z.string().min(1),
+  })
+  .strict();
+
+export const BehavioralProfilingSchema = z
+  .object({
+    patternDependency: z.string().min(1),
+    disciplineBreaches: z.array(DisciplineBreachSchema),
+    emotionalVolatility: z.string().min(1),
+  })
+  .strict();
+
+export const MarketPhaseSchema = z
+  .object({
+    timeframe: z.string().min(1),
+    environment: z.string().min(1),
+  })
+  .strict();
+
+export const SystemicInterventionSchema = z
+  .object({
+    command: z.string().min(1),
+    condition: z.string().min(1),
+    action: z.string().min(1),
+    rationale: z.string().min(1),
+  })
+  .strict();
+
 export const LedgerAnalysisSchema = z
   .object({
-    summary: z.string(),
-    operationStyle: z.string(),
-    marketView: z.string(),
-    recommendations: z.array(z.string()),
+    coreMetrics: CoreMetricsSchema,
+    behavioralProfiling: BehavioralProfilingSchema,
+    marketMicrostructure: z.array(MarketPhaseSchema),
+    systemicInterventions: z.array(SystemicInterventionSchema),
     generatedAt: isoDateTime,
     windowStart: isoDate,
     windowEnd: isoDate,
@@ -78,3 +153,11 @@ export const LedgerAnalysisSchema = z
   })
   .strict();
 export type LedgerAnalysis = z.infer<typeof LedgerAnalysisSchema>;
+export type CoreMetrics = z.infer<typeof CoreMetricsSchema>;
+export type MaxDrawdown = z.infer<typeof MaxDrawdownSchema>;
+export type ProfitConcentration = z.infer<typeof ProfitConcentrationSchema>;
+export type NetCashFlow = z.infer<typeof NetCashFlowSchema>;
+export type BehavioralProfiling = z.infer<typeof BehavioralProfilingSchema>;
+export type DisciplineBreach = z.infer<typeof DisciplineBreachSchema>;
+export type MarketPhase = z.infer<typeof MarketPhaseSchema>;
+export type SystemicIntervention = z.infer<typeof SystemicInterventionSchema>;

@@ -8,9 +8,9 @@
  *   - non-QuantError throws propagate
  *
  * Renderer (formatLedgerAnalysis):
- *   - head + summary + style + view + recommendations
- *   - recommendation list capped at MAX_RECS (5) with "+N more" tail
- *   - empty recommendations skip the "recommendations:" block
+ *   - header + core metrics + behavioral + phases + interventions
+ *   - sections cap with "+N more" tails where applicable
+ *   - sections omitted when their lists are empty
  *   - error envelope passthrough
  */
 
@@ -34,16 +34,33 @@ type LedgerAnalyzeResult = ResultOf<'ledger.analyze'>;
 const ctx: InstructionCtx = { traceId: 't1', source: 'im', userId: 'me' };
 
 const sample: LedgerAnalysis = {
-  summary: '本月偏防守',
-  operationStyle: '波段',
-  marketView: '震荡',
-  recommendations: ['控制仓位', '关注食品板块'],
+  coreMetrics: {
+    winRatePct: 65.5,
+    pnlRatio: 1.8,
+    maxDrawdown: { valuePct: -12.3, startDate: '2026-04-10', endDate: '2026-04-22' },
+    profitConcentration: { level: 'high', corePeriod: '4.11-4.13', contributionPct: 78 },
+    netCashFlow: { status: 'inflow', amount: '5000' },
+  },
+  behavioralProfiling: {
+    patternDependency: '极度依赖趋势跟随',
+    disciplineBreaches: [{ date: '2026-04-15', pnlPct: -5.2, analysis: '扛单' }],
+    emotionalVolatility: '末期重仓博弈',
+  },
+  marketMicrostructure: [{ timeframe: '4.11-4.13', environment: '强主线顺风期' }],
+  systemicInterventions: [
+    {
+      command: 'SET_MAX_DRAWDOWN_LIMIT',
+      condition: 'WIN_STREAK >= 5',
+      action: 'HALT_TRADING_24H',
+      rationale: '连胜后情绪化',
+    },
+  ],
   windowStart: '2026-04-01',
   windowEnd: '2026-04-30',
   entryCount: 12,
   provider: 'deepseek',
   generatedAt: '2026-05-01T00:00:00.000Z',
-} as LedgerAnalysis;
+};
 
 interface AnalyzeCall {
   userId: string;
@@ -107,37 +124,72 @@ describe('renderLedgerAnalyze / formatLedgerAnalysis', () => {
     return { ok: true, data: d };
   }
 
-  it('renders head + summary/style/view + recommendations', () => {
+  it('renders header + metrics + behavioral + phases + interventions', () => {
     const out = renderLedgerAnalyze(okEnv(sample));
     expect(out.ok).toBe(true);
     if (!out.ok) return;
-    expect(out.output.text).toContain('ledger analyze');
-    expect(out.output.text).toContain('2026-04-01 → 2026-04-30');
-    expect(out.output.text).toContain('entries=12');
-    expect(out.output.text).toContain('via=deepseek');
-    expect(out.output.text).toContain('summary : 本月偏防守');
-    expect(out.output.text).toContain('style   : 波段');
-    expect(out.output.text).toContain('view    : 震荡');
-    expect(out.output.text).toContain('1. 控制仓位');
-    expect(out.output.text).toContain('2. 关注食品板块');
+    const text = out.output.text;
+    expect(text).toContain('ledger analyze');
+    expect(text).toContain('2026-04-01 → 2026-04-30');
+    expect(text).toContain('entries=12');
+    expect(text).toContain('via=deepseek');
+    expect(text).toContain('win=65.50%');
+    expect(text).toContain('pnl_ratio=1.80');
+    expect(text).toContain('mdd=-12.30%');
+    expect(text).toContain('high');
+    expect(text).toContain('4.11-4.13');
+    expect(text).toContain('inflow');
+    expect(text).toContain('极度依赖趋势跟随');
+    expect(text).toContain('末期重仓博弈');
+    expect(text).toContain('breaches:');
+    expect(text).toContain('2026-04-15  -5.20%  扛单');
+    expect(text).toContain('phases:');
+    expect(text).toContain('[4.11-4.13] 强主线顺风期');
+    expect(text).toContain('interventions:');
+    expect(text).toContain('SET_MAX_DRAWDOWN_LIMIT');
+    expect(text).toContain('if(WIN_STREAK >= 5) → HALT_TRADING_24H');
+    expect(text).toContain('why: 连胜后情绪化');
   });
 
-  it('caps recommendations at 5 with "+N more" tail', () => {
+  it('caps breaches at 3 with "+N more" tail', () => {
     const many: LedgerAnalysis = {
       ...sample,
-      recommendations: Array.from({ length: 8 }, (_, i) => `tip ${String(i + 1)}`),
+      behavioralProfiling: {
+        ...sample.behavioralProfiling,
+        disciplineBreaches: Array.from({ length: 5 }, (_, i) => ({
+          date: `2026-04-${String(10 + i).padStart(2, '0')}`,
+          pnlPct: -1 - i,
+          analysis: `b${String(i)}`,
+        })),
+      },
     };
     const out = formatLedgerAnalysis(many);
-    expect(out).toContain('1. tip 1');
-    expect(out).toContain('5. tip 5');
-    expect(out).not.toContain('6. tip 6');
-    expect(out).toContain('+3 more');
+    expect(out).toContain('b0');
+    expect(out).toContain('b2');
+    expect(out).not.toContain('b3');
+    expect(out).toContain('+2 more');
   });
 
-  it('skips the "recommendations:" block when empty', () => {
-    const empty: LedgerAnalysis = { ...sample, recommendations: [] };
+  it('omits sections when their lists are empty', () => {
+    const empty: LedgerAnalysis = {
+      ...sample,
+      behavioralProfiling: { ...sample.behavioralProfiling, disciplineBreaches: [] },
+      marketMicrostructure: [],
+      systemicInterventions: [],
+    };
     const out = formatLedgerAnalysis(empty);
-    expect(out).not.toContain('recommendations:');
+    expect(out).not.toContain('breaches:');
+    expect(out).not.toContain('phases:');
+    expect(out).not.toContain('interventions:');
+  });
+
+  it('renders pnl_ratio=n/a when null', () => {
+    const noRatio: LedgerAnalysis = {
+      ...sample,
+      coreMetrics: { ...sample.coreMetrics, pnlRatio: null },
+    };
+    const out = formatLedgerAnalysis(noRatio);
+    expect(out).toContain('pnl_ratio=n/a');
   });
 
   it('passes through error envelope', () => {

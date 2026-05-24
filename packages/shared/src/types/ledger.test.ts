@@ -74,19 +74,86 @@ describe('EnrichedLedgerEntrySchema', () => {
 });
 
 describe('LedgerAnalysisSchema', () => {
-  it('rejects extra keys (strict)', () => {
+  const valid = {
+    coreMetrics: {
+      winRatePct: 65.5,
+      pnlRatio: 1.8,
+      maxDrawdown: { valuePct: -12.3, startDate: '2026-04-10', endDate: '2026-04-22' },
+      profitConcentration: { level: 'high', corePeriod: '4.11-4.13', contributionPct: 78 },
+      netCashFlow: { status: 'inflow', amount: '5000' },
+    },
+    behavioralProfiling: {
+      patternDependency: '极度依赖趋势跟随',
+      disciplineBreaches: [{ date: '2026-04-15', pnlPct: -5.2, analysis: '扛单' }],
+      emotionalVolatility: '末期重仓博弈',
+    },
+    marketMicrostructure: [{ timeframe: '4.11-4.13', environment: '强主线顺风期' }],
+    systemicInterventions: [
+      {
+        command: 'SET_MAX_DRAWDOWN_LIMIT',
+        condition: 'WIN_STREAK >= 5',
+        action: 'HALT_TRADING_24H',
+        rationale: '连胜后情绪化',
+      },
+    ],
+    generatedAt: '2026-05-08T00:00:00+00:00',
+    windowStart: '2026-04-08',
+    windowEnd: '2026-05-08',
+    entryCount: 20,
+    provider: 'moonshot',
+  };
+
+  it('parses a fully populated analysis', () => {
+    expect(() => LedgerAnalysisSchema.parse(valid)).not.toThrow();
+  });
+
+  it('accepts pnlRatio = null', () => {
     expect(() =>
       LedgerAnalysisSchema.parse({
-        summary: 's',
-        operationStyle: 'o',
-        marketView: 'm',
-        recommendations: [],
-        generatedAt: '2026-05-08T00:00:00+00:00',
-        windowStart: '2026-04-08',
-        windowEnd: '2026-05-08',
-        entryCount: 0,
-        provider: 'moonshot',
-        rogue: 1,
+        ...valid,
+        coreMetrics: { ...valid.coreMetrics, pnlRatio: null },
+      }),
+    ).not.toThrow();
+  });
+
+  it('accepts empty breaches / phases / interventions', () => {
+    expect(() =>
+      LedgerAnalysisSchema.parse({
+        ...valid,
+        behavioralProfiling: { ...valid.behavioralProfiling, disciplineBreaches: [] },
+        marketMicrostructure: [],
+        systemicInterventions: [],
+      }),
+    ).not.toThrow();
+  });
+
+  it('rejects extra keys (strict)', () => {
+    expect(() => LedgerAnalysisSchema.parse({ ...valid, rogue: 1 })).toThrow();
+  });
+
+  it('rejects bad concentration level', () => {
+    expect(() =>
+      LedgerAnalysisSchema.parse({
+        ...valid,
+        coreMetrics: {
+          ...valid.coreMetrics,
+          profitConcentration: {
+            ...valid.coreMetrics.profitConcentration,
+            level: 'extreme',
+          },
+        },
+      }),
+    ).toThrow();
+  });
+
+  it('rejects non-decimal cash-flow amount', () => {
+    expect(() =>
+      LedgerAnalysisSchema.parse({
+        ...valid,
+        coreMetrics: {
+          ...valid.coreMetrics,
+          netCashFlow: { status: 'none', amount: 'lots' },
+        },
       }),
     ).toThrow();
   });

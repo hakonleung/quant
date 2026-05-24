@@ -42,17 +42,88 @@ export function LedgerAiPanel({
     );
   }
 
+  const cm = analysis.coreMetrics;
+  const bp = analysis.behavioralProfiling;
   return (
-    <Flex direction="column" gap="10px" p="14px">
-      <Block label="SUMMARY" body={analysis.summary} />
-      <Block label="操作风格" body={analysis.operationStyle} />
-      <Block label="市场观察" body={analysis.marketView} />
-      {analysis.recommendations.length > 0 && (
-        <Block
-          label="建议"
-          body={analysis.recommendations.map((r, i) => `${String(i + 1)}. ${r}`).join('\n')}
+    <Flex direction="column" gap="12px" p="14px">
+      <Section label="核心指标">
+        <Metric k="胜率" v={fmtPct(cm.winRatePct)} />
+        <Metric k="盈亏比" v={fmtNumOrNa(cm.pnlRatio)} />
+        <Metric
+          k="最大回撤"
+          v={`${fmtPct(cm.maxDrawdown.valuePct)}  (${cm.maxDrawdown.startDate} → ${cm.maxDrawdown.endDate})`}
         />
+        <Metric
+          k="利润集中度"
+          v={`${cm.profitConcentration.level}  ·  ${cm.profitConcentration.corePeriod}  ·  ${fmtPct(cm.profitConcentration.contributionPct)}`}
+        />
+        <Metric k="净资金流" v={`${cm.netCashFlow.status}  ${cm.netCashFlow.amount}`} />
+      </Section>
+
+      <Section label="行为画像">
+        <Metric k="模式依赖" v={bp.patternDependency} />
+        <Metric k="情绪波动" v={bp.emotionalVolatility} />
+        {bp.disciplineBreaches.length > 0 && (
+          <Box mt="4px">
+            <Text
+              fontSize="9px"
+              letterSpacing="0.14em"
+              color="term.ink3"
+              fontFamily="mono"
+              mb="2px"
+            >
+              纪律断层
+            </Text>
+            {bp.disciplineBreaches.map((b) => (
+              <Text
+                key={b.date}
+                fontSize="11px"
+                color="term.ink"
+                fontFamily="mono"
+                lineHeight="1.5"
+              >
+                {`${b.date}  ${fmtPct(b.pnlPct)}  ${b.analysis}`}
+              </Text>
+            ))}
+          </Box>
+        )}
+      </Section>
+
+      {analysis.marketMicrostructure.length > 0 && (
+        <Section label="市场微观结构">
+          {analysis.marketMicrostructure.map((p) => (
+            <Text
+              key={p.timeframe}
+              fontSize="11px"
+              color="term.ink"
+              fontFamily="mono"
+              lineHeight="1.5"
+            >
+              <Text as="span" color="accent">{`[${p.timeframe}] `}</Text>
+              {p.environment}
+            </Text>
+          ))}
+        </Section>
       )}
+
+      {analysis.systemicInterventions.length > 0 && (
+        <Section label="系统熔断规则">
+          {analysis.systemicInterventions.map((iv) => (
+            <Box key={iv.command} mb="6px">
+              <Text fontSize="11px" color="rise" fontFamily="mono" fontWeight="700">
+                {iv.command}
+              </Text>
+              <Text fontSize="11px" color="term.ink" fontFamily="mono" lineHeight="1.5">
+                {`if (${iv.condition}) → ${iv.action}`}
+              </Text>
+              <Text fontSize="10px" color="term.ink3" fontFamily="mono" lineHeight="1.5">
+                {iv.rationale}
+              </Text>
+            </Box>
+          ))}
+        </Section>
+      )}
+
       <Text fontSize="9px" color="term.ink3" fontFamily="mono" letterSpacing="0.12em">
         {`${analysis.windowStart} → ${analysis.windowEnd}  ·  ${analysis.provider || 'unknown'}  ·  ${String(analysis.entryCount)} 条`}
       </Text>
@@ -60,12 +131,12 @@ export function LedgerAiPanel({
   );
 }
 
-function Block({
+function Section({
   label,
-  body,
+  children,
 }: {
   readonly label: string;
-  readonly body: string;
+  readonly children: React.ReactNode;
 }): React.ReactElement {
   return (
     <Box>
@@ -75,13 +146,34 @@ function Block({
         color="accent"
         fontFamily="mono"
         fontWeight="700"
-        mb="2px"
+        mb="4px"
       >
         {label}
       </Text>
-      <Text fontSize="12px" color="term.ink" whiteSpace="pre-wrap" lineHeight="1.5">
-        {body}
-      </Text>
+      <Flex direction="column" gap="2px">
+        {children}
+      </Flex>
     </Box>
   );
+}
+
+function Metric({ k, v }: { readonly k: string; readonly v: string }): React.ReactElement {
+  return (
+    <Flex gap="8px" fontFamily="mono" fontSize="12px" lineHeight="1.5">
+      <Text color="term.ink3" minW="72px">
+        {k}
+      </Text>
+      <Text color="term.ink" whiteSpace="pre-wrap" flex="1">
+        {v}
+      </Text>
+    </Flex>
+  );
+}
+
+function fmtPct(n: number): string {
+  return `${n.toFixed(2)}%`;
+}
+
+function fmtNumOrNa(n: number | null): string {
+  return n === null ? 'n/a' : n.toFixed(2);
 }

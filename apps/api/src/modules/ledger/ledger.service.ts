@@ -13,6 +13,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 import {
   EnrichedLedgerEntrySchema,
+  LedgerAnalysisSchema,
   QuantError,
   enrichEntries,
   mergeEntries,
@@ -31,7 +32,9 @@ import { LedgerStore } from './ledger.store.js';
 import { buildLedgerSystemPrompt, buildLedgerUserPrompt } from '@quant/config/prompts';
 
 const MAX_AI_WINDOW = 30;
-const MAX_RECOMMENDATIONS = 5;
+const MAX_BREACHES = 3;
+const MAX_PHASES = 4;
+const MAX_INTERVENTIONS = 3;
 
 @Injectable()
 export class LedgerService {
@@ -165,51 +168,174 @@ function parseLedgerAnalysis(
   if (typeof payload !== 'object' || payload === null || Array.isArray(payload)) {
     throw new QuantError('LLM_FAILED', 'ledger output is not a JSON object', {});
   }
-  const obj = payload as Readonly<Record<string, unknown>>;
-  const summary = decodeNonEmptyString(obj['summary'], 'summary');
-  const operationStyle = decodeNonEmptyString(obj['operation_style'], 'operation_style');
-  const marketView = decodeNonEmptyString(obj['market_view'], 'market_view');
-  const recommendations = decodeStringList(obj['recommendations']);
   const first = window[0];
   const last = window[window.length - 1];
   if (first === undefined || last === undefined) {
     throw new QuantError('LLM_FAILED', 'ledger window is empty', {});
   }
-  return {
-    summary,
-    operationStyle,
-    marketView,
-    recommendations: [...recommendations],
+  const obj = payload as Readonly<Record<string, unknown>>;
+  const candidate = {
+    coreMetrics: decodeCoreMetrics(obj['core_metrics']),
+    behavioralProfiling: decodeBehavioral(obj['behavioral_profiling']),
+    marketMicrostructure: decodePhases(obj['market_microstructure']),
+    systemicInterventions: decodeInterventions(obj['systemic_interventions']),
     generatedAt: generatedAt.toISOString(),
     windowStart: first.date,
     windowEnd: last.date,
     entryCount: window.length,
     provider,
   };
+  const parsed = LedgerAnalysisSchema.safeParse(candidate);
+  if (!parsed.success) {
+    throw new QuantError('LLM_FAILED', 'ledger output failed schema validation', {
+      issues: parsed.error.issues.slice(0, 5),
+    });
+  }
+  return parsed.data;
 }
 
-function decodeNonEmptyString(raw: unknown, key: string): string {
+function asObj(raw: unknown, key: string): Readonly<Record<string, unknown>> {
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
+    throw new QuantError('LLM_FAILED', `ledger output '${key}' must be an object`, {
+      got: typeof raw,
+    });
+  }
+  return raw as Readonly<Record<string, unknown>>;
+}
+
+function asNumber(raw: unknown, key: string): number {
+  if (typeof raw === 'number' && Number.isFinite(raw)) return raw;
+  if (typeof raw === 'string') {
+    const n = Number(raw);
+    if (Number.isFinite(n)) return n;
+  }
+  throw new QuantError('LLM_FAILED', `ledger output '${key}' must be a finite number`, {
+    got: typeof raw,
+  });
+}
+
+function asNumberOrNull(raw: unknown): number | null {
+  if (raw === null || raw === undefined) return null;
+  if (typeof raw === 'number') return Number.isFinite(raw) ? raw : null;
+  if (typeof raw === 'string') {
+    const n = Number(raw);
+    return Number.isFinite(n) ? n : null;
+  }
+  return null;
+}
+
+function asString(raw: unknown, key: string): string {
   if (typeof raw !== 'string') {
     throw new QuantError('LLM_FAILED', `ledger output '${key}' must be a string`, {
       got: typeof raw,
     });
   }
-  const stripped = raw.trim();
-  if (stripped.length === 0) {
+  const trimmed = raw.trim();
+  if (trimmed.length === 0) {
     throw new QuantError('LLM_FAILED', `ledger output '${key}' is empty`, {});
   }
-  return stripped;
+  return trimmed;
 }
 
-function decodeStringList(raw: unknown): readonly string[] {
+function asDecimalString(raw: unknown, key: string): string {
+  if (typeof raw === 'string' && /^-?\d+(\.\d+)?$/u.test(raw.trim())) return raw.trim();
+  if (typeof raw === 'number' && Number.isFinite(raw)) return raw.toString();
+  throw new QuantError('LLM_FAILED', `ledger output '${key}' must be a decimal`, {
+    got: typeof raw,
+  });
+}
+
+function decodeCoreMetrics(raw: unknown): unknown {
+  const obj = asObj(raw, 'core_metrics');
+  const dd = asObj(obj['max_drawdown'], 'core_metrics.max_drawdown');
+  const pc = asObj(obj['profit_concentration'], 'core_metrics.profit_concentration');
+  const cf = asObj(obj['net_cash_flow'], 'core_metrics.net_cash_flow');
+  return {
+    winRatePct: asNumber(obj['win_rate_pct'], 'core_metrics.win_rate_pct'),
+    pnlRatio: asNumberOrNull(obj['pnl_ratio']),
+    maxDrawdown: {
+      valuePct: asNumber(dd['value_pct'], 'core_metrics.max_drawdown.value_pct'),
+      startDate: asString(dd['start_date'], 'core_metrics.max_drawdown.start_date'),
+      endDate: asString(dd['end_date'], 'core_metrics.max_drawdown.end_date'),
+    },
+    profitConcentration: {
+      level: asString(pc['level'], 'core_metrics.profit_concentration.level'),
+      corePeriod: asString(pc['core_period'], 'core_metrics.profit_concentration.core_period'),
+      contributionPct: asNumber(
+        pc['contribution_pct'],
+        'core_metrics.profit_concentration.contribution_pct',
+      ),
+    },
+    netCashFlow: {
+      status: asString(cf['status'], 'core_metrics.net_cash_flow.status'),
+      amount: asDecimalString(cf['amount'], 'core_metrics.net_cash_flow.amount'),
+    },
+  };
+}
+
+function decodeBehavioral(raw: unknown): unknown {
+  const obj = asObj(raw, 'behavioral_profiling');
+  const breachesRaw = obj['discipline_breaches'];
+  const breaches: unknown[] = [];
+  if (Array.isArray(breachesRaw)) {
+    for (const item of breachesRaw) {
+      if (typeof item !== 'object' || item === null || Array.isArray(item)) continue;
+      const it = item as Readonly<Record<string, unknown>>;
+      try {
+        breaches.push({
+          date: asString(it['date'], 'discipline_breaches[].date'),
+          pnlPct: asNumber(it['pnl_pct'], 'discipline_breaches[].pnl_pct'),
+          analysis: asString(it['analysis'], 'discipline_breaches[].analysis'),
+        });
+      } catch {
+        // skip malformed individual breach
+      }
+      if (breaches.length >= MAX_BREACHES) break;
+    }
+  }
+  return {
+    patternDependency: asString(obj['pattern_dependency'], 'pattern_dependency'),
+    disciplineBreaches: breaches,
+    emotionalVolatility: asString(obj['emotional_volatility'], 'emotional_volatility'),
+  };
+}
+
+function decodePhases(raw: unknown): unknown[] {
   if (!Array.isArray(raw)) return [];
-  const out: string[] = [];
-  for (const entry of raw) {
-    if (typeof entry !== 'string') continue;
-    const trimmed = entry.trim();
-    if (trimmed.length === 0) continue;
-    out.push(trimmed);
-    if (out.length >= MAX_RECOMMENDATIONS) break;
+  const out: unknown[] = [];
+  for (const item of raw) {
+    if (typeof item !== 'object' || item === null || Array.isArray(item)) continue;
+    const it = item as Readonly<Record<string, unknown>>;
+    try {
+      out.push({
+        timeframe: asString(it['timeframe'], 'market_microstructure[].timeframe'),
+        environment: asString(it['environment'], 'market_microstructure[].environment'),
+      });
+    } catch {
+      // skip malformed phase
+    }
+    if (out.length >= MAX_PHASES) break;
+  }
+  return out;
+}
+
+function decodeInterventions(raw: unknown): unknown[] {
+  if (!Array.isArray(raw)) return [];
+  const out: unknown[] = [];
+  for (const item of raw) {
+    if (typeof item !== 'object' || item === null || Array.isArray(item)) continue;
+    const it = item as Readonly<Record<string, unknown>>;
+    try {
+      out.push({
+        command: asString(it['command'], 'systemic_interventions[].command'),
+        condition: asString(it['condition'], 'systemic_interventions[].condition'),
+        action: asString(it['action'], 'systemic_interventions[].action'),
+        rationale: asString(it['rationale'], 'systemic_interventions[].rationale'),
+      });
+    } catch {
+      // skip malformed intervention
+    }
+    if (out.length >= MAX_INTERVENTIONS) break;
   }
   return out;
 }

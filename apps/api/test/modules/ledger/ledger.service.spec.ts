@@ -60,10 +60,31 @@ function fakeLlm(rounds: readonly FakeLlmResult[]): {
 }
 
 const SAMPLE_PAYLOAD = {
-  summary: '过去三日整体小幅盈利',
-  operation_style: '稳健加减仓',
-  market_view: '震荡偏强',
-  recommendations: ['保持当前仓位'],
+  core_metrics: {
+    win_rate_pct: 60,
+    pnl_ratio: 1.4,
+    max_drawdown: { value_pct: -8, start_date: '2026-05-01', end_date: '2026-05-01' },
+    profit_concentration: {
+      level: 'medium',
+      core_period: '5.01-5.03',
+      contribution_pct: 55,
+    },
+    net_cash_flow: { status: 'none', amount: '0' },
+  },
+  behavioral_profiling: {
+    pattern_dependency: '稳健加减仓',
+    discipline_breaches: [],
+    emotional_volatility: '末期振幅平稳',
+  },
+  market_microstructure: [{ timeframe: '5.01-5.03', environment: '震荡偏强, 轮动摩擦' }],
+  systemic_interventions: [
+    {
+      command: 'SET_DAILY_LOSS_LIMIT',
+      condition: 'DAILY_PCT < -3',
+      action: 'HALT_TRADING_24H',
+      rationale: '抑制扛单',
+    },
+  ],
 };
 
 async function tmpRoot(): Promise<string> {
@@ -206,7 +227,8 @@ describe('LedgerService.analyze', () => {
     const first = await svc.analyze(USER, 't-1');
     const second = await svc.analyze(USER, 't-2');
 
-    expect(first.summary).toBe('过去三日整体小幅盈利');
+    expect(first.coreMetrics.winRatePct).toBe(60);
+    expect(first.behavioralProfiling.patternDependency).toBe('稳健加减仓');
     expect(first.provider).toBe('moonshot');
     expect(first.entryCount).toBe(1);
     expect(second).toEqual(first);
@@ -272,9 +294,10 @@ describe('LedgerService.analyze', () => {
     const { llm } = fakeLlm([
       {
         text: JSON.stringify({
-          summary: '',
-          operation_style: 'x',
-          market_view: 'y',
+          core_metrics: SAMPLE_PAYLOAD.core_metrics,
+          // behavioral_profiling missing → must fail
+          market_microstructure: [],
+          systemic_interventions: [],
         }),
       },
     ]);
@@ -282,22 +305,27 @@ describe('LedgerService.analyze', () => {
     await expect(svc.analyze(USER, 't-1')).rejects.toMatchObject({ code: 'LLM_FAILED' });
   });
 
-  it('caps recommendations at 5', async () => {
+  it('caps systemic_interventions at 3', async () => {
     const { store, cache } = await setup([
       { date: '2026-05-01', pnlAmount: '0', closingPosition: '100000' },
     ]);
-    const huge = Array.from({ length: 12 }, (_, i) => `rec ${String(i)}`);
+    const huge = Array.from({ length: 8 }, (_, i) => ({
+      command: `CMD_${String(i)}`,
+      condition: 'X',
+      action: 'Y',
+      rationale: `r${String(i)}`,
+    }));
     const { llm } = fakeLlm([
       {
         text: JSON.stringify({
           ...SAMPLE_PAYLOAD,
-          recommendations: huge,
+          systemic_interventions: huge,
         }),
       },
     ]);
     const svc = new LedgerService(store, cache, llm, new FrozenClock(FROZEN));
     const result = await svc.analyze(USER, 't-1');
-    expect(result.recommendations.length).toBe(5);
+    expect(result.systemicInterventions.length).toBe(3);
   });
 
   it('strips ```json fences in the LLM output', async () => {
@@ -308,6 +336,6 @@ describe('LedgerService.analyze', () => {
     const { llm } = fakeLlm([{ text: fenced }]);
     const svc = new LedgerService(store, cache, llm, new FrozenClock(FROZEN));
     const result = await svc.analyze(USER, 't-1');
-    expect(result.summary).toBe('过去三日整体小幅盈利');
+    expect(result.coreMetrics.winRatePct).toBe(60);
   });
 });
