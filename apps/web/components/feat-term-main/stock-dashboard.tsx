@@ -15,15 +15,16 @@
  */
 
 import { Box, Flex, Text } from '@chakra-ui/react';
-import type { KlineBar, Sentiment, StockSnapshotDto } from '@quant/shared';
+import type { KlineBar, Sentiment } from '@quant/shared';
 
 import { COLUMN_CATALOG, COLUMN_KEYS, type ColumnKey } from '../../lib/eqty/columns.catalog.js';
+import { listRowFromStockListRow, type ListRow } from '../../lib/fp/eq-list-fp.js';
 import {
   useKline,
   useSentiment,
   useStockMetaQuery,
-  useStockSnapshots,
 } from '../../lib/hooks/use-eqty-data.js';
+import { useStockListRows } from '../../lib/hooks/use-stock-list-rows.js';
 
 import { MiniKline } from './mini-kline.js';
 
@@ -49,8 +50,9 @@ export function StockDashboard({ code }: Props): React.ReactElement {
 
 function FocusPanel({ code }: { code: string }): React.ReactElement {
   const meta = useStockMetaQuery(code).data ?? null;
-  const snaps = useStockSnapshots([code]);
-  const snap = snaps.byCode.get(code) ?? null;
+  const listQ = useStockListRows({ kind: 'user-sector', codes: [code] });
+  const rawRow = listQ.data?.rows[0] ?? null;
+  const row: ListRow | null = rawRow === null ? null : listRowFromStockListRow(rawRow, undefined);
   const sent = useSentiment(code).data ?? null;
   const klineQ = useKline(code, '90D');
   const bars = klineQ.data ?? [];
@@ -87,11 +89,11 @@ function FocusPanel({ code }: { code: string }): React.ReactElement {
             </Text>
           </Text>
         </Box>
-        <PriceLine snap={snap} bars={bars} />
+        <PriceLine row={row} bars={bars} />
       </Flex>
 
       {/* TWO-COL METRIC GRID — excludes everything already in the header */}
-      <MetricGrid snap={snap} bars={bars} />
+      <MetricGrid row={row} bars={bars} />
 
       {/* SENTIMENT — only if cached */}
       {sent !== null && <SentimentBlock sent={sent} />}
@@ -100,14 +102,15 @@ function FocusPanel({ code }: { code: string }): React.ReactElement {
 }
 
 function PriceLine({
-  snap,
+  row,
   bars,
 }: {
-  snap: StockSnapshotDto | null;
+  row: ListRow | null;
   bars: readonly KlineBar[];
 }): React.ReactElement {
-  const price = snap?.price ?? null;
-  const change = computeChangePct(bars);
+  const price = row?.price ?? null;
+  const rowChg = typeof row?.chgPct === 'number' ? row.chgPct : null;
+  const change = rowChg ?? computeChangePct(bars);
   // Chinese stock-market convention — 涨红跌绿: gains paint red, losses
   // paint green. The arrow direction still tracks price direction.
   const chgColor = change === null ? 'term.ink3' : change >= 0 ? 'term.red' : 'term.green';
@@ -138,7 +141,7 @@ function computeChangePct(bars: readonly KlineBar[]): number | null {
 }
 
 interface MetricGridProps {
-  readonly snap: StockSnapshotDto | null;
+  readonly row: ListRow | null;
   readonly bars: readonly KlineBar[];
 }
 
@@ -149,11 +152,11 @@ interface MetricGridProps {
  */
 const HEADER_DUPES = new Set<string>(['name', 'price', 'chgPct']);
 
-function MetricGrid({ snap, bars }: MetricGridProps): React.ReactElement {
+function MetricGrid({ row, bars }: MetricGridProps): React.ReactElement {
   const rows: { readonly k: string; readonly v: string }[] = [{ k: 'vol', v: fmtVolume(bars) }];
   for (const key of COLUMN_KEYS) {
     if (HEADER_DUPES.has(key)) continue;
-    rows.push({ k: labelOf(key), v: fmtAppliedField(key, snap, bars) });
+    rows.push({ k: labelOf(key), v: fmtAppliedField(key, row) });
   }
 
   return (
@@ -325,47 +328,77 @@ function fmtNum(v: string | number | null | undefined): string {
   return n.toFixed(2);
 }
 
-function fmtAppliedField(
-  key: ColumnKey,
-  snap: StockSnapshotDto | null,
-  bars: readonly KlineBar[],
-): string {
-  if (key === 'price') return fmtNum(snap?.price ?? null);
-  if (key === 'chgPct') {
-    if (bars.length < 2) return '—';
-    const last = bars.at(-1)!;
-    const prev = bars.at(-2)!;
-    if (prev.close === 0) return '—';
-    const pct = ((last.close - prev.close) / prev.close) * 100;
-    return `${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%`;
+// Per-column display format. Mirrors `feat-eq-list/list-columns.tsx`
+// so the term dashboard prints the same value the list cell would.
+type Fmt = 'num' | 'pct' | 'pctFrac' | 'cny' | 'consecUp' | 'subPct';
+const FMT_BY_KEY: Readonly<Record<ColumnKey, Fmt>> = {
+  name: 'num',
+  price: 'num',
+  chgPct: 'pctFrac',
+  turnoverRate: 'pctFrac',
+  turnover: 'cny',
+  consecUp: 'consecUp',
+  ret5d: 'pctFrac',
+  ret10d: 'pctFrac',
+  ret20d: 'pctFrac',
+  ret90d: 'pctFrac',
+  ret250d: 'pctFrac',
+  wcmi: 'num',
+  wcmiRhythm: 'subPct',
+  wcmiMaSupport: 'subPct',
+  wcmiUpWave: 'subPct',
+  wcmiYangDom: 'subPct',
+  wcmiShadowClean: 'subPct',
+  wcmiStageGain: 'subPct',
+  wcmiCrashAvoid: 'subPct',
+  wcmiRecentStrength: 'subPct',
+  mktCap: 'cny',
+  floatMktCap: 'cny',
+  peTtm: 'num',
+  peDynamic: 'num',
+  pb: 'num',
+  peg: 'num',
+  grossMargin: 'pctFrac',
+  ddeMainInflow3d: 'cny',
+  ddeMainInflow5d: 'cny',
+  ddeMainInflow10d: 'cny',
+  ddeMainInflow20d: 'cny',
+  ddeMainInflowRatio3d: 'pctFrac',
+  ddeMainInflowRatio5d: 'pctFrac',
+  ddeMainInflowRatio10d: 'pctFrac',
+  ddeMainInflowRatio20d: 'pctFrac',
+};
+
+function readRowNumber(row: ListRow, key: ColumnKey): number | null {
+  const v = (row as unknown as Record<string, unknown>)[key];
+  if (typeof v === 'number' && Number.isFinite(v)) return v;
+  if (typeof v === 'string') {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
   }
-  if (snap === null) return '—';
-  const d = snap.derived;
-  switch (key) {
-    case 'name':
-      return snap.meta.name;
-    case 'turnoverRate':
-    case 'turnover':
-    case 'consecUp':
-      return '—';
-    case 'mktCap':
-      return fmtNum(d.mkt_cap);
-    case 'floatMktCap':
-      return fmtNum(d.float_mkt_cap);
-    case 'peTtm':
-      return fmtNum(d.pe_ttm);
-    case 'peDynamic':
-      return fmtNum(d.pe_dynamic);
-    case 'pb':
-      return fmtNum(d.pb);
-    case 'peg':
-      return fmtNum(d.peg);
-    case 'grossMargin': {
-      const n = d.gross_margin_ttm === null ? null : Number(d.gross_margin_ttm);
-      if (n === null || !Number.isFinite(n)) return '—';
-      return `${(n * 100).toFixed(2)}%`;
-    }
+  return null;
+}
+
+function fmtAppliedField(key: ColumnKey, row: ListRow | null): string {
+  if (row === null) return '—';
+  if (key === 'name') return row.name;
+  if (key === 'consecUp') {
+    return row.statsReady ? `${String(row.consecUpDays)}d` : '—';
+  }
+  const n = readRowNumber(row, key);
+  if (n === null) return '—';
+  switch (FMT_BY_KEY[key]) {
+    case 'pctFrac':
+      return `${n >= 0 ? '+' : ''}${(n * 100).toFixed(2)}%`;
+    case 'pct':
+      return `${n.toFixed(2)}%`;
+    case 'cny':
+      return fmtNum(n);
+    case 'subPct':
+      // Already scaled [0,100] cross-sectional percentile.
+      return n.toFixed(0);
+    case 'num':
     default:
-      return '—';
+      return fmtNum(n);
   }
 }
