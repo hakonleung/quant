@@ -8,43 +8,32 @@
  *                          UI re-fetches the now-warm cache.
  */
 
-import {
-  isValidWatchCode,
-  SentimentSchema,
-  TRACE_HEADER,
-  WatchMarketSchema,
-} from '@quant/shared';
+import { inferMarketFromCode, SentimentSchema, TRACE_HEADER } from '@quant/shared';
 import { z } from 'zod';
 
 import { bffErrorResponse, nestJson, readTrace } from '../../_lib/proxy.js';
 
-const codeMismatchMsg = 'code does not match market (a=6 digits, hk=4-5 digits, us=letters)';
+const codeRule = z
+  .string()
+  .min(1)
+  .refine((c) => inferMarketFromCode(c) !== null, {
+    message: 'code matches no known market (a=6 digits, hk=4-5 digits, us=letters)',
+  });
 
 const BodySchema = z
   .object({
-    market: WatchMarketSchema.default('a'),
-    code: z.string().min(1),
+    code: codeRule,
     windowDays: z.number().int().positive().max(365).optional(),
     bypassCache: z.boolean().optional(),
   })
-  .strict()
-  .refine((v) => isValidWatchCode(v.market, v.code), { message: codeMismatchMsg, path: ['code'] });
+  .strict();
 
-const QuerySchema = z
-  .object({
-    market: WatchMarketSchema.default('a'),
-    code: z.string().min(1),
-  })
-  .strict()
-  .refine((v) => isValidWatchCode(v.market, v.code), { message: codeMismatchMsg, path: ['code'] });
+const QuerySchema = z.object({ code: codeRule }).strict();
 
 export async function GET(request: Request): Promise<Response> {
   const traceId = readTrace(request);
   const url = new URL(request.url);
-  const parsed = QuerySchema.safeParse({
-    market: url.searchParams.get('market') ?? 'a',
-    code: url.searchParams.get('code') ?? '',
-  });
+  const parsed = QuerySchema.safeParse({ code: url.searchParams.get('code') ?? '' });
   if (!parsed.success) {
     return Response.json(
       {
@@ -56,7 +45,7 @@ export async function GET(request: Request): Promise<Response> {
       { status: 400, headers: { [TRACE_HEADER]: traceId } },
     );
   }
-  const params = new URLSearchParams({ market: parsed.data.market, code: parsed.data.code });
+  const params = new URLSearchParams({ code: parsed.data.code });
   try {
     const cached = await nestJson(
       request,

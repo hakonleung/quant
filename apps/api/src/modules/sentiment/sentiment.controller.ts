@@ -9,17 +9,18 @@
  * Both verbs share a path so the BFF + react-query keep one key per
  * resource and revalidate the GET query after a POST mutation.
  *
- * Full pipeline runs in NestJS (`NewsSentimentService`); the Python
- * sentiment ops + cache are gone with the migration.
+ * `market` is **not** part of the wire format. The boundary takes
+ * `code` (single) or `codes` (aggregate) and downstream layers
+ * (`NewsSentimentService`, `SentimentCacheStore`) infer market once
+ * via `inferMarketFromCode`. This keeps three layers from juggling
+ * the same param. Validation rejects codes that match no market.
  */
 
 import { Body, Controller, Get, Inject, NotFoundException, Post, Query, Req } from '@nestjs/common';
 import {
-  isValidWatchCode,
-  WatchMarketSchema,
+  inferMarketFromCode,
   type MarketSentiment,
   type Sentiment,
-  type WatchMarket,
 } from '@quant/shared';
 import type { Request } from 'express';
 import { z } from 'zod';
@@ -30,55 +31,52 @@ import { ZodValidationPipe } from '../../common/zod-pipe.js';
 import { NewsSentimentService } from './news-sentiment.service.js';
 
 const DEFAULT_WINDOW_DAYS = 30;
-const codeRule = z.string().min(1);
-const codeMismatchMsg =
-  'code does not match market (a=6 digits, hk=4-5 digits, us=letters)';
+const codeRule = z
+  .string()
+  .min(1)
+  .refine((c) => inferMarketFromCode(c) !== null, {
+    message: 'code matches no known market (a=6 digits, hk=4-5 digits, us=letters)',
+  });
 
 const AnalyzeOneQuerySchema = z
   .object({
-    market: WatchMarketSchema.default('a'),
     code: codeRule,
     windowDays: z.coerce.number().int().positive().max(365).optional(),
   })
-  .strict()
-  .refine((v) => isValidWatchCode(v.market, v.code), {
-    message: codeMismatchMsg,
-    path: ['code'],
-  });
+  .strict();
 const AnalyzeOneBodySchema = z
   .object({
-    market: WatchMarketSchema.default('a'),
     code: codeRule,
     windowDays: z.number().int().positive().max(365).optional(),
     bypassCache: z.boolean().optional(),
   })
-  .strict()
-  .refine((v) => isValidWatchCode(v.market, v.code), {
-    message: codeMismatchMsg,
-    path: ['code'],
-  });
+  .strict();
 type AnalyzeOneBody = z.infer<typeof AnalyzeOneBodySchema>;
 type AnalyzeOneQuery = z.infer<typeof AnalyzeOneQuerySchema>;
 
 const AnalyzeManyQuerySchema = z
   .object({
-    market: WatchMarketSchema.default('a'),
     codes: z.string().min(1, 'codes is required'),
     windowDays: z.coerce.number().int().positive().max(365).optional(),
   })
   .strict();
 const AnalyzeManyBodySchema = z
   .object({
-    market: WatchMarketSchema.default('a'),
     codes: z.array(codeRule).min(1).max(200),
     windowDays: z.number().int().positive().max(365).optional(),
     bypassCache: z.boolean().optional(),
   })
   .strict()
-  .refine((v) => v.codes.every((c) => isValidWatchCode(v.market, c)), {
-    message: 'every code must match market',
-    path: ['codes'],
-  });
+  .refine(
+    (v) => {
+      const first = inferMarketFromCode(v.codes[0] ?? '');
+      return v.codes.every((c) => inferMarketFromCode(c) === first);
+    },
+    {
+      message: 'codes span multiple markets — aggregate analysis requires a single market',
+      path: ['codes'],
+    },
+  );
 type AnalyzeManyQuery = z.infer<typeof AnalyzeManyQuerySchema>;
 type AnalyzeManyBody = z.infer<typeof AnalyzeManyBodySchema>;
 
@@ -97,12 +95,12 @@ export class SentimentController {
     @Query(oneQueryPipe) query: AnalyzeOneQuery,
   ): Promise<Sentiment> {
     const windowDays = query.windowDays ?? DEFAULT_WINDOW_DAYS;
-    const cached = await this.service.getCachedStock(query.market, query.code, windowDays);
+    const cached = await this.service.getCachedStock(query.code, windowDays);
     if (cached === null) {
       throw new NotFoundException({
         code: 'NOT_FOUND',
-        message: `no cached sentiment for ${query.market}:${query.code}`,
-        details: { market: query.market, code: query.code },
+        message: `no cached sentiment for ${query.code}`,
+        details: { code: query.code },
       });
     }
     return cached;
@@ -116,7 +114,6 @@ export class SentimentController {
   ): Promise<Sentiment> {
     return this.service.analyzeOne(
       {
-        market: body.market,
         code: body.code,
         ...(body.windowDays !== undefined ? { windowDays: body.windowDays } : {}),
         ...(body.bypassCache !== undefined ? { bypassCache: body.bypassCache } : {}),
@@ -130,14 +127,14 @@ export class SentimentController {
     @Req() _req: Request,
     @Query(manyQueryPipe) query: AnalyzeManyQuery,
   ): Promise<MarketSentiment> {
-    const codes = parseCodesQuery(query.codes, query.market);
+    const codes = parseCodesQuery(query.codes);
     const windowDays = query.windowDays ?? DEFAULT_WINDOW_DAYS;
-    const cached = await this.service.getCachedMarket(query.market, codes, windowDays);
+    const cached = await this.service.getCachedMarket(codes, windowDays);
     if (cached === null) {
       throw new NotFoundException({
         code: 'NOT_FOUND',
         message: 'no cached market sentiment for codes',
-        details: { market: query.market, codes },
+        details: { codes },
       });
     }
     return cached;
@@ -151,7 +148,6 @@ export class SentimentController {
   ): Promise<MarketSentiment> {
     return this.service.analyzeMany(
       {
-        market: body.market,
         codes: [...body.codes],
         ...(body.windowDays !== undefined ? { windowDays: body.windowDays } : {}),
         ...(body.bypassCache !== undefined ? { bypassCache: body.bypassCache } : {}),
@@ -166,9 +162,14 @@ function traceOf(req: Request): string {
   return r.traceId ?? '';
 }
 
-function parseCodesQuery(raw: string, market: WatchMarket): readonly string[] {
+/**
+ * GET query parser — only keeps codes that map to a known market. The
+ * `AnalyzeManyBodySchema` does the same plus the single-market refine;
+ * the GET path is cache-only so we just silently drop unknown codes.
+ */
+function parseCodesQuery(raw: string): readonly string[] {
   return raw
     .split(',')
     .map((s) => s.trim())
-    .filter((s) => s.length > 0 && isValidWatchCode(market, s));
+    .filter((s) => s.length > 0 && inferMarketFromCode(s) !== null);
 }

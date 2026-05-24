@@ -51,8 +51,21 @@ const CODE_PATTERN: Readonly<Record<WatchMarket, RegExp>> = {
   us: /^(?:\d{1,3}\.)?[A-Za-z][A-Za-z.\-]{0,9}$/,
 };
 
-export function isValidWatchCode(market: WatchMarket, code: string): boolean {
-  return CODE_PATTERN[market].test(code);
+/**
+ * Classify `code` into a single market based on its shape. Returns
+ * `null` when the code matches no market — that doubles as "invalid"
+ * for any caller that previously held a (market, code) validator.
+ *
+ * Order matters: A (6 digits) and HK (4–5 digits) are checked before
+ * US (whose regex also accepts leading digits via the secid prefix
+ * branch), so a 6-digit numeric stays A-share rather than collapsing
+ * to US.
+ */
+export function inferMarketFromCode(code: string): WatchMarket | null {
+  if (CODE_PATTERN.a.test(code)) return 'a';
+  if (CODE_PATTERN.hk.test(code)) return 'hk';
+  if (CODE_PATTERN.us.test(code)) return 'us';
+  return null;
 }
 
 const signedDecimal = z.string().regex(/^-?\d+(\.\d+)?$/, 'expected signed decimal as string');
@@ -257,7 +270,7 @@ export const WatchTaskCreateSchema = z
   })
   .strict()
   .superRefine((data, ctx) => {
-    if (!isValidWatchCode(data.market, data.code)) {
+    if (inferMarketFromCode(data.code) !== data.market) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ['code'],

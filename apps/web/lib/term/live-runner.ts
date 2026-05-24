@@ -25,20 +25,11 @@ import { z } from 'zod';
 import {
   enrichEntries,
   InstructionAgentDeltaPayloadSchema,
-  isValidWatchCode,
   QuantError,
   validateLedger,
   WatchTaskSchema,
   type LedgerEntry,
-  type WatchMarket,
 } from '@quant/shared';
-
-function inferLiveRunnerMarket(code: string): WatchMarket {
-  for (const m of ['a', 'hk', 'us'] as const) {
-    if (isValidWatchCode(m, code)) return m;
-  }
-  return 'a';
-}
 import {
   MockCache,
   type AgentDeltaFrame,
@@ -237,23 +228,21 @@ function buildFetchers(deps: LiveRunnerDeps): Record<string, Fetcher> {
 
     'analyze.one': async ({ code, force }: { code: string; force?: boolean }) => {
       // Cached read first when not forced; on miss or force, hit the
-      // paid POST. Mirrors mock semantics.
-      const market = inferLiveRunnerMarket(code);
+      // paid POST. BE infers market from code shape.
       if (force !== true) {
-        const cached = await getCachedSentiment(code, market);
+        const cached = await getCachedSentiment(code);
         if (cached !== null) return sentimentToTerm(cached);
       }
-      const fresh = await analyzeSentiment(code, market);
+      const fresh = await analyzeSentiment(code);
       return sentimentToTerm(fresh);
     },
 
     'analyze.many': async ({ codes, force }: { codes: readonly string[]; force?: boolean }) => {
-      const market = codes.length > 0 ? inferLiveRunnerMarket(codes[0] ?? '') : 'a';
       if (force !== true) {
-        const cached = await getCachedMarketSentiment(codes, market);
+        const cached = await getCachedMarketSentiment(codes);
         if (cached !== null) return marketSentimentToTerm(cached, codes);
       }
-      const fresh = await analyzeManySentiment(codes, market);
+      const fresh = await analyzeManySentiment(codes);
       return marketSentimentToTerm(fresh, codes);
     },
 

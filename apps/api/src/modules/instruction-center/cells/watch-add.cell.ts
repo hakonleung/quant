@@ -13,7 +13,7 @@
 import {
   InstructionDispatchError,
   QuantError,
-  isValidWatchCode,
+  inferMarketFromCode,
   okResult,
   type InstructionCell,
   type InstructionEnvelope,
@@ -33,7 +33,7 @@ export function buildWatchAddCell(
 ): InstructionCell<BeEnv, 'watch.add'> {
   return {
     async handler(args, ctx): Promise<WatchAddResult> {
-      if (!isValidWatchCode(args.market, args.code)) {
+      if (inferMarketFromCode(args.code) !== args.market) {
         throw new InstructionDispatchError(
           'validation',
           `code ${args.code} is not valid for market ${args.market}`,

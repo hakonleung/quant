@@ -72,4 +72,15 @@ export interface RecordColumnSpec {
     | 'BLOB';
   readonly nullable?: boolean;
   readonly primaryKey?: boolean;
+  /**
+   * Raw SQL expression to use when this column is absent from the
+   * on-disk parquet (schema evolution after adding a new column to an
+   * existing table). The adapter substitutes the expression into the
+   * load `SELECT` list as `<defaultOnLoad> AS <name>`. Must be valid
+   * DuckDB SQL and self-quoted — e.g. `"'a'"` for a string literal,
+   * `'0'` for an int, `'NULL'` for a nullable column. When unset and
+   * the column is missing from the parquet, the load fails (preserves
+   * the strict-schema default).
+   */
+  readonly defaultOnLoad?: string;
 }

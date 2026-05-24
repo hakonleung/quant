@@ -84,18 +84,18 @@ interface AnalyzeOneCall {
 function fakeSentiment(opts: FakeSentimentOpts = {}): {
   service: NewsSentimentService;
   analyzeCalls: AnalyzeOneCall[];
-  cachedCalls: { market: 'a' | 'hk' | 'us'; code: string; windowDays: number }[];
+  cachedCalls: { code: string; windowDays: number }[];
 } {
   const analyzeCalls: AnalyzeOneCall[] = [];
-  const cachedCalls: { market: 'a' | 'hk' | 'us'; code: string; windowDays: number }[] = [];
+  const cachedCalls: { code: string; windowDays: number }[] = [];
   const service = {
     analyzeOne: (request: AnalyzeOneCall['request'], userMeta: AnalyzeOneCall['userMeta']) => {
       analyzeCalls.push({ request, userMeta });
       if (opts.reject !== undefined) return Promise.reject(opts.reject);
       return Promise.resolve(opts.resolve ?? baseSentiment);
     },
-    getCachedStock: (market: 'a' | 'hk' | 'us', code: string, windowDays: number) => {
-      cachedCalls.push({ market, code, windowDays });
+    getCachedStock: (code: string, windowDays: number) => {
+      cachedCalls.push({ code, windowDays });
       if (opts.cachedThrows === true) return Promise.reject(new Error('cache down'));
       return Promise.resolve(opts.cached ?? null);
     },
@@ -114,15 +114,15 @@ describe('buildAnalyzeCell.handler', () => {
   it('forwards bypassCache=true when fresh=true; omits windowDays when absent', async () => {
     const { service, analyzeCalls } = fakeSentiment();
     const cell = buildAnalyzeCell({ sentiment: service });
-    await cell.handler({ market: 'a', code: '600519', fresh: true, confirm: false }, ctx);
-    expect(analyzeCalls[0]?.request).toEqual({ market: 'a', code: '600519', bypassCache: true });
+    await cell.handler({ code: '600519', fresh: true, confirm: false }, ctx);
+    expect(analyzeCalls[0]?.request).toEqual({ code: '600519', bypassCache: true });
   });
 
   it('forwards windowDays when present and omits bypassCache when fresh=false', async () => {
     const { service, analyzeCalls } = fakeSentiment();
     const cell = buildAnalyzeCell({ sentiment: service });
-    await cell.handler({ market: 'a', code: '600519', fresh: false, confirm: false, windowDays: 7 }, ctx);
-    expect(analyzeCalls[0]?.request).toEqual({ market: 'a', code: '600519', windowDays: 7 });
+    await cell.handler({ code: '600519', fresh: false, confirm: false, windowDays: 7 }, ctx);
+    expect(analyzeCalls[0]?.request).toEqual({ code: '600519', windowDays: 7 });
   });
 
   it('propagates QuantError so the executor wraps to error envelope', async () => {
@@ -188,7 +188,7 @@ describe('buildAnalyzeCell.peek (IM confirm bypass)', () => {
     expect(cell.peek).toBeDefined();
     const bypass = await cell.peek!({ code: '600519', fresh: false }, ctx);
     expect(bypass).toBe(true);
-    expect(cachedCalls[0]).toEqual({ market: 'a', code: '600519', windowDays: 30 });
+    expect(cachedCalls[0]).toEqual({ code: '600519', windowDays: 30 });
   });
 
   it('returns false when fresh=true (user explicitly asked for re-run)', async () => {
@@ -224,6 +224,6 @@ describe('buildAnalyzeCell.peek (IM confirm bypass)', () => {
     const { service, cachedCalls } = fakeSentiment({ cached: baseSentiment });
     const cell = buildAnalyzeCell({ sentiment: service });
     await cell.peek!({ code: '600519', fresh: false, windowDays: 7 }, ctx);
-    expect(cachedCalls[0]).toEqual({ market: 'a', code: '600519', windowDays: 7 });
+    expect(cachedCalls[0]).toEqual({ code: '600519', windowDays: 7 });
   });
 });

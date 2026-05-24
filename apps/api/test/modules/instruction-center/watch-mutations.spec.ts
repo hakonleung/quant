@@ -6,7 +6,7 @@
  *   - valid code → task created, name resolved via lookup
  *   - lookup throws → falls back to args.code as the display name
  *   - explicit name in args overrides lookup
- *   - isValidWatchCode fails → InstructionDispatchError('validation')
+ *   - inferMarketFromCode fails → InstructionDispatchError('validation')
  *   - QuantError on create → InstructionDispatchError('validation')
  *
  * watch.remove:

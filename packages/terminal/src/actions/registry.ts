@@ -29,7 +29,7 @@ const codesSchema = z.array(codeSchema).max(500);
 /**
  * Watch tasks span A / HK / US markets — the per-market code patterns
  * (6-digit / 4–5-digit / letters±secid prefix) live in `@quant/shared`
- * `isValidWatchCode`. The terminal action layer relaxes to "any non-
+ * `inferMarketFromCode`. The terminal action layer relaxes to "any non-
  * empty string"; strict per-market validation happens server-side in
  * `WatchTaskCreate.superRefine`. This avoids an action-level reject
  * when the user enters a 4-digit HK code.

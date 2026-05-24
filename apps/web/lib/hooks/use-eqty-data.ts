@@ -16,8 +16,6 @@ import {
 } from '@tanstack/react-query';
 import { useMemo } from 'react';
 
-import { isValidWatchCode, type WatchMarket } from '@quant/shared';
-
 import {
   analyzeManySentiment,
   analyzeSentiment,
@@ -31,35 +29,19 @@ import {
 } from '../api/endpoints.js';
 
 /**
- * Cheap shape-based market inference for sentiment hooks: 6 digits → 'a',
- * 4-5 digits → 'hk', alpha (incl. `<secid>.TICKER`) → 'us'. Mirrors the
- * binding in ui-cmd/global-cells.ts so panel button + `R` shortcut agree.
- * Falls back to 'a' on ambiguity — the BE refine will reject with a
- * clear message.
+ * Market is intentionally absent from the query key: codes are
+ * already globally unique (A 6-digit / HK 4–5-digit / US alpha) so
+ * `code` alone identifies the row. The BE infers market server-side.
  */
-function inferMarketFromCode(code: string): WatchMarket {
-  for (const m of ['a', 'hk', 'us'] as const) {
-    if (isValidWatchCode(m, code)) return m;
-  }
-  return 'a';
-}
-
-const sentimentKey = (
-  market: WatchMarket,
-  code: string,
-): readonly ['sentiment', WatchMarket, string] => ['sentiment', market, code];
+const sentimentKey = (code: string): readonly ['sentiment', string] => ['sentiment', code];
 
 /**
  * Stable react-query key for an aggregate analysis. Keying on the
  * canonicalised join means re-ordered or duplicated input codes share
- * the same cache entry — same contract as the Python cache hash.
+ * the same cache entry — same contract as the BE cache hash.
  */
-const marketSentimentKey = (
-  market: WatchMarket,
-  codes: readonly string[],
-): readonly ['sentiment.many', WatchMarket, string] => [
+const marketSentimentKey = (codes: readonly string[]): readonly ['sentiment.many', string] => [
   'sentiment.many',
-  market,
   [...new Set(codes)].sort().join(','),
 ];
 
@@ -196,10 +178,9 @@ export function useStockSnapshots(
  * here as `data === null` so the panel renders an empty state.
  */
 export function useSentiment(code: string): UseQueryResult<Sentiment | null> {
-  const market = inferMarketFromCode(code);
   return useQuery({
-    queryKey: sentimentKey(market, code),
-    queryFn: () => getCachedSentiment(code, market),
+    queryKey: sentimentKey(code),
+    queryFn: () => getCachedSentiment(code),
     enabled: code.length > 0,
     // 5 min: cache-only reads are cheap and the underlying parquet
     // updates only when the user clicks FETCH.
@@ -212,18 +193,20 @@ export function useSentiment(code: string): UseQueryResult<Sentiment | null> {
  * success invalidates {@link useSentiment} so the cached-read query
  * re-fetches the now-warm row — single source of truth for the panel
  * stays the GET query (modules/07-frontend.md §4.2).
+ *
+ * BE infers market from `code` shape and 400s on unknown shapes — no
+ * client-side guard needed.
  */
 export function useAnalyzeSentiment(
   code: string,
 ): UseMutationResult<Sentiment, Error, void, unknown> {
   const qc = useQueryClient();
-  const market = inferMarketFromCode(code);
   return useMutation({
-    mutationKey: ['sentiment.analyze', market, code],
-    mutationFn: async (): Promise<Sentiment> => analyzeSentiment(code, market),
+    mutationKey: ['sentiment.analyze', code],
+    mutationFn: async (): Promise<Sentiment> => analyzeSentiment(code),
     onSuccess: (data) => {
-      qc.setQueryData<Sentiment | null>(sentimentKey(market, code), data);
-      void qc.invalidateQueries({ queryKey: sentimentKey(market, code) });
+      qc.setQueryData<Sentiment | null>(sentimentKey(code), data);
+      void qc.invalidateQueries({ queryKey: sentimentKey(code) });
     },
   });
 }
@@ -235,10 +218,9 @@ export function useAnalyzeSentiment(
 export function useMarketSentiment(
   codes: readonly string[],
 ): UseQueryResult<MarketSentiment | null> {
-  const market = codes.length > 0 ? inferMarketFromCode(codes[0] ?? '') : 'a';
   return useQuery({
-    queryKey: marketSentimentKey(market, codes),
-    queryFn: () => getCachedMarketSentiment(codes, market),
+    queryKey: marketSentimentKey(codes),
+    queryFn: () => getCachedMarketSentiment(codes),
     enabled: codes.length > 0,
     staleTime: 5 * 60 * 1000,
   });
@@ -253,13 +235,12 @@ export function useAnalyzeMany(
   codes: readonly string[],
 ): UseMutationResult<MarketSentiment, Error, void, unknown> {
   const qc = useQueryClient();
-  const market = codes.length > 0 ? inferMarketFromCode(codes[0] ?? '') : 'a';
   return useMutation({
-    mutationKey: ['sentiment.analyze.many', market, ...codes],
-    mutationFn: async (): Promise<MarketSentiment> => analyzeManySentiment(codes, market),
+    mutationKey: ['sentiment.analyze.many', ...codes],
+    mutationFn: async (): Promise<MarketSentiment> => analyzeManySentiment(codes),
     onSuccess: (data) => {
-      qc.setQueryData<MarketSentiment | null>(marketSentimentKey(market, codes), data);
-      void qc.invalidateQueries({ queryKey: marketSentimentKey(market, codes) });
+      qc.setQueryData<MarketSentiment | null>(marketSentimentKey(codes), data);
+      void qc.invalidateQueries({ queryKey: marketSentimentKey(codes) });
     },
   });
 }

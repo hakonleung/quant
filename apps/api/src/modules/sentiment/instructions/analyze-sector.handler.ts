@@ -84,7 +84,6 @@ export class AnalyzeSectorInstructionHandler extends InstructionRegistrarBase<Ar
     try {
       result = await this.sentiment.analyzeMany(
         {
-          market: 'a',
           codes: sector.codes,
           ...(args.fresh ? { bypassCache: true } : {}),
           ...(args.windowDays !== undefined ? { windowDays: args.windowDays } : {}),

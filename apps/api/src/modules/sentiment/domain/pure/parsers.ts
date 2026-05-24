@@ -327,12 +327,78 @@ function splitSemi(s: string): string[] {
 }
 
 export function parseJsonObject(raw: string): Readonly<Record<string, unknown>> | null {
-  let payload: unknown;
-  try {
-    payload = JSON.parse(raw.trim());
-  } catch {
-    return null;
+  const candidates = jsonCandidates(raw);
+  for (const c of candidates) {
+    let payload: unknown;
+    try {
+      payload = JSON.parse(c);
+    } catch {
+      continue;
+    }
+    if (typeof payload === 'object' && payload !== null && !Array.isArray(payload)) {
+      return payload as Readonly<Record<string, unknown>>;
+    }
   }
-  if (typeof payload !== 'object' || payload === null || Array.isArray(payload)) return null;
-  return payload as Readonly<Record<string, unknown>>;
+  return null;
+}
+
+/**
+ * Yield JSON-object candidates from a raw LLM output. Tries, in order:
+ *   1. the trimmed string verbatim
+ *   2. the body of a ```json ... ``` (or ``` ... ```) fenced block
+ *   3. the first balanced { ... } substring (depth-aware, string-safe)
+ *
+ * Web-search-enabled providers occasionally prepend prose or wrap output
+ * in markdown despite a `json_object` response format — this lets us
+ * recover instead of failing the call.
+ */
+function jsonCandidates(raw: string): readonly string[] {
+  const out: string[] = [];
+  const trimmed = raw.trim();
+  if (trimmed.length === 0) return out;
+  out.push(trimmed);
+  const fence = /```(?:json)?\s*([\s\S]*?)```/u.exec(trimmed);
+  if (fence !== null && fence[1] !== undefined) {
+    const inner = fence[1].trim();
+    if (inner.length > 0) out.push(inner);
+  }
+  const block = firstBalancedBrace(trimmed);
+  if (block !== null) out.push(block);
+  return out;
+}
+
+function firstBalancedBrace(s: string): string | null {
+  let start = -1;
+  let depth = 0;
+  let inStr = false;
+  let escape = false;
+  for (let i = 0; i < s.length; i += 1) {
+    const ch = s[i];
+    if (inStr) {
+      if (escape) {
+        escape = false;
+      } else if (ch === '\\') {
+        escape = true;
+      } else if (ch === '"') {
+        inStr = false;
+      }
+      continue;
+    }
+    if (ch === '"') {
+      inStr = true;
+      continue;
+    }
+    if (ch === '{') {
+      if (depth === 0) start = i;
+      depth += 1;
+      continue;
+    }
+    if (ch === '}') {
+      depth -= 1;
+      if (depth === 0 && start !== -1) {
+        return s.slice(start, i + 1);
+      }
+    }
+  }
+  return null;
 }

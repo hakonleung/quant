@@ -127,11 +127,8 @@ export async function postStockListRows(
  * when no cache row exists (404) so the panel can show "no analysis
  * yet" without throwing.
  */
-export async function getCachedSentiment(
-  code: string,
-  market: 'a' | 'hk' | 'us' = 'a',
-): Promise<Sentiment | null> {
-  const q = new URLSearchParams({ market, code });
+export async function getCachedSentiment(code: string): Promise<Sentiment | null> {
+  const q = new URLSearchParams({ code });
   return safeOne(`/api/sentiment/analyze_one?${q.toString()}`, SentimentSchema);
 }
 
@@ -141,14 +138,11 @@ export async function getCachedSentiment(
  * and returns the resulting `Sentiment`. The caller is expected to
  * invalidate the cached-read query on success (see
  * {@link useAnalyzeSentiment}).
+ *
+ * Market is derived from `code` shape on the server.
  */
-export async function analyzeSentiment(
-  code: string,
-  market: 'a' | 'hk' | 'us' = 'a',
-): Promise<Sentiment> {
-  return apiPost(`/api/sentiment/analyze_one`, { market, code }, (raw) =>
-    SentimentSchema.parse(raw),
-  );
+export async function analyzeSentiment(code: string): Promise<Sentiment> {
+  return apiPost(`/api/sentiment/analyze_one`, { code }, (raw) => SentimentSchema.parse(raw));
 }
 
 /**
@@ -157,10 +151,9 @@ export async function analyzeSentiment(
  */
 export async function getCachedMarketSentiment(
   codes: readonly string[],
-  market: 'a' | 'hk' | 'us' = 'a',
 ): Promise<MarketSentiment | null> {
   if (codes.length === 0) return null;
-  const q = new URLSearchParams({ market, codes: codes.join(',') });
+  const q = new URLSearchParams({ codes: codes.join(',') });
   return safeOne(`/api/sentiment/analyze_many?${q.toString()}`, MarketSentimentSchema);
 }
 
@@ -235,9 +228,8 @@ export async function findSimilarPatterns(
 
 export async function analyzeManySentiment(
   codes: readonly string[],
-  market: 'a' | 'hk' | 'us' = 'a',
 ): Promise<MarketSentiment> {
-  return apiPost(`/api/sentiment/analyze_many`, { market, codes: [...codes] }, (raw) =>
+  return apiPost(`/api/sentiment/analyze_many`, { codes: [...codes] }, (raw) =>
     MarketSentimentSchema.parse(raw),
   );
 }

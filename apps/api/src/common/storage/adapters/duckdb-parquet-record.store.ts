@@ -77,12 +77,40 @@ export class DuckDBParquetRecordStore<V, K extends RecordKey = string> implement
     if (this.loaded) return conn;
     const exists = await fileExists(this.filePath);
     if (exists) {
+      const selectList = await this.buildLoadSelectList(conn);
       await conn.run(
-        `INSERT INTO ${quoteIdent(this.opts.spec.table)} SELECT * FROM read_parquet(${quoteLiteral(this.filePath)});`,
+        `INSERT INTO ${quoteIdent(this.opts.spec.table)} SELECT ${selectList} FROM read_parquet(${quoteLiteral(this.filePath)});`,
       );
     }
     this.loaded = true;
     return conn;
+  }
+
+  /**
+   * Build an explicit SELECT list that maps the on-disk parquet schema
+   * onto the spec's column list. If the parquet has all the spec's
+   * columns, this is effectively `SELECT col1, col2, …`. If a spec
+   * column is missing from the parquet (newly added after the parquet
+   * was written), it's substituted with the column's `defaultOnLoad`
+   * expression — otherwise the load throws with a clear message.
+   */
+  private async buildLoadSelectList(conn: DuckDBConnection): Promise<string> {
+    const probe = await conn.runAndReadAll(
+      `DESCRIBE SELECT * FROM read_parquet(${quoteLiteral(this.filePath)}) LIMIT 0;`,
+    );
+    const parquetCols = new Set(
+      probe.getRowObjects().map((r) => String((r as Record<string, unknown>)['column_name'] ?? '')),
+    );
+    const parts = this.opts.spec.columns.map((c) => {
+      if (parquetCols.has(c.name)) return quoteIdent(c.name);
+      if (c.defaultOnLoad !== undefined) {
+        return `${c.defaultOnLoad} AS ${quoteIdent(c.name)}`;
+      }
+      throw new Error(
+        `RecordTableSpec ${this.opts.spec.table}: column "${c.name}" is missing from ${this.filePath} and has no defaultOnLoad`,
+      );
+    });
+    return parts.join(', ');
   }
 
   async get(key: K): Promise<V | null> {

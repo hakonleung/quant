@@ -31,19 +31,21 @@ import type { RecordStore, RecordTableSpec } from '../../common/storage/ports/re
 import { SENTIMENT_MARKET_RECORD_STORE, SENTIMENT_STOCK_RECORD_STORE } from './sentiment.token.js';
 
 /**
- * Composite PK: `market:code` (stock) / `market:codeHash` (market). Legacy
- * rows written before the market column existed had pk = bare code and no
- * `market` column — those are treated as `market='a'` on read. New writes
- * always include market, so the composite key namespace isolates HK / US
- * from A-share. We do NOT migrate existing parquet rows.
+ * Cache key strategy
+ * ------------------
+ *
+ * PK remains the bare `code` (stock) / `codeHash` (market) so that:
+ *   1. The existing parquet files (3 columns, written before `market`
+ *      was added) load unchanged via the duckdb adapter's
+ *      `defaultOnLoad` migration — old rows default to `market = 'a'`.
+ *   2. The DuckDB single-column primary-key constraint stays satisfied.
+ *
+ * Cross-market isolation by PK is unnecessary in practice: A-share is
+ * 6-digit, HK is 4-5 digit, US is alpha — these code spaces don't
+ * collide. We still record `market` as a regular column and verify it
+ * matches on read; a mismatch returns null (treat as miss) rather than
+ * surfacing a wrong-market payload.
  */
-function stockKey(market: WatchMarket, code: string): string {
-  return `${market}:${code}`;
-}
-
-function marketKey(market: WatchMarket, codeHash: string): string {
-  return `${market}:${codeHash}`;
-}
 
 export interface SentimentStockRow {
   readonly market: WatchMarket;
@@ -64,10 +66,10 @@ export const SENTIMENT_STOCK_TABLE_SPEC: RecordTableSpec<SentimentStockRow> = {
   // cast: preprocess gives input=unknown so the ZodType<V> equality check
   // rejects it, but at runtime we only ever read+validate disk rows.
   schema: SentimentStockRowSchema as unknown as z.ZodType<SentimentStockRow>,
-  pk: (row) => stockKey(row.market, row.code),
+  pk: (row) => row.code,
   columns: [
-    { name: 'market', type: 'VARCHAR', nullable: false },
     { name: 'code', type: 'VARCHAR', nullable: false, primaryKey: true },
+    { name: 'market', type: 'VARCHAR', nullable: false, defaultOnLoad: "'a'" },
     { name: 'windowDays', type: 'INTEGER', nullable: false },
     { name: 'payload_json', type: 'VARCHAR', nullable: false },
   ],
@@ -90,10 +92,10 @@ export const SentimentMarketRowSchema = z.object({
 export const SENTIMENT_MARKET_TABLE_SPEC: RecordTableSpec<SentimentMarketRow> = {
   table: 'sentiment_market',
   schema: SentimentMarketRowSchema as unknown as z.ZodType<SentimentMarketRow>,
-  pk: (row) => marketKey(row.market, row.codeHash),
+  pk: (row) => row.codeHash,
   columns: [
-    { name: 'market', type: 'VARCHAR', nullable: false },
     { name: 'codeHash', type: 'VARCHAR', nullable: false, primaryKey: true },
+    { name: 'market', type: 'VARCHAR', nullable: false, defaultOnLoad: "'a'" },
     { name: 'windowDays', type: 'INTEGER', nullable: false },
     { name: 'payload_json', type: 'VARCHAR', nullable: false },
   ],
@@ -112,22 +114,22 @@ export class SentimentCacheStore {
     @Inject(CLOCK) private readonly clock: Clock,
   ) {}
 
-  async getStock(
-    market: WatchMarket,
-    code: string,
-    windowDays: number,
-  ): Promise<Sentiment | null> {
-    let row = await this.stockStore.get(stockKey(market, code));
-    if (row === null && market === 'a') {
-      row = await this.stockStore.get(code);
-    }
+  /**
+   * Cache lookups are market-implicit: the stored `Sentiment` row
+   * carries `market` for display, but lookup is keyed purely by `code`
+   * because A / HK / US code shapes don't collide
+   * (6-digit / 4–5-digit / alpha). Saves the controller + service from
+   * having to thread a redundant arg.
+   */
+  async getStock(code: string, windowDays: number): Promise<Sentiment | null> {
+    const row = await this.stockStore.get(code);
     if (row === null) return null;
     if (row.windowDays !== windowDays) return null;
     return this.decodeStock(row);
   }
 
   async putStock(value: Sentiment, windowDays: number): Promise<void> {
-    await this.runLocked(`stock:${value.market}:${value.code}`, async () => {
+    await this.runLocked(`stock:${value.code}`, async () => {
       await this.stockStore.upsert({
         market: value.market,
         code: value.code,
@@ -138,22 +140,15 @@ export class SentimentCacheStore {
     });
   }
 
-  async getMarket(
-    market: WatchMarket,
-    codeHash: string,
-    windowDays: number,
-  ): Promise<MarketSentiment | null> {
-    let row = await this.marketStore.get(marketKey(market, codeHash));
-    if (row === null && market === 'a') {
-      row = await this.marketStore.get(codeHash);
-    }
+  async getMarket(codeHash: string, windowDays: number): Promise<MarketSentiment | null> {
+    const row = await this.marketStore.get(codeHash);
     if (row === null) return null;
     if (row.windowDays !== windowDays) return null;
     return this.decodeMarket(row);
   }
 
   async putMarket(value: MarketSentiment, windowDays: number): Promise<void> {
-    await this.runLocked(`market:${value.market}:${value.codeHash}`, async () => {
+    await this.runLocked(`market:${value.codeHash}`, async () => {
       await this.marketStore.upsert({
         market: value.market,
         codeHash: value.codeHash,
