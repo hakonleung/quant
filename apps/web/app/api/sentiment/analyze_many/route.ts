@@ -9,20 +9,30 @@
  * the now-warm cache.
  */
 
-import { MarketSentimentSchema, TRACE_HEADER } from '@quant/shared';
+import {
+  isValidWatchCode,
+  MarketSentimentSchema,
+  TRACE_HEADER,
+  WatchMarketSchema,
+} from '@quant/shared';
 import { z } from 'zod';
 
 import { bffErrorResponse, nestJson, readTrace } from '../../_lib/proxy.js';
 
-const codeRule = z.string().regex(/^\d{6}$/, 'expected 6-digit code');
+const codeRule = z.string().min(1);
 
 const PostBodySchema = z
   .object({
+    market: WatchMarketSchema.default('a'),
     codes: z.array(codeRule).min(1).max(200),
     windowDays: z.number().int().positive().max(365).optional(),
     bypassCache: z.boolean().optional(),
   })
-  .strict();
+  .strict()
+  .refine((v) => v.codes.every((c) => isValidWatchCode(v.market, c)), {
+    message: 'every code must match market',
+    path: ['codes'],
+  });
 
 export async function GET(request: Request): Promise<Response> {
   const traceId = readTrace(request);
@@ -34,7 +44,8 @@ export async function GET(request: Request): Promise<Response> {
       { status: 400, headers: { [TRACE_HEADER]: traceId } },
     );
   }
-  const params = new URLSearchParams({ codes });
+  const market = url.searchParams.get('market') ?? 'a';
+  const params = new URLSearchParams({ market, codes });
   const window = url.searchParams.get('windowDays');
   if (window !== null) params.set('windowDays', window);
   try {

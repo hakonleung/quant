@@ -4,6 +4,7 @@ import type { MarketSentiment, Sentiment } from '../types/eqty.js';
 import { marketSentimentLines, sentimentLines } from './sentiment-format.js';
 
 const FULL: Sentiment = {
+  market: 'a',
   code: '600519',
   cachedAt: '2026-05-06T08:00:00.000Z',
   brief: '渠道改善 + 估值修复，整体偏多。',
@@ -91,6 +92,7 @@ describe('sentimentLines', () => {
 });
 
 const MARKET: MarketSentiment = {
+  market: 'a',
   asof: '2026-05-06',
   windowDays: 30,
   fetchedAt: '2026-05-06T00:00:00.000Z',

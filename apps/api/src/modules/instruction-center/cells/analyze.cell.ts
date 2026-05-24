@@ -38,6 +38,7 @@ export function buildAnalyzeCell(deps: AnalyzeCellDeps): InstructionCell<BeEnv, 
       try {
         return await deps.sentiment.analyzeOne(
           {
+            market: 'a',
             code: args.code,
             ...(args.fresh ? { bypassCache: true } : {}),
             ...(args.windowDays !== undefined ? { windowDays: args.windowDays } : {}),
@@ -61,7 +62,7 @@ export function buildAnalyzeCell(deps: AnalyzeCellDeps): InstructionCell<BeEnv, 
       if (parsed.data.fresh) return false;
       const windowDays = parsed.data.windowDays ?? 30;
       try {
-        const cached = await deps.sentiment.getCachedStock(parsed.data.code, windowDays);
+        const cached = await deps.sentiment.getCachedStock('a', parsed.data.code, windowDays);
         return cached !== null;
       } catch {
         return false;

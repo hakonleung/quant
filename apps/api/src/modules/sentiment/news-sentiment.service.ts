@@ -25,6 +25,7 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import {
   type IndustryTrend,
+  isValidWatchCode,
   MarketSentimentSchema,
   type MarketSentiment,
   QuantError,
@@ -33,6 +34,7 @@ import {
   type StockMetaDto,
   type StyleSignal,
   type ThemeClusterView,
+  type WatchMarket,
 } from '@quant/shared';
 import { createHash } from 'node:crypto';
 
@@ -72,12 +74,14 @@ export interface SentimentCallContext {
 }
 
 export interface AnalyzeOneArgs {
+  readonly market: WatchMarket;
   readonly code: string;
   readonly windowDays?: number;
   readonly bypassCache?: boolean;
 }
 
 export interface AnalyzeManyArgs {
+  readonly market: WatchMarket;
   readonly codes: readonly string[];
   readonly windowDays?: number;
   readonly bypassCache?: boolean;
@@ -94,31 +98,36 @@ export class NewsSentimentService {
     @Inject(CLOCK) private readonly clock: Clock,
   ) {}
 
-  async getCachedStock(code: string, windowDays: number): Promise<Sentiment | null> {
-    return this.cache.getStock(code, windowDays);
+  async getCachedStock(
+    market: WatchMarket,
+    code: string,
+    windowDays: number,
+  ): Promise<Sentiment | null> {
+    return this.cache.getStock(market, code, windowDays);
   }
 
   async getCachedMarket(
+    market: WatchMarket,
     codes: readonly string[],
     windowDays: number,
   ): Promise<MarketSentiment | null> {
-    const canon = canonicaliseCodes(codes);
+    const canon = canonicaliseCodes(market, codes);
     const codeHash = sha256(canon.join(','));
-    return this.cache.getMarket(codeHash, windowDays);
+    return this.cache.getMarket(market, codeHash, windowDays);
   }
 
   async analyzeOne(args: AnalyzeOneArgs, ctx: SentimentCallContext): Promise<Sentiment> {
-    const code = args.code;
+    const { market, code } = args;
     const windowDays = args.windowDays ?? DEFAULT_WINDOW_DAYS;
 
     if (args.bypassCache !== true) {
-      const cached = await this.cache.getStock(code, windowDays);
+      const cached = await this.cache.getStock(market, code, windowDays);
       if (cached !== null) return cached;
     }
 
     const asof = this.todayAsof();
-    const meta = await this.meta.get(code, ctx.traceId);
-    const result = await this.runPerStock({ meta, asof, windowDays, ctx });
+    const meta = await this.resolveMeta(market, code, ctx.traceId);
+    const result = await this.runPerStock({ market, meta, asof, windowDays, ctx });
     await this.cache.putStock(result, windowDays);
     return result;
   }
@@ -127,12 +136,13 @@ export class NewsSentimentService {
     if (args.codes.length === 0) {
       throw new QuantError('INVALID_ARGUMENT', 'codes must be non-empty', {});
     }
+    const { market } = args;
     const windowDays = args.windowDays ?? DEFAULT_WINDOW_DAYS;
-    const canon = canonicaliseCodes(args.codes);
+    const canon = canonicaliseCodes(market, args.codes);
     const codeHash = sha256(canon.join(','));
 
     if (args.bypassCache !== true) {
-      const cached = await this.cache.getMarket(codeHash, windowDays);
+      const cached = await this.cache.getMarket(market, codeHash, windowDays);
       if (cached !== null) return cached;
     }
     const asof = this.todayAsof();
@@ -141,6 +151,7 @@ export class NewsSentimentService {
       canon.map((code) =>
         this.analyzeOne(
           {
+            market,
             code,
             windowDays,
             ...(args.bypassCache === true ? { bypassCache: true } : {}),
@@ -170,10 +181,11 @@ export class NewsSentimentService {
       });
     }
 
-    const themeClusters = await this.runClusterStep(perStock, ctx);
-    const synth = await this.runMarketSynthStep(perStock, themeClusters, ctx);
+    const themeClusters = await this.runClusterStep(market, perStock, ctx);
+    const synth = await this.runMarketSynthStep(market, perStock, themeClusters, ctx);
 
     const result: MarketSentiment = MarketSentimentSchema.parse({
+      market,
       asof,
       windowDays,
       fetchedAt: this.clock.now().toISOString(),
@@ -189,24 +201,41 @@ export class NewsSentimentService {
     return result;
   }
 
+  private async resolveMeta(
+    market: WatchMarket,
+    code: string,
+    traceId: string,
+  ): Promise<StockMetaDto> {
+    if (market === 'a') return this.meta.get(code, traceId);
+    // HK/US: no NestJS-side meta source yet — feed the prompt a stub and let
+    // the LLM resolve name + industries via web_search (see prompt rule 11).
+    return {
+      code,
+      name: '',
+      industries: '',
+    } as unknown as StockMetaDto;
+  }
+
   // -------------------------------------------------------------------------
   // pipeline steps
   // -------------------------------------------------------------------------
 
   private async runPerStock(args: {
+    readonly market: WatchMarket;
     readonly meta: StockMetaDto;
     readonly asof: string;
     readonly windowDays: number;
     readonly ctx: SentimentCallContext;
   }): Promise<Sentiment> {
     const promptMeta: SentimentMeta = {
+      market: args.market,
       code: args.meta.code,
       name: args.meta.name,
       industries: industriesOf(args.meta),
     };
     const out = await this.llm.completeJsonWithWebSearch(
       {
-        system: buildSentimentSystem(),
+        system: buildSentimentSystem(args.market),
         user: buildSentimentUser({
           meta: promptMeta,
           asof: args.asof,
@@ -217,12 +246,14 @@ export class NewsSentimentService {
     );
     return decodeStockSentiment({
       rawJson: out.text,
+      market: args.market,
       code: args.meta.code,
       fetchedAt: this.clock.now().toISOString(),
     });
   }
 
   private async runClusterStep(
+    market: WatchMarket,
     perStock: readonly Sentiment[],
     ctx: SentimentCallContext,
   ): Promise<readonly ThemeClusterView[]> {
@@ -241,7 +272,7 @@ export class NewsSentimentService {
 
     const out = await this.llm.completeJson(
       {
-        system: buildSentimentClusterSystem(),
+        system: buildSentimentClusterSystem(market),
         user: buildSentimentClusterUser({ stocks: memberships }),
       },
       { userId: ctx.userId, traceId: ctx.traceId, scope: 'sentiment' },
@@ -262,6 +293,7 @@ export class NewsSentimentService {
   }
 
   private async runMarketSynthStep(
+    market: WatchMarket,
     perStock: readonly Sentiment[],
     clusters: readonly ThemeClusterView[],
     ctx: SentimentCallContext,
@@ -293,7 +325,7 @@ export class NewsSentimentService {
     try {
       out = await this.llm.completeJson(
         {
-          system: buildSentimentMarketSynthSystem(),
+          system: buildSentimentMarketSynthSystem(market),
           user: buildSentimentMarketSynthUser(payload),
         },
         { userId: ctx.userId, traceId: ctx.traceId, scope: 'sentiment' },
@@ -335,6 +367,7 @@ export class NewsSentimentService {
 
 export function decodeStockSentiment(args: {
   readonly rawJson: string;
+  readonly market: WatchMarket;
   readonly code: string;
   readonly fetchedAt: string;
 }): Sentiment {
@@ -350,6 +383,7 @@ export function decodeStockSentiment(args: {
   const competitive = parseCompetitive(obj['competitive']);
 
   return SentimentSchema.parse({
+    market: args.market,
     code: args.code,
     cachedAt: ensureOffsetIso(args.fetchedAt),
     brief: typeof obj['brief'] === 'string' ? obj['brief'] : '',
@@ -404,10 +438,12 @@ function ensureOffsetIso(s: string): string {
   return `${s}Z`;
 }
 
-function canonicaliseCodes(codes: readonly string[]): readonly string[] {
+function canonicaliseCodes(market: WatchMarket, codes: readonly string[]): readonly string[] {
   const set = new Set<string>();
   for (const c of codes) {
-    if (typeof c === 'string' && /^\d{6}$/u.test(c)) set.add(c);
+    if (typeof c !== 'string') continue;
+    if (!isValidWatchCode(market, c)) continue;
+    set.add(c);
   }
   return [...set].sort();
 }

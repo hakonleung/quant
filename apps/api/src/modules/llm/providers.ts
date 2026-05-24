@@ -69,7 +69,8 @@ export const LLM_PROVIDERS: readonly LlmProviderRow[] = [
   },
   {
     provider: 'qwen',
-    modelPro: 'qwen3.6-plus-2026-04-02',
+    // modelPro: 'qwen3.6-plus-2026-04-02',
+    modelPro: 'qwen3.6-max-preview',
     modelFlash: 'qwen-turbo',
     baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
     apiKeyEnv: 'QWEN_API_KEY',

@@ -251,16 +251,16 @@ describe('parseClusterObject', () => {
     });
   });
 
-  it('filters out invalid member codes', () => {
+  it('filters out empty member codes (market-shape check happens upstream)', () => {
     const r = parseClusterObject({
       label: 'x',
-      members: ['600519', 'abc', '999'],
+      members: ['600519', '', '00700', 'AAPL'],
       industries: [],
       heat: 0,
       trend: 'stable',
       summary: '',
     });
-    expect(r?.memberCodes).toEqual(['600519']);
+    expect(r?.memberCodes).toEqual(['600519', '00700', 'AAPL']);
   });
 
   it('falls back to stable on unknown trend', () => {

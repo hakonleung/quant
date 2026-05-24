@@ -15,6 +15,8 @@
 
 import { z } from 'zod';
 
+import { WatchMarketSchema } from './watch.js';
+
 /**
  * GET /api/kline/:code?range=30D|90D|250D
  *
@@ -147,6 +149,7 @@ export type CompetitiveLandscape = z.infer<typeof CompetitiveLandscapeSchema>;
 /** GET /api/sentiment/:code — structured multi-dimensional sentiment. */
 export const SentimentSchema = z
   .object({
+    market: WatchMarketSchema.default('a'),
     code: z.string(),
     cachedAt: z.string().datetime({ offset: true }),
     /** One-paragraph "上涨核心动因分析" (≤120字), brief view. */
@@ -224,6 +227,7 @@ export type IndustryTrend = z.infer<typeof IndustryTrendSchema>;
 
 export const MarketSentimentSchema = z
   .object({
+    market: WatchMarketSchema.default('a'),
     asof: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'expected YYYY-MM-DD'),
     windowDays: z.number().int().positive(),
     fetchedAt: z.string().datetime({ offset: true }),

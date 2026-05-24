@@ -291,7 +291,7 @@ export function parseClusterObject(raw: unknown): ThemeClusterView | null {
   const obj = raw as Readonly<Record<string, unknown>>;
   const label = typeof obj['label'] === 'string' ? obj['label'] : '';
   if (label.length === 0) return null;
-  const members = collectStrings(obj['members']).filter((c) => /^\d{6}$/u.test(c));
+  const members = collectStrings(obj['members']).filter((c) => c.length > 0);
   const heat = typeof obj['heat'] === 'number' && Number.isFinite(obj['heat']) ? obj['heat'] : 0;
   const trendRaw = typeof obj['trend'] === 'string' ? obj['trend'] : 'stable';
   const trend = CLUSTER_TREND_SET.has(trendRaw as ThemeClusterView['trend'])
