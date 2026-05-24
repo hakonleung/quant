@@ -24,6 +24,7 @@ import {
 } from '@quant/shared';
 import type { z } from 'zod';
 
+import { AuthConfig } from '../../auth/config/auth.config.js';
 import type { InstructionCtx } from '../../instruction/instruction.port.js';
 import { InstructionRegistrarBase } from '../../instruction/instruction.provider.js';
 import { InstructionRegistry } from '../../instruction/instruction.registry.js';
@@ -57,11 +58,15 @@ export class AnalyzeSectorInstructionHandler extends InstructionRegistrarBase<Ar
     @Inject(InstructionRegistry) registry: InstructionRegistry,
     @Inject(NewsSentimentService) private readonly sentiment: NewsSentimentService,
     @Inject(SectorsService) private readonly sectors: SectorsService,
+    @Inject(AuthConfig) private readonly authCfg: AuthConfig,
   ) {
     super(registry);
   }
 
   async execute(args: Args, ctx: InstructionCtx): Promise<InstructionResult> {
+    if (ctx.userId !== this.authCfg.adminUserId) {
+      return errResult('forbidden', 'analyze.sector is admin-only');
+    }
     let sector;
     try {
       sector = this.sectors.resolveVisible(ctx.userId, args.id);
