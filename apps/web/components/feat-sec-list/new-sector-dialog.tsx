@@ -10,11 +10,11 @@
  */
 
 import { Box, Button, Flex, Input, Text } from '@chakra-ui/react';
-import type { NlScreenResult, ScreenMatchView, WatchMarket } from '@quant/shared';
+import type { NlToDslResult, WatchMarket } from '@quant/shared';
 import { useState } from 'react';
 
 import { useCurrentUserId } from '../../lib/hooks/use-current-user.js';
-import { useNlScreen } from '../../lib/hooks/use-nl-screen.js';
+import { useNlToDsl } from '../../lib/hooks/use-nl-to-dsl.js';
 import { useSectorsStore, type Sector } from '../../lib/stores/sectors.store.js';
 import { DslTree } from '../dsl/dsl-tree.js';
 
@@ -30,8 +30,8 @@ export function NewSectorDialog({ open, onClose }: Props): React.ReactElement | 
   const [title, setTitle] = useState('');
   const [market, setMarket] = useState<WatchMarket>('a');
   const [nl, setNl] = useState('');
-  const [preview, setPreview] = useState<NlScreenResult | null>(null);
-  const screen = useNlScreen();
+  const [preview, setPreview] = useState<NlToDslResult | null>(null);
+  const screen = useNlToDsl();
   const upsert = useSectorsStore((s) => s.upsert);
   const currentUserId = useCurrentUserId() ?? '';
 
@@ -92,28 +92,26 @@ export function NewSectorDialog({ open, onClose }: Props): React.ReactElement | 
     // NL → DSL must be in sync with the saved sector. If the user edited
     // the prompt after the last preview (or never previewed), re-translate
     // before persisting so screenPlan / universePlan / rank match `nl`.
-    let snapshot: NlScreenResult | null = preview;
+    // We never run the actual screen here — codes/evidence are populated
+    // lazily on first `sector.refresh`.
+    let snapshot: NlToDslResult | null = preview;
     if (snapshot === null || snapshot.nl !== trimmedNl) {
       snapshot = await screen.mutateAsync({ nl: trimmedNl });
       setPreview(snapshot);
     }
-    const evidence = matchesToEvidence(snapshot.matches);
-    const codes = snapshot.matches.map((m) => m.code);
     const s: Sector = {
       id: '',
       name: t,
       kind: 'dynamic',
       market: 'a',
-      count: codes.length,
+      count: 0,
       meta: snapshot.nl,
       chgPct: null,
-      codes,
+      codes: [],
       nl: snapshot.nl,
-      evidence,
       screenPlan: snapshot.screenPlan,
       universePlan: snapshot.universePlan,
       rank: snapshot.rank,
-      lastScreenedAt: new Date().toISOString(),
       createdBy: currentUserId,
       published: false,
     };
@@ -205,7 +203,7 @@ function Header({ onClose }: { onClose: () => void }): React.ReactElement {
         fontWeight="700"
         letterSpacing="0.18em"
       >
-        002
+        MKT.NEW
       </Text>
       <Text
         fontFamily="mono"
@@ -352,7 +350,7 @@ interface DynamicFormProps {
   readonly onRun: () => void;
   readonly isRunning: boolean;
   readonly error: string | null;
-  readonly preview: NlScreenResult | null;
+  readonly preview: NlToDslResult | null;
 }
 
 function DynamicForm({
@@ -442,10 +440,10 @@ function DynamicForm({
             letterSpacing="0.16em"
             textTransform="uppercase"
           >
-            // preview · {preview.matches.length} hit(s)
+            // dsl preview · run refresh to populate matches
           </Text>
           <Box
-            maxH="220px"
+            maxH="320px"
             overflow="auto"
             borderWidth="1px"
             borderColor="line"
@@ -458,52 +456,9 @@ function DynamicForm({
               rank={preview.rank}
             />
           </Box>
-          <Box maxH="160px" overflow="auto" borderWidth="1px" borderColor="line">
-            <MatchPreviewList matches={preview.matches.slice(0, 50)} />
-          </Box>
         </Flex>
       )}
     </Flex>
-  );
-}
-
-function MatchPreviewList({
-  matches,
-}: {
-  matches: readonly ScreenMatchView[];
-}): React.ReactElement {
-  if (matches.length === 0) {
-    return (
-      <Text px="10px" py="10px" fontFamily="mono" fontSize="11px" color="ink3">
-        // no matches
-      </Text>
-    );
-  }
-  return (
-    <Box>
-      {matches.map((m) => (
-        <Flex
-          key={m.code}
-          align="center"
-          gap="10px"
-          px="10px"
-          py="5px"
-          borderBottomWidth="1px"
-          borderColor="line2"
-          fontFamily="mono"
-          fontSize="11px"
-        >
-          <Text color="ink" fontWeight="600" w="60px">
-            {m.code}
-          </Text>
-          <Text color="ink3" overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap">
-            {Object.entries(m.evidence)
-              .map(([k, v]) => `${k}=${formatEvidence(v)}`)
-              .join(' · ')}
-          </Text>
-        </Flex>
-      ))}
-    </Box>
   );
 }
 
@@ -590,20 +545,3 @@ function Footer({ onCancel, onSave, canSave, saveLabel }: FooterProps): React.Re
   );
 }
 
-function matchesToEvidence(
-  matches: readonly ScreenMatchView[],
-): Readonly<Record<string, Readonly<Record<string, unknown>>>> {
-  const out: Record<string, Record<string, unknown>> = {};
-  for (const m of matches) {
-    out[m.code] = { ...m.evidence };
-  }
-  return out;
-}
-
-function formatEvidence(v: unknown): string {
-  if (v === null || v === undefined) return '—';
-  if (typeof v === 'number') return Number.isInteger(v) ? String(v) : v.toFixed(2);
-  if (typeof v === 'string') return v;
-  if (typeof v === 'boolean') return v ? 'true' : 'false';
-  return JSON.stringify(v);
-}

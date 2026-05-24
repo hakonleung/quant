@@ -22,14 +22,15 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  /* Kill decorative motion only; loading spinners and other essential
+   * progress indicators (Chakra `loading` button, etc.) must keep
+   * spinning so async actions don't look frozen. */
   .blink {
     animation: none !important;
   }
   *,
   *::before,
   *::after {
-    animation-duration: 0.001ms !important;
-    animation-iteration-count: 1 !important;
     transition-duration: 0.001ms !important;
     scroll-behavior: auto !important;
   }
