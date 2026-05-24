@@ -39,6 +39,18 @@ import {
 } from '../../../src/modules/instruction-center/cells/analyze.render.js';
 import type { InstructionCtx } from '../../../src/modules/instruction/instruction.port.js';
 import type { NewsSentimentService } from '../../../src/modules/sentiment/news-sentiment.service.js';
+import type { StockMetaService } from '../../../src/modules/stock-meta/stock-meta.service.js';
+
+function fakeStockMeta(
+  rows: ReadonlyArray<{ code: string; name: string; name_pinyin?: string }> = [],
+): StockMetaService {
+  return {
+    listAll: () =>
+      Promise.resolve(
+        rows.map((r) => ({ code: r.code, name: r.name, name_pinyin: r.name_pinyin ?? '' })),
+      ),
+  } as unknown as StockMetaService;
+}
 
 type AnalyzeResult = ResultOf<'analyze'>;
 
@@ -106,21 +118,21 @@ function fakeSentiment(opts: FakeSentimentOpts = {}): {
 describe('buildAnalyzeCell.handler', () => {
   it('returns the upstream Sentiment verbatim', async () => {
     const { service } = fakeSentiment();
-    const cell = buildAnalyzeCell({ sentiment: service });
+    const cell = buildAnalyzeCell({ sentiment: service, stockMeta: fakeStockMeta() });
     const r = await cell.handler({ code: '600519', fresh: false, confirm: false }, ctx);
     expect(r).toEqual(baseSentiment);
   });
 
   it('forwards bypassCache=true when fresh=true; omits windowDays when absent', async () => {
     const { service, analyzeCalls } = fakeSentiment();
-    const cell = buildAnalyzeCell({ sentiment: service });
+    const cell = buildAnalyzeCell({ sentiment: service, stockMeta: fakeStockMeta() });
     await cell.handler({ code: '600519', fresh: true, confirm: false }, ctx);
     expect(analyzeCalls[0]?.request).toEqual({ code: '600519', bypassCache: true });
   });
 
   it('forwards windowDays when present and omits bypassCache when fresh=false', async () => {
     const { service, analyzeCalls } = fakeSentiment();
-    const cell = buildAnalyzeCell({ sentiment: service });
+    const cell = buildAnalyzeCell({ sentiment: service, stockMeta: fakeStockMeta() });
     await cell.handler({ code: '600519', fresh: false, confirm: false, windowDays: 7 }, ctx);
     expect(analyzeCalls[0]?.request).toEqual({ code: '600519', windowDays: 7 });
   });
@@ -129,7 +141,7 @@ describe('buildAnalyzeCell.handler', () => {
     const { service } = fakeSentiment({
       reject: new QuantError('LLM_FAILED', 'llm quota exceeded', {}),
     });
-    const cell = buildAnalyzeCell({ sentiment: service });
+    const cell = buildAnalyzeCell({ sentiment: service, stockMeta: fakeStockMeta() });
     await expect(
       cell.handler({ code: '600519', fresh: false, confirm: false }, ctx),
     ).rejects.toBeInstanceOf(QuantError);
@@ -137,7 +149,7 @@ describe('buildAnalyzeCell.handler', () => {
 
   it('propagates non-QuantError throws (for the async-job logger)', async () => {
     const { service } = fakeSentiment({ reject: new Error('net error') });
-    const cell = buildAnalyzeCell({ sentiment: service });
+    const cell = buildAnalyzeCell({ sentiment: service, stockMeta: fakeStockMeta() });
     await expect(
       cell.handler({ code: '600519', fresh: false, confirm: false }, ctx),
     ).rejects.toThrow('net error');
@@ -184,7 +196,7 @@ describe('renderAnalyze', () => {
 describe('buildAnalyzeCell.peek (IM confirm bypass)', () => {
   it('returns true when cache hit + fresh=false → skip confirm card', async () => {
     const { service, cachedCalls } = fakeSentiment({ cached: baseSentiment });
-    const cell = buildAnalyzeCell({ sentiment: service });
+    const cell = buildAnalyzeCell({ sentiment: service, stockMeta: fakeStockMeta() });
     expect(cell.peek).toBeDefined();
     const bypass = await cell.peek!({ code: '600519', fresh: false }, ctx);
     expect(bypass).toBe(true);
@@ -193,7 +205,7 @@ describe('buildAnalyzeCell.peek (IM confirm bypass)', () => {
 
   it('returns false when fresh=true (user explicitly asked for re-run)', async () => {
     const { service, cachedCalls } = fakeSentiment({ cached: baseSentiment });
-    const cell = buildAnalyzeCell({ sentiment: service });
+    const cell = buildAnalyzeCell({ sentiment: service, stockMeta: fakeStockMeta() });
     const bypass = await cell.peek!({ code: '600519', fresh: true }, ctx);
     expect(bypass).toBe(false);
     expect(cachedCalls).toHaveLength(0);
@@ -201,29 +213,69 @@ describe('buildAnalyzeCell.peek (IM confirm bypass)', () => {
 
   it('returns false on cache miss', async () => {
     const { service } = fakeSentiment({ cached: null });
-    const cell = buildAnalyzeCell({ sentiment: service });
+    const cell = buildAnalyzeCell({ sentiment: service, stockMeta: fakeStockMeta() });
     const bypass = await cell.peek!({ code: '600519', fresh: false }, ctx);
     expect(bypass).toBe(false);
   });
 
   it('returns false (fail closed) when getCachedStock throws', async () => {
     const { service } = fakeSentiment({ cachedThrows: true });
-    const cell = buildAnalyzeCell({ sentiment: service });
+    const cell = buildAnalyzeCell({ sentiment: service, stockMeta: fakeStockMeta() });
     const bypass = await cell.peek!({ code: '600519', fresh: false }, ctx);
     expect(bypass).toBe(false);
   });
 
-  it('returns false on invalid args (zod parse fails)', async () => {
+  it('returns false when code can be neither classified nor name-resolved', async () => {
     const { service } = fakeSentiment({ cached: baseSentiment });
-    const cell = buildAnalyzeCell({ sentiment: service });
-    const bypass = await cell.peek!({ code: 'invalid-non-digit' }, ctx);
+    const cell = buildAnalyzeCell({ sentiment: service, stockMeta: fakeStockMeta() });
+    const bypass = await cell.peek!({ code: 'totally-unknown' }, ctx);
     expect(bypass).toBe(false);
   });
 
   it('forwards an explicit windowDays from rawArgs to the cache probe', async () => {
     const { service, cachedCalls } = fakeSentiment({ cached: baseSentiment });
-    const cell = buildAnalyzeCell({ sentiment: service });
+    const cell = buildAnalyzeCell({ sentiment: service, stockMeta: fakeStockMeta() });
     await cell.peek!({ code: '600519', fresh: false, windowDays: 7 }, ctx);
     expect(cachedCalls[0]).toEqual({ code: '600519', windowDays: 7 });
+  });
+});
+
+describe('buildAnalyzeCell name → code resolution (IM ergonomics)', () => {
+  // Users typically type `/分析 埃科光电` rather than `/分析 688376`.
+  // The cell resolves A-share name (or pinyin) to code before calling
+  // the sentiment pipeline; HK/US wire codes still pass through verbatim.
+  it('handler resolves Chinese name to code via StockMetaService', async () => {
+    const { service, analyzeCalls } = fakeSentiment();
+    const meta = fakeStockMeta([
+      { code: '688376', name: '埃科光电', name_pinyin: 'aikgd' },
+    ]);
+    const cell = buildAnalyzeCell({ sentiment: service, stockMeta: meta });
+    await cell.handler({ code: '埃科光电', fresh: false, confirm: false }, ctx);
+    expect(analyzeCalls[0]?.request.code).toBe('688376');
+  });
+
+  it('passes through wire-form codes without touching meta', async () => {
+    const { service, analyzeCalls } = fakeSentiment();
+    // empty meta proves the cell never consulted it for a wire-form code
+    const cell = buildAnalyzeCell({ sentiment: service, stockMeta: fakeStockMeta([]) });
+    await cell.handler({ code: '00700', fresh: false, confirm: false }, ctx);
+    expect(analyzeCalls[0]?.request.code).toBe('00700');
+  });
+
+  it('handler throws QuantError when neither code nor name matches', async () => {
+    const { service } = fakeSentiment();
+    const cell = buildAnalyzeCell({ sentiment: service, stockMeta: fakeStockMeta([]) });
+    await expect(
+      cell.handler({ code: '埃科光电', fresh: false, confirm: false }, ctx),
+    ).rejects.toMatchObject({ code: 'INVALID_ARGUMENT' });
+  });
+
+  it('peek probes cache against the resolved code', async () => {
+    const { service, cachedCalls } = fakeSentiment({ cached: baseSentiment });
+    const meta = fakeStockMeta([{ code: '688376', name: '埃科光电' }]);
+    const cell = buildAnalyzeCell({ sentiment: service, stockMeta: meta });
+    const bypass = await cell.peek!({ code: '埃科光电', fresh: false }, ctx);
+    expect(bypass).toBe(true);
+    expect(cachedCalls[0]).toEqual({ code: '688376', windowDays: 30 });
   });
 });

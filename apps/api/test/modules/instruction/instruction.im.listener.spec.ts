@@ -177,7 +177,7 @@ function buildWithCenter(centerIds: readonly string[]): Harness & {
     },
   };
   const auth: Pick<AuthService, 'resolveFromImChannel'> = {
-    resolveFromImChannel: (channel, sender) =>
+    resolveFromImChannel: (_channel, sender) =>
       Promise.resolve({
         id: sender,
         displayName: sender,
@@ -289,6 +289,41 @@ describe('InstructionImListener.onInbound — ACL', () => {
     await listener.onInbound(inbound('/focus 600519', 'slack:U_GOOD'));
     expect(sends).toHaveLength(1);
     expect(sends[0]?.text).toBe('focused 600519');
+  });
+});
+
+describe('InstructionImListener.onInbound — validation precedes paid-confirm gate', () => {
+  // Regression: a malformed arg to a paid-confirm instruction used to
+  // surface the confirm card; only after the user clicked ✓ did the
+  // dispatch path zod-parse the args and reject with "validation". Now
+  // the listener validates first so the user sees the error immediately
+  // and never burns a click on input that can't run.
+  const paidSpec: InstructionSpec<{ code: string }> = {
+    id: instructionId('ta'),
+    summary: 'paid',
+    summaryCn: 'paid',
+    group: 'system',
+    argsSchema: z.object({ code: z.string().regex(/^\d{6}$/u) }).strict(),
+    positional: ['code'],
+    requiresImConfirm: true,
+  };
+
+  it('returns validation error for a malformed code without showing the confirm card', async () => {
+    const { listener, sends, enqueued, reg } = build();
+    reg.register(paidSpec, {
+      execute: (): Promise<InstructionResult> =>
+        Promise.resolve({ ok: true, output: { text: 'ran' } }),
+    });
+    await listener.onInbound(inbound('/ta 992'));
+    expect(enqueued).toHaveLength(0);
+    expect(sends).toHaveLength(1);
+    expect(sends[0]?.text.startsWith('[validation]')).toBe(true);
+    expect(sends[0]?.meta).toEqual({
+      ok: false,
+      instructionId: 'ta',
+      code: 'validation',
+    });
+    expect(sends[0]?.kind).toBe('instruction.reply');
   });
 });
 

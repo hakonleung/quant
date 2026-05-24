@@ -167,6 +167,17 @@ export class SentimentCacheStore {
       this.logger.warn(`sentiment_stock_payload_invalid code=${row.code} err=${String(err)}`);
       return null;
     }
+    // Legacy payloads (pre-market-aware wire) stored `market: null` inside
+    // the JSON blob; the row's `market` column already carries the right
+    // value (defaulted to 'a' on load). Backfill before zod parses so the
+    // strict WatchMarket enum doesn't trip on the null and report a cache
+    // miss for every legacy entry.
+    if (typeof parsedJson === 'object' && parsedJson !== null) {
+      const obj = parsedJson as Record<string, unknown>;
+      if (obj['market'] === null || obj['market'] === undefined) {
+        obj['market'] = row.market;
+      }
+    }
     const result = SentimentSchema.safeParse(parsedJson);
     if (!result.success) {
       this.logger.warn(`sentiment_stock_cache_invalid code=${row.code}`);
@@ -183,6 +194,12 @@ export class SentimentCacheStore {
     } catch (err) {
       this.logger.warn(`sentiment_market_payload_invalid hash=${row.codeHash} err=${String(err)}`);
       return null;
+    }
+    if (typeof parsedJson === 'object' && parsedJson !== null) {
+      const obj = parsedJson as Record<string, unknown>;
+      if (obj['market'] === null || obj['market'] === undefined) {
+        obj['market'] = row.market;
+      }
     }
     const result = MarketSentimentSchema.safeParse(parsedJson);
     if (!result.success) {

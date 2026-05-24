@@ -91,4 +91,38 @@ describe('SentimentCacheStore', () => {
     await store.putMarket(MARKET, 30);
     await expect(store.getMarket('abc', 7)).resolves.toBeNull();
   });
+
+  // Regression: legacy payloads (pre-market-aware wire) serialized
+  // `market: null` inside the JSON blob. The store must fall back to the
+  // row column instead of returning null and tripping the IM paid-confirm
+  // gate on every cached A-share lookup.
+  it('decodeStock backfills null payload.market from the row column', async () => {
+    const { store, stock } = makeStore();
+    const legacyPayload = { ...STOCK, market: null };
+    await stock.upsert({
+      market: 'a',
+      code: '000001',
+      windowDays: 30,
+      payload_json: JSON.stringify(legacyPayload),
+    });
+    await expect(store.getStock('000001', 30)).resolves.toMatchObject({
+      code: '000001',
+      market: 'a',
+    });
+  });
+
+  it('decodeMarket backfills null payload.market from the row column', async () => {
+    const { store, market } = makeStore();
+    const legacyPayload = { ...MARKET, market: null };
+    await market.upsert({
+      market: 'hk',
+      codeHash: 'abc',
+      windowDays: 30,
+      payload_json: JSON.stringify(legacyPayload),
+    });
+    await expect(store.getMarket('abc', 30)).resolves.toMatchObject({
+      codeHash: 'abc',
+      market: 'hk',
+    });
+  });
 });

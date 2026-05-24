@@ -160,7 +160,7 @@ export class BeInstructionCenter implements BeInstructionCenterPort {
       'watch.add': buildWatchAddCell({ watch }),
       'watch.remove': buildWatchRemoveCell({ taskStore: watchTaskStore }),
       'watch.group': buildWatchGroupCell({ watch }),
-      analyze: buildAnalyzeCell({ sentiment }),
+      analyze: buildAnalyzeCell({ sentiment, stockMeta }),
       ta: buildTaCell({ ta }),
       'ta.sector': buildTaSectorCell({ ta, sectors }),
       screen: buildScreenCell({ screen, stockList }),

@@ -123,6 +123,25 @@ export class InstructionImListener implements OnModuleInit {
     return this.runEntry(msg, traceId, parsed.id, entry.spec.mode === 'async', rawArgs);
   }
 
+  /**
+   * Args validation for the IM front door — mirrors `executor.route()`'s
+   * zod parse so a bad code never reaches the paid-confirm card. Returns
+   * `null` on success or a `validation`-coded error result on failure.
+   */
+  private validateArgs(
+    instructionId: string,
+    rawArgs: Record<string, string>,
+  ): InstructionResult | null {
+    const entry = this.executor.resolveEntry(instructionId);
+    if (entry === undefined) return null;
+    const parsed = entry.spec.argsSchema.safeParse(rawArgs);
+    if (parsed.success) return null;
+    const issues = parsed.error.issues
+      .map((i) => `${i.path.join('.')}: ${i.message}`)
+      .join('; ');
+    return errResult('validation', issues);
+  }
+
   private isConfirmTokenSet(rawArgs: Record<string, string>): boolean {
     const v = rawArgs['confirm'];
     if (v === undefined) return false;
@@ -273,6 +292,13 @@ export class InstructionImListener implements OnModuleInit {
     const imHints: InstructionImHints | undefined = isAsync
       ? { channel: msg.channel, target: replyTarget }
       : undefined;
+    // Validate args first so malformed input is reported immediately —
+    // otherwise the paid-confirm card fires for invalid codes, the user
+    // clicks ✓, then the schema rejects them anyway. The card round-trip
+    // also re-enters this method with `confirm=1`, so re-validation on
+    // the second pass is harmless.
+    const validation = this.validateArgs(instructionId, rawArgs);
+    if (validation !== null) return reply(validation, instructionId);
     // Paid-confirm gate (generic): for instructions tagged
     // `requiresImConfirm`, intercept the first call and ask for explicit
     // approval before the (typically `costsCredits`) handler runs. The

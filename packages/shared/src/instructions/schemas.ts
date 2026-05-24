@@ -21,7 +21,6 @@ import { SectorSchema } from '../types/sectors.js';
 import { StockListRowSchema } from '../types/stock-list.js';
 import { StockMetaDtoSchema, StockSnapshotDtoSchema } from '../types/stock-meta.js';
 import { TaAnalysisSchema, TaSectorAnalysisSchema } from '../types/ta.js';
-import { inferMarketFromCode } from '../types/watch.js';
 import { AgentHistoryEntrySchema, AGENT_HISTORY_MAX_ENTRIES } from './agent-history.js';
 
 const TRUTHY = new Set(['1', 'true', 'TRUE', 'yes', 'on']);
@@ -419,22 +418,17 @@ export type WatchGroupResult = z.infer<typeof WatchGroupResultSchema>;
 
 // ── analysis ────────────────────────────────────────────────────────────
 
-const codeInAnyMarket = z
-  .string()
-  .min(1)
-  .refine((c) => inferMarketFromCode(c) !== null, {
-    message: 'code matches no known market (a=6 digits, hk=4-5 digits, us=letters)',
-  });
-
 /**
- * Market is **not** an input — the boundary only takes `code`, and the
- * downstream service infers the market once via `inferMarketFromCode`.
- * Keeping market off the wire stops three layers (controller → service
- * → cache) from passing the same param around just to re-derive it.
+ * `/analyze` accepts either a wire-form code (matches `inferMarketFromCode`)
+ * or an A-share stock name / pinyin (e.g. `分析 埃科光电`). The cell
+ * handler resolves names → codes via `StockMetaService` before the
+ * sentiment pipeline runs; non-matching strings produce a clearer
+ * "unknown code or name" error at the handler boundary instead of a
+ * generic schema rejection that hides the IM ergonomics intent.
  */
 export const AnalyzeArgsSchema = z
   .object({
-    code: codeInAnyMarket,
+    code: z.string().min(1),
     fresh: InstructionOptionalBoolFlagSchema,
     windowDays: z.coerce.number().int().min(1).max(30).optional(),
     confirm: InstructionOptionalBoolFlagSchema.describe(
