@@ -210,10 +210,21 @@ export function convertScalar(raw: unknown, path: string): DslScalar {
   if ('const' in raw) return { kind: 'const', value: parseDecimalString(raw['const'], path) };
   if ('field' in raw) {
     const name = raw['field'];
-    if (typeof name !== 'string' || !SCREEN_FIELD_NAMES.has(name)) {
+    if (typeof name !== 'string') {
       throw invalid(path, `unknown field ${String(name)}`);
     }
-    return { kind: 'field', field: name };
+    if (SCREEN_FIELD_NAMES.has(name)) {
+      return { kind: 'field', field: name };
+    }
+    // Universe-side fields (snapshot-derived: wcmi*, mkt_cap, pe_*, pb,
+    // peg, gross_margin_ttm, ret_*, dde_*, price, listed_days, float_pct).
+    // Only meaningful in per-code positions like rank.metric — using one
+    // inside a screen predicate evaluates to NA (excluded). The prompt
+    // routes these into universe_plan / rank, never into screen_plan.
+    if (UNIVERSE_FIELD_SET.has(name)) {
+      return { kind: 'universe_field', field: name };
+    }
+    throw invalid(path, `unknown field ${name}`);
   }
   throw invalid(path, 'scalar must be one of: field/const/agg/period_return/indicator/scale');
 }
@@ -339,7 +350,11 @@ function parseUniverseConst(raw: unknown, field: string, path: string): unknown 
   if (field === 'float_pct') {
     return parseDecimalString(raw, path);
   }
-  throw invalid(path, `unsupported field ${field}`);
+  // All remaining universe fields are numeric snapshot scalars
+  // (mkt_cap / pe_* / pb / peg / gross_margin_ttm / ret_* / dde_* /
+  // wcmi*). They were already validated against UNIVERSE_FIELD_SET in
+  // the caller, so parse as decimal here.
+  return parseDecimalString(raw, path);
 }
 
 // ---------------------------------------------------------------------------

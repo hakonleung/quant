@@ -76,6 +76,18 @@ export const UNIVERSE_FIELD_NAMES = [
   'dde_main_inflow_ratio_5d',
   'dde_main_inflow_ratio_10d',
   'dde_main_inflow_ratio_20d',
+  // ---- WCMI 90-day wave-quality scores (snapshot.derived). Composite
+  // ∈ [0, 1000]; sub-scores are cross-sectional percentile × 100 ∈ [0, 100].
+  // Null when bars < 30 or the net-down survivor gate fails.
+  'wcmi',
+  'wcmi_rhythm',
+  'wcmi_ma_support',
+  'wcmi_up_wave',
+  'wcmi_yang_dom',
+  'wcmi_shadow_clean',
+  'wcmi_stage_gain',
+  'wcmi_crash_avoid',
+  'wcmi_recent_strength',
 ] as const;
 export type UniverseFieldName = (typeof UNIVERSE_FIELD_NAMES)[number];
 export const UNIVERSE_FIELD_SET: ReadonlySet<string> = new Set(UNIVERSE_FIELD_NAMES);
@@ -110,6 +122,15 @@ export const UNIVERSE_SNAPSHOT_FIELD_NAMES = [
   'dde_main_inflow_ratio_5d',
   'dde_main_inflow_ratio_10d',
   'dde_main_inflow_ratio_20d',
+  'wcmi',
+  'wcmi_rhythm',
+  'wcmi_ma_support',
+  'wcmi_up_wave',
+  'wcmi_yang_dom',
+  'wcmi_shadow_clean',
+  'wcmi_stage_gain',
+  'wcmi_crash_avoid',
+  'wcmi_recent_strength',
 ] as const;
 export const UNIVERSE_SNAPSHOT_FIELD_SET: ReadonlySet<string> = new Set(
   UNIVERSE_SNAPSHOT_FIELD_NAMES,

@@ -29,12 +29,15 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import { DuckDBInstance, type DuckDBConnection } from '@duckdb/node-api';
 import {
   QuantError,
+  type DslScalar,
   type RankSpecView,
   type ScreenPlanAst,
   type ScreenRunResult,
+  type StockSnapshotDto,
   type UniversePlanAst,
 } from '@quant/shared';
 
+import { D, type Dec } from '../../common/decimal.js';
 import { KlineReaderService } from '../kline/kline-reader.service.js';
 import { KLINE_DATA_DIR } from '../kline/kline.token.js';
 import { LocalStockMetaAdapter } from '../stock-meta/local-stock-meta.adapter.js';
@@ -83,9 +86,25 @@ export class ScreenExecService {
     const startMs = Math.max(asof.getTime() - calendarDays * 86_400_000, KLINE_FLOOR_DATE_MS);
     const start = new Date(startMs);
 
+    // Rank metrics that reference universe_field (wcmi / pe_* / ret_* /
+    // dde_* …) need a per-code snapshot map; load it once up-front.
+    // Cheap relative to the kline read, so we accept the eager cost
+    // rather than threading a lazy loader through both paths.
+    const snapshotByCode = rank !== null && needsSnapshot(rank.metric)
+      ? await this.loadSnapshotMap()
+      : null;
+
     if (canPushdown(plan.expr)) {
       try {
-        return await this.executePushdown(plan, asof, start, universe, rank, signature);
+        return await this.executePushdown(
+          plan,
+          asof,
+          start,
+          universe,
+          rank,
+          signature,
+          snapshotByCode,
+        );
       } catch (err) {
         // A codegen / execution failure shouldn't break user-facing screen
         // results. Log the cause and fall through to the interpreter.
@@ -94,7 +113,14 @@ export class ScreenExecService {
         );
       }
     }
-    return this.executeInterpreter(plan, asof, start, universe, rank, signature);
+    return this.executeInterpreter(plan, asof, start, universe, rank, signature, snapshotByCode);
+  }
+
+  private async loadSnapshotMap(): Promise<ReadonlyMap<string, StockSnapshotDto>> {
+    const snapshots = await this.metaAdapter.listSnapshots([]);
+    const map = new Map<string, StockSnapshotDto>();
+    for (const s of snapshots) map.set(s.meta.code, s);
+    return map;
   }
 
   // -----------------------------------------------------------------------
@@ -108,13 +134,14 @@ export class ScreenExecService {
     universe: readonly string[],
     rank: RankSpecView | null,
     signature: string,
+    snapshotByCode: ReadonlyMap<string, StockSnapshotDto> | null,
   ): Promise<ScreenRunResult> {
     const matchedCodes = await this.runPushdownSql(plan, asof, start, universe);
     if (matchedCodes.length === 0) {
       return { matches: [], planSignature: signature };
     }
     const rowsByCode = await this.klineReader.bulkRangeForScreen(matchedCodes, start, asof);
-    const matches = this.evaluateMatches(plan, matchedCodes, rowsByCode, rank, {
+    const matches = this.evaluateMatches(plan, matchedCodes, rowsByCode, rank, snapshotByCode, {
       // Trust SQL but enforce the interpreter as a parity guard; any
       // disagreement is logged + dropped (see evaluateMatches).
       enforcePredicate: true,
@@ -160,9 +187,10 @@ export class ScreenExecService {
     universe: readonly string[],
     rank: RankSpecView | null,
     signature: string,
+    snapshotByCode: ReadonlyMap<string, StockSnapshotDto> | null,
   ): Promise<ScreenRunResult> {
     const rowsByCode = await this.klineReader.bulkRangeForScreen(universe, start, asof);
-    const matches = this.evaluateMatches(plan, universe, rowsByCode, rank, {
+    const matches = this.evaluateMatches(plan, universe, rowsByCode, rank, snapshotByCode, {
       enforcePredicate: false,
     });
     const ordered = rank === null ? matches : applyRank(matches, rank);
@@ -180,6 +208,7 @@ export class ScreenExecService {
     codes: readonly string[],
     rowsByCode: Record<string, readonly ScreenRow[]>,
     rank: RankSpecView | null,
+    snapshotByCode: ReadonlyMap<string, StockSnapshotDto> | null,
     opts: { enforcePredicate: boolean },
   ): { code: string; evidence: Evidence }[] {
     const out: { code: string; evidence: Evidence }[] = [];
@@ -204,7 +233,9 @@ export class ScreenExecService {
           ? evidence
           : {
               ...evidence,
-              rank_metric: evidenceValue(evaluateScalar(stockRows, rank.metric)),
+              rank_metric: evidenceValue(
+                evaluateRankMetric(stockRows, rank.metric, snapshotByCode?.get(code) ?? null),
+              ),
             };
       out.push({ code, evidence: rankAttached });
     }
@@ -280,6 +311,7 @@ function scalarLookback(scalar: RankSpecView['metric']): number {
   switch (scalar.kind) {
     case 'field':
     case 'const':
+    case 'universe_field':
       return 1;
     case 'agg':
       return scalar.window.days;
@@ -287,6 +319,125 @@ function scalarLookback(scalar: RankSpecView['metric']): number {
       return scalar.window.days + 1;
     case 'scale':
       return scalarLookback(scalar.inner);
+  }
+}
+
+function needsSnapshot(scalar: DslScalar): boolean {
+  switch (scalar.kind) {
+    case 'universe_field':
+      return true;
+    case 'scale':
+      return needsSnapshot(scalar.inner);
+    case 'field':
+    case 'const':
+    case 'agg':
+    case 'period_return':
+      return false;
+  }
+}
+
+/**
+ * Rank-step scalar evaluator. Same shape as `evaluateScalar` but resolves
+ * `universe_field` from the per-code snapshot. Returns null when the
+ * value is unavailable (kline interpreter NA / missing snapshot field) —
+ * `applyRank` skips those rows so they don't poison the sort.
+ */
+function evaluateRankMetric(
+  rows: readonly ScreenRow[],
+  scalar: DslScalar,
+  snap: StockSnapshotDto | null,
+): Dec | null {
+  switch (scalar.kind) {
+    case 'universe_field': {
+      const value = readSnapshotField(snap, scalar.field);
+      if (value === null) return null;
+      try {
+        const dec = new D(value);
+        return dec.isFinite() ? dec : null;
+      } catch {
+        return null;
+      }
+    }
+    case 'scale': {
+      const inner = evaluateRankMetric(rows, scalar.inner, snap);
+      if (inner === null) return null;
+      return inner.mul(new D(scalar.factor));
+    }
+    case 'field':
+    case 'const':
+    case 'agg':
+    case 'period_return':
+      return evaluateScalar(rows, scalar);
+  }
+}
+
+function readSnapshotField(snap: StockSnapshotDto | null, field: string): string | null {
+  if (snap === null) return null;
+  switch (field) {
+    case 'price':
+      return snap.price;
+    case 'mkt_cap':
+      return snap.derived.mkt_cap;
+    case 'float_mkt_cap':
+      return snap.derived.float_mkt_cap;
+    case 'pe_ttm':
+      return snap.derived.pe_ttm;
+    case 'pe_dynamic':
+      return snap.derived.pe_dynamic;
+    case 'pb':
+      return snap.derived.pb;
+    case 'peg':
+      return snap.derived.peg;
+    case 'gross_margin_ttm':
+      return snap.derived.gross_margin_ttm;
+    case 'wcmi':
+      return snap.derived.wcmi;
+    case 'wcmi_rhythm':
+      return snap.derived.wcmi_rhythm;
+    case 'wcmi_ma_support':
+      return snap.derived.wcmi_ma_support;
+    case 'wcmi_up_wave':
+      return snap.derived.wcmi_up_wave;
+    case 'wcmi_yang_dom':
+      return snap.derived.wcmi_yang_dom;
+    case 'wcmi_shadow_clean':
+      return snap.derived.wcmi_shadow_clean;
+    case 'wcmi_stage_gain':
+      return snap.derived.wcmi_stage_gain;
+    case 'wcmi_crash_avoid':
+      return snap.derived.wcmi_crash_avoid;
+    case 'wcmi_recent_strength':
+      return snap.derived.wcmi_recent_strength;
+    case 'ret_1d':
+      return snap.returns.ret_1d;
+    case 'ret_5d':
+      return snap.returns.ret_5d;
+    case 'ret_10d':
+      return snap.returns.ret_10d;
+    case 'ret_20d':
+      return snap.returns.ret_20d;
+    case 'ret_90d':
+      return snap.returns.ret_90d;
+    case 'ret_250d':
+      return snap.returns.ret_250d;
+    case 'dde_main_net_inflow_3d':
+      return snap.dde?.main_net_inflow_3d ?? null;
+    case 'dde_main_net_inflow_5d':
+      return snap.dde?.main_net_inflow_5d ?? null;
+    case 'dde_main_net_inflow_10d':
+      return snap.dde?.main_net_inflow_10d ?? null;
+    case 'dde_main_net_inflow_20d':
+      return snap.dde?.main_net_inflow_20d ?? null;
+    case 'dde_main_inflow_ratio_3d':
+      return snap.dde?.main_inflow_ratio_3d ?? null;
+    case 'dde_main_inflow_ratio_5d':
+      return snap.dde?.main_inflow_ratio_5d ?? null;
+    case 'dde_main_inflow_ratio_10d':
+      return snap.dde?.main_inflow_ratio_10d ?? null;
+    case 'dde_main_inflow_ratio_20d':
+      return snap.dde?.main_inflow_ratio_20d ?? null;
+    default:
+      return null;
   }
 }
 

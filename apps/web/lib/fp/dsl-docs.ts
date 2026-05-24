@@ -87,6 +87,34 @@ const FIELD_DOCS: Readonly<Record<string, DslDoc>> = {
   list_date: { title: 'list_date', description: '上市日期。' },
   pe: { title: 'pe', description: '市盈率（TTM）。' },
   pb: { title: 'pb', description: '市净率。' },
+  // ---- WCMI 90-day wave-quality (universe.derived)
+  wcmi: { title: 'WCMI', description: '90 日波形质量综合分 [0, 1000]，越高越好。' },
+  wcmi_rhythm: { title: 'WCMI 节奏', description: '走势节奏子项的横截面百分位 × 100。' },
+  wcmi_ma_support: {
+    title: 'WCMI 均线支撑',
+    description: '均线支撑/粘合度的横截面百分位 × 100。',
+  },
+  wcmi_up_wave: {
+    title: 'WCMI 上升浪',
+    description: '上升浪推升力度的横截面百分位 × 100。',
+  },
+  wcmi_yang_dom: {
+    title: 'WCMI 阳线占优',
+    description: '阳线占优/多头主导的横截面百分位 × 100。',
+  },
+  wcmi_shadow_clean: {
+    title: 'WCMI 上影线干净',
+    description: '上影线干净度的横截面百分位 × 100。',
+  },
+  wcmi_stage_gain: {
+    title: 'WCMI 阶段涨幅',
+    description: '阶段涨幅子项的横截面百分位 × 100。',
+  },
+  wcmi_crash_avoid: { title: 'WCMI 抗跌', description: '回撤防御能力的横截面百分位 × 100。' },
+  wcmi_recent_strength: {
+    title: 'WCMI 近端强势',
+    description: '近端强度子项的横截面百分位 × 100。',
+  },
 };
 
 const STRUCT_DOCS: Readonly<Record<string, DslDoc>> = {

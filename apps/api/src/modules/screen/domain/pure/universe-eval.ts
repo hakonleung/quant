@@ -248,6 +248,24 @@ function resolveSnapshotField(name: string, snap: StockSnapshotDto | null): stri
       return snap.dde?.main_inflow_ratio_10d ?? null;
     case 'dde_main_inflow_ratio_20d':
       return snap.dde?.main_inflow_ratio_20d ?? null;
+    case 'wcmi':
+      return snap.derived.wcmi;
+    case 'wcmi_rhythm':
+      return snap.derived.wcmi_rhythm;
+    case 'wcmi_ma_support':
+      return snap.derived.wcmi_ma_support;
+    case 'wcmi_up_wave':
+      return snap.derived.wcmi_up_wave;
+    case 'wcmi_yang_dom':
+      return snap.derived.wcmi_yang_dom;
+    case 'wcmi_shadow_clean':
+      return snap.derived.wcmi_shadow_clean;
+    case 'wcmi_stage_gain':
+      return snap.derived.wcmi_stage_gain;
+    case 'wcmi_crash_avoid':
+      return snap.derived.wcmi_crash_avoid;
+    case 'wcmi_recent_strength':
+      return snap.derived.wcmi_recent_strength;
     default:
       return null;
   }

@@ -60,6 +60,11 @@ function scalarOk(node: DslScalar): boolean {
     case 'agg':
     case 'period_return':
       return true;
+    case 'universe_field':
+      // Universe fields resolve per-code from the snapshot map; the
+      // kline SQL codegen has no way to join that in. Fall back to the
+      // interpreter, where the rank step will handle it.
+      return false;
     case 'scale':
       return scalarOk(node.inner);
   }
@@ -72,6 +77,7 @@ function scalarRowLevel(node: DslScalar): boolean {
       return true;
     case 'agg':
     case 'period_return':
+    case 'universe_field':
       return false;
     case 'scale':
       return scalarRowLevel(node.inner);

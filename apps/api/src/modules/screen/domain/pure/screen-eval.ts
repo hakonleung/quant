@@ -174,6 +174,14 @@ function evalScalar(rows: readonly ScreenRow[], node: DslScalar): Dec | Na {
   switch (node.kind) {
     case 'field':
       return rowValue(rows[rows.length - 1]!, node.field);
+    case 'universe_field':
+      // Universe scalars have no per-bar value — they're per-code
+      // snapshot reads handled by the rank step in screen-exec. When
+      // a universe_field somehow lands inside a kline predicate we
+      // treat it as NA (which makes any compare false → row excluded)
+      // rather than throwing, matching the "missing data = exclude"
+      // convention used elsewhere in the pipeline.
+      return NA;
     case 'const':
       return new D(node.value);
     case 'agg':

@@ -43,6 +43,8 @@ export function scalarLabel(scalar: DslScalar): string | null {
   switch (scalar.kind) {
     case 'field':
       return scalar.field;
+    case 'universe_field':
+      return scalar.field;
     case 'agg':
       return `${scalar.agg}_${scalar.field}_${String(scalar.window.days)}d`;
     case 'period_return':

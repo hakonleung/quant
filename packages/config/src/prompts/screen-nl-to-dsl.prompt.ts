@@ -57,6 +57,15 @@ const UNIVERSE_FIELDS = [
   'dde_main_inflow_ratio_5d',
   'dde_main_inflow_ratio_10d',
   'dde_main_inflow_ratio_20d',
+  'wcmi',
+  'wcmi_rhythm',
+  'wcmi_ma_support',
+  'wcmi_up_wave',
+  'wcmi_yang_dom',
+  'wcmi_shadow_clean',
+  'wcmi_stage_gain',
+  'wcmi_crash_avoid',
+  'wcmi_recent_strength',
 ].join(', ');
 
 /**
@@ -105,10 +114,16 @@ export function buildNlToDslSystemPrompt(): string {
   6. Top-N / 排序：**只要**用户提到"前 N"、"取前 N"、"排前 N"、"按...排序"、
      "按...排名"、"...前 N 只"、"sort/rank/top" 等任一表述，**必须**输出顶层
      \`rank\` 字段；**绝不**丢弃，**绝不**塞进 predicate。\`metric\` 用产生
-     该排序值的 Scalar（如"近 N 日涨幅"→\`period_return(N)\`、"成交额"→
-     \`field amount\`、"换手率"→\`field turnover_rate\`）；\`order\` 默认
-     \`desc\`（"前 N"通常是从高到低），用户明确说"最低/最少"时才用 \`asc\`；
-     \`top_n\` 必须填用户给的整数。
+     该排序值的 Scalar：
+       * K 线衍生量 → 普通 Scalar，如"近 N 日涨幅"→\`{"period_return":{"days":N}}\`、
+         "成交额"→\`{"field":"amount"}\`、"换手率"→\`{"field":"turnover_rate"}\`；
+       * Universe / snapshot 字段（wcmi、wcmi_*、mkt_cap、float_mkt_cap、pe_ttm、
+         pe_dynamic、pb、peg、gross_margin_ttm、ret_1d/5d/10d/20d/90d/250d、
+         dde_main_*、price、listed_days、float_pct）→ 直接写 \`{"field":"<name>"}\`，
+         转换器会按 universe 字段解析；例如"按 WCMI 排前 50"→
+         \`{"metric":{"field":"wcmi"},"order":"desc","top_n":50}\`。
+     \`order\` 默认 \`desc\`（"前 N"通常是从高到低），用户明确说"最低/最少"时才用
+     \`asc\`；\`top_n\` 必须填用户给的整数。
   7. **绝不**编造未定义的 op 或字段。Schema 是封闭的。以下示例是**绝不**
      允许出现的：\`add\` / \`sub\` / \`div\`（标量算术只支持 \`scale\` 一种
      形式：另一标量乘以一个常数因子，见下方"X 高于 Y 的 K%"示例）、
@@ -149,6 +164,22 @@ export function buildNlToDslSystemPrompt(): string {
          （N ∈ {3,5,10,20}；金额单位元；净流出用 \`lt\` + 负数）
        * \`近 N 日主力净流入占比 > X%\`  → \`dde_main_inflow_ratio_Nd gt X/100\`
          （占同期成交额比例，小数；可负）
+       * \`WCMI > N\` / \`WCMI 评分 ≥ N\` / \`波形质量 ...\`
+                                          → \`wcmi <op> N\`
+         （90 日波形质量综合分，范围 [0, 1000]，越高越好；按字面数值传入，
+          不要除以 100/1000；空值表示样本不足，自动被排除）
+       * \`WCMI 节奏 / wcmi_rhythm > N\`   → \`wcmi_rhythm <op> N\`
+         （以下 8 个子项均为横截面百分位 × 100，范围 [0, 100]，按字面数值
+          传入；分项名称见下方"WCMI 子项中文映射"）
+     WCMI 子项中文映射（universe 字段）：
+       * \`节奏 / 走势节奏\`               → \`wcmi_rhythm\`
+       * \`均线支撑 / 均线粘合\`           → \`wcmi_ma_support\`
+       * \`上升浪 / 上行浪 / 推升力度\`    → \`wcmi_up_wave\`
+       * \`阳线占优 / 多头主导\`           → \`wcmi_yang_dom\`
+       * \`上影线干净 / 无长上影\`         → \`wcmi_shadow_clean\`
+       * \`阶段涨幅（WCMI）\`              → \`wcmi_stage_gain\`
+       * \`抗跌 / 防回撤\`                 → \`wcmi_crash_avoid\`
+       * \`近期强度 / 近端强势\`           → \`wcmi_recent_strength\`
      正确翻译永远好过丢弃。
   9. \`实际换手率\` 与 \`turnover_rate\` 是同一列，**不要**捏造另一字段。
  9a. 行业术语在 \`universe_plan\` 中的标准映射（除非用户给出自己的阈值，
@@ -262,6 +293,55 @@ Rank 形态：
         {"op": "lt",  "left": {"field": "pe_ttm"},                   "right": {"const": 30}}
       ]
     }
+  }
+}
+
+[Q] WCMI 评分 ≥ 800, 节奏 wcmi_rhythm 大于 70, 抗跌 wcmi_crash_avoid 大于 60, 排除 ST
+[A] {
+  "screen_plan": {
+    "asof": "<TODAY>",
+    "expr": {
+      "op": "gt",
+      "left":  {"field": "close_qfq"},
+      "right": {"const": 0}
+    }
+  },
+  "universe_plan": {
+    "asof": "<TODAY>",
+    "expr": {
+      "op": "and",
+      "args": [
+        {"op": "gte", "left": {"field": "wcmi"},             "right": {"const": 800}},
+        {"op": "gt",  "left": {"field": "wcmi_rhythm"},      "right": {"const": 70}},
+        {"op": "gt",  "left": {"field": "wcmi_crash_avoid"}, "right": {"const": 60}},
+        {"op": "eq",  "left": {"field": "is_st"},            "right": {"const": false}}
+      ]
+    }
+  }
+}
+
+[Q] 流通市值 200 亿以上, 按 WCMI 综合分降序取前 30
+[A] {
+  "screen_plan": {
+    "asof": "<TODAY>",
+    "expr": {
+      "op": "gt",
+      "left":  {"field": "close_qfq"},
+      "right": {"const": 0}
+    }
+  },
+  "universe_plan": {
+    "asof": "<TODAY>",
+    "expr": {
+      "op": "gte",
+      "left":  {"field": "float_mkt_cap"},
+      "right": {"const": 20000000000}
+    }
+  },
+  "rank": {
+    "metric": {"field": "wcmi"},
+    "order": "desc",
+    "top_n": 30
   }
 }
 

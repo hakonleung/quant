@@ -71,6 +71,8 @@ function scalarToCanonical(node: DslScalar): Record<string, unknown> {
   switch (node.kind) {
     case 'field':
       return { field: node.field };
+    case 'universe_field':
+      return { universe_field: node.field };
     case 'const':
       return { const: node.value };
     case 'agg':

@@ -49,6 +49,11 @@ function scalar(node: DslScalar, cols: Set<string>): number {
     case 'field':
       cols.add(node.field);
       return 1;
+    case 'universe_field':
+      // Universe scalars don't touch the kline column set; they resolve
+      // per-code from the snapshot map. Lookback is zero — the value is
+      // a single number, not a windowed series.
+      return 1;
     case 'const':
       return 1;
     case 'agg':

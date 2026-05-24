@@ -329,6 +329,16 @@ function compileScalar(node: DslScalar, ctx: CodegenCtx, tableAlias: string | nu
       const inner = compileScalar(node.inner, ctx, tableAlias);
       return `(${inner} * CAST(${quoteLiteral(node.factor)} AS DOUBLE))`;
     }
+    case 'universe_field':
+      // Should never reach codegen: `canPushdown` rejects any AST
+      // containing a universe_field. Throw as a defensive guard so a
+      // future caller wiring this path notices instead of silently
+      // emitting broken SQL.
+      throw new QuantError(
+        'DSL_INVALID',
+        `universe_field '${node.field}' is not pushdown-able to SQL`,
+        {},
+      );
   }
 }
 

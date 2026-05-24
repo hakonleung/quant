@@ -20,6 +20,17 @@ import { z } from 'zod';
 export const DslFieldSchema = z.object({ kind: z.literal('field'), field: z.string() }).strict();
 export type DslField = z.infer<typeof DslFieldSchema>;
 
+/**
+ * Universe-side scalar field — resolves against the per-code snapshot
+ * (`StockSnapshotDto`) rather than per-bar kline rows. Only valid in
+ * positions that are evaluated per-code (rank.metric); using one inside
+ * a screen predicate has no per-bar value and evaluates to NA.
+ */
+export const DslUniverseFieldSchema = z
+  .object({ kind: z.literal('universe_field'), field: z.string() })
+  .strict();
+export type DslUniverseField = z.infer<typeof DslUniverseFieldSchema>;
+
 export const DslConstSchema = z.object({ kind: z.literal('const'), value: z.string() }).strict();
 export type DslConst = z.infer<typeof DslConstSchema>;
 
@@ -47,11 +58,18 @@ export interface DslScale {
   /** stringified Decimal to match `const` wire format */
   readonly factor: string;
 }
-export type DslScalar = DslField | DslConst | DslAggregate | DslPeriodReturn | DslScale;
+export type DslScalar =
+  | DslField
+  | DslUniverseField
+  | DslConst
+  | DslAggregate
+  | DslPeriodReturn
+  | DslScale;
 
 export const DslScalarSchema: z.ZodType<DslScalar> = z.lazy(() =>
   z.union([
     DslFieldSchema,
+    DslUniverseFieldSchema,
     DslConstSchema,
     DslAggregateSchema,
     DslPeriodReturnSchema,
