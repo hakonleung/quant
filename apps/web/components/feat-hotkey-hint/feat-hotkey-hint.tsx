@@ -42,6 +42,12 @@ export function FeatHotkeyHint(): React.ReactElement | null {
   const grouped = useMemo(() => groupBindings(visible), [visible]);
 
   if (!hintOpen) return null;
+  // All colors use the `term.*` namespace so bright text reads against
+  // the deep terminal-panel background. The earlier non-namespaced
+  // `ink`/`accent`/`line2` tokens resolved to LIGHT-theme values (dark
+  // ink, light line) which collapsed to invisible against the explicit
+  // dark rgba surface. Confirmed via the workbench cyber slot — all
+  // dark-surface components in this repo use `term.*`.
   if (hintMinimized) {
     return (
       <Box
@@ -51,10 +57,10 @@ export function FeatHotkeyHint(): React.ReactElement | null {
         right="16px"
         bottom="16px"
         zIndex={9999}
-        bg="rgba(10,14,16,0.92)"
-        color="accent"
+        bg="term.panel"
+        color="term.amber"
         borderWidth="1px"
-        borderColor="line2"
+        borderColor="term.line"
         borderRadius="4px"
         px="10px"
         py="6px"
@@ -65,7 +71,7 @@ export function FeatHotkeyHint(): React.ReactElement | null {
         aria-label={`open keyboard hint (${visible.length} shortcuts)`}
         _focusVisible={{
           outline: '2px solid',
-          outlineColor: 'accent',
+          outlineColor: 'term.amber',
           outlineOffset: '2px',
         }}
         onClick={() => setHintMinimized(false)}
@@ -87,10 +93,10 @@ export function FeatHotkeyHint(): React.ReactElement | null {
       maxH="60vh"
       overflowY="auto"
       zIndex={9999}
-      bg="rgba(8,11,13,0.96)"
-      color="ink"
+      bg="term.panel"
+      color="term.ink"
       borderWidth="1px"
-      borderColor="line2"
+      borderColor="term.line"
       borderRadius="4px"
       boxShadow="0 6px 22px rgba(0,0,0,0.45)"
       fontFamily="mono"
@@ -102,10 +108,10 @@ export function FeatHotkeyHint(): React.ReactElement | null {
         px="10px"
         py="6px"
         borderBottomWidth="1px"
-        borderColor="line2"
-        bg="rgba(20,28,32,0.85)"
+        borderColor="term.line"
+        bg="term.panel2"
       >
-        <Text fontWeight="700" letterSpacing="0.14em" color="accent">
+        <Text fontWeight="700" letterSpacing="0.14em" color="term.amber">
           KEYS · {ctx.activeFeat ?? 'global'}
         </Text>
         <Flex gap="4px">
@@ -119,12 +125,12 @@ export function FeatHotkeyHint(): React.ReactElement | null {
       </Flex>
       <Box px="10px" py="8px">
         {grouped.length === 0 ? (
-          <Text color="ink2">No shortcuts available in this scope.</Text>
+          <Text color="term.ink2">No shortcuts available in this scope.</Text>
         ) : (
           grouped.map(([group, list]) => (
             <Box key={group} mb="8px">
               <Text
-                color="ink2"
+                color="term.ink2"
                 fontSize="9px"
                 letterSpacing="0.18em"
                 mb="3px"
@@ -138,16 +144,16 @@ export function FeatHotkeyHint(): React.ReactElement | null {
                   gap="10px"
                   py="2px"
                 >
-                  <Text minW="64px" color="accent" fontWeight="700">
+                  <Text minW="64px" color="term.amber" fontWeight="700">
                     {b.seq.join(' ') || '—'}
                   </Text>
-                  <Text color="ink">{b.ui.label}</Text>
+                  <Text color="term.ink">{b.ui.label}</Text>
                 </Flex>
               ))}
             </Box>
           ))
         )}
-        <Text mt="6px" color="ink2" fontSize="9px" letterSpacing="0.12em">
+        <Text mt="6px" color="term.ink3" fontSize="9px" letterSpacing="0.12em">
           ? toggle · Esc close · z f fullscreen · z m minimize
         </Text>
       </Box>
@@ -173,15 +179,15 @@ function HeaderButton({ label, onClick, children }: HeaderButtonProps): React.Re
       display="grid"
       placeItems="center"
       bg="transparent"
-      color="ink2"
+      color="term.ink2"
       borderWidth="1px"
-      borderColor="line2"
+      borderColor="term.line"
       borderRadius="2px"
       cursor="pointer"
-      _hover={{ color: 'accent', borderColor: 'accent' }}
+      _hover={{ color: 'term.amber', borderColor: 'term.amber' }}
       _focusVisible={{
         outline: '2px solid',
-        outlineColor: 'accent',
+        outlineColor: 'term.amber',
         outlineOffset: '1px',
       }}
     >
