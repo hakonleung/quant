@@ -1,6 +1,7 @@
 {
   "name": "qx-os",
   "version": "0.0.0",
+  "private": true,
   "type": "module",
   "description": "A terminal-first quant workbench for A-share mid/short-term trading: K-line patterns, news sentiment, DDE main-fund flow and a WCMI composite score, driven by a unified command set reachable from mouse, keyboard, AI and IM.",
   "keywords": [
