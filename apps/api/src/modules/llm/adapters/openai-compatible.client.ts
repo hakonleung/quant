@@ -42,6 +42,7 @@ import type {
 } from '../ports/llm-client.port.js';
 import { runMoonshotWebSearchStream } from '../web-search/moonshot-tool-loop.js';
 import { runQwenWebSearchStream } from '../web-search/qwen-extra-body.js';
+import { runQwenResponsesStream } from '../web-search/qwen-responses.js';
 import type { LlmProviderRow, WebSearchKind } from '../providers.js';
 
 export interface OpenAiCompatibleClientOptions {
@@ -109,6 +110,10 @@ export class OpenAiCompatibleLlmClient implements LlmClient {
   }
 
   async *chatStreamFinalize(args: ChatStreamFinalizeArgs): AsyncIterable<ChatStreamChunk> {
+    if (args.webSearch === true && this.webSearchKind === 'qwen_responses') {
+      yield* runQwenResponsesStream(this.client, this.model, args, this.providerRow.provider);
+      return;
+    }
     if (args.webSearch === true && this.webSearchKind === 'qwen_extra_body') {
       yield* runQwenWebSearchStream(this.client, this.model, args, this.providerRow.provider);
       return;

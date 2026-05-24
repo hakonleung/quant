@@ -21,7 +21,7 @@
  * `LLM_PROVIDERS` table this module replaces.
  */
 
-export type WebSearchKind = 'moonshot_tool' | 'qwen_extra_body';
+export type WebSearchKind = 'moonshot_tool' | 'qwen_extra_body' | 'qwen_responses';
 
 export interface LlmProviderRow {
   /** Stable identifier (lower-case). Used in logs and the user ledger. */
@@ -69,11 +69,11 @@ export const LLM_PROVIDERS: readonly LlmProviderRow[] = [
   },
   {
     provider: 'qwen',
-    modelPro: 'qwen-plus',
+    modelPro: 'qwen3.6-plus-2026-04-02',
     modelFlash: 'qwen-turbo',
     baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
     apiKeyEnv: 'QWEN_API_KEY',
-    webSearchKind: 'qwen_extra_body',
+    webSearchKind: 'qwen_responses',
     cnyPerKInputToken: 0.0008,
     cnyPerKOutputToken: 0.002,
   },

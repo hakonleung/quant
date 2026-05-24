@@ -21,48 +21,77 @@ export interface SentimentMeta {
 
 const STOCK_SCHEMA_DOC = `\
 {
-  "brief":   string,   // ≤120字「上涨核心动因分析」一段话，紧凑不寒暄
-  "score":   number,   // ∈[-1,1]，强多头≈+0.6 强空头≈-0.6
-  "drivers": string[], // 每条 "summary|+/-/0|conf|rumor" — summary≤30字 conf∈[0,1] rumor=0|1
-  "themes":  string[], // 每条 "label|relevance|rationale" — label≤8字 relevance∈[0,1] rationale≤30字
-  "products":string[], // 每条 "name|sharePct|note" — name≤12字 sharePct数字或空 note≤20字或空
-  "signals": string[], // 每条 "product|change|horizon|magnitude" — change=up|down|short|destock|stable horizon=spot|short|mid magnitude≤10字或空
-  "mna":     string[], // 同 drivers
-  "supply":  string[], // 同 drivers
-  "research":string[], // 每条 "broker|rating|targetPrice|upsidePct|horizonMonths|reportDate" — 任一未知留空，date=YYYY-MM-DD
-  "competitive": {     // 或 null
+  "brief":   string,   // ≤120字 单段中文。必须优先点明"资本运作/重组预期"或"核心产品放量"等具体驱动事件名称，禁止八股套话/寒暄/免责
+  "score":   number,   // ∈[-1,1]，最多两位小数。强多≈+0.6 强空≈-0.6
+  "drivers": string[], // 每条 "summary|sign|conf|rumor" — summary≤30字且含具体数据/节点；sign=+|-|0；conf∈[0,1] 两位小数；rumor=0|1
+  "themes":  string[], // 每条 "label|relevance|rationale" — label≤8字；relevance∈[0,1] 两位小数；rationale≤30字；按 relevance 倒序
+  "products":string[], // 每条 "name|sharePct|note" — name≤12字；sharePct 数字%(如 30%)或留空；note≤20字
+  "signals": string[], // 每条 "product|change|horizon|magnitude" — change=up|down|short|destock|stable；horizon=spot|short|mid；magnitude≤10字
+  "mna":     string[], // 同 drivers 格式 (summary|sign|conf|rumor) — summary 中必须包含标的/阶段(rumor/planning/approved/completed)
+  "supply":  string[], // 同 drivers 格式
+  "research":string[], // 每条 "broker|rating|targetPrice|upsidePct|horizonMonths|reportDate" — 任一未知留空；date=YYYY-MM-DD 且必须 ≤ 评估锚点
+  "competitive": {     // 或 null (无可命名对手时整个置 null)
     "pos":     "leader"|"challenger"|"follower"|"niche"|"unclear",
-    "share":   number|null,
+    "share":   number|null,                                  // 百分比数值，如 15.5 表 15.5%，未知 null
     "summary": string,                                       // ≤60字
-    "competitors": string[],                                 // "name|relation|threat|note" — relation=domestic_peer|foreign_peer|substitute|upstream|downstream threat=high|medium|low note≤20字
+    "competitors": string[],                                 // "name|relation|threat|note" — relation=domestic_peer|foreign_peer|substitute|upstream|downstream；threat=high|medium|low；note≤20字
     "moats":   string[],                                     // 每条≤15字
     "risks":   string[]                                      // 每条≤15字
   },
-  "gaps":    string[], // 来自 research|news|xueqiu|guba|industry
+  "gaps":    string[], // 信息缺口来源标签 research|news|xueqiu|guba|industry
   "caveats": string[]  // 每条≤30字
 }`;
 
 const STOCK_SYSTEM = `\
-你是资深 A 股分析师，借助 web 搜索整合并购/热点题材/核心产品/价格信号/竞争\
-格局/供需/研报目标/情绪等维度，输出**单个**合法 minified JSON 对象。
+你是顶级 A 股量化基本面研究员。你必须主动调用 Web 搜索工具检索目标股票\
+的真实最新资讯，再整合为高密度结构化 JSON 特征。
 
-**只输出 JSON，无 markdown 包裹、无前后缀文字、无换行缩进。**
+<objective>
+输出一个合法的 minified JSON 对象。绝对禁止 markdown 标记、前后缀文字、换行缩进。
+</objective>
 
-Schema（每条字符串用 \`|\` 分隔，按下列字段顺序）：
+<schema>
 ${STOCK_SCHEMA_DOC}
+</schema>
 
-硬性规则：
-  1. 严格按 Schema 输出；原文未提及的字段给空数组 \`[]\` 或 \`null\`，**不要捏造**。
-  2. 数组上限：drivers/mna/supply ≤5 条；themes ≤5 条且按 relevance 倒序；
-     products ≤5 条；signals ≤5 条；research ≤5 条；competitors 2-6 条
-     （无可命名对手时整个 competitive 置 null）；moats/risks/gaps/caveats 各 ≤5 条。
-  3. \`brief\` 是单段中文要点（≤120字），紧扣"上涨核心动因"，不要寒暄/免责。
-  4. \`score\` ∈ [-1, 1]，必须根据搜索结果整体判断。
-  5. 数值字段无信息时写 \`null\`（不要 0 / "" / "未知"）。
-  6. 所有字符串字段严格遵守上文字数上限（超出会被裁掉，请自行精简）。`;
+<hard_rules>
+1. 【搜索执行规范】必须且只能通过内置 Web 搜索工具检索；禁止仅凭离线知识库回答。\
+若工具未返回结果，相应字段填空数组 / null，不得编造。
+2. 【主营核验】首次搜索结果必须用于核验「公司名 ↔ 主营业务 ↔ 所属行业」三者一致；\
+若发现张冠李戴 (同名/简称/曾用名混淆)，立即放弃当前线索重新检索。
+3. 【重组预期优先】若检索到并购、资产注入、跨界收购、大股东 / 实控人变更，\
+必须出现在 \`mna\` 中，且 \`brief\` 开头点明核心逻辑。
+4. 【零幻觉红线】未在检索结果中得到证实的事实严禁出现；不确定时填 null / [] / rumor=1。
+5. 【时效约束】\`research\` 的 reportDate 严禁早于评估锚点之前的过期数据；\
+其他字段引用的事件优先选用窗口期内最新进展。
+6. 【数组上限】drivers/mna/supply ≤5；themes ≤5 (relevance 倒序)；products ≤5；\
+signals ≤5；research ≤5；competitors 2-6；moats/risks/gaps/caveats 各 ≤5。
+7. 【管道符规范】所有以 \`|\` 分隔的字符串元素必须严格按 Schema 字段顺序与分隔符\
+个数填写；缺失字段留空 (相邻 \`||\`)，不得跳过分隔符。
+8. 【数值规范】JSON 顶层数值字段 (score, share) 必须是 number 或 null，\
+禁止带单位字符串。管道内的数值表达可带 %, 万, 亿等单位。
+9. 【JSON 安全】所有字符串中的 " 必须转义为 \\"；中文双引号不要在 JSON 字段中\
+使用；不得出现裸换行 / 制表符。
+10.【反照抄】Schema 注释 / 字段说明里的所有中文词组仅用于解释字段语义，禁止照搬。\
+每条文本必须能映射回检索到的具体公司名 / 事件 / 日期 / 数值，否则视为捏造。
+</hard_rules>`;
 
 export function buildSentimentSystem(): string {
   return STOCK_SYSTEM;
+}
+
+function shiftDate(asof: string, days: number): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/u.exec(asof);
+  if (m === null) return asof;
+  const y = Number(m[1]);
+  const mo = Number(m[2]);
+  const d = Number(m[3]);
+  const t = Date.UTC(y, mo - 1, d) - days * 86400_000;
+  const dt = new Date(t);
+  const yy = String(dt.getUTCFullYear()).padStart(4, '0');
+  const mm = String(dt.getUTCMonth() + 1).padStart(2, '0');
+  const dd = String(dt.getUTCDate()).padStart(2, '0');
+  return `${yy}-${mm}-${dd}`;
 }
 
 export function buildSentimentUser(args: {
@@ -70,12 +99,29 @@ export function buildSentimentUser(args: {
   readonly asof: string;
   readonly days: number;
 }): string {
+  const start = shiftDate(args.asof, args.days);
   return [
-    `目标股票：${args.meta.name}（${args.meta.code}）`,
-    `所属行业：${args.meta.industries}`,
-    `截止日期：${args.asof}（窗口：近 ${String(args.days)} 天）`,
+    '<context>',
+    `目标股票: ${args.meta.name} (${args.meta.code})`,
+    `所属行业: ${args.meta.industries}`,
+    `评估锚点: ${args.asof}`,
+    `检索时间窗口: ${start} 至 ${args.asof} (近 ${String(args.days)} 天)`,
+    '</context>',
     '',
-    '请通过 web 搜索收集近期资讯后，按 system prompt 中的 Schema 输出**单行 minified JSON**。',
+    '<search_instructions>',
+    `请主动使用 Web 搜索工具, 围绕 "${args.meta.name}" 或股票代码 "${args.meta.code}" 做多维度检索:`,
+    `1. "${args.meta.name} ${args.meta.code} 并购重组 资产注入 实控人变更"`,
+    `2. "${args.meta.name} 主营产品 市场占有率 产能 在手订单"`,
+    `3. "${args.meta.name} 研报 评级 目标价 ${String(args.asof).slice(0, 4)}"`,
+    `4. "${args.meta.name} 竞争对手 技术壁垒 国产替代"`,
+    '检索结果若早于时间窗口起点, 整段丢弃不采纳。',
+    '</search_instructions>',
+    '',
+    '<task>',
+    '基于搜索取得的真实最新资讯, 识别重组/资本运作预期、核心技术壁垒、短期价格催化剂\
+与供需边际变化, 并按 system 中的 schema 输出**单行 minified JSON**。',
+    '严禁张冠李戴 (务必核验公司主营与代码对应), 严禁套用 schema 注释中的中文短语。',
+    '</task>',
   ].join('\n');
 }
 
