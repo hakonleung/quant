@@ -27,6 +27,15 @@
 
 详见 [`docs/rfcs/0001-screening-dsl.md`](../rfcs/0001-screening-dsl.md)（仍为权威）。变更走 schema 版本号；NestJS 端校验在 `nl-screen.ts` zod schema 中收口。
 
+Universe 字段白名单（`UNIVERSE_FIELD_NAMES`）涵盖 meta（`code` / `name` /
+`industries` / `list_date` / `float_pct` / `is_st` / `exchange` /
+`listed_days`）、snapshot 衍生量（`price` / `mkt_cap` / `float_mkt_cap` /
+`pe_ttm` / `pe_dynamic` / `pb` / `peg` / `gross_margin_ttm`）、周期收益
+（`ret_{1,5,10,20,90,250}d`）、DDE 主力资金（`dde_main_net_inflow_*` /
+`dde_main_inflow_ratio_*`）以及 WCMI 波形质量（`wcmi` + 8 个子分，详见
+`01-stock-meta.md` §6）。同名 scalar 在 `screen_plan` / `rank.metric` 中
+自动解析为 `universe_field`，rank step 会按需加载 snapshot map。
+
 ## 缓存策略
 
 - **K 线读取**：DuckDB 列裁剪 + 时间窗口；`bulkRangeForScreen` 单次 `read_parquet` 拉满 universe。

@@ -120,3 +120,9 @@ $$\mathrm{WCMI}(c) = 10 \cdot \sum_i w_i \cdot \mathrm{pct}_i(c) \in [0, 1000]$$
 - **写盘**：composite 与 7 个子分通过 `LocalStockMetaWriterService.
   upsertMetrics` 一并落库，FE 通过 `StockListRow.wcmi*` 字段消费；
   EQ.LIST WCMI 列展示 composite，hover tooltip 列出 7 个子分百分位。
+- **Screen 暴露**：`wcmi` 与 8 个子分（`wcmi_rhythm` / `wcmi_ma_support` /
+  `wcmi_up_wave` / `wcmi_yang_dom` / `wcmi_shadow_clean` / `wcmi_stage_gain` /
+  `wcmi_crash_avoid` / `wcmi_recent_strength`）均为 universe DSL 字段，可用
+  于 `universe_plan` 谓词（如 `wcmi >= 800`）与 `rank.metric`（按字面值
+  传入，composite ∈ [0, 1000]，子分 ∈ [0, 100]）。详见
+  `docs/modules/03-screen.md`。
