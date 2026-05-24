@@ -48,7 +48,10 @@ export function FeatAiEq({ code }: Props): React.ReactElement {
 
   const initialOutput: InitialOutput | undefined = useMemo(() => {
     if (sentiment === null) return undefined;
-    const head = `$ analyze code=${code}  cache=${sentiment.cachedAt.slice(0, 10)}`;
+    const d = new Date(sentiment.cachedAt);
+    const pad = (n: number): string => String(n).padStart(2, '0');
+    const cacheLocal = `${String(d.getFullYear())}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    const head = `$ analyze code=${code}  cache=${cacheLocal}`;
     const body = `${head}\n${sentimentLines(sentiment).join('\n')}`;
     return { body, status: 'cached' };
   }, [sentiment, code]);

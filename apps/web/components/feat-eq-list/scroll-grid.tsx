@@ -97,6 +97,17 @@ export function ScrollGrid({
     rowVirtualizer.scrollToIndex(focusedIndex, { align: 'auto' });
   }, [focusedIndex, rowVirtualizer]);
 
+  // After the user clicks a header to re-sort, snap the table back to
+  // the top — otherwise the previous scroll position points into the
+  // middle of a freshly reordered list, which is disorienting.
+  const sortKey = sort === null ? null : `${sort.key}:${sort.dir}`;
+  const lastSortKeyRef = useRef<string | null>(sortKey);
+  useEffect(() => {
+    if (lastSortKeyRef.current === sortKey) return;
+    lastSortKeyRef.current = sortKey;
+    scrollRef.current?.scrollTo({ top: 0 });
+  }, [sortKey]);
+
   // ArrowUp/Down step focus through the sorted rows when the grid (or
   // any of its descendants) has keyboard focus. PageUp/Down jump 10
   // rows; Home/End snap to the ends. The handler also auto-scrolls

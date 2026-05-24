@@ -354,6 +354,31 @@ export function useTermConsole(config: UseTermConsoleConfig): TermConsoleBridge 
           if (initialBuffer !== undefined && initialBuffer.length > 0) {
             dispatch({ kind: 'setBuffer', buffer: initialBuffer, cursor: initialBuffer.length });
           }
+          // Cached output can be many rows; xterm auto-follows the
+          // cursor and parks the viewport at the bottom. Surfaces like
+          // AI.EQ / AI.SEC remount via `key={code|sectorId}` whenever
+          // the focused stock / sector changes, so snapping to the top
+          // here is the user-facing "scroll to top on focus change".
+          // Sequencing: dispatch's `schedulePaint` queued a microtask
+          // that will fire `paintTerminal` (which calls `term.write`
+          // many times — each goes through xterm's async parser).
+          // Queue an empty write *after* that paint microtask; its
+          // callback fires once the parser has drained every preceding
+          // write, so scrolling to top happens after the content is in
+          // the buffer and not before.
+          if (initialOutput !== undefined) {
+            queueMicrotask(() => {
+              const t = termRef.current;
+              if (t === null) return;
+              t.write('', () => {
+                try {
+                  t.scrollToTop();
+                } catch {
+                  /* */
+                }
+              });
+            });
+          }
         });
       }
 

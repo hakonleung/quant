@@ -14,10 +14,7 @@
 
 import { Logger } from '@nestjs/common';
 import type OpenAI from 'openai';
-import type {
-  ResponseInputItem,
-  ResponseStreamEvent,
-} from 'openai/resources/responses/responses';
+import type { ResponseInputItem, ResponseStreamEvent } from 'openai/resources/responses/responses';
 import type { Stream } from 'openai/streaming';
 
 import {
@@ -42,12 +39,8 @@ export async function* runQwenResponsesStream(
     model,
     input,
     stream: true,
-    tools: [
-      { type: 'web_search' },
-      { type: 'web_extractor' },
-      { type: 'code_interpreter' },
-    ],
-    extra_body: { enable_thinking: true },
+    tools: [{ type: 'web_search' }, { type: 'web_extractor' }, { type: 'code_interpreter' }],
+    // extra_body: { enable_thinking: true },
   };
   if (args.responseFormat === 'json_object') {
     body['text'] = { format: { type: 'json_object' } };
@@ -98,9 +91,7 @@ export async function* runQwenResponsesStream(
     deltaTextLen = fallbackText.length;
   }
   if (deltaTextLen === 0) {
-    log.warn(
-      `qwen_responses_empty provider=${provider} events=${[...eventTypes].join(',')}`,
-    );
+    log.warn(`qwen_responses_empty provider=${provider} events=${[...eventTypes].join(',')}`);
   }
   yield { delta: '', done: true, ...(lastUsage !== undefined ? { usage: lastUsage } : {}) };
 }
