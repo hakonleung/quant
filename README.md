@@ -5,6 +5,50 @@ A personal-investor quant workbench for A-share mid/short-term trading decisions
 Engineering rules (highest authority): [`CLAUDE.md`](CLAUDE.md).
 Architecture deep-dive: [`docs/architecture.md`](docs/architecture.md).
 
+## Highlights
+
+A terminal-first workbench: every action is a typed command, the same command set is reachable by mouse, keyboard, AI, or IM.
+
+### Market scan — sort by WCMI, drill into one stock
+
+| MKT watch board (sectors + WCMI rank)            | EQ chart + pattern reference matches             |
+| ------------------------------------------------ | ------------------------------------------------ |
+| ![](docs/screenshots/mkt-watch-board.png)        | ![](docs/screenshots/eq-chart-pattern.png)       |
+
+### Screener + Watch — NL2DSL gating, then edge-triggered alerts
+
+| `/screen` NL2DSL (Chinese prompt → AST)          | `/watch` groups + pct/abs edge-triggered alerts  |
+| ------------------------------------------------ | ------------------------------------------------ |
+| ![](docs/screenshots/scr-dsl-nl2dsl.png)         | ![](docs/screenshots/watch-edge-alerts.png)      |
+
+### AI briefing — single stock, whole sector, behavior replay
+
+| `/analyze` stock (drivers / themes / signals)    | `/analyze_sector` (themes / style / industry)    |
+| ------------------------------------------------ | ------------------------------------------------ |
+| ![](docs/screenshots/ai-analyze-stock.png)       | ![](docs/screenshots/ai-analyze-sector.png)      |
+
+Net-flow + AI replay on the EQ detail pane — win rate, profit factor, max drawdown, behavioral profile:
+
+![](docs/screenshots/eq-netflow-ai-replay.png)
+
+### Backtest evaluation — per-holding-period distribution
+
+`/bt eval` runs every signal day in a window and renders the holding-return distribution (5d / 10d / 20d / …) as histogram + KDE, with sample size, mean, median, win rate, and excess vs market baseline.
+
+![](docs/screenshots/bt-eval-histogram.png)
+
+### Terminal-first + IM bridge
+
+| Cheatsheet — every command, mouse-free           | Feishu bot — same instruction set, anywhere      |
+| ------------------------------------------------ | ------------------------------------------------ |
+| ![](docs/screenshots/term-help.png)              | ![](docs/screenshots/im-feishu-analyze.png)      |
+
+### Customize columns + filters
+
+CFG → COLUMNS: applied / available columns, per-column live filters that feed back into the MKT rank.
+
+![](docs/screenshots/cfg-columns.png)
+
 ## Usage
 
 1. Boot the dev stack (see [Run](#run)).
