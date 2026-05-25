@@ -39,10 +39,10 @@ export function ScopeBadge(): React.ReactElement | null {
       right={showsBadgeNeighbour ? RIGHT_OFFSET_WITH_BADGE : RIGHT_OFFSET}
       bottom={BOTTOM_OFFSET_HIDDEN}
       zIndex={9998}
-      bg="rgba(10,14,16,0.78)"
+      bg="brand.panelAlpha"
       color="ink2"
       borderWidth="1px"
-      borderColor="line2"
+      borderColor="line"
       borderRadius="4px"
       px="8px"
       py="4px"

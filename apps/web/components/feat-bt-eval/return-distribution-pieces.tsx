@@ -5,6 +5,10 @@
  * reference lines, crosshair, empty hint, hover tooltip. Kept here so
  * the main chart file stays under the 400-line cap (CLAUDE.md §1.2)
  * and the layout primitives can be unit-shot in isolation.
+ *
+ * Theme-aware colour values arrive via `DistColors` props from the
+ * parent stack — the stack pulls all `dist.*` semantic tokens in one
+ * `useTokenColors` call.
  */
 
 import { Box } from '@chakra-ui/react';
@@ -13,15 +17,26 @@ import type { HistogramBin } from '../../lib/fp/return-histogram.js';
 
 export const PAD = { top: 10, right: 12, bottom: 22, left: 36 } as const;
 
-export const REF_COLORS = {
-  zero: '#555',
-  mean: '#ff3ea5',
-  median: '#00e5ff',
-  baseline: '#ff8c00',
-} as const;
-export const KDE_COLOR = '#f0f0f0';
-const BAR_FILL = 'rgba(120,140,170,0.35)';
-const BAR_STROKE = '#8fa3c4';
+/**
+ * Resolved palette for the distribution chart. Field names mirror the
+ * `dist.*` semantic-token paths in `lib/theme/system.ts`. Bundling them
+ * into a single props object keeps each sub-piece's signature stable
+ * across theme flips.
+ */
+export interface DistColors {
+  readonly zero: string;
+  readonly mean: string;
+  readonly median: string;
+  readonly baseline: string;
+  readonly kdeLine: string;
+  readonly barFill: string;
+  readonly barStroke: string;
+  readonly axisLine: string;
+  readonly axisTick: string;
+  readonly axisLabel: string;
+  readonly crosshair: string;
+  readonly emptyText: string;
+}
 
 export interface HoverState {
   readonly bin: HistogramBin;
@@ -43,9 +58,17 @@ export interface BarsProps {
   readonly innerH: number;
   readonly xFor: (v: number) => number;
   readonly hover: HoverState | null;
+  readonly colors: DistColors;
 }
 
-export function Bars({ bins, maxCount, innerH, xFor, hover }: BarsProps): React.ReactElement {
+export function Bars({
+  bins,
+  maxCount,
+  innerH,
+  xFor,
+  hover,
+  colors,
+}: BarsProps): React.ReactElement {
   const safeMax = Math.max(maxCount, 1);
   return (
     <g>
@@ -63,8 +86,9 @@ export function Bars({ bins, maxCount, innerH, xFor, hover }: BarsProps): React.
             y={y}
             width={w}
             height={Math.max(h, 0)}
-            fill={BAR_FILL}
-            stroke={BAR_STROKE}
+            fill={colors.barFill}
+            fillOpacity={0.35}
+            stroke={colors.barStroke}
             strokeWidth={isHover ? 1.5 : 0.5}
             opacity={hover === null ? 1 : isHover ? 1 : 0.6}
           />
@@ -80,6 +104,7 @@ export interface XAxisProps {
   readonly width: number;
   readonly height: number;
   readonly xFor: (v: number) => number;
+  readonly colors: DistColors;
 }
 
 export function XAxis({
@@ -88,16 +113,37 @@ export function XAxis({
   width,
   height,
   xFor,
+  colors,
 }: XAxisProps): React.ReactElement {
   const ticks = niceAxisTicks(domainMin, domainMax, width - PAD.left - PAD.right);
   const y = height - PAD.bottom;
   return (
     <g>
-      <line x1={PAD.left} x2={width - PAD.right} y1={y} y2={y} stroke="#2a2a2a" strokeWidth={0.5} />
+      <line
+        x1={PAD.left}
+        x2={width - PAD.right}
+        y1={y}
+        y2={y}
+        stroke={colors.axisLine}
+        strokeWidth={0.5}
+      />
       {ticks.map((t) => (
         <g key={`xt-${String(t)}`}>
-          <line x1={xFor(t)} x2={xFor(t)} y1={y} y2={y + 2} stroke="#666" strokeWidth={0.5} />
-          <text x={xFor(t)} y={y + 9} fill="#888" textAnchor="middle" style={{ fontSize: '8px' }}>
+          <line
+            x1={xFor(t)}
+            x2={xFor(t)}
+            y1={y}
+            y2={y + 2}
+            stroke={colors.axisTick}
+            strokeWidth={0.5}
+          />
+          <text
+            x={xFor(t)}
+            y={y + 9}
+            fill={colors.axisLabel}
+            textAnchor="middle"
+            style={{ fontSize: '8px' }}
+          >
             {formatPctNumber(t)}
           </text>
         </g>
@@ -118,6 +164,7 @@ export interface RefLinesProps {
   readonly mean: number;
   readonly median: number;
   readonly baseline: number | null;
+  readonly colors: DistColors;
 }
 
 export function RefLines({
@@ -126,15 +173,16 @@ export function RefLines({
   mean,
   median,
   baseline,
+  colors,
 }: RefLinesProps): React.ReactElement {
   const y2 = height - PAD.bottom;
   return (
     <g>
-      <RefLine x={xFor(0)} y1={PAD.top} y2={y2} color={REF_COLORS.zero} dashed />
-      <RefLine x={xFor(mean)} y1={PAD.top} y2={y2} color={REF_COLORS.mean} />
-      <RefLine x={xFor(median)} y1={PAD.top} y2={y2} color={REF_COLORS.median} dashed />
+      <RefLine x={xFor(0)} y1={PAD.top} y2={y2} color={colors.zero} dashed />
+      <RefLine x={xFor(mean)} y1={PAD.top} y2={y2} color={colors.mean} />
+      <RefLine x={xFor(median)} y1={PAD.top} y2={y2} color={colors.median} dashed />
       {baseline !== null && (
-        <RefLine x={xFor(baseline)} y1={PAD.top} y2={y2} color={REF_COLORS.baseline} dashed />
+        <RefLine x={xFor(baseline)} y1={PAD.top} y2={y2} color={colors.baseline} dashed />
       )}
     </g>
   );
@@ -166,9 +214,11 @@ function RefLine({ x, y1, y2, color, dashed }: RefLineProps): React.ReactElement
 export function Crosshair({
   cx,
   height,
+  color,
 }: {
   readonly cx: number;
   readonly height: number;
+  readonly color: string;
 }): React.ReactElement {
   return (
     <line
@@ -176,7 +226,7 @@ export function Crosshair({
       x2={cx}
       y1={PAD.top}
       y2={height - PAD.bottom}
-      stroke="#fff"
+      stroke={color}
       strokeWidth={0.5}
       strokeDasharray="2 2"
       opacity={0.6}
@@ -187,9 +237,11 @@ export function Crosshair({
 export function EmptyHint({
   width,
   height,
+  color,
 }: {
   readonly width: number;
   readonly height: number;
+  readonly color: string;
 }): React.ReactElement {
   return (
     <text
@@ -197,7 +249,7 @@ export function EmptyHint({
       y={height / 2}
       fontFamily="monospace"
       fontSize="10"
-      fill="#666"
+      fill={color}
       textAnchor="middle"
       dominantBaseline="middle"
     >

@@ -20,8 +20,8 @@ interface ActivityRowProps {
 const STATUS_COLOR: Readonly<Record<ChannelDeliveryStatus, string>> = {
   pending: 'term.ink3',
   sent: 'term.green',
-  failed: 'term.red',
-  dryrun: 'term.amber',
+  failed: 'up',
+  dryrun: 'accent',
 };
 
 const SRC_LABEL: Readonly<Record<ChannelActivity['source'], string>> = {
@@ -31,9 +31,9 @@ const SRC_LABEL: Readonly<Record<ChannelActivity['source'], string>> = {
 };
 
 const SRC_COLOR: Readonly<Record<ChannelActivity['source'], string>> = {
-  system: 'term.amber',
+  system: 'accent',
   manual: 'term.ink',
-  inbound: 'term.cyan',
+  inbound: 'link',
 };
 
 function formatTime(iso: string): string {
@@ -59,8 +59,8 @@ export function ActivityRow({ row }: ActivityRowProps): React.ReactElement {
       px="8px"
       py="6px"
       borderBottomWidth="1px"
-      borderColor="term.line2"
-      _hover={{ bg: 'term.panel2' }}
+      borderColor="term.line"
+      _hover={{ bg: 'term.bgElev' }}
     >
       <Text fontSize="10px" color="term.ink3" flexShrink={0} minW="58px" lineHeight="1.5">
         {formatTime(row.ts)}
@@ -105,7 +105,7 @@ export function ActivityRow({ row }: ActivityRowProps): React.ReactElement {
           {row.text}
         </Text>
         {row.error !== undefined ? (
-          <Text fontSize="10px" color="term.red" mt="2px">
+          <Text fontSize="10px" color="up" mt="2px">
             err: {row.error}
           </Text>
         ) : null}

@@ -61,7 +61,7 @@ function FocusPanel({ code }: { code: string }): React.ReactElement {
     <Frame>
       {/* K-LINE — top */}
       <Flex align="center" gap="6px" mb="4px">
-        <Text color="term.amber">◆</Text>
+        <Text color="accent">◆</Text>
         <Text color="term.ink3" fontSize="10px" letterSpacing="0.18em">
           {code} 90D
         </Text>
@@ -72,7 +72,7 @@ function FocusPanel({ code }: { code: string }): React.ReactElement {
 
       {/* HEADER — code/name on the left, price/chg% on the right */}
       <Flex align="center" gap="6px">
-        <Text color="term.amber">▸</Text>
+        <Text color="accent">▸</Text>
         <Text color="term.ink3" fontSize="10px" letterSpacing="0.18em">
           FOCUS
         </Text>
@@ -113,7 +113,7 @@ function PriceLine({
   const change = rowChg ?? computeChangePct(bars);
   // Chinese stock-market convention — 涨红跌绿: gains paint red, losses
   // paint green. The arrow direction still tracks price direction.
-  const chgColor = change === null ? 'term.ink3' : change >= 0 ? 'term.red' : 'term.green';
+  const chgColor = change === null ? 'term.ink3' : change >= 0 ? 'up' : 'term.green';
   const chgArrow = change === null ? '·' : change >= 0 ? '▲' : '▼';
   return (
     <Flex direction="column" align="flex-end" flexShrink={0}>
@@ -176,7 +176,7 @@ function SentimentBlock({ sent }: { sent: Sentiment }): React.ReactElement {
   return (
     <Box mt="14px" pt="10px" borderTopWidth="1px" borderTopColor="term.line">
       <Flex align="center" gap="6px">
-        <Text color="term.amber">◆</Text>
+        <Text color="accent">◆</Text>
         <Text color="term.ink3" fontSize="10px" letterSpacing="0.18em">
           SENTIMENT
         </Text>
@@ -213,7 +213,7 @@ function ScoreRow({ score }: { score: number | null }): React.ReactElement {
   // Score is in [0, 1] (already normalised by the gateway).
   const t = Math.max(0, Math.min(1, score));
   const fillW = `${String(Math.round(t * 100))}%`;
-  const color = t >= 0.75 ? 'term.green' : t <= 0.25 ? 'term.red' : 'term.amber';
+  const color = t >= 0.75 ? 'term.green' : t <= 0.25 ? 'up' : 'accent';
   return (
     <Flex justify="space-between" align="center" fontSize="11px" mt="3px" gap="8px">
       <Text color="term.ink3">score</Text>
@@ -225,7 +225,7 @@ function ScoreRow({ score }: { score: number | null }): React.ReactElement {
           position="relative"
           w="58px"
           h="6px"
-          bg="term.panel2"
+          bg="term.bgElev"
           borderWidth="1px"
           borderColor="term.line"
         >
@@ -254,7 +254,7 @@ function Frame({ children }: { children: React.ReactNode }): React.ReactElement 
       h="100%"
       px="12px"
       py="12px"
-      bg="rgba(10,14,16,0.72)"
+      bg="brand.panelAlpha"
       borderLeftWidth="1px"
       borderLeftColor="term.line"
       fontFamily="mono"

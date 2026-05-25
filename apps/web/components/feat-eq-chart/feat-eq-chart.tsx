@@ -43,10 +43,12 @@ import {
   ChartCanvas,
   DEFAULT_PRICE_H,
   DEFAULT_VOL_H,
-  MA_COLORS,
   findRangeIndices,
   totalChartHeight,
 } from './chart-canvas.js';
+import { MA_COLOR_PATHS, getMaColors } from './chart-canvas-constants.js';
+import type { MaKey } from '../../lib/fp/kline-chart.js';
+import { useTokenColors } from '../../lib/theme/use-token-color.js';
 import { useKline, useStockMetaQuery, useStockSnapshots } from '../../lib/hooks/use-eqty-data.js';
 import { useUiStore } from '../../lib/stores/ui.store.js';
 import { FeatView } from '../feat-view/feat-view.js';
@@ -145,6 +147,9 @@ export function FeatEqChart({ code }: Props): React.ReactElement {
     return cur.close / prev.close - 1;
   })();
 
+  const maTokens = useTokenColors(MA_COLOR_PATHS);
+  const maColors = useMemo(() => getMaColors(maTokens), [maTokens]);
+
   return (
     <FeatView
       feat={Feat.EquityChart}
@@ -168,6 +173,7 @@ export function FeatEqChart({ code }: Props): React.ReactElement {
           hovered={selectedIdx === null && hoverIdx !== null}
           vp={vp}
           setVp={setVp}
+          maColors={maColors}
         />
         <Box flex="1" minH={0}>
           <Box position="relative" h={`${String(TOTAL_H)}px`} bg="panel">
@@ -216,6 +222,8 @@ interface FocusProps {
   /** Viewport state — drives the inline zoom controls. */
   readonly vp: ChartViewport;
   readonly setVp: (vp: ChartViewport) => void;
+  /** Theme-resolved MA palette (parent owns the `useTokenColors` call). */
+  readonly maColors: Readonly<Record<MaKey, string>>;
 }
 
 function FocusLabel({
@@ -227,6 +235,7 @@ function FocusLabel({
   hovered,
   vp,
   setVp,
+  maColors,
 }: FocusProps): React.ReactElement {
   const closeColor =
     bar === null ? 'ink2' : bar.close > bar.open ? 'up' : bar.close < bar.open ? 'down' : 'ink2';
@@ -313,10 +322,10 @@ function FocusLabel({
         >
           {tag}
         </Box>
-        <MaInline ma="MA5" value={bar?.ma5 ?? null} color={MA_COLORS.ma5} />
-        <MaInline ma="MA10" value={bar?.ma10 ?? null} color={MA_COLORS.ma10} />
-        <MaInline ma="MA20" value={bar?.ma20 ?? null} color={MA_COLORS.ma20} />
-        <MaInline ma="MA60" value={bar?.ma60 ?? null} color={MA_COLORS.ma60} />
+        <MaInline ma="MA5" value={bar?.ma5 ?? null} color={maColors.ma5} />
+        <MaInline ma="MA10" value={bar?.ma10 ?? null} color={maColors.ma10} />
+        <MaInline ma="MA20" value={bar?.ma20 ?? null} color={maColors.ma20} />
+        <MaInline ma="MA60" value={bar?.ma60 ?? null} color={maColors.ma60} />
       </Flex>
     </Flex>
   );
@@ -477,7 +486,7 @@ function FinancialsSection({ code, meta }: FinancialsProps): React.ReactElement 
       {/* Always render the LATEST QUARTER container so the section's
           height is stable from first paint — prevents CLS when the
           meta query resolves later. */}
-      <Box mt="8px" pt="6px" borderTopWidth="1px" borderColor="line2">
+      <Box mt="8px" pt="6px" borderTopWidth="1px" borderColor="line">
         <Text color="ink3" fontSize="9px" letterSpacing="0.16em" mb="4px">
           LATEST QUARTER {latestQ?.period ?? '—'}
         </Text>

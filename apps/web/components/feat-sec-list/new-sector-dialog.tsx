@@ -123,7 +123,7 @@ export function NewSectorDialog({ open, onClose }: Props): React.ReactElement | 
     <Box
       position="fixed"
       inset={0}
-      bg="rgba(0,0,0,0.45)"
+      bg="overlay"
       zIndex={2000}
       display="flex"
       alignItems="center"
@@ -143,7 +143,7 @@ export function NewSectorDialog({ open, onClose }: Props): React.ReactElement | 
         flexDirection="column"
         borderWidth="1px"
         borderColor="accent"
-        boxShadow="0 14px 48px rgba(0,0,0,0.55)"
+        boxShadow="card"
       >
         <Header onClose={closeAndReset} />
         <Tabs tab={tab} setTab={setTab} />
@@ -420,7 +420,7 @@ function DynamicForm({
             fontWeight="700"
             letterSpacing="0.16em"
             borderRadius="0"
-            _hover={{ bg: 'accentDark' }}
+            _hover={{ bg: 'accent' }}
           >
             RUN ▶
           </Button>
@@ -527,7 +527,7 @@ function Footer({ onCancel, onSave, canSave, saveLabel }: FooterProps): React.Re
         ml="auto"
         onClick={onSave}
         disabled={!canSave}
-        bg={canSave ? 'accent' : 'badgeBg'}
+        bg={canSave ? 'accent' : 'panel3'}
         color={canSave ? 'panel' : 'ink3'}
         h="auto"
         px="16px"
@@ -537,7 +537,7 @@ function Footer({ onCancel, onSave, canSave, saveLabel }: FooterProps): React.Re
         fontWeight="700"
         letterSpacing="0.18em"
         borderRadius="0"
-        _hover={canSave ? { bg: 'accentDark' } : {}}
+        _hover={canSave ? { bg: 'accent', opacity: 0.85 } : {}}
       >
         {saveLabel}
       </Button>

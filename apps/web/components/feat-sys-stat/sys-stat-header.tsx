@@ -140,7 +140,7 @@ function QueueCapsule({ code, queue, scanning }: QueueCapsuleProps): React.React
         {formatQueueCounter(queue)}
       </Text>
       {scanning && (
-        <Text as="span" className="blink" color="term.amber" fontWeight="700">
+        <Text as="span" className="blink" color="accent" fontWeight="700">
           ⟳
         </Text>
       )}
@@ -174,7 +174,7 @@ function TriggerCapsule({ code, scan, scanning }: TriggerCapsuleProps): React.Re
         {code}
       </Text>
       {scanning && (
-        <Text as="span" className="blink" color="term.amber" fontWeight="700">
+        <Text as="span" className="blink" color="accent" fontWeight="700">
           ⟳
         </Text>
       )}

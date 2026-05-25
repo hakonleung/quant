@@ -183,11 +183,11 @@ export function FeatWatchLive({ bare }: FeatWatchLiveProps = {}): React.ReactEle
         message: (
           <Text fontFamily="mono" fontSize="12px" color="term.ink2" lineHeight="1.7">
             delete group{' '}
-            <Text as="span" color="term.amber">
+            <Text as="span" color="accent">
               {group.name}
             </Text>{' '}
             and its{' '}
-            <Text as="span" color="term.red">
+            <Text as="span" color="up">
               {group.tasks.length}
             </Text>{' '}
             watch tasks? This also removes the group's stored conds and cannot be undone.
@@ -222,7 +222,7 @@ export function FeatWatchLive({ bare }: FeatWatchLiveProps = {}): React.ReactEle
         message: (
           <Text fontFamily="mono" fontSize="12px" color="term.ink2" lineHeight="1.7">
             delete{' '}
-            <Text as="span" color="term.red">
+            <Text as="span" color="up">
               {String(keys.length)}
             </Text>{' '}
             selected watch task(s)? This cannot be undone.
@@ -309,7 +309,7 @@ export function FeatWatchLive({ bare }: FeatWatchLiveProps = {}): React.ReactEle
               fontSize="12px"
               letterSpacing="0.18em"
               cursor="pointer"
-              _hover={{ bg: 'term.panel2' }}
+              _hover={{ bg: 'term.bgElev' }}
               _focusVisible={{ outline: '2px solid', outlineColor: 'term.green', outlineOffset: '-2px' }}
               aria-expanded={false}
               aria-label="open new watch form"
@@ -361,9 +361,9 @@ export function FeatWatchLive({ bare }: FeatWatchLiveProps = {}): React.ReactEle
             py="6px"
             mx="14px"
             borderWidth="1px"
-            borderColor="term.amber"
+            borderColor="accent"
             bg="term.panel"
-            color="term.amber"
+            color="accent"
             fontFamily="mono"
             fontSize="11px"
             letterSpacing="0.06em"
@@ -449,7 +449,7 @@ function BodyStatus({
   }
   if (state.kind === 'error') {
     return (
-      <Text role="status" aria-live="polite" color="term.red">
+      <Text role="status" aria-live="polite" color="up">
         stream error: {state.message}
       </Text>
     );
@@ -522,7 +522,7 @@ function Group({
         borderBottomWidth="1px"
         borderColor="term.line"
         cursor="pointer"
-        _hover={{ bg: 'term.panel2' }}
+        _hover={{ bg: 'term.bgElev' }}
         onClick={(): void => {
           onToggleGroup(group);
         }}
@@ -574,7 +574,7 @@ function Group({
         {!group.enabled && (
           <Text
             fontSize="9px"
-            color="term.red"
+            color="up"
             letterSpacing="0.18em"
             fontWeight="600"
             flexShrink={0}
@@ -676,11 +676,11 @@ function Row({ task, checked, onToggle }: RowProps): React.ReactElement {
       px="6px"
       py="2px"
       borderBottomWidth="1px"
-      borderColor="term.line2"
+      borderColor="term.line"
       cursor="pointer"
       bg={checked ? 'term.panel' : 'transparent'}
       transition="background 120ms ease, color 120ms ease"
-      _hover={{ bg: 'term.panel2' }}
+      _hover={{ bg: 'term.bgElev' }}
       onClick={onToggle}
     >
       <Checkbox.Root
@@ -727,10 +727,10 @@ function RowSummary({ task }: { readonly task: WatchTask }): React.ReactElement 
       </Text>
       <Box flex="1" />
       <Flex align="baseline" gap="6px" flexShrink={0}>
-        <Text fontSize="9px" color={task.enabled ? 'term.ink3' : 'term.red'} letterSpacing="0.02em">
+        <Text fontSize="9px" color={task.enabled ? 'term.ink3' : 'up'} letterSpacing="0.02em">
           {task.enabled ? `↺${formatMinutes(task.pushIntervalSec)}` : 'off'}
         </Text>
-        <Text fontSize="9px" color={task.hitCount > 0 ? 'term.amber' : 'term.ink3'}>
+        <Text fontSize="9px" color={task.hitCount > 0 ? 'accent' : 'term.ink3'}>
           ✦{String(task.hitCount)}
         </Text>
       </Flex>

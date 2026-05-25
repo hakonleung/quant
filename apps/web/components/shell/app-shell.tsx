@@ -165,6 +165,14 @@ function useThemeAttribute(): void {
   }, [theme, setTheme]);
   useEffect(() => {
     if (typeof document === 'undefined') return;
-    document.documentElement.dataset['theme'] = theme;
+    const root = document.documentElement;
+    root.dataset['theme'] = theme;
+    // Chakra v3's `_dark` conditional value uses the selector
+    // `.dark &, .dark .chakra-theme:not(.light) &`, so the semantic
+    // tokens only flip when the root carries a `dark` className. The
+    // `[data-theme]` attribute is kept for native `color-scheme` and
+    // any non-Chakra CSS that consumes it.
+    root.classList.toggle('dark', theme === 'dark');
+    root.classList.toggle('light', theme === 'light');
   }, [theme]);
 }

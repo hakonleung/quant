@@ -39,7 +39,9 @@ import { buildCompleterEnv } from '../../lib/instructions/completion.js';
 import { defaultInvoker } from '../../lib/instructions/fe-center.js';
 import { feDispatch, termOutputToEvents } from '../../lib/instructions/dispatch.js';
 import type { FeCtx } from '../../lib/instructions/fe-types.js';
+import { useSettingsStore } from '../../lib/stores/settings.store.js';
 import { useUiStore } from '../../lib/stores/ui.store.js';
+import { buildXtermTheme } from '../../lib/theme/xterm-theme.js';
 import { installRunner } from '../../lib/term/install-runner.js';
 
 const PROMPT = paint('$ ', ANSI.cyan, ANSI.bold);
@@ -260,29 +262,11 @@ export function useTermConsole(config: UseTermConsoleConfig): TermConsoleBridge 
         cursorWidth: 2,
         convertEol: true,
         scrollback: 1000,
-        theme: {
-          background: '#06080a',
-          foreground: '#cfead8',
-          cursor: '#5eff9c',
-          cursorAccent: '#06080a',
-          selectionBackground: '#1f8a4f',
-          black: '#0a0e10',
-          red: '#ff4d6d',
-          green: '#5eff9c',
-          yellow: '#ffc14d',
-          blue: '#5cf2ff',
-          magenta: '#ff5cd1',
-          cyan: '#5cf2ff',
-          white: '#cfead8',
-          brightBlack: '#4d6c61',
-          brightRed: '#ff4d6d',
-          brightGreen: '#5eff9c',
-          brightYellow: '#ffc14d',
-          brightBlue: '#5cf2ff',
-          brightMagenta: '#ff5cd1',
-          brightCyan: '#5cf2ff',
-          brightWhite: '#ffffff',
-        },
+        // ANSI palette derived from the workbench theme — see
+        // `lib/theme/xterm-theme.ts` for the slot map. A theme-store
+        // subscription below swaps the palette live on theme flips
+        // without tearing down the xterm instance.
+        theme: buildXtermTheme(useSettingsStore.getState().theme),
       });
       const fit = new FitAddon();
       term.loadAddon(fit);
@@ -437,6 +421,22 @@ export function useTermConsole(config: UseTermConsoleConfig): TermConsoleBridge 
       unsub();
     };
   }, [schedulePaint]);
+
+  // Theme flips swap the xterm palette in-place. `term.options.theme`
+  // assignment is the supported xterm v5+ path — no instance teardown,
+  // scroll buffer preserved. We compare prev/next mode so unrelated
+  // settings mutations (slack targets, column filters) don't churn.
+  useEffect(() => {
+    const unsub = useSettingsStore.subscribe((s, prev) => {
+      if (s.theme === prev.theme) return;
+      const t = termRef.current;
+      if (t === null) return;
+      t.options.theme = buildXtermTheme(s.theme);
+    });
+    return () => {
+      unsub();
+    };
+  }, []);
 
   useEffect(() => {
     const animating = state.phase === 'running' || state.phase === 'cancelling';

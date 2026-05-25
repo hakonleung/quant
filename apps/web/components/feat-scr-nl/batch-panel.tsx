@@ -26,7 +26,7 @@ export function BatchPanel({ result, loading, onApply }: Props): React.ReactElem
     <Box
       mt="4px"
       borderWidth="1px"
-      borderColor="line2"
+      borderColor="line"
       bg="panel"
       p="10px"
       fontFamily="mono"
@@ -48,7 +48,7 @@ interface HeaderProps {
 function BatchHeader({ result, canApply, onApply }: HeaderProps): React.ReactElement {
   return (
     <Flex align="center" gap="10px" mb="6px">
-      <Text color="prompt" letterSpacing="0.16em" fontSize="10px" fontWeight="700">
+      <Text color="down" letterSpacing="0.16em" fontSize="10px" fontWeight="700">
         ▎ BATCH
       </Text>
       <BatchStatus result={result} />
@@ -61,7 +61,7 @@ function BatchHeader({ result, canApply, onApply }: HeaderProps): React.ReactEle
         bg={canApply ? 'accent' : 'panel'}
         color={canApply ? 'panel' : 'ink3'}
         borderWidth="1px"
-        borderColor={canApply ? 'accent' : 'line2'}
+        borderColor={canApply ? 'accent' : 'line'}
         fontFamily="mono"
         fontSize="10px"
         letterSpacing="0.16em"
@@ -127,7 +127,7 @@ function BatchBody({ result }: { result: BatchMatchResult }): React.ReactElement
               px="6px"
               py="1px"
               borderWidth="1px"
-              borderColor="line2"
+              borderColor="line"
               color="ink2"
               fontSize="10px"
             >

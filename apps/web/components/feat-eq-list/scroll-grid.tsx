@@ -333,7 +333,7 @@ const RowItem = memo(function RowItem({
       display="flex"
       alignItems="center"
       borderBottomWidth="1px"
-      borderColor="line2"
+      borderColor="line"
       borderLeftWidth={focused ? '2px' : 0}
       borderLeftColor="accent"
       bg={focused ? 'accentBg' : 'panel'}
@@ -386,7 +386,7 @@ const RowItem = memo(function RowItem({
           bg={c.sticky === true ? (focused ? 'accentBg' : 'panel') : 'transparent'}
           zIndex={c.sticky === true ? 1 : 0}
           borderBottomWidth={c.sticky === true ? '1px' : 0}
-          borderColor="line2"
+          borderColor="line"
           flexShrink={0}
         >
           {c.render(row, rowIndex)}

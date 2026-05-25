@@ -80,7 +80,7 @@ function NlEditor({ sector }: { sector: Sector }): React.ReactElement {
     <Box px="10px" py="8px" borderBottomWidth="1px" borderColor="line" bg="panel3" flexShrink={0}>
       <Flex align="flex-start" gap="8px">
         <Text
-          color="prompt"
+          color="down"
           fontFamily="mono"
           fontSize="12px"
           fontWeight="700"

@@ -42,7 +42,7 @@ export function ChannelLiveBody(): React.ReactElement {
     <Flex direction="column" flex="1" minH={0} color="term.ink2" fontFamily="mono" fontSize="12px">
       <FilterChips state={filter} onChange={setFilter} />
       {error !== null && status === 'error' ? (
-        <Box px="14px" py="6px" color="term.red" fontSize="11px">
+        <Box px="14px" py="6px" color="up" fontSize="11px">
           stream error: {error}
         </Box>
       ) : null}

@@ -22,7 +22,20 @@
 
 import { Box } from '@chakra-ui/react';
 
+import { useTokenColor } from '../../lib/theme/use-token-color.js';
+
 export function CrtOverlay(): React.ReactElement {
+  // Token reads so the overlay flips with the theme. In light mode the
+  // grid colour shifts to a desaturated forest-grey, the phosphor dots
+  // become a near-imperceptible darken (not green specks on white),
+  // the scanline alpha drops to ~10% (avoids a striped-paper look on
+  // the bright bg) and the vignette becomes a soft warm wash instead
+  // of a black hole.
+  const gridColor = useTokenColor('brand.gridColor');
+  const phosphor = useTokenColor('brand.termGlowBorder');
+  const scanlineAlpha = useTokenColor('brand.scanlineAlpha');
+  const vignette = useTokenColor('brand.vignette');
+  const scan = scanlineAlpha.length > 0 ? scanlineAlpha : 'rgba(0, 0, 0, 0.32)';
   return (
     <>
       {/* z=0 — coarse grid */}
@@ -32,7 +45,7 @@ export function CrtOverlay(): React.ReactElement {
         pointerEvents="none"
         zIndex={0}
         opacity={0.22}
-        backgroundImage="linear-gradient(rgb(26, 58, 38) 1px, transparent 1px), linear-gradient(90deg, rgb(26, 58, 38) 1px, transparent 1px)"
+        backgroundImage={`linear-gradient(${gridColor} 1px, transparent 1px), linear-gradient(90deg, ${gridColor} 1px, transparent 1px)`}
         backgroundSize="32px 32px"
       />
       {/* z=1 — phosphor dot mesh */}
@@ -42,7 +55,7 @@ export function CrtOverlay(): React.ReactElement {
         pointerEvents="none"
         zIndex={1}
         opacity={0.4}
-        backgroundImage="radial-gradient(rgba(155, 242, 182, 0.06) 1px, transparent 1px)"
+        backgroundImage={`radial-gradient(${phosphor} 1px, transparent 1px)`}
         backgroundSize="3px 3px"
       />
       {/* z=4 — horizontal scanlines */}
@@ -51,7 +64,7 @@ export function CrtOverlay(): React.ReactElement {
         inset="0"
         pointerEvents="none"
         zIndex={4}
-        background="repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.32) 0px, rgba(0, 0, 0, 0.32) 1px, transparent 1px, transparent 3px)"
+        background={`repeating-linear-gradient(0deg, ${scan} 0px, ${scan} 1px, transparent 1px, transparent 3px)`}
         css={{ mixBlendMode: 'multiply' }}
       />
       {/* z=6 — vignette + soft inner glow */}
@@ -60,7 +73,7 @@ export function CrtOverlay(): React.ReactElement {
         inset="0"
         pointerEvents="none"
         zIndex={6}
-        boxShadow="rgba(0, 0, 0, 0.92) 0px 0px 220px inset, rgba(0, 80, 40, 0.3) 0px 0px 90px inset"
+        boxShadow={vignette}
         borderRadius="12px"
       />
     </>

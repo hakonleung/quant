@@ -6,6 +6,11 @@
  * Computes the shared x-domain across every holding's observation set
  * (with light symmetric padding) so panels are visually comparable, and
  * delegates the per-panel rendering to {@link ReturnDistributionChart}.
+ *
+ * Owns the single `useTokenColors` call that resolves every `dist.*`
+ * semantic token; the resulting `DistColors` struct is passed to the
+ * legend and each chart so SVG / Canvas leaves never read CSS vars
+ * themselves.
  */
 
 import { Box, Flex } from '@chakra-ui/react';
@@ -16,8 +21,10 @@ import type {
 } from '@quant/shared';
 import { useMemo } from 'react';
 
+import { useTokenColors } from '../../lib/theme/use-token-color.js';
+
 import { ReturnDistributionChart } from './return-distribution-chart.js';
-import { KDE_COLOR, REF_COLORS } from './return-distribution-pieces.js';
+import type { DistColors } from './return-distribution-pieces.js';
 
 export interface ReturnDistributionStackProps {
   readonly summary: BacktestEvaluateResponse['summary'];
@@ -32,6 +39,47 @@ const DEFAULT_WIDTH = 480;
 const DEFAULT_HEIGHT = 140;
 const DOMAIN_PAD = 0.05;
 
+/**
+ * Token paths consumed by {@link DistColors}, in the order required
+ * by {@link buildDistColors}.
+ */
+// Folded in task #8: stat.zero → ink3 (distinct from KDE's ink2);
+// stat.baseline → accent (amber matches); bar.fill → ink2 + SVG
+// `fillOpacity={0.35}` (same trick as chart.focus.range). Only mean
+// and median keep dedicated hues (unique magenta + cyan).
+const DIST_COLOR_PATHS = [
+  'ink3',
+  'dist.stat.mean',
+  'dist.stat.median',
+  'accent',
+  'ink2',
+  'ink2',
+  'link',
+  'line',
+  'ink3',
+  'ink3',
+  'ink',
+  'ink3',
+] as const;
+
+function buildDistColors(resolved: readonly string[]): DistColors {
+  const at = (i: number): string => resolved[i] ?? '';
+  return {
+    zero: at(0),
+    mean: at(1),
+    median: at(2),
+    baseline: at(3),
+    kdeLine: at(4),
+    barFill: at(5),
+    barStroke: at(6),
+    axisLine: at(7),
+    axisTick: at(8),
+    axisLabel: at(9),
+    crosshair: at(10),
+    emptyText: at(11),
+  };
+}
+
 export function ReturnDistributionStack(
   props: ReturnDistributionStackProps,
 ): React.ReactElement {
@@ -43,6 +91,9 @@ export function ReturnDistributionStack(
     width = DEFAULT_WIDTH,
     height = DEFAULT_HEIGHT,
   } = props;
+
+  const tokens = useTokenColors(DIST_COLOR_PATHS);
+  const colors = useMemo(() => buildDistColors(tokens), [tokens]);
 
   const domain = useMemo(() => computeSharedDomain(observations), [observations]);
 
@@ -58,7 +109,7 @@ export function ReturnDistributionStack(
 
   return (
     <Flex direction="column" gap="10px">
-      <Legend />
+      <Legend colors={colors} />
       {summary.map((s) => {
         const rets = byHolding.get(s.holding) ?? [];
         const spread = spreadByHolding[s.holding] ?? null;
@@ -76,6 +127,7 @@ export function ReturnDistributionStack(
             summaryLine={buildSummaryLine(s, spread)}
             width={width}
             height={height}
+            colors={colors}
           />
         );
       })}
@@ -83,13 +135,13 @@ export function ReturnDistributionStack(
   );
 }
 
-function Legend(): React.ReactElement {
+function Legend({ colors }: { readonly colors: DistColors }): React.ReactElement {
   const items: readonly { color: string; label: string; dashed: boolean }[] = [
-    { color: REF_COLORS.zero, label: '0%', dashed: true },
-    { color: REF_COLORS.mean, label: '均值', dashed: false },
-    { color: REF_COLORS.median, label: '中位', dashed: true },
-    { color: REF_COLORS.baseline, label: '基准', dashed: true },
-    { color: KDE_COLOR, label: 'KDE 平滑曲线', dashed: false },
+    { color: colors.zero, label: '0%', dashed: true },
+    { color: colors.mean, label: '均值', dashed: false },
+    { color: colors.median, label: '中位', dashed: true },
+    { color: colors.baseline, label: '基准', dashed: true },
+    { color: colors.kdeLine, label: 'KDE 平滑曲线', dashed: false },
   ];
   return (
     <Flex gap="10px" fontFamily="mono" fontSize="10px" color="ink3" flexWrap="wrap">

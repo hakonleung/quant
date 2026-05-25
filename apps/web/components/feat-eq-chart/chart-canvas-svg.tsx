@@ -11,19 +11,44 @@
  * Leaf SVG sub-pieces (candle, date ticks, focus marker, hover
  * crosshair) live in `chart-svg-pieces.tsx`; this file is just the
  * top-level layout glue.
+ *
+ * Theme-aware colours come in through `chartColors` / `maColors`
+ * props — the parent owns the `useTokenColors` calls so SSR / theme
+ * flips stay funnelled through a single subscription.
  */
 
 import type { KlineBar } from '@quant/shared';
 import type { MutableRefObject, PointerEvent as ReactPointerEvent } from 'react';
 
-import { palette } from '../../lib/theme/tokens.js';
 import type { MaKey } from '../../lib/fp/kline-chart.js';
 import type { CandleGeometry } from '../../lib/fp/chart-render-helpers.js';
 import type { ChartViewport } from '../../lib/fp/chart-view.js';
 
-import { MA_COLORS, VOL_GAP } from './chart-canvas-constants.js';
+import { VOL_GAP } from './chart-canvas-constants.js';
 import { CandleGroup, DateTicks, FocusDateMarker, HoverCrosshair } from './chart-svg-pieces.js';
 import { AXIS_TEXT_STYLE } from './chart-svg-style.js';
+
+/**
+ * Resolved theme tokens for the chart SVG layer. Field names mirror
+ * the `chart.*` semantic-token paths in `lib/theme/system.ts`; the
+ * parent component flattens the dotted paths through `useTokenColors`
+ * and rebuilds this struct so every sub-component pulls from one
+ * subscription.
+ */
+export interface ChartColors {
+  readonly axisLine: string;
+  readonly axisTick: string;
+  readonly axisLabel: string;
+  readonly gridLine: string;
+  readonly candleUp: string;
+  readonly candleDown: string;
+  readonly focusBg: string;
+  readonly focusRange: string;
+  readonly focusRangeBorder: string;
+  readonly crosshairLine: string;
+  readonly crosshairLabelBg: string;
+  readonly crosshairLabelText: string;
+}
 
 interface ChartSvgProps {
   readonly bars: readonly KlineBar[];
@@ -56,6 +81,8 @@ interface ChartSvgProps {
   readonly onPointerUp: (e: ReactPointerEvent<SVGSVGElement>) => void;
   readonly onPointerCancel: (e: ReactPointerEvent<SVGSVGElement>) => void;
   readonly onPointerLeave: (e: ReactPointerEvent<SVGSVGElement>) => void;
+  readonly chartColors: ChartColors;
+  readonly maColors: Readonly<Record<MaKey, string>>;
 }
 
 export function ChartSvg(props: ChartSvgProps): React.ReactElement {
@@ -90,6 +117,8 @@ export function ChartSvg(props: ChartSvgProps): React.ReactElement {
     onPointerCancel,
     onPointerLeave,
     bars,
+    chartColors,
+    maColors,
   } = props;
 
   return (
@@ -109,13 +138,13 @@ export function ChartSvg(props: ChartSvgProps): React.ReactElement {
     >
       {showVolume && (
         <>
-          <line x1={priceAxisW} x2={width} y1={priceH} y2={priceH} stroke={palette.light.line} />
+          <line x1={priceAxisW} x2={width} y1={priceH} y2={priceH} stroke={chartColors.axisLine} />
           <line
             x1={priceAxisW}
             x2={width}
             y1={priceH + VOL_GAP + volH}
             y2={priceH + VOL_GAP + volH}
-            stroke={palette.light.line}
+            stroke={chartColors.axisLine}
           />
         </>
       )}
@@ -125,12 +154,12 @@ export function ChartSvg(props: ChartSvgProps): React.ReactElement {
           const y = scaleY(p);
           return (
             <g key={`pt-${String(i)}`}>
-              <line x1={priceAxisW - 3} x2={width} y1={y} y2={y} stroke={palette.light.line2} />
+              <line x1={priceAxisW - 3} x2={width} y1={y} y2={y} stroke={chartColors.gridLine} />
               <text
                 x={priceAxisW - 6}
                 y={y + 3}
                 style={AXIS_TEXT_STYLE}
-                fill={palette.light.ink3}
+                fill={chartColors.axisLabel}
                 textAnchor="end"
               >
                 {p.toFixed(2)}
@@ -146,8 +175,9 @@ export function ChartSvg(props: ChartSvgProps): React.ReactElement {
             y={0}
             width={xForIndex(committedRange.end) - xForIndex(committedRange.start) + vp.candleW}
             height={priceH + VOL_GAP + volH}
-            fill="rgba(30,98,200,0.06)"
-            stroke="rgba(30,98,200,0.45)"
+            fill={chartColors.focusRange}
+            fillOpacity={0.06}
+            stroke={chartColors.focusRangeBorder}
           />
         )}
         {candleGeom.map((c) => (
@@ -159,6 +189,7 @@ export function ChartSvg(props: ChartSvgProps): React.ReactElement {
             effVolH={effVolH}
             effVolGap={effVolGap}
             isFocused={focusIdx === c.idx}
+            chartColors={chartColors}
           />
         ))}
         {(['ma60', 'ma20', 'ma10', 'ma5'] as const).map((k) =>
@@ -167,7 +198,7 @@ export function ChartSvg(props: ChartSvgProps): React.ReactElement {
               key={k}
               d={maPaths[k]}
               fill="none"
-              stroke={MA_COLORS[k]}
+              stroke={maColors[k]}
               strokeWidth="1.1"
               opacity="0.95"
             />
@@ -181,7 +212,7 @@ export function ChartSvg(props: ChartSvgProps): React.ReactElement {
               y={c.volY}
               width={vp.candleW}
               height={Math.max(1, c.volH)}
-              fill={c.isUp ? palette.light.up : palette.light.down}
+              fill={c.isUp ? chartColors.candleUp : chartColors.candleDown}
               opacity={focusIdx === null || focusIdx === c.idx ? 0.85 : 0.4}
             />
           ))}
@@ -196,6 +227,7 @@ export function ChartSvg(props: ChartSvgProps): React.ReactElement {
             totalH={totalH}
             interactive={interactive}
             focusIdx={focusIdx}
+            chartColors={chartColors}
           />
         )}
 
@@ -204,6 +236,7 @@ export function ChartSvg(props: ChartSvgProps): React.ReactElement {
             date={bars[focusIdx].date}
             cx={Math.max(18, Math.min(innerW - 18, xForIndex(focusIdx) + vp.candleW / 2))}
             totalH={totalH}
+            chartColors={chartColors}
           />
         )}
       </g>
@@ -214,6 +247,7 @@ export function ChartSvg(props: ChartSvgProps): React.ReactElement {
           width={width}
           priceAxisW={priceAxisW}
           price={hoverPrice}
+          chartColors={chartColors}
         />
       )}
     </svg>

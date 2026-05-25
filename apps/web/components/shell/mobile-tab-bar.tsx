@@ -83,7 +83,7 @@ function TabButton({ spec, active, onSelect }: TabButtonProps): React.ReactEleme
       cursor="pointer"
       // Mono chrome — keep the press feedback obvious on touch since
       // hover effects don't fire on phones.
-      _active={{ bg: 'panel2' }}
+      _active={{ bg: 'panel3' }}
       _focusVisible={{ outline: '2px solid', outlineColor: 'accent', outlineOffset: '-2px' }}
     >
       <Text

@@ -11,7 +11,8 @@
  *   - `.blink` strobe + reduced-motion guard
  *   - `:focus-visible` 1-px accent outline
  *   - `.skip-link` keyboard skip-to-main pattern
- *   - `[data-theme="dark"]` Chakra colour-token overrides + color-scheme
+ *   - `[data-theme="..."]` → `color-scheme` switch (Chakra's `_dark`
+ *     conditional tokens do the colour rewrite)
  *   - `@media (max-width:767px)` mobile font-size bump
  */
 
@@ -61,27 +62,13 @@
   transform: translateY(0);
 }
 
+/*
+ * Theme switching: Chakra v3 `_dark` conditional values (see
+ * `lib/theme/system.ts`) fire on `color-scheme: dark`. So all the
+ * `<html data-theme="...">` attribute has to do is flip color-scheme;
+ * Chakra rewrites every `--chakra-colors-*` automatically.
+ */
 [data-theme='dark'] {
-  --chakra-colors-bg: #0d1014;
-  --chakra-colors-panel: #11151b;
-  --chakra-colors-panel2: #161b22;
-  --chakra-colors-panel3: #1a2129;
-  --chakra-colors-line: #1f2731;
-  --chakra-colors-line2: #2a3340;
-  --chakra-colors-hover: #1c232c;
-  --chakra-colors-ink: #e6ebf2;
-  --chakra-colors-ink2: #a8b2c0;
-  --chakra-colors-ink3: #6f7888;
-  --chakra-colors-accent: #e29e3a;
-  --chakra-colors-accentDark: #c9852a;
-  --chakra-colors-accentBg: #3a2810;
-  --chakra-colors-up: #ff5566;
-  --chakra-colors-down: #3fbf86;
-  --chakra-colors-link: #5aa0ff;
-  --chakra-colors-violet: #9d80ff;
-  --chakra-colors-prompt: #3fbf86;
-  --chakra-colors-promptBg: #0f2a1d;
-  --chakra-colors-badgeBg: #1a2129;
   color-scheme: dark;
 }
 

@@ -42,17 +42,19 @@ import {
   visibleSlice,
   type ChartViewport,
 } from '../../lib/fp/chart-view.js';
+import { useTokenColors } from '../../lib/theme/use-token-color.js';
 
-import { ChartSvg } from './chart-canvas-svg.js';
+import { ChartSvg, type ChartColors } from './chart-canvas-svg.js';
 import {
   BOTTOM_PAD,
   DATE_AXIS_H,
   DEFAULT_PRICE_H,
   DEFAULT_VOL_H,
-  MA_COLORS,
+  MA_COLOR_PATHS,
   PRICE_AXIS_W,
   TOP_PAD,
   VOL_GAP,
+  getMaColors,
 } from './chart-canvas-constants.js';
 import { useChartPointer } from './use-chart-pointer.js';
 
@@ -64,11 +66,55 @@ export {
   DATE_AXIS_H,
   DEFAULT_PRICE_H,
   DEFAULT_VOL_H,
-  MA_COLORS,
   PRICE_AXIS_W,
   TOP_PAD,
   VOL_GAP,
 };
+
+/**
+ * Token paths for the non-MA chart colours, batched into a single
+ * `useTokenColors` call so the chart only triggers one `getComputedStyle`
+ * per theme flip rather than ~12. Paths collapsed onto workbench tokens
+ * in task #6: axes / grid / candles / crosshair no longer carry their
+ * own chart-specific tokens (see THEME_DESIGN.md 瘦身记录). Field names
+ * on {@link ChartColors} are preserved so the SVG layer stays stable.
+ */
+const CHART_COLOR_PATHS = [
+  'line',
+  'ink3',
+  'ink3',
+  'line',
+  'up',
+  'down',
+  'accentBg',
+  // focus-range fill: was `chart.focus.range` (rgba blue @ 6%); now
+  // resolves to plain `link` and the SVG applies `fillOpacity={0.06}`
+  // at draw time. Avoids carrying a chart-specific token whose only
+  // job was to bake an alpha.
+  'link',
+  'link',
+  'accent',
+  'accentBg',
+  'accent',
+] as const;
+
+function buildChartColors(resolved: readonly string[]): ChartColors {
+  const at = (i: number): string => resolved[i] ?? '';
+  return {
+    axisLine: at(0),
+    axisTick: at(1),
+    axisLabel: at(2),
+    gridLine: at(3),
+    candleUp: at(4),
+    candleDown: at(5),
+    focusBg: at(6),
+    focusRange: at(7),
+    focusRangeBorder: at(8),
+    crosshairLine: at(9),
+    crosshairLabelBg: at(10),
+    crosshairLabelText: at(11),
+  };
+}
 
 export function totalChartHeight(
   priceH: number,
@@ -141,6 +187,10 @@ export function ChartCanvas({
   focusIdx = null,
   onBarClick,
 }: ChartCanvasProps): React.ReactElement {
+  const maTokens = useTokenColors(MA_COLOR_PATHS);
+  const maColors = useMemo(() => getMaColors(maTokens), [maTokens]);
+  const chartTokens = useTokenColors(CHART_COLOR_PATHS);
+  const chartColors = useMemo(() => buildChartColors(chartTokens), [chartTokens]);
   const wrapRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(900);
   useEffect(() => {
@@ -340,6 +390,8 @@ export function ChartCanvas({
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerCancel}
         onPointerLeave={onPointerLeave}
+        chartColors={chartColors}
+        maColors={maColors}
       />
     </Box>
   );

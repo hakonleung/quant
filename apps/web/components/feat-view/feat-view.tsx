@@ -637,7 +637,7 @@ function OverlayBody({
       color={cyber ? 'term.ink2' : 'ink'}
       borderWidth="1px"
       borderColor={cyber ? 'term.line' : 'line'}
-      boxShadow="0 14px 48px rgba(0,0,0,0.55)"
+      boxShadow="card"
     >
       {children}
     </Box>

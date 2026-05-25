@@ -93,7 +93,7 @@ export function LineNumberGutter({
       minW={`${String(digits + 2)}ch`}
       overflow="hidden"
       borderRightWidth="1px"
-      borderRightColor="rgba(94, 255, 156, 0.08)"
+      borderRightColor="brand.termGlowBorder"
       pl="6px"
       pr="8px"
     >

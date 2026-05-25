@@ -18,8 +18,8 @@ export type VitalCode = 'LCP' | 'INP' | 'CLS';
 export function vitalColor(s: VitalSample | null): string {
   if (s === null) return 'term.ink3';
   if (s.rating === 'good') return 'term.green';
-  if (s.rating === 'needs-improvement') return 'term.amber';
-  return 'term.red';
+  if (s.rating === 'needs-improvement') return 'accent';
+  return 'up';
 }
 
 /**

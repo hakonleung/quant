@@ -206,7 +206,7 @@ function DialogShell({
     <Flex
       position="fixed"
       inset="0"
-      bg="rgba(15,17,22,0.55)"
+      bg="overlay"
       align={isMobile ? 'stretch' : 'center'}
       justify="center"
       zIndex={1200}
@@ -242,7 +242,7 @@ function DialogCard({ ref, isMobile, title, children }: DialogCardProps): React.
       bg="panel"
       borderWidth={isMobile ? '0' : '1px'}
       borderColor="line"
-      boxShadow={isMobile ? 'none' : '0 14px 48px rgba(0,0,0,0.55)'}
+      boxShadow={isMobile ? 'none' : 'shadowCard'}
       display="flex"
       flexDirection="column"
       overflow="auto"
@@ -394,7 +394,7 @@ function Field({
         }}
         {...(placeholder !== undefined ? { placeholder } : {})}
         {...(inputMode !== undefined ? { inputMode } : {})}
-        bg="panel2"
+        bg="panel3"
         fontFamily="mono"
         fontSize="12px"
       />

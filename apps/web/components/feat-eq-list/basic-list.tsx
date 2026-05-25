@@ -184,7 +184,7 @@ export function BasicList({ sector, market, bare }: BasicListProps): React.React
                     color={focused ? 'ink' : 'ink2'}
                     _hover={focused ? {} : { bg: 'hover' }}
                     borderBottomWidth="1px"
-                    borderColor="line2"
+                    borderColor="line"
                     onClick={(): void => {
                       setFocusCode(r.code);
                     }}

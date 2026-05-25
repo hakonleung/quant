@@ -57,7 +57,7 @@ export function LedgerImportDialog({
     <Flex
       position="fixed"
       inset="0"
-      bg="rgba(15,17,22,0.55)"
+      bg="overlay"
       align="center"
       justify="center"
       zIndex={1200}
@@ -69,7 +69,7 @@ export function LedgerImportDialog({
         bg="panel"
         borderWidth="1px"
         borderColor="line"
-        boxShadow="0 14px 48px rgba(0,0,0,0.55)"
+        boxShadow="card"
         p="16px"
         minW="360px"
         maxW="92vw"

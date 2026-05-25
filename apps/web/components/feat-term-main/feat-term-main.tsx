@@ -14,6 +14,7 @@ import { useState } from 'react';
 
 import { useViewport } from '../../lib/hooks/use-viewport.js';
 import { useUiStore } from '../../lib/stores/ui.store.js';
+import { useTokenColor } from '../../lib/theme/use-token-color.js';
 import { TermConsole } from '../term-console/index.js';
 
 import { BigLogo } from './big-logo.js';
@@ -28,13 +29,16 @@ export function FeatTermMain(): React.ReactElement {
   const previewCode = peekListCode(state.active?.state) ?? focusCode;
   const { mode: vpMode } = useViewport();
   const isMobile = vpMode === 'mobile';
+  // `brand.logoBg` holds a full `radial-gradient(...)` string — Chakra's
+  // `bg` accepts any CSS value, so the gradient flows straight through.
+  const logoBg = useTokenColor('brand.logoBg');
 
   return (
     <Flex
       direction="column"
       h="100%"
       minH="320px"
-      bg="radial-gradient(ellipse at center, #08120c 0%, #04060a 65%, #020406 100%)"
+      bg={logoBg}
       position="relative"
       overflow="hidden"
     >
@@ -68,7 +72,7 @@ export function FeatTermMain(): React.ReactElement {
             maxH="46vh"
             overflowY="auto"
             borderBottomWidth="1px"
-            borderBottomColor="rgba(94, 255, 156, 0.12)"
+            borderBottomColor="brand.termGlowBorder"
           >
             <StockDashboard code={previewCode} />
           </Box>

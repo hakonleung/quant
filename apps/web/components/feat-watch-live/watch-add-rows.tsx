@@ -88,12 +88,12 @@ export function GroupRow({
             }}
           />
           {state.newGroupName.length > 0 && invalid ? (
-            <Text fontSize="11px" color="term.red">
+            <Text fontSize="11px" color="up">
               1–32 chars · letters/digits/space/_/-
             </Text>
           ) : null}
           {duplicate ? (
-            <Text fontSize="11px" color="term.red">
+            <Text fontSize="11px" color="up">
               name already exists
             </Text>
           ) : null}

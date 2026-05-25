@@ -8,13 +8,16 @@
  *
  * Each piece is purely presentational — props in, JSX out — and shares
  * the axis-text style with the parent module via a small re-export.
+ *
+ * Theme-aware colours arrive via `chartColors` from the parent so
+ * subscriptions to `useSettingsStore` stay funnelled through one site.
  */
 
 import type { KlineBar } from '@quant/shared';
 
-import { palette } from '../../lib/theme/tokens.js';
 import type { CandleGeometry } from '../../lib/fp/chart-render-helpers.js';
 
+import type { ChartColors } from './chart-canvas-svg.js';
 import { AXIS_TEXT_STYLE, DATE_LABEL_W } from './chart-svg-style.js';
 
 interface CandleGroupProps {
@@ -24,6 +27,7 @@ interface CandleGroupProps {
   readonly effVolH: number;
   readonly effVolGap: number;
   readonly isFocused: boolean;
+  readonly chartColors: ChartColors;
 }
 
 export function CandleGroup({
@@ -33,8 +37,9 @@ export function CandleGroup({
   effVolH,
   effVolGap,
   isFocused,
+  chartColors,
 }: CandleGroupProps): React.ReactElement {
-  const stroke = c.isUp ? palette.light.up : palette.light.down;
+  const stroke = c.isUp ? chartColors.candleUp : chartColors.candleDown;
   return (
     <g>
       {isFocused && (
@@ -43,7 +48,7 @@ export function CandleGroup({
           y={0}
           width={candleW + 2}
           height={priceH + effVolGap + effVolH}
-          fill="rgba(184,117,20,0.08)"
+          fill={chartColors.focusBg}
         />
       )}
       {c.highY < c.top && (
@@ -59,11 +64,11 @@ export function CandleGroup({
           width={Math.max(1, candleW - 1)}
           height={Math.max(1, c.bodyH - 1)}
           fill="none"
-          stroke={palette.light.up}
+          stroke={chartColors.candleUp}
           strokeWidth={1}
         />
       ) : (
-        <rect x={c.x} y={c.top} width={candleW} height={c.bodyH} fill={palette.light.down} />
+        <rect x={c.x} y={c.top} width={candleW} height={c.bodyH} fill={chartColors.candleDown} />
       )}
     </g>
   );
@@ -78,6 +83,7 @@ interface DateTicksProps {
   readonly totalH: number;
   readonly interactive: boolean;
   readonly focusIdx: number | null;
+  readonly chartColors: ChartColors;
 }
 
 interface TickPlacement {
@@ -128,6 +134,7 @@ export function DateTicks({
   totalH,
   interactive,
   focusIdx,
+  chartColors,
 }: DateTicksProps): React.ReactElement {
   // Visible-pixel span of the focus marker — we intersect rendered
   // spans directly so anchor switching (start/end) at the edges
@@ -155,7 +162,7 @@ export function DateTicks({
             x={placement.x}
             y={totalH - 6}
             style={AXIS_TEXT_STYLE}
-            fill={palette.light.ink3}
+            fill={chartColors.axisLabel}
             textAnchor={placement.anchor}
           >
             {b.date.slice(5)}
@@ -170,9 +177,15 @@ interface FocusDateMarkerProps {
   readonly date: string;
   readonly cx: number;
   readonly totalH: number;
+  readonly chartColors: ChartColors;
 }
 
-export function FocusDateMarker({ date, cx, totalH }: FocusDateMarkerProps): React.ReactElement {
+export function FocusDateMarker({
+  date,
+  cx,
+  totalH,
+  chartColors,
+}: FocusDateMarkerProps): React.ReactElement {
   const markerW = 36;
   return (
     <g>
@@ -181,14 +194,14 @@ export function FocusDateMarker({ date, cx, totalH }: FocusDateMarkerProps): Rea
         y={totalH - 16}
         width={markerW}
         height={13}
-        fill={palette.light.amberBg}
-        stroke={palette.light.amber}
+        fill={chartColors.crosshairLabelBg}
+        stroke={chartColors.crosshairLine}
       />
       <text
         x={cx}
         y={totalH - 7}
         style={AXIS_TEXT_STYLE}
-        fill={palette.light.amberDark}
+        fill={chartColors.crosshairLabelText}
         textAnchor="middle"
         fontWeight="700"
       >
@@ -203,6 +216,7 @@ interface HoverCrosshairProps {
   readonly width: number;
   readonly priceAxisW: number;
   readonly price: number;
+  readonly chartColors: ChartColors;
 }
 
 export function HoverCrosshair({
@@ -210,6 +224,7 @@ export function HoverCrosshair({
   width,
   priceAxisW,
   price,
+  chartColors,
 }: HoverCrosshairProps): React.ReactElement {
   return (
     <g>
@@ -218,7 +233,7 @@ export function HoverCrosshair({
         x2={width}
         y1={y}
         y2={y}
-        stroke={palette.light.amber}
+        stroke={chartColors.crosshairLine}
         strokeDasharray="2 3"
         opacity="0.7"
       />
@@ -227,14 +242,14 @@ export function HoverCrosshair({
         y={y - 7}
         width={priceAxisW - 2}
         height={14}
-        fill={palette.light.amberBg}
-        stroke={palette.light.amber}
+        fill={chartColors.crosshairLabelBg}
+        stroke={chartColors.crosshairLine}
       />
       <text
         x={priceAxisW - 6}
         y={y + 3}
         style={AXIS_TEXT_STYLE}
-        fill={palette.light.amberDark}
+        fill={chartColors.crosshairLabelText}
         textAnchor="end"
         fontWeight="700"
       >

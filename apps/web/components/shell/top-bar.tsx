@@ -24,6 +24,7 @@ import { Box, Flex } from '@chakra-ui/react';
 import { runViewTransition } from '../../lib/fp/view-transition.js';
 import { useViewport } from '../../lib/hooks/use-viewport.js';
 import { useLayoutStore } from '../../lib/stores/layout.store.js';
+import { useTokenColor } from '../../lib/theme/use-token-color.js';
 
 import { FeatSysMain } from '../feat-sys-main/feat-sys-main.js';
 import { FeatUsrMain } from '../feat-usr-main/feat-usr-main.js';
@@ -33,10 +34,6 @@ import { LogoArt } from './logo-art.js';
 
 const BRAND_HEIGHT = 52;
 const BRAND_HEIGHT_MOBILE = 44;
-const TERM_BG = 'radial-gradient(ellipse at center, #08120c 0%, #04060a 65%, #020406 100%)';
-const TERM_LOGO_COLOR = '#d4ffe2';
-const TERM_LOGO_GLOW =
-  'rgba(155, 242, 182, 0.8) 0px 0px 4px, rgba(155, 242, 182, 0.4) 0px 0px 12px';
 
 interface TopBarProps {
   readonly session?: SessionChipInfo | undefined;
@@ -88,6 +85,12 @@ interface BrandProps {
 
 function Brand({ compact = false, stretch = false }: BrandProps): React.ReactElement {
   const setAppMode = useLayoutStore((s) => s.setAppMode);
+  const termBg = useTokenColor('brand.logoBg');
+  const termLogoColor = useTokenColor('brand.logoColor');
+  const termLogoGlow = useTokenColor('brand.logoGlow');
+  const gridColor = useTokenColor('brand.gridColor');
+  const scanlineAlpha = useTokenColor('brand.scanlineAlpha');
+  const focusRing = useTokenColor('brand.termGlowBorder');
   const onToggle = (): void => {
     runViewTransition(typeof document === 'undefined' ? null : document, () => {
       setAppMode('term');
@@ -114,18 +117,18 @@ function Brand({ compact = false, stretch = false }: BrandProps): React.ReactEle
       cursor="pointer"
       border="0"
       overflow="hidden"
-      style={{ background: TERM_BG, viewTransitionName: 'app-logo' }}
+      style={{ background: termBg, viewTransitionName: 'app-logo' }}
       _hover={{ filter: 'brightness(1.15)' }}
-      _focus={{ outline: 'none', boxShadow: '0 0 0 2px rgba(155,242,182,0.4) inset' }}
+      _focus={{ outline: 'none', boxShadow: `0 0 0 2px ${focusRing} inset` }}
     >
-      <CrtBackdrop />
+      <CrtBackdrop gridColor={gridColor} scanlineAlpha={scanlineAlpha} />
       <Box position="relative" zIndex={2}>
         <LogoArt
-          color={TERM_LOGO_COLOR}
+          color={termLogoColor}
           fontSize={compact ? '6px' : '7.5px'}
           lineHeight="1"
           letterSpacing={compact ? '0.5px' : '1px'}
-          textShadow={TERM_LOGO_GLOW}
+          textShadow={termLogoGlow}
           showCursor={false}
         />
       </Box>
@@ -133,12 +136,23 @@ function Brand({ compact = false, stretch = false }: BrandProps): React.ReactEle
   );
 }
 
+interface CrtBackdropProps {
+  readonly gridColor: string;
+  readonly scanlineAlpha: string;
+}
+
 /**
  * CRT chrome — coarse grid (z=0) + horizontal scanlines (z=1).
  * Extracted from Brand so the latter stays under the per-function
- * line cap; the layers never change at runtime.
+ * line cap; `gridColor` / `scanlineAlpha` are resolved from
+ * `brand.*` tokens by the parent so the look auto-flips with theme.
  */
-function CrtBackdrop(): React.ReactElement {
+function CrtBackdrop({ gridColor, scanlineAlpha }: CrtBackdropProps): React.ReactElement {
+  // Empty token values during SSR — fall back so the first paint is not
+  // a transparent panel that pops on hydration. Production hex is
+  // identical to the prior literal.
+  const grid = gridColor.length > 0 ? gridColor : 'rgb(26,58,38)';
+  const scan = scanlineAlpha.length > 0 ? scanlineAlpha : 'rgba(0,0,0,0.32)';
   return (
     <>
       <Box
@@ -147,7 +161,7 @@ function CrtBackdrop(): React.ReactElement {
         pointerEvents="none"
         zIndex={0}
         opacity={0.32}
-        backgroundImage="linear-gradient(rgb(26, 58, 38) 1px, transparent 1px), linear-gradient(90deg, rgb(26, 58, 38) 1px, transparent 1px)"
+        backgroundImage={`linear-gradient(${grid} 1px, transparent 1px), linear-gradient(90deg, ${grid} 1px, transparent 1px)`}
         backgroundSize="16px 16px"
       />
       <Box
@@ -155,7 +169,7 @@ function CrtBackdrop(): React.ReactElement {
         inset="0"
         pointerEvents="none"
         zIndex={1}
-        background="repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.32) 0px, rgba(0, 0, 0, 0.32) 1px, transparent 1px, transparent 3px)"
+        background={`repeating-linear-gradient(0deg, ${scan} 0px, ${scan} 1px, transparent 1px, transparent 3px)`}
         css={{ mixBlendMode: 'multiply' }}
       />
     </>

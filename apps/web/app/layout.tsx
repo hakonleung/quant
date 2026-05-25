@@ -24,6 +24,12 @@ export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
   viewportFit: 'cover',
+  // The `<meta name="theme-color">` tag must inline a literal colour —
+  // it is parsed before our CSS / JS run, so CSS vars (and therefore
+  // `useTokenColor`) are not an option. Keep these two hex values in
+  // sync with the workbench `bg` semantic token (light = `palette.light.bg`,
+  // dark = `palette.term.bg` — TERM.MAIN is the dark-mode root surface).
+  // See `apps/web/lib/theme/tokens.ts`.
   themeColor: [
     { media: '(prefers-color-scheme: light)', color: '#f4f5f7' },
     { media: '(prefers-color-scheme: dark)', color: '#06080a' },

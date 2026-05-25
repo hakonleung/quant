@@ -82,7 +82,7 @@ export function SelectSectorsDialog({ open, code, onClose }: Props): React.React
       left={0}
       w="100vw"
       h="100vh"
-      bg="rgba(15,17,22,0.55)"
+      bg="overlay"
       align="center"
       justify="center"
       zIndex={1100}
@@ -133,7 +133,7 @@ export function SelectSectorsDialog({ open, code, onClose }: Props): React.React
                   px="14px"
                   py="8px"
                   borderBottomWidth="1px"
-                  borderColor="line2"
+                  borderColor="line"
                   cursor="pointer"
                   _hover={{ bg: 'hover' }}
                   onClick={(): void => {
@@ -247,7 +247,7 @@ function DynamicSection({
             px="14px"
             py="8px"
             borderBottomWidth="1px"
-            borderColor="line2"
+            borderColor="line"
             opacity={0.6}
             cursor="not-allowed"
           >

@@ -108,7 +108,7 @@ export function MiniKline({ bars, cols = 36, rows = 6 }: Props): React.ReactElem
         <Box as="span" color="term.ink3">
           │
         </Box>
-        <Box as="span" color="term.red" opacity={0.85} whiteSpace="pre">
+        <Box as="span" color="up" opacity={0.85} whiteSpace="pre">
           {scaleToSpark(window.map((b) => b.volume))}
         </Box>
       </Flex>

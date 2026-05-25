@@ -36,7 +36,7 @@ export function TipsBar({ state }: Props): React.ReactElement {
       py="6px"
       borderTopWidth="1px"
       borderTopColor="term.line"
-      bg="rgba(6,8,10,0.78)"
+      bg="brand.panelAlpha"
       align="center"
       gap="14px"
       fontFamily="mono"
@@ -61,10 +61,10 @@ function PhaseIndicator({ state }: { state: TerminalState }): React.ReactElement
     phase === 'idle'
       ? 'term.green'
       : phase === 'running'
-        ? 'term.cyan'
+        ? 'link'
         : phase === 'cancelling'
-          ? 'term.amber'
-          : 'term.cyan';
+          ? 'accent'
+          : 'link';
   const label =
     phase === 'idle'
       ? 'READY'
@@ -85,8 +85,8 @@ function PhaseIndicator({ state }: { state: TerminalState }): React.ReactElement
 
 function HintItem({ hint }: { hint: KeyHint }): React.ReactElement {
   const danger = hint.danger === true;
-  const keyColor = danger ? 'term.red' : 'term.cyan';
-  const labelColor = danger ? 'term.red' : 'term.ink2';
+  const keyColor = danger ? 'up' : 'link';
+  const labelColor = danger ? 'up' : 'term.ink2';
   return (
     <Flex align="baseline" gap="6px">
       <Text color={keyColor} fontWeight="700">

@@ -30,10 +30,10 @@ describe('wsAppearance', () => {
     expect(wsAppearance('open')).toEqual({ color: 'term.green', glyph: '●' });
   });
   it('error → red cross', () => {
-    expect(wsAppearance('error')).toEqual({ color: 'term.red', glyph: '✘' });
+    expect(wsAppearance('error')).toEqual({ color: 'up', glyph: '✘' });
   });
   it('connecting → amber ring', () => {
-    expect(wsAppearance('connecting')).toEqual({ color: 'term.amber', glyph: '○' });
+    expect(wsAppearance('connecting')).toEqual({ color: 'accent', glyph: '○' });
   });
 });
 
@@ -56,10 +56,10 @@ describe('queueCounterColor', () => {
     expect(queueCounterColor(null)).toBe('term.ink3');
   });
   it('paused → amber', () => {
-    expect(queueCounterColor(queue({ paused: true }))).toBe('term.amber');
+    expect(queueCounterColor(queue({ paused: true }))).toBe('accent');
   });
   it('active → red (signals active load)', () => {
-    expect(queueCounterColor(queue({ paused: false }))).toBe('term.red');
+    expect(queueCounterColor(queue({ paused: false }))).toBe('up');
   });
 });
 
@@ -68,13 +68,13 @@ describe('scanLabelColor', () => {
     expect(scanLabelColor(false, false)).toBe('term.green');
   });
   it('flash only → amber', () => {
-    expect(scanLabelColor(false, true)).toBe('term.amber');
+    expect(scanLabelColor(false, true)).toBe('accent');
   });
   it('server scanning → amber (overrides idle flash)', () => {
-    expect(scanLabelColor(true, false)).toBe('term.amber');
+    expect(scanLabelColor(true, false)).toBe('accent');
   });
   it('both → still amber', () => {
-    expect(scanLabelColor(true, true)).toBe('term.amber');
+    expect(scanLabelColor(true, true)).toBe('accent');
   });
 });
 
@@ -116,12 +116,12 @@ describe('fpsColor', () => {
     expect(fpsColor(0)).toBe('term.ink3');
   });
   it('< 30 → red', () => {
-    expect(fpsColor(29)).toBe('term.red');
-    expect(fpsColor(1)).toBe('term.red');
+    expect(fpsColor(29)).toBe('up');
+    expect(fpsColor(1)).toBe('up');
   });
   it('30-49 → amber', () => {
-    expect(fpsColor(30)).toBe('term.amber');
-    expect(fpsColor(49)).toBe('term.amber');
+    expect(fpsColor(30)).toBe('accent');
+    expect(fpsColor(49)).toBe('accent');
   });
   it('>= 50 → green', () => {
     expect(fpsColor(50)).toBe('term.green');
@@ -138,11 +138,11 @@ describe('memColor', () => {
     expect(memColor(400)).toBe('term.green');
   });
   it('401-800 → amber', () => {
-    expect(memColor(401)).toBe('term.amber');
-    expect(memColor(800)).toBe('term.amber');
+    expect(memColor(401)).toBe('accent');
+    expect(memColor(800)).toBe('accent');
   });
   it('> 800 → red', () => {
-    expect(memColor(801)).toBe('term.red');
+    expect(memColor(801)).toBe('up');
   });
 });
 

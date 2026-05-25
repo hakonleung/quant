@@ -23,8 +23,8 @@ import {
 import {
   Bars,
   Crosshair,
+  type DistColors,
   EmptyHint,
-  KDE_COLOR,
   PAD,
   RefLines,
   Tooltip,
@@ -43,15 +43,15 @@ export interface ReturnDistributionChartProps {
   readonly summaryLine: string;
   readonly width: number;
   readonly height: number;
+  readonly colors: DistColors;
 }
 
 const KDE_SAMPLES = 80;
-const KDE_STROKE = KDE_COLOR;
 
 export function ReturnDistributionChart(
   props: ReturnDistributionChartProps,
 ): React.ReactElement {
-  const { width, height, returns, domainMin, domainMax, holding } = props;
+  const { width, height, returns, domainMin, domainMax, holding, colors } = props;
   const innerW = Math.max(1, width - PAD.left - PAD.right);
   const innerH = Math.max(1, height - PAD.top - PAD.bottom);
   const histogram = useMemo(
@@ -82,6 +82,7 @@ export function ReturnDistributionChart(
         mean={props.mean}
         median={props.median}
         baseline={props.baseline}
+        colors={colors}
       />
       {hover !== null && (
         <Tooltip
@@ -129,6 +130,7 @@ interface ChartSvgProps {
   readonly mean: number;
   readonly median: number;
   readonly baseline: number | null;
+  readonly colors: DistColors;
 }
 
 function ChartSvg(p: ChartSvgProps): React.ReactElement {
@@ -148,9 +150,10 @@ function ChartSvg(p: ChartSvgProps): React.ReactElement {
         width={p.width}
         height={p.height}
         xFor={p.xFor}
+        colors={p.colors}
       />
       {p.histogram.bins.length === 0 ? (
-        <EmptyHint width={p.width} height={p.height} />
+        <EmptyHint width={p.width} height={p.height} color={p.colors.emptyText} />
       ) : (
         <Bars
           bins={p.histogram.bins}
@@ -158,10 +161,11 @@ function ChartSvg(p: ChartSvgProps): React.ReactElement {
           innerH={p.innerH}
           xFor={p.xFor}
           hover={p.hover}
+          colors={p.colors}
         />
       )}
       {p.kdePath !== null && (
-        <path d={p.kdePath} fill="none" stroke={KDE_STROKE} strokeWidth={1.5} />
+        <path d={p.kdePath} fill="none" stroke={p.colors.kdeLine} strokeWidth={1.5} />
       )}
       <RefLines
         xFor={p.xFor}
@@ -169,8 +173,11 @@ function ChartSvg(p: ChartSvgProps): React.ReactElement {
         mean={p.mean}
         median={p.median}
         baseline={p.baseline}
+        colors={p.colors}
       />
-      {p.hover !== null && <Crosshair cx={p.hover.cx} height={p.height} />}
+      {p.hover !== null && (
+        <Crosshair cx={p.hover.cx} height={p.height} color={p.colors.crosshair} />
+      )}
     </svg>
   );
 }

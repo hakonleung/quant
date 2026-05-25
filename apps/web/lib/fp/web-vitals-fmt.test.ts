@@ -12,8 +12,8 @@ describe('vitalColor', () => {
 
   it('maps each rating bucket to the matching terminal palette token', () => {
     expect(vitalColor(sample(1000, 'good'))).toBe('term.green');
-    expect(vitalColor(sample(3000, 'needs-improvement'))).toBe('term.amber');
-    expect(vitalColor(sample(5000, 'poor'))).toBe('term.red');
+    expect(vitalColor(sample(3000, 'needs-improvement'))).toBe('accent');
+    expect(vitalColor(sample(5000, 'poor'))).toBe('up');
   });
 });
 

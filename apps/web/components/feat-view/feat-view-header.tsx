@@ -15,8 +15,8 @@ export type FeatViewStatusTone = 'green' | 'amber' | 'red' | 'idle' | 'accent';
 
 const TONE_TO_COLOR: Readonly<Record<FeatViewStatusTone, string>> = {
   green: 'term.green',
-  amber: 'term.amber',
-  red: 'term.red',
+  amber: 'accent',
+  red: 'up',
   idle: 'term.ink3',
   accent: 'accent',
 };

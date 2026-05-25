@@ -3,6 +3,16 @@
  * non-`'use client'` file so the orchestrator (`chart-canvas.tsx`) and
  * the presentational SVG body (`chart-canvas-svg.tsx`) can both
  * consume them without circular dependency.
+ *
+ * Colour values themselves no longer live here — chart code resolves
+ * them at runtime via `useTokenColor` / `useTokenColors`. The four MA
+ * overlays fold straight onto workbench tokens (`link` / `accent` /
+ * `violet` / `down`) so the chart palette stays in lockstep with the
+ * rest of the UI — see `lib/theme/THEME_DESIGN.md` §1.6. This file
+ * only exposes the canonical token paths and a small helper that
+ * re-maps a positional `string[]` (the order callers pass to
+ * `useTokenColors`) back into the `Record<MaKey, string>` shape the
+ * SVG layer wants.
  */
 
 import type { MaKey } from '../../lib/fp/kline-chart.js';
@@ -21,16 +31,19 @@ export const DEFAULT_PRICE_H = 240;
  */
 export const DEFAULT_VOL_H = 36;
 
-export const MA_COLORS: Readonly<Record<MaKey, string>> = {
-  // One distinct hue per window so overlapping lines stay legible —
-  // the prior monochrome warm scale was unreadable when MA10/20/60
-  // ran near each other.
-  //   MA5  blue    — fast, "current" line
-  //   MA10 amber   — short-term momentum
-  //   MA20 magenta — medium-term, classic 月线
-  //   MA60 green   — long-term, slow
-  ma5: '#3b82f6',
-  ma10: '#f59e0b',
-  ma20: '#ec4899',
-  ma60: '#10b981',
-};
+/**
+ * Token paths for the 4 moving-average overlays, in
+ * `[ma5, ma10, ma20, ma60]` order. Pass directly to `useTokenColors`
+ * and feed the resulting `readonly string[]` through
+ * {@link getMaColors} to rebuild the `Record<MaKey, string>` map.
+ */
+export const MA_COLOR_PATHS = ['link', 'accent', 'violet', 'down'] as const;
+
+export function getMaColors(resolved: readonly string[]): Readonly<Record<MaKey, string>> {
+  return {
+    ma5: resolved[0] ?? '',
+    ma10: resolved[1] ?? '',
+    ma20: resolved[2] ?? '',
+    ma60: resolved[3] ?? '',
+  };
+}

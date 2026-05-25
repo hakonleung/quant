@@ -16,8 +16,8 @@ export interface WsAppearance {
 
 export function wsAppearance(status: WsStatus): WsAppearance {
   if (status === 'open') return { color: 'term.green', glyph: '●' };
-  if (status === 'error') return { color: 'term.red', glyph: '✘' };
-  return { color: 'term.amber', glyph: '○' };
+  if (status === 'error') return { color: 'up', glyph: '✘' };
+  return { color: 'accent', glyph: '○' };
 }
 
 /** Look up a queue entry by name; returns null when the stream snapshot
@@ -31,12 +31,12 @@ export function findQueue(
 
 export function queueCounterColor(queue: QueueSnapshotEntry | null): string {
   if (queue === null) return 'term.ink3';
-  return queue.paused ? 'term.amber' : 'term.red';
+  return queue.paused ? 'accent' : 'up';
 }
 
 /** Server-confirmed scanning > local 1 s submit flash > idle. */
 export function scanLabelColor(scanning: boolean, flashing: boolean): string {
-  return scanning || flashing ? 'term.amber' : 'term.green';
+  return scanning || flashing ? 'accent' : 'term.green';
 }
 
 export function triggerCapsuleTitle(code: string, scanning: boolean): string {
@@ -61,15 +61,15 @@ export function formatClock(now: Date): string {
 
 export function fpsColor(fps: number): string {
   if (fps === 0) return 'term.ink3';
-  if (fps < 30) return 'term.red';
-  if (fps < 50) return 'term.amber';
+  if (fps < 30) return 'up';
+  if (fps < 50) return 'accent';
   return 'term.green';
 }
 
 export function memColor(mb: number | null): string {
   if (mb === null) return 'term.ink3';
-  if (mb > 800) return 'term.red';
-  if (mb > 400) return 'term.amber';
+  if (mb > 800) return 'up';
+  if (mb > 400) return 'accent';
   return 'term.green';
 }
 

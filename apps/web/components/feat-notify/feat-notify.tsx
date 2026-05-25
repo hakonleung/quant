@@ -136,7 +136,7 @@ function Toast({ entry, onDismiss }: ToastProps): ReactElement {
       minW={{ base: 'auto', md: '280px' }}
       maxW={{ base: '100%', md: '420px' }}
       cursor="pointer"
-      boxShadow="0 8px 28px rgba(0,0,0,0.45)"
+      boxShadow="float"
       _hover={{ borderLeftColor: 'accent' }}
     >
       <Text

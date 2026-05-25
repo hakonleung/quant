@@ -89,7 +89,7 @@ function ConfirmDialog({ opts, onConfirm, onCancel }: DialogProps): React.ReactE
       aria-label={title}
       position="fixed"
       inset={0}
-      bg="rgba(0,0,0,0.45)"
+      bg="overlay"
       zIndex={2000}
       display="flex"
       alignItems="center"
@@ -106,7 +106,7 @@ function ConfirmDialog({ opts, onConfirm, onCancel }: DialogProps): React.ReactE
         maxW="92vw"
         borderWidth="1px"
         borderColor="accent"
-        boxShadow="0 14px 48px rgba(0,0,0,0.55)"
+        boxShadow="card"
       >
         <Flex
           align="center"
@@ -179,7 +179,7 @@ function ConfirmDialog({ opts, onConfirm, onCancel }: DialogProps): React.ReactE
             fontWeight="700"
             letterSpacing="0.18em"
             borderRadius="0"
-            _hover={{ bg: 'accentDark' }}
+            _hover={{ bg: 'accent', opacity: 0.85 }}
           >
             {confirmLabel}
           </Button>

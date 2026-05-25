@@ -14,14 +14,13 @@ import { Box } from '@chakra-ui/react';
 import { runViewTransition } from '../../lib/fp/view-transition.js';
 import { useViewport } from '../../lib/hooks/use-viewport.js';
 import { useLayoutStore } from '../../lib/stores/layout.store.js';
+import { useTokenColor } from '../../lib/theme/use-token-color.js';
 import { LogoArt } from '../shell/logo-art.js';
-
-const LOGO_COLOR = '#d4ffe2';
-const LOGO_GLOW =
-  'rgba(155, 242, 182, 0.8) 0px 0px 4px, rgba(155, 242, 182, 0.4) 0px 0px 12px, rgba(155, 242, 182, 0.2) 0px 0px 28px';
 
 export function BigLogo(): React.ReactElement {
   const setAppMode = useLayoutStore((s) => s.setAppMode);
+  const logoColor = useTokenColor('brand.logoColor');
+  const logoGlow = useTokenColor('brand.logoGlow');
   // The ASCII grid is 46 chars wide. At 11.05 px + 1 px letter-spacing
   // it renders ≈ 350 px — fits desktop but eats the entire row on a
   // 375 px phone, leaving header sys-stat with no breathing room. Drop
@@ -49,10 +48,10 @@ export function BigLogo(): React.ReactElement {
       style={{ viewTransitionName: 'app-logo' }}
     >
       <LogoArt
-        color={LOGO_COLOR}
+        color={logoColor}
         fontSize={fontSize}
         letterSpacing={letterSpacing}
-        textShadow={LOGO_GLOW}
+        textShadow={logoGlow}
       />
     </Box>
   );

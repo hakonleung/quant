@@ -44,7 +44,7 @@ export function FeatHotkeyHint(): React.ReactElement | null {
   if (!hintOpen) return null;
   // All colors use the `term.*` namespace so bright text reads against
   // the deep terminal-panel background. The earlier non-namespaced
-  // `ink`/`accent`/`line2` tokens resolved to LIGHT-theme values (dark
+  // `ink`/`accent`/`line` tokens resolved to LIGHT-theme values (dark
   // ink, light line) which collapsed to invisible against the explicit
   // dark rgba surface. Confirmed via the workbench cyber slot — all
   // dark-surface components in this repo use `term.*`.
@@ -58,7 +58,7 @@ export function FeatHotkeyHint(): React.ReactElement | null {
         bottom="16px"
         zIndex={9999}
         bg="term.panel"
-        color="term.amber"
+        color="accent"
         borderWidth="1px"
         borderColor="term.line"
         borderRadius="4px"
@@ -71,7 +71,7 @@ export function FeatHotkeyHint(): React.ReactElement | null {
         aria-label={`open keyboard hint (${visible.length} shortcuts)`}
         _focusVisible={{
           outline: '2px solid',
-          outlineColor: 'term.amber',
+          outlineColor: 'accent',
           outlineOffset: '2px',
         }}
         onClick={() => setHintMinimized(false)}
@@ -98,7 +98,7 @@ export function FeatHotkeyHint(): React.ReactElement | null {
       borderWidth="1px"
       borderColor="term.line"
       borderRadius="4px"
-      boxShadow="0 6px 22px rgba(0,0,0,0.45)"
+      boxShadow="float"
       fontFamily="mono"
       fontSize="11px"
     >
@@ -109,9 +109,9 @@ export function FeatHotkeyHint(): React.ReactElement | null {
         py="6px"
         borderBottomWidth="1px"
         borderColor="term.line"
-        bg="term.panel2"
+        bg="term.bgElev"
       >
-        <Text fontWeight="700" letterSpacing="0.14em" color="term.amber">
+        <Text fontWeight="700" letterSpacing="0.14em" color="accent">
           KEYS · {ctx.activeFeat ?? 'global'}
         </Text>
         <Flex gap="4px">
@@ -144,7 +144,7 @@ export function FeatHotkeyHint(): React.ReactElement | null {
                   gap="10px"
                   py="2px"
                 >
-                  <Text minW="64px" color="term.amber" fontWeight="700">
+                  <Text minW="64px" color="accent" fontWeight="700">
                     {b.seq.join(' ') || '—'}
                   </Text>
                   <Text color="term.ink">{b.ui.label}</Text>
@@ -184,10 +184,10 @@ function HeaderButton({ label, onClick, children }: HeaderButtonProps): React.Re
       borderColor="term.line"
       borderRadius="2px"
       cursor="pointer"
-      _hover={{ color: 'term.amber', borderColor: 'term.amber' }}
+      _hover={{ color: 'accent', borderColor: 'accent' }}
       _focusVisible={{
         outline: '2px solid',
-        outlineColor: 'term.amber',
+        outlineColor: 'accent',
         outlineOffset: '1px',
       }}
     >

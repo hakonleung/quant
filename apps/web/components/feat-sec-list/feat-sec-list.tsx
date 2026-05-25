@@ -284,7 +284,7 @@ function SectorChip({
       px="8px"
       py="4px"
       borderRightWidth="1px"
-      borderColor="line2"
+      borderColor="line"
       bg={selected ? 'accentBg' : 'panel'}
       borderTopWidth={selected ? '2px' : 0}
       borderTopColor="accent"

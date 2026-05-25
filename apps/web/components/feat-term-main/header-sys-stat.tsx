@@ -148,14 +148,14 @@ function useMemoryMb(): number | null {
 
 function fpsColor(fps: number): string {
   if (fps === 0) return 'term.ink3';
-  if (fps < 30) return 'term.red';
-  if (fps < 50) return 'term.amber';
+  if (fps < 30) return 'up';
+  if (fps < 50) return 'accent';
   return 'term.green';
 }
 
 function memColor(mb: number | null): string {
   if (mb === null) return 'term.ink3';
-  if (mb > 800) return 'term.red';
-  if (mb > 400) return 'term.amber';
+  if (mb > 800) return 'up';
+  if (mb > 400) return 'accent';
   return 'term.green';
 }

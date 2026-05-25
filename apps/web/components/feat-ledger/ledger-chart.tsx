@@ -269,8 +269,8 @@ function HoverInfoBox({ tooltip }: { readonly tooltip: ChartTooltip }): React.Re
       pointerEvents="none"
       lineHeight="1.3"
     >
-      <div>{tooltip.line1}</div>
-      <div>{tooltip.line2}</div>
+      <Box as="div">{tooltip.line1}</Box>
+      <Box as="div">{tooltip.line2}</Box>
     </Box>
   );
 }

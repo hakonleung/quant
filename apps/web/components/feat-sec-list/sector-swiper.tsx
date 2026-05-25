@@ -242,10 +242,10 @@ function NavPill({ dir, onClick }: NavPillProps): React.ReactElement {
       transform="translateY(-50%)"
       h="28px"
       w="22px"
-      bg="rgba(10,14,16,0.78)"
+      bg="brand.panelAlpha"
       color="ink2"
       borderWidth="1px"
-      borderColor="line2"
+      borderColor="line"
       borderRadius="2px"
       fontFamily="mono"
       fontSize="14px"
@@ -254,7 +254,7 @@ function NavPill({ dir, onClick }: NavPillProps): React.ReactElement {
       display="grid"
       placeItems="center"
       cursor="pointer"
-      _hover={{ bg: 'rgba(10,14,16,0.92)', color: 'accent', borderColor: 'accent' }}
+      _hover={{ bg: 'brand.panelAlpha', color: 'accent', borderColor: 'accent' }}
       // Render above scroll-snap content but inside the swiper box so
       // hit-testing stays predictable.
       zIndex={1}
