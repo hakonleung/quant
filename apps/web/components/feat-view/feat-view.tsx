@@ -15,27 +15,34 @@ const TRANSITION_MS = 280;
 const prefersReducedMotion = (): boolean =>
   typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
+// Fullscreen geometry — the pane sits BELOW the topbar so brand / SYS /
+// USR / theme toggle stay reachable (Apple HIG: full-window apps keep
+// the menu bar). The same values drive both the static CSS style and
+// the WAAPI keyframe endpoints so the animation lands exactly where
+// CSS takes over — without this match the pane jumps the difference
+// between `top: 0` (old keyframe end) and `top: 52px` (CSS) at the end
+// of the animation.
+const FULLSCREEN_TOP = 'calc(var(--app-topbar-h, 52px) + env(safe-area-inset-top))';
+const FULLSCREEN_HEIGHT = 'calc(100dvh - var(--app-topbar-h, 52px) - env(safe-area-inset-top))';
+const FULLSCREEN_KEYFRAME = {
+  top: FULLSCREEN_TOP,
+  left: '0px',
+  width: '100vw',
+  height: FULLSCREEN_HEIGHT,
+} as const;
+
 /**
  * Inline styles applied to the pane when it switches to fullscreen.
- * Lifted to module scope so the pane chrome stays under the per-
- * function line cap.
- *
- * **TopBar preserved.** We carve out the TopBar (`top: 52px desktop /
- * 44px mobile`) so users keep access to brand / SYS status / USR /
- * theme toggle / settings while a pane is fullscreen — the only UX
- * change versus fullscreen-edge-to-edge is that the very top 52px
- * stays in topbar mode, which is the Apple HIG pattern (full-window
- * apps still show the menu bar). Mobile uses 44px topbar height.
  *
  * z-index uses the unified `fullscreen` token (1500) — above
  * overlay/dialog/scrim but below toast/hint/tooltip so transient
  * messages can still surface.
  */
 const FULLSCREEN_STYLE = {
-  top: 'calc(var(--app-topbar-h, 52px) + env(safe-area-inset-top))',
+  top: FULLSCREEN_TOP,
   left: 0,
   width: '100vw',
-  height: 'calc(100dvh - var(--app-topbar-h, 52px) - env(safe-area-inset-top))',
+  height: FULLSCREEN_HEIGHT,
   zIndex: 'var(--chakra-z-index-fullscreen, 1500)',
   paddingBottom: 'env(safe-area-inset-bottom)',
 } as const;
@@ -118,7 +125,12 @@ export function FeatView({
     // fullscreen via the inline `position:fixed` switch alone.
     if (prefersReducedMotion()) return;
     // After the mode change paints (pane becomes position:fixed inset:0),
-    // play a Web Animations keyframe from the starting rect → fullscreen.
+    // play a Web Animations keyframe from the starting rect →
+    // fullscreen geometry. End keyframe MUST match `FULLSCREEN_STYLE`
+    // exactly — otherwise the WAAPI animation handoff back to CSS at
+    // `finish` causes a visible jump (we previously animated to `top:
+    // 0` while CSS set `top: 52px`, so the pane snapped down by the
+    // topbar height at the end of the animation).
     requestAnimationFrame(() => {
       const node = paneRef.current;
       if (node === null) return;
@@ -130,10 +142,7 @@ export function FeatView({
             width: `${r.width}px`,
             height: `${r.height}px`,
           },
-          // 100dvh follows iOS dynamic viewport (URL bar / keyboard);
-          // 100vh would let the bottom of the pane slip below the
-          // address bar after a swipe-down.
-          { top: '0px', left: '0px', width: '100vw', height: '100dvh' },
+          { ...FULLSCREEN_KEYFRAME },
         ],
         { duration: TRANSITION_MS, easing: 'ease' },
       );
@@ -154,9 +163,11 @@ export function FeatView({
       return;
     }
     const r = ph.getBoundingClientRect();
+    // Start keyframe = current FULLSCREEN_STYLE values so the WAAPI
+    // animation begins exactly where the rendered pane is right now.
     const anim = node.animate(
       [
-        { top: '0px', left: '0px', width: '100vw', height: '100dvh' },
+        { ...FULLSCREEN_KEYFRAME },
         {
           top: `${r.top}px`,
           left: `${r.left}px`,
@@ -169,7 +180,7 @@ export function FeatView({
     anim.onfinish = (): void => {
       // Swap to normal mode synchronously so the inline `position:fixed`
       // styles are gone before we cancel the keyframe — otherwise the
-      // pane briefly snaps back to 100vw/100dvh on cancel and flickers.
+      // pane briefly snaps back to the fullscreen rect on cancel.
       flushSync(() => {
         setMode('normal');
       });
@@ -218,9 +229,14 @@ export function FeatView({
   // away.
   const renderInlineBody = !overlayActive && !(bodyOverlay && isMinimized);
 
-  // Body collapses by max-height transition; explicit ceiling keeps the
-  // animation smooth even when content is taller than the viewport.
-  const bodyMaxH = inlineCollapsed ? '0px' : '4000px';
+  // Pane flex changes instantly when toggling minimized; we drive the
+  // collapse animation through the body wrapper's `grid-template-rows`
+  // (`1fr` ↔ `0fr`). The old `max-height: 4000px → 0` approach wasted
+  // the first ~75 % of the animation because max-height only starts
+  // changing visible height once it drops below the content's natural
+  // height — small panes felt like they "snapped" after a delay.
+  // grid-template-rows interpolation is baseline in evergreen Chrome
+  // and Safari (2024+) and degrades to instant-collapse otherwise.
 
   const paneBox = (
     <Box
@@ -276,20 +292,30 @@ export function FeatView({
           {children}
         </OverlayBody>
       ) : renderInlineBody ? (
+        // Wrapper carries the collapse animation via grid-template-rows
+        // (`1fr` open / `0fr` minimized). Inner Box owns the actual
+        // scroll surface; `min-height: 0` lets the grid row shrink to
+        // 0 instead of clamping to content's intrinsic height.
         <Box
           flex={isMinimized || contentSized === true ? '0 0 auto' : '1'}
           minH={0}
-          overflowX="hidden"
-          overflowY={isMinimized ? 'hidden' : 'auto'}
-          display="flex"
-          flexDirection="column"
+          display="grid"
+          gridTemplateRows={isMinimized ? '0fr' : '1fr'}
+          overflow="hidden"
           style={{
-            maxHeight: bodyMaxH,
             opacity: isMinimized ? 0 : 1,
-            transition: `max-height ${TRANSITION_MS}ms ease, opacity ${TRANSITION_MS}ms ease`,
+            transition: `grid-template-rows ${TRANSITION_MS}ms ease, opacity ${TRANSITION_MS}ms ease`,
           }}
         >
-          {children}
+          <Box
+            minH={0}
+            overflowX="hidden"
+            overflowY={isMinimized ? 'hidden' : 'auto'}
+            display="flex"
+            flexDirection="column"
+          >
+            {children}
+          </Box>
         </Box>
       ) : null}
     </Box>
@@ -299,20 +325,34 @@ export function FeatView({
     return paneBox;
   }
 
-  // Fullscreen: keep a same-sized placeholder in the grid so layout
-  // doesn't reflow underneath, then **portal** the fullscreen pane to
-  // `document.body` so it escapes every ancestor stacking / containing
-  // context. The Liquid Glass `backdrop-filter` on TopBar would
-  // otherwise trap a fixed-positioned descendant inside the topbar's
-  // bounding box (backdrop-filter creates a containing block for fixed
-  // children per CSS spec) — visible regression: USR.MAIN in topbar
-  // fullscreening into the topbar slot instead of the viewport.
+  // Fullscreen: keep a same-shaped placeholder in the column so
+  // sibling panes don't jump up to fill the gap, then **portal** the
+  // fullscreen pane to `document.body` so it escapes every ancestor
+  // stacking / containing context. The Liquid Glass `backdrop-filter`
+  // on TopBar would otherwise trap a fixed-positioned descendant
+  // inside the topbar's bounding box (backdrop-filter creates a
+  // containing block for fixed children per CSS spec) — visible
+  // regression: USR.MAIN in topbar fullscreening into the topbar slot
+  // instead of the viewport.
+  //
+  // Placeholder flex mirrors what the pane would have if it were not
+  // fullscreen: `1 1 0` for normal panes, `0 0 auto` for content-sized
+  // ones. Without this the column's leftover space gets reabsorbed by
+  // the other panes and they slide around when fullscreen is entered.
+  const placeholderFlex = contentSized === true ? '0 0 auto' : '1 1 0';
   const portalTarget = typeof document === 'undefined' ? null : document.body;
   return (
     <>
-      {/* Same-sized placeholder keeps the column from collapsing while
-          the real pane is portaled out to body for fullscreen. */}
-      <Box ref={placeholderRef} h="100%" minH={0} visibility="hidden" />
+      <Box
+        ref={placeholderRef}
+        flex={placeholderFlex}
+        minH={0}
+        visibility="hidden"
+        // The exit animation reads the placeholder's bounding rect to
+        // know where to fly the pane back to — that geometry is exactly
+        // what the column reserved for this pane.
+        aria-hidden="true"
+      />
       {portalTarget === null ? paneBox : createPortal(paneBox, portalTarget)}
     </>
   );
