@@ -101,8 +101,9 @@ export interface FeatConfig {
 }
 
 export const FEAT_CONFIG_MAP: Readonly<Record<Feat, FeatConfig>> = {
-  // MKT — sector slider, content-sized header strip
-  [Feat.Mkt]: {},
+  // MKT — sector slider, content-sized header strip. Fullscreen
+  // doesn't make sense for a single-row chip strip.
+  [Feat.Mkt]: { noFullscreen: true },
 
   // EQ workbench panes — all three are independent floating tiles
   [Feat.EquityChart]: {},

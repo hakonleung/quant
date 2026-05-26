@@ -18,12 +18,16 @@
 import { Box, Button, Flex, Text, Textarea } from '@chakra-ui/react';
 import { useEffect, useState } from 'react';
 
+import { refreshSector } from '../../lib/api/sectors.js';
 import { Feat } from '../../lib/eqty/feat.js';
+import { formatRelativeTime } from '../../lib/fp/eq-list-fp.js';
 import { useNlScreen } from '../../lib/hooks/use-nl-screen.js';
 import { useSectorsStore, type Sector } from '../../lib/stores/sectors.store.js';
 import { useUiStore } from '../../lib/stores/ui.store.js';
 import { DslTree } from '../dsl/dsl-tree.js';
 import { FeatView } from '../feat-view/feat-view.js';
+import { FeatViewHeaderRight } from '../feat-view/feat-view-header.js';
+import { MonoButton } from '../ui/mono-button.js';
 
 export function FeatScrDsl(): React.ReactElement {
   const activeSectorId = useUiStore((s) => s.activeSectorId);
@@ -33,12 +37,73 @@ export function FeatScrDsl(): React.ReactElement {
   const hasPlan = isDynamic && sector.screenPlan !== undefined;
 
   return (
-    <FeatView feat={Feat.ScreenDsl} status={hasPlan ? 'green' : 'amber'}>
+    <FeatView
+      feat={Feat.ScreenDsl}
+      status={hasPlan ? 'green' : 'amber'}
+      titleSlot={isDynamic ? <LastScreenedLabel sector={sector} /> : undefined}
+      right={isDynamic ? <RefreshAction sector={sector} /> : undefined}
+    >
       {isDynamic ? <NlEditor sector={sector} /> : null}
       <Box px="10px" py="8px">
         {hasPlan ? <PlanTree sector={sector} /> : <EmptyHint sector={sector} />}
       </Box>
     </FeatView>
+  );
+}
+
+/**
+ * Header right slot — "re-run this screen". Replaces the old
+ * `DynamicRefreshBar` that used to live inside the EQ.LIST body
+ * (gone since the 2026-05 split moved DSL out into its own pane).
+ * Disabled until the sector has a parsed `screenPlan`; otherwise
+ * there's nothing to re-execute.
+ */
+function RefreshAction({ sector }: { sector: Sector }): React.ReactElement {
+  const upsert = useSectorsStore((s) => s.upsert);
+  const [pending, setPending] = useState(false);
+  const canRefresh = sector.screenPlan !== undefined;
+  const onClick = (): void => {
+    if (!canRefresh || pending) return;
+    setPending(true);
+    refreshSector(sector.id)
+      .then((next) => {
+        upsert(next);
+      })
+      .catch((e: unknown) => {
+        // Surface as notification rather than swallow — the user
+        // pressed REFRESH and deserves to know it failed. Keep it
+        // simple: console error + leave the pending flag down.
+        console.error('refresh sector failed:', e);
+      })
+      .finally(() => {
+        setPending(false);
+      });
+  };
+  return (
+    <FeatViewHeaderRight>
+      <MonoButton
+        icon="refresh"
+        label={canRefresh ? (pending ? 'refreshing…' : 'rerun screen') : 'no plan to rerun'}
+        onClick={onClick}
+        disabled={!canRefresh || pending}
+      />
+    </FeatViewHeaderRight>
+  );
+}
+
+/**
+ * "last screened: Nm ago" caption rendered as the DSL pane's
+ * titleSlot. The relative-time pass needs a `Date.now()` injection —
+ * the formatter is pure but we cap the disable here at the runtime
+ * edge (CLAUDE.md §1.2 single bridge per file).
+ */
+function LastScreenedLabel({ sector }: { sector: Sector }): React.ReactElement {
+  return (
+    <Text fontFamily="mono" fontSize="xs" color="ink3" letterSpacing="0.14em">
+      {/* eslint-disable-next-line no-restricted-globals -- cosmetic
+          relative-time ticks on render. */}
+      last: {formatRelativeTime(sector.lastScreenedAt, Date.now())}
+    </Text>
   );
 }
 
