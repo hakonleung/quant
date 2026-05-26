@@ -37,7 +37,7 @@ import { ConfirmCancelled, useConfirm } from '../../lib/hooks/use-confirm.js';
 
 import { BasicList } from './basic-list.js';
 import { buildColumns } from './list-columns.js';
-import { AllSectorHeader, DynamicHeader, EditableTitle, UserSectorHeader } from './list-headers.js';
+import { EditableTitle } from './list-headers.js';
 import type { ColumnDef, SortState } from './list-types.js';
 import { ScrollGrid } from './scroll-grid.js';
 
@@ -280,26 +280,6 @@ function FeatEqListInner({ bare, onCountsChange }: FeatEqListProps = {}): React.
     upsert({ ...sector, name: next.trim() });
   };
 
-  const onUserAddCode = (code: string): void => {
-    if (sector === null || sector.kind !== 'user') return;
-    if (sector.codes.includes(code)) return;
-    const nextCodes = [...sector.codes, code];
-    upsert({ ...sector, codes: nextCodes, count: nextCodes.length });
-  };
-
-  const onUserAddCodes = (codes: readonly string[]): void => {
-    if (sector === null || sector.kind !== 'user') return;
-    const existing = new Set(sector.codes);
-    const nextCodes = [...sector.codes];
-    for (const c of codes) {
-      if (existing.has(c)) continue;
-      existing.add(c);
-      nextCodes.push(c);
-    }
-    if (nextCodes.length === sector.codes.length) return;
-    upsert({ ...sector, codes: nextCodes, count: nextCodes.length });
-  };
-
   const { guard: confirmGuard, comp: confirmComp } = useConfirm();
   const onUserRemoveCode = (code: string): void => {
     if (sector === null || sector.kind !== 'user') return;
@@ -371,11 +351,10 @@ function FeatEqListInner({ bare, onCountsChange }: FeatEqListProps = {}): React.
       }
     >
       <Flex direction="column" h="100%" minH={0}>
-        {isAll && <AllSectorHeader onPick={setFocusCode} />}
-        {isUserSector && sector !== null && (
-          <UserSectorHeader sector={sector} onAdd={onUserAddCode} onBatchAdd={onUserAddCodes} />
-        )}
-        {isDynamic && sector !== null && <DynamicHeader sector={sector} />}
+        {/* SEARCH / DSL / BT used to live inline at the top of the
+            list. The 2026-05 split moved them out to their own
+            floating tiles in the same column — embedding them here
+            again was the old duplicate. */}
         <ScrollGrid
           columns={columns}
           rows={sortedRows}

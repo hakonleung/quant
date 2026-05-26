@@ -52,10 +52,10 @@ export function FeatLedger({ bare }: FeatLedgerProps = {}): React.ReactElement {
   const [aiOpen, setAiOpen] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
 
-  // `A` (USR.ledger sub-scope) — open the add-entry form. Bound here
-  // rather than centrally because the form's open state is local React
-  // state. The cell metadata lives in global-cells.ts.
-  useFeatHotkeys(Feat.UsrMain, {
+  // `A` — open the add-entry form. Bound here rather than centrally
+  // because the form's open state is local React state. The cell
+  // metadata lives in global-cells.ts under the LDG scope.
+  useFeatHotkeys(Feat.Ledger, {
     'ui.ledger-add-open': () => setAddOpen(true),
   });
   const [editing, setEditing] = useState<LedgerEntry | null>(null);

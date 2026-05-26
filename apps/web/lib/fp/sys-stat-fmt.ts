@@ -20,6 +20,26 @@ export function wsAppearance(status: WsStatus): WsAppearance {
   return { color: 'accent', glyph: '○' };
 }
 
+/**
+ * Label-only colour mapping — used by the new no-dot SYS header where
+ * state reads through label colour alone (green/amber/red).
+ */
+export function wsStatusColor(status: WsStatus): string {
+  if (status === 'open') return 'term.green';
+  if (status === 'error') return 'up';
+  return 'accent';
+}
+
+/**
+ * IDB doesn't currently report a status — we assume it's healthy when
+ * the bundle reaches the browser at all, so the label stays green.
+ * Centralised here for parity with `wsStatusColor` so the SYS header
+ * doesn't hard-code `term.green` inline.
+ */
+export function idbStatusColor(): string {
+  return 'term.green';
+}
+
 /** Look up a queue entry by name; returns null when the stream snapshot
  *  hasn't reported it yet (server still warming up). */
 export function findQueue(

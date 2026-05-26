@@ -18,10 +18,12 @@ import { FeatAiSec } from '../feat-ai-sec/feat-ai-sec.js';
 import { FeatEqChart } from '../feat-eq-chart/feat-eq-chart.js';
 import { FeatEqInfo } from '../feat-eq-info/feat-eq-info.js';
 import { FeatEqList } from '../feat-eq-list/feat-eq-list.js';
+import { FeatLedger } from '../feat-ledger/feat-ledger.js';
 import { FeatMkt } from '../feat-mkt/feat-mkt.js';
 import { FeatScrPat } from '../feat-scr-pat/feat-scr-pat.js';
+import { FeatSettings } from '../feat-settings/feat-settings.js';
 import { FeatSysMain } from '../feat-sys-main/feat-sys-main.js';
-import { FeatUsrMain } from '../feat-usr-main/feat-usr-main.js';
+import { FeatWatchLive } from '../feat-watch-live/feat-watch-live.js';
 import { MobileTabBar } from '../shell/mobile-tab-bar.js';
 import { EmptyState } from '../ui/empty-state.js';
 
@@ -54,7 +56,17 @@ export function EqtyModuleMobile(): React.ReactElement {
           </Flex>
         )}
         {tab === 'sys' && <FeatSysMain embedded="mobile" />}
-        {tab === 'usr' && <FeatUsrMain embedded="mobile" />}
+        {tab === 'usr' && (
+          // USR mobile tab now stacks the three ex-USR-tab panes
+          // vertically (LDG / WATCH / SET) — the desktop split into
+          // separate topbar tiles doesn't make sense on a phone, so we
+          // surface them inline as the body of the USR tab.
+          <Flex direction="column" h="100%" gap="1px" bg="line" overflowY="auto">
+            <FeatLedger bare />
+            <FeatWatchLive bare />
+            <FeatSettings embedded="mobile" />
+          </Flex>
+        )}
       </Box>
       <MobileTabBar />
     </Flex>

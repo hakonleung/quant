@@ -26,8 +26,10 @@ import { useViewport } from '../../lib/hooks/use-viewport.js';
 import { useLayoutStore } from '../../lib/stores/layout.store.js';
 import { useTokenColor } from '../../lib/theme/use-token-color.js';
 
+import { FeatLedger } from '../feat-ledger/feat-ledger.js';
+import { FeatSettings } from '../feat-settings/feat-settings.js';
 import { FeatSysMain } from '../feat-sys-main/feat-sys-main.js';
-import { FeatUsrMain } from '../feat-usr-main/feat-usr-main.js';
+import { FeatWatchLive } from '../feat-watch-live/feat-watch-live.js';
 
 import type { SessionChipInfo } from './app-shell.js';
 import { LogoArt } from './logo-art.js';
@@ -42,21 +44,15 @@ interface TopBarProps {
 export function TopBar({ session }: TopBarProps = {}): React.ReactElement {
   const { mode } = useViewport();
   const isMobile = mode === 'mobile';
-  // SYS.MAIN capsule strip (queue / mem / fps) eats ~360px even
-  // collapsed; on mobile it pushes USR.MAIN off-screen, so we drop the
-  // strip from the topbar there — queue progress is still available via
-  // the in-pane status badges. USR.MAIN's tab strip shrinks to a chip-
-  // sized affordance since its body is bodyOverlay anchored to the
-  // header rect.
-  const sideSlot = isMobile ? '96px' : '260px';
   return (
     <Flex
       minH={`${String(isMobile ? BRAND_HEIGHT_MOBILE : BRAND_HEIGHT)}px`}
       // Transparent TopBar — the body wallpaper (logo bg recipe)
       // shows through directly, so the Brand visually integrates with
       // the canvas (no border, no glass strip separating them). The
-      // TopBar acts as a Flex container with gap/padding so SYS / USR
-      // float as glass tiles on the same wallpaper as the main grid.
+      // TopBar acts as a Flex container with gap/padding so SYS / SET
+      // / LDG / WATCH float as glass tiles on the same wallpaper as
+      // the main grid.
       bg="transparent"
       gap="4px"
       px="4px"
@@ -65,18 +61,25 @@ export function TopBar({ session }: TopBarProps = {}): React.ReactElement {
       style={{ paddingTop: 'env(safe-area-inset-top)' }}
     >
       <Brand compact={isMobile} stretch={isMobile} />
+      {/* Topbar tiles — collapsed to the bottom-tab nav on mobile. SYS
+       * stretches to absorb leftover row width; SET / LDG / WATCH are
+       * fixed-shaped chip-style panes whose bodies float as overlays
+       * when restored (bodyOverlay config). */}
       {!isMobile && (
-        <Box flex="1" minW={0} display="flex" alignItems="stretch">
-          <FeatSysMain />
-        </Box>
-      )}
-      {/* SYS + USR move to bottom-tab nav on mobile — the topbar
-       * collapses to just the brand mark (filling the row) and the
-       * user chip lives inside USR's tall header on desktop. */}
-      {!isMobile && (
-        <Box w={sideSlot} flex="0 0 auto" display="flex" alignItems="stretch">
-          <FeatUsrMain session={session} />
-        </Box>
+        <>
+          <Box flex="1" minW={0} display="flex" alignItems="stretch">
+            <FeatSysMain />
+          </Box>
+          <Box display="flex" alignItems="stretch">
+            <FeatLedger />
+          </Box>
+          <Box display="flex" alignItems="stretch">
+            <FeatWatchLive />
+          </Box>
+          <Box display="flex" alignItems="stretch">
+            <FeatSettings session={session} />
+          </Box>
+        </>
       )}
     </Flex>
   );

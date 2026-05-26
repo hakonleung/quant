@@ -36,7 +36,9 @@ const MODULE_KEYS: ReadonlyArray<readonly [letter: string, feat: Feat, label: st
   ['e', Feat.EquityChart, 'Switch to equity chart'],
   ['a', Feat.AIEq, 'Switch to AI (stock)'],
   ['s', Feat.AISec, 'Switch to AI (sector)'],
-  ['u', Feat.UsrMain, 'Switch to user'],
+  // `u` → SET (the ex-USR config tab — kept as the user-surface entry
+  // point now that USR is split into SET / LDG / WATCH).
+  ['u', Feat.Settings, 'Switch to settings'],
   ['t', Feat.Terminal, 'Switch to terminal'],
   ['y', Feat.SysMain, 'Switch to system'],
 ];
@@ -288,11 +290,11 @@ function registerOpenNewSectorCell(): void {
 }
 
 function registerOpenLedgerAddCell(): void {
-  // Sub-scope `USR.ledger` — fires only when the user has focused USR
-  // (e.g. via `g u`) AND the ledger sub-tab is on top of the sub-focus
-  // stack (pushed by FeatUsrMain's tab effect).
+  // `A` fires inside the LDG pane scope (LDG is now a standalone
+  // floating tile, so the simple feat-scope is enough — no sub-focus
+  // stack required).
   registerLocalCell('ui.ledger-add-open', {
-    scope: `${Feat.UsrMain}.ledger`,
+    scope: Feat.Ledger,
     keys: ['A'],
     label: 'New ledger entry',
     group: 'edit',

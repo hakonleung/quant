@@ -71,16 +71,6 @@ interface FeatViewProps {
    * frame.
    */
   readonly bare?: boolean;
-  /**
-   * Tall, two-row header that matches the topbar logo height. Window
-   * controls sit on the first row's right edge; `right` fills the rest
-   * of the first row, `rightSecondary` (only meaningful with
-   * `tallHeader`) fills the second row.
-   */
-  readonly tallHeader?: boolean;
-  /** Second-row content for the tall header. Ignored when `tallHeader`
-   *  is false. */
-  readonly rightSecondary?: ReactNode;
   readonly children: ReactNode;
 }
 
@@ -92,21 +82,24 @@ export function FeatView({
   right,
   contentSized,
   bare,
-  tallHeader,
-  rightSecondary,
   children,
 }: FeatViewProps): React.ReactElement {
   if (bare === true) return <>{children}</>;
   const config = FEAT_CONFIG_MAP[feat];
   const cyber = config.cyber ?? false;
   const bodyOverlay = config.bodyOverlay ?? false;
+  const floating = config.floating ?? false;
 
   // Persisted mode keyed by feat id — survives reloads. Missing entries
   // fall back to the static `defaultMinimized` flag in feat config.
+  // Floating panes have only two states (`minimized`/`normal`) — clamp
+  // any stale `fullscreen` value to `normal` so a config that flips a
+  // pane to `floating` after release doesn't leave it stuck.
   const persistedMode = useLayoutStore((s) => s.featViewMode[feat]);
-  const setPersistedMode = useLayoutStore((s) => s.setFeatViewMode);
-  const mode: FeatViewMode =
+  const rawMode: FeatViewMode =
     persistedMode ?? (config.defaultMinimized === true ? 'minimized' : 'normal');
+  const mode: FeatViewMode = floating && rawMode === 'fullscreen' ? 'normal' : rawMode;
+  const setPersistedMode = useLayoutStore((s) => s.setFeatViewMode);
   const setMode = useCallback(
     (m: FeatViewMode): void => {
       setPersistedMode(feat, m);
@@ -258,12 +251,18 @@ export function FeatView({
       flex={
         isFullscreen
           ? undefined
-          : bodyOverlay
-            ? '1 1 0'
-            : inlineCollapsed || contentSized === true
-              ? '0 0 auto'
-              : '1 1 0'
+          : floating
+            ? undefined
+            : bodyOverlay
+              ? '1 1 0'
+              : inlineCollapsed || contentSized === true
+                ? '0 0 auto'
+                : '1 1 0'
       }
+      // Floating panes size to content. The dock around them controls
+      // placement; the pane just shrinks/grows around its header + body.
+      w={floating ? 'fit-content' : undefined}
+      minW={floating ? '88px' : undefined}
       minH={0}
       display="flex"
       flexDirection="column"
@@ -278,10 +277,9 @@ export function FeatView({
         {...(statusBlink !== undefined ? { statusBlink } : {})}
         titleSlot={titleSlot}
         right={right}
-        rightSecondary={rightSecondary}
         cyber={cyber}
         mode={mode}
-        tall={tallHeader ?? false}
+        allowFullscreen={!floating}
         onMinimize={minimize}
         onRestore={restore}
         onFullscreen={goFullscreen}
@@ -392,10 +390,11 @@ interface FeatViewHeaderProps {
   readonly statusBlink?: boolean;
   readonly titleSlot?: ReactNode;
   readonly right?: ReactNode;
-  readonly rightSecondary?: ReactNode;
   readonly cyber: boolean;
   readonly mode: FeatViewMode;
-  readonly tall: boolean;
+  /** Floating panes hide the fullscreen button — they're already
+   *  detached from the column grid, so growing edge-to-edge is a no-op. */
+  readonly allowFullscreen: boolean;
   readonly onMinimize: () => void;
   readonly onRestore: () => void;
   readonly onFullscreen: () => void;
@@ -403,7 +402,6 @@ interface FeatViewHeaderProps {
 }
 
 function FeatViewHeader(props: FeatViewHeaderProps): React.ReactElement {
-  if (props.tall) return <FeatViewHeaderTall {...props} />;
   const {
     id,
     status,
@@ -416,6 +414,7 @@ function FeatViewHeader(props: FeatViewHeaderProps): React.ReactElement {
     onRestore,
     onFullscreen,
     onExitFullscreen,
+    allowFullscreen,
   } = props;
   return (
     <Flex
@@ -466,6 +465,7 @@ function FeatViewHeader(props: FeatViewHeaderProps): React.ReactElement {
       >
         <FeatViewControls
           mode={mode}
+          allowFullscreen={allowFullscreen}
           onFullscreen={onFullscreen}
           onExitFullscreen={onExitFullscreen}
         />
@@ -474,104 +474,9 @@ function FeatViewHeader(props: FeatViewHeaderProps): React.ReactElement {
   );
 }
 
-/**
- * Two-row header used by SYS / USR — height matches the topbar logo
- * (52px desktop / 44px mobile).
- *
- * Row 1: id + status + titleSlot + `right` (primary content)
- *        + window controls (always pinned to the right).
- * Row 2: `rightSecondary` content (web vitals on SYS, tabs on USR).
- */
-function FeatViewHeaderTall({
-  id,
-  status,
-  statusBlink,
-  titleSlot,
-  right,
-  rightSecondary,
-  cyber,
-  mode,
-  onMinimize,
-  onRestore,
-  onFullscreen,
-  onExitFullscreen,
-}: FeatViewHeaderProps): React.ReactElement {
-  return (
-    <Flex
-      direction="column"
-      px="10px"
-      py="2px"
-      h={{ base: '44px', md: '52px' }}
-      // Tall header is transparent — sits inside the TopBar's own
-      // glass surface, so its only chrome is a hairline divider.
-      bg="transparent"
-      borderBottomWidth="1px"
-      borderBottomColor={cyber ? 'term.line' : 'glass.line'}
-      flexShrink={0}
-      color={cyber ? 'term.ink3' : 'ink3'}
-      justify="space-between"
-    >
-      <Flex align="center" gap="8px" flexShrink={0} minW={0}>
-        <FeatNameToggle
-          id={id}
-          minimized={mode === 'minimized'}
-          onToggle={mode === 'minimized' ? onRestore : onMinimize}
-          disabled={mode === 'fullscreen'}
-        />
-        {status !== undefined && (
-          <Box flexShrink={0}>
-            <FeatViewStatus tone={status} blink={statusBlink ?? false} />
-          </Box>
-        )}
-        {titleSlot !== undefined && <Box flexShrink={0}>{titleSlot}</Box>}
-        {right !== undefined && (
-          <Flex
-            align="center"
-            gap="6px"
-            fontFamily="mono"
-            fontSize="xs"
-            letterSpacing="0.06em"
-            flex="1"
-            minW={0}
-            overflow="hidden"
-          >
-            {right}
-          </Flex>
-        )}
-        <HStack
-          ml="auto"
-          gap="10px"
-          fontFamily="mono"
-          fontSize="xs"
-          letterSpacing="0.06em"
-          color={cyber ? 'term.ink3' : 'ink3'}
-          flexShrink={0}
-        >
-          <FeatViewControls
-            mode={mode}
-            onFullscreen={onFullscreen}
-            onExitFullscreen={onExitFullscreen}
-          />
-        </HStack>
-      </Flex>
-      <Flex
-        align="center"
-        gap="6px"
-        fontFamily="mono"
-        fontSize="xs"
-        letterSpacing="0.06em"
-        flexShrink={0}
-        minW={0}
-        overflow="hidden"
-      >
-        {rightSecondary}
-      </Flex>
-    </Flex>
-  );
-}
-
 interface FeatViewControlsProps {
   readonly mode: FeatViewMode;
+  readonly allowFullscreen: boolean;
   readonly onFullscreen: () => void;
   readonly onExitFullscreen: () => void;
 }
@@ -581,12 +486,18 @@ interface FeatViewControlsProps {
  * minimize / restore button is gone — clicking the pane name in
  * `<FeatNameToggle>` toggles `minimized` ↔ `normal`. Only fullscreen
  * remains as an explicit button (no obvious header gesture for it).
+ *
+ * Floating panes (`allowFullscreen=false`) collapse to nothing here —
+ * the toggle button + chevron in the name handle the only meaningful
+ * state change.
  */
 function FeatViewControls({
   mode,
+  allowFullscreen,
   onFullscreen,
   onExitFullscreen,
-}: FeatViewControlsProps): React.ReactElement {
+}: FeatViewControlsProps): React.ReactElement | null {
+  if (!allowFullscreen) return null;
   return (
     <HStack gap="2px">
       {mode === 'fullscreen' ? (

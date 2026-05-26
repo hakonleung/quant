@@ -48,15 +48,19 @@ export const Feat = {
   // SYS — unified status + IM activity + watch outputs
   SysMain: 'SYS',
 
-  // USR — single pane, three tabs (LDG / WATCH / CFG)
-  UsrMain: 'USR',
-  // Internal sub-feat ids — rendered only as the active-tab label
-  // inside USR.MAIN (and as the standalone feat when used outside the
-  // merged pane, if any consumer ever needs that). They never receive
-  // their own grid slot or persisted view-mode entry.
-  Ledger: 'LDG.MAIN',
-  WatchLive: 'WATCH.LIVE',
+  // Ex-USR tabs — independent topbar tiles since the 2026-05 split.
+  // The old combined `USR` pane (which wrapped these three under a
+  // tab strip) is gone.
+  Settings: 'SET',
+  Ledger: 'LDG',
+  WatchLive: 'WATCH',
+  // SYS.CFG is the actual settings surface — `Feat.Settings` (SET)
+  // wraps it with the chrome that hosts the user chip.
   SysCfg: 'SYS.CFG',
+
+  // Floating overlays — bottom-right dock, no fullscreen.
+  Dev: 'DEV', // perf metrics (mem / fps / lcp / inp / cls)
+  Scope: 'SCOPE', // active feat + keyboard hint
 
   // TERM — keyboard-driven command surface
   Terminal: 'TERM.MAIN',
@@ -75,6 +79,15 @@ export interface FeatConfig {
    * where there is no vertical space for an inline body.
    */
   readonly bodyOverlay?: boolean;
+  /**
+   * Floating overlay pane: rendered by its consumer in a fixed-position
+   * container (e.g. bottom-right dock) instead of participating in a
+   * column flex. The pane has only two states (`minimized` /
+   * `normal`) — clicking the name toggles them; the fullscreen control
+   * is hidden because the pane is already detached from the layout
+   * grid.
+   */
+  readonly floating?: boolean;
 }
 
 export const FEAT_CONFIG_MAP: Readonly<Record<Feat, FeatConfig>> = {
@@ -95,16 +108,18 @@ export const FEAT_CONFIG_MAP: Readonly<Record<Feat, FeatConfig>> = {
   [Feat.AIEq]: { cyber: true },
   [Feat.AISec]: { cyber: true },
 
+  // SYS / SET / LDG / WATCH all live in the topbar — narrow chrome
+  // with no inline body space, so `bodyOverlay` floats their bodies
+  // as fixed-position dropdowns anchored to the header rect.
   [Feat.SysMain]: { cyber: true, defaultMinimized: true, bodyOverlay: true },
-  // USR lives only in the topbar — narrow chrome with no inline space,
-  // so its body floats as a bodyOverlay dropdown.
-  [Feat.UsrMain]: { cyber: true, defaultMinimized: true, bodyOverlay: true },
-  [Feat.Terminal]: { cyber: true, defaultMinimized: true },
-  // Sub-feats (rendered as labels inside USR.MAIN). Any pane that
-  // mounts them standalone would inherit `defaultMinimized: true` so
-  // they don't fight USR.MAIN for vertical space if both happen to be
-  // present during a transitional render.
-  [Feat.Ledger]: { defaultMinimized: true },
-  [Feat.WatchLive]: { cyber: true, defaultMinimized: true },
+  [Feat.Settings]: { cyber: true, defaultMinimized: true, bodyOverlay: true },
+  [Feat.Ledger]: { defaultMinimized: true, bodyOverlay: true },
+  [Feat.WatchLive]: { cyber: true, defaultMinimized: true, bodyOverlay: true },
   [Feat.SysCfg]: { cyber: true, defaultMinimized: true, bodyOverlay: true },
+
+  // Floating overlays — bottom-right dock, no fullscreen.
+  [Feat.Dev]: { cyber: true, defaultMinimized: true, floating: true },
+  [Feat.Scope]: { defaultMinimized: true, floating: true },
+
+  [Feat.Terminal]: { cyber: true, defaultMinimized: true },
 };

@@ -84,7 +84,9 @@ export const BUILTIN_PRESETS: readonly LayoutPreset[] = [
       [Feat.Mkt]: 'minimized',
       [Feat.AISec]: 'minimized',
       [Feat.AIEq]: 'minimized',
-      [Feat.UsrMain]: 'minimized',
+      [Feat.Settings]: 'minimized',
+      [Feat.Ledger]: 'minimized',
+      [Feat.WatchLive]: 'minimized',
     },
   },
   {
@@ -98,7 +100,9 @@ export const BUILTIN_PRESETS: readonly LayoutPreset[] = [
       [Feat.EquityChart]: 'minimized',
       [Feat.AISec]: 'minimized',
       [Feat.AIEq]: 'minimized',
-      [Feat.UsrMain]: 'minimized',
+      [Feat.Settings]: 'minimized',
+      [Feat.Ledger]: 'minimized',
+      [Feat.WatchLive]: 'minimized',
     },
   },
   {
@@ -112,7 +116,9 @@ export const BUILTIN_PRESETS: readonly LayoutPreset[] = [
       [Feat.Mkt]: 'minimized',
       [Feat.AISec]: 'normal',
       [Feat.AIEq]: 'normal',
-      [Feat.UsrMain]: 'minimized',
+      [Feat.Settings]: 'minimized',
+      [Feat.Ledger]: 'minimized',
+      [Feat.WatchLive]: 'minimized',
     },
   },
 ];
