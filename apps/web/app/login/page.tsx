@@ -40,26 +40,25 @@ export default async function LoginPage({ searchParams }: LoginPageProps): Promi
 function LoginCard({ error }: { readonly error: string | undefined }): JSX.Element {
   return (
     <Box
-      bg="panel"
+      className="glass-strong"
       borderWidth="1px"
-      borderColor="line"
-      borderRadius="12px"
+      borderRadius="lg"
       px="36px"
       py="32px"
       w="360px"
-      boxShadow="card"
+      boxShadow="glassStrong"
     >
-      <Box as="h1" fontSize="22px" mb="8px" color="ink">
+      <Box as="h1" fontSize="xl" mb="8px" color="ink">
         登录到 Quant
       </Box>
-      <Box as="p" fontSize="13px" color="ink2" mb="24px">
+      <Box as="p" fontSize="body" color="ink2" mb="24px">
         使用飞书账号继续。仅用于将你的本地账本、自选股和系统配置与你的身份绑定。
       </Box>
       <a href="/api/auth/feishu/start" style={LOGIN_LINK_STYLE}>
         用飞书登录
       </a>
       {error !== undefined && (
-        <Box as="p" mt="16px" fontSize="12px" color="up">
+        <Box as="p" mt="16px" fontSize="sm" color="up">
           登录失败：{error}
         </Box>
       )}
@@ -73,7 +72,7 @@ const LOGIN_LINK_STYLE: React.CSSProperties = {
   padding: '10px 16px',
   background: 'var(--chakra-colors-link)',
   color: 'var(--chakra-colors-white)',
-  borderRadius: '8px',
+  borderRadius: 'var(--chakra-radii-sm)',
   textDecoration: 'none',
-  fontSize: '14px',
+  fontSize: 'var(--chakra-font-sizes-md)',
 };

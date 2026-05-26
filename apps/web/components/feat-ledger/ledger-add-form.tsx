@@ -1,6 +1,7 @@
 'use client';
 
 import { Box, Button, Flex, Input, Text } from '@chakra-ui/react';
+import { DialogPortal } from '../feat-view/dialog-portal.js';
 import { LedgerEntrySchema, type LedgerEntry } from '@quant/shared';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
@@ -160,7 +161,7 @@ export function LedgerAddForm({
     >
       <FormFields state={state} onChange={setState} mode={mode} closingRequired={closingRequired} />
       {error !== null && (
-        <Text fontSize="11px" color="fall" fontFamily="mono" role="alert">
+        <Text fontSize="xs" color="fall" fontFamily="mono" role="alert">
           {error}
         </Text>
       )}
@@ -203,13 +204,14 @@ function DialogShell({
   children,
 }: DialogShellProps): React.ReactElement {
   return (
-    <Flex
+    <DialogPortal>
+      <Flex
       position="fixed"
       inset="0"
       bg="overlay"
       align={isMobile ? 'stretch' : 'center'}
       justify="center"
-      zIndex={1200}
+      zIndex="dialog"
       role="dialog"
       aria-modal="true"
       aria-label={ariaLabel}
@@ -222,6 +224,7 @@ function DialogShell({
         {children}
       </DialogCard>
     </Flex>
+    </DialogPortal>
   );
 }
 
@@ -252,7 +255,7 @@ function DialogCard({ ref, isMobile, title, children }: DialogCardProps): React.
       }}
     >
       <Text
-        fontSize="11px"
+        fontSize="xs"
         letterSpacing="0.18em"
         color="accent"
         fontFamily="mono"
@@ -376,7 +379,7 @@ function Field({
 }: FieldProps): React.ReactElement {
   return (
     <Box>
-      <Text fontSize="10px" letterSpacing="0.12em" color="ink3" fontFamily="mono" mb="2px">
+      <Text fontSize="xs" letterSpacing="0.12em" color="ink3" fontFamily="mono" mb="2px">
         {label}
         {required ? (
           <Text as="span" color="fall" ml="2px">
@@ -396,7 +399,7 @@ function Field({
         {...(inputMode !== undefined ? { inputMode } : {})}
         bg="panel3"
         fontFamily="mono"
-        fontSize="12px"
+        fontSize="sm"
       />
     </Box>
   );

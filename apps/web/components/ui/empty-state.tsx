@@ -58,7 +58,7 @@ export function EmptyState({
     >
       <Text
         fontFamily="mono"
-        fontSize="20px"
+        fontSize="xl"
         color={inkAccent}
         letterSpacing="0.04em"
         aria-hidden="true"
@@ -67,7 +67,7 @@ export function EmptyState({
       </Text>
       <Text
         fontFamily="mono"
-        fontSize="13px"
+        fontSize="body"
         fontWeight="700"
         color={inkAccent}
         letterSpacing="0.06em"
@@ -77,7 +77,7 @@ export function EmptyState({
       {body !== undefined && (
         <Box
           fontFamily="mono"
-          fontSize="11px"
+          fontSize="xs"
           color={inkBody}
           lineHeight="1.7"
           maxW="320px"

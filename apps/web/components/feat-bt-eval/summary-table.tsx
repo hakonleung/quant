@@ -62,7 +62,7 @@ export function SummaryTable({
       as="table"
       width="100%"
       fontFamily="mono"
-      fontSize="11px"
+      fontSize="xs"
       style={{ borderCollapse: 'collapse' }}
     >
       <SummaryTableHead headers={SUMMARY_HEADERS} />

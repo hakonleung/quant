@@ -259,14 +259,14 @@ function FocusLabel({
       borderColor="line"
       bg="panel3"
       fontFamily="mono"
-      fontSize="10px"
+      fontSize="xs"
       color="ink2"
     >
       {/* Row 1 — price · chgPct · 距今涨幅 · 换手/H/L/O · zoom controls. */}
       <Flex align="center" gap="12px" flexWrap="wrap">
         <Text
           fontFamily="mono"
-          fontSize="13px"
+          fontSize="body"
           color={closeColor}
           fontWeight="800"
           letterSpacing="0.04em"
@@ -276,7 +276,7 @@ function FocusLabel({
         {dayChgPct !== null && (
           <Text
             fontFamily="mono"
-            fontSize="12px"
+            fontSize="sm"
             color={dayChgPct >= 0 ? 'up' : 'down'}
             fontWeight="700"
             letterSpacing="0.04em"
@@ -316,7 +316,7 @@ function FocusLabel({
           borderColor={selected ? 'accent' : 'line'}
           color={selected ? 'accent' : 'ink3'}
           bg={selected ? 'accentBg' : 'transparent'}
-          fontSize="9px"
+          fontSize="xs"
           fontWeight="700"
           letterSpacing="0.12em"
         >
@@ -384,7 +384,7 @@ function Centered({ children }: { children: React.ReactNode }): React.ReactEleme
       transform="translate(-50%,-50%)"
       fontFamily="mono"
       color="ink3"
-      fontSize="11px"
+      fontSize="xs"
       letterSpacing="0.16em"
     >
       {children}
@@ -465,10 +465,10 @@ function FinancialsSection({ code, meta }: FinancialsProps): React.ReactElement 
       borderColor="line"
       bg="panel3"
       fontFamily="mono"
-      fontSize="11px"
+      fontSize="xs"
       color="ink2"
     >
-      <Text color="ink3" fontSize="9px" letterSpacing="0.16em" textTransform="uppercase" mb="6px">
+      <Text color="ink3" fontSize="xs" letterSpacing="0.16em" textTransform="uppercase" mb="6px">
         FUNDAMENTALS
       </Text>
       <Box display="grid" gridTemplateColumns="repeat(auto-fit, minmax(120px, 1fr))" gap="4px 16px">
@@ -487,7 +487,7 @@ function FinancialsSection({ code, meta }: FinancialsProps): React.ReactElement 
           height is stable from first paint — prevents CLS when the
           meta query resolves later. */}
       <Box mt="8px" pt="6px" borderTopWidth="1px" borderColor="line">
-        <Text color="ink3" fontSize="9px" letterSpacing="0.16em" mb="4px">
+        <Text color="ink3" fontSize="xs" letterSpacing="0.16em" mb="4px">
           LATEST QUARTER {latestQ?.period ?? '—'}
         </Text>
         <Box
@@ -508,7 +508,7 @@ function FinancialsSection({ code, meta }: FinancialsProps): React.ReactElement 
 function FinCell({ label, value }: { label: string; value: string }): React.ReactElement {
   return (
     <Flex gap="6px" align="baseline">
-      <Text color="ink3" letterSpacing="0.10em" fontSize="9px" minW="64px">
+      <Text color="ink3" letterSpacing="0.10em" fontSize="xs" minW="64px">
         {label}
       </Text>
       <Text color={value === '—' ? 'ink3' : 'ink'} fontWeight="600">

@@ -255,7 +255,7 @@ export function FeatLedger({ bare }: FeatLedgerProps = {}): React.ReactElement {
             flexShrink={0}
           >
             <Text
-              fontSize="9px"
+              fontSize="xs"
               letterSpacing="0.18em"
               color="accent"
               fontFamily="mono"
@@ -328,7 +328,7 @@ function TabButton({ active, onClick, children }: TabButtonProps): React.ReactEl
       as="button"
       px="6px"
       py="2px"
-      fontSize="10px"
+      fontSize="xs"
       fontFamily="mono"
       letterSpacing="0.12em"
       color={active ? 'term.green' : 'term.ink3'}

@@ -1,6 +1,7 @@
 'use client';
 
 import { Box, Button, Flex, Text } from '@chakra-ui/react';
+import { DialogPortal } from '../feat-view/dialog-portal.js';
 import { LedgerEntrySchema, type LedgerEntry } from '@quant/shared';
 import { useRef, useState } from 'react';
 import { z } from 'zod';
@@ -54,28 +55,34 @@ export function LedgerImportDialog({
   };
 
   return (
-    <Flex
+    <DialogPortal>
+      <Flex
       position="fixed"
       inset="0"
       bg="overlay"
       align="center"
       justify="center"
-      zIndex={1200}
+      zIndex="dialog"
       onMouseDown={(e): void => {
         if (e.target === e.currentTarget) onCancel();
       }}
     >
       <Box
-        bg="panel"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="ldg-import-dialog-title"
+        aria-describedby="ldg-import-dialog-desc"
+        className="glass-strong"
         borderWidth="1px"
-        borderColor="line"
-        boxShadow="card"
+        borderRadius="lg"
+        boxShadow="glassStrong"
         p="16px"
         minW="360px"
         maxW="92vw"
       >
         <Text
-          fontSize="11px"
+          id="ldg-import-dialog-title"
+          fontSize="xs"
           letterSpacing="0.18em"
           color="accent"
           fontFamily="mono"
@@ -84,26 +91,39 @@ export function LedgerImportDialog({
         >
           LDG.IMPORT
         </Text>
-        <Text fontSize="11px" color="ink2" mb="10px">
+        <Text id="ldg-import-dialog-desc" fontSize="xs" color="ink2" mb="10px">
           选择导出的 JSON 文件 — 同日期记录会被覆盖。
         </Text>
-        <input
-          ref={fileRef}
-          type="file"
-          accept="application/json"
-          onChange={(e): void => {
-            const file = e.currentTarget.files?.[0];
-            if (file) void handleFile(file);
-          }}
-          style={{ fontSize: '12px', fontFamily: 'monospace' }}
-        />
+        <label>
+          <Text as="span" srOnly>
+            选择 JSON 文件
+          </Text>
+          <input
+            ref={fileRef}
+            type="file"
+            accept="application/json"
+            aria-describedby={error !== null ? 'ldg-import-error' : undefined}
+            onChange={(e): void => {
+              const file = e.currentTarget.files?.[0];
+              if (file) void handleFile(file);
+            }}
+            style={{ fontSize: 'var(--chakra-font-sizes-sm)', fontFamily: 'monospace' }}
+          />
+        </label>
         {entries !== null && (
-          <Text fontSize="10px" color="ink3" mt="6px" fontFamily="mono">
+          <Text fontSize="xs" color="ink3" mt="6px" fontFamily="mono">
             待导入 {String(entries.length)} 条
           </Text>
         )}
         {error !== null && (
-          <Text fontSize="11px" color="fall" mt="6px" fontFamily="mono">
+          <Text
+            id="ldg-import-error"
+            role="alert"
+            fontSize="xs"
+            color="up"
+            mt="6px"
+            fontFamily="mono"
+          >
             {error}
           </Text>
         )}
@@ -125,5 +145,6 @@ export function LedgerImportDialog({
         </Flex>
       </Box>
     </Flex>
+    </DialogPortal>
   );
 }

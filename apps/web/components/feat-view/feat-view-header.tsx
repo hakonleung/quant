@@ -48,7 +48,7 @@ export function FeatViewStatus({
       className={blink ? 'blink' : undefined}
       color={TONE_TO_COLOR[tone]}
       fontFamily="mono"
-      fontSize="10px"
+      fontSize="xs"
       lineHeight="1"
       fontWeight="700"
     >

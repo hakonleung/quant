@@ -40,7 +40,7 @@ interface PlanProps {
 
 export function DslTree({ screenPlan, universePlan, rank }: PlanProps): React.ReactElement {
   return (
-    <Box fontFamily="mono" fontSize="11px" color="ink2" lineHeight="1.7">
+    <Box fontFamily="mono" fontSize="xs" color="ink2" lineHeight="1.7">
       {universePlan !== null && (
         <Section title="UNIVERSE" asof={universePlan.asof}>
           <UniverseNode node={universePlan.expr} depth={0} />
@@ -59,7 +59,7 @@ function RankSection({ rank }: { rank: RankSpecView }): React.ReactElement {
     <Box mb="8px">
       <Box
         fontFamily="mono"
-        fontSize="9px"
+        fontSize="xs"
         letterSpacing="0.18em"
         color="ink3"
         fontWeight="700"
@@ -86,7 +86,7 @@ function Section({ title, asof, children }: SectionProps): React.ReactElement {
     <Box mb="8px">
       <Box
         fontFamily="mono"
-        fontSize="9px"
+        fontSize="xs"
         letterSpacing="0.18em"
         color="ink3"
         fontWeight="700"
@@ -367,7 +367,7 @@ function Token({ doc, children, accent = false }: TokenProps): React.ReactElemen
           boxShadow="md"
           p="8px 10px"
           fontFamily="mono"
-          fontSize="10px"
+          fontSize="xs"
           color="ink2"
           letterSpacing="0.04em"
           lineHeight="1.5"

@@ -2,7 +2,7 @@
 
 import { Box, Flex, HStack, Text } from '@chakra-ui/react';
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
-import { flushSync } from 'react-dom';
+import { createPortal, flushSync } from 'react-dom';
 
 import { FEAT_CONFIG_MAP, type Feat } from '../../lib/eqty/feat.js';
 import { useLayoutStore, type FeatViewMode } from '../../lib/stores/layout.store.js';
@@ -15,17 +15,28 @@ const TRANSITION_MS = 280;
 const prefersReducedMotion = (): boolean =>
   typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-/** Inline styles applied to the pane when it switches to fullscreen.
- *  Lifted to module scope so the pane chrome stays under the per-
- *  function line cap. `100dvh` tracks iOS dynamic viewport; the
- *  safe-area paddings keep the header clear of the notch / home bar. */
+/**
+ * Inline styles applied to the pane when it switches to fullscreen.
+ * Lifted to module scope so the pane chrome stays under the per-
+ * function line cap.
+ *
+ * **TopBar preserved.** We carve out the TopBar (`top: 52px desktop /
+ * 44px mobile`) so users keep access to brand / SYS status / USR /
+ * theme toggle / settings while a pane is fullscreen — the only UX
+ * change versus fullscreen-edge-to-edge is that the very top 52px
+ * stays in topbar mode, which is the Apple HIG pattern (full-window
+ * apps still show the menu bar). Mobile uses 44px topbar height.
+ *
+ * z-index uses the unified `fullscreen` token (1500) — above
+ * overlay/dialog/scrim but below toast/hint/tooltip so transient
+ * messages can still surface.
+ */
 const FULLSCREEN_STYLE = {
-  top: 0,
+  top: 'calc(var(--app-topbar-h, 52px) + env(safe-area-inset-top))',
   left: 0,
   width: '100vw',
-  height: '100dvh',
-  zIndex: 1000,
-  paddingTop: 'env(safe-area-inset-top)',
+  height: 'calc(100dvh - var(--app-topbar-h, 52px) - env(safe-area-inset-top))',
+  zIndex: 'var(--chakra-z-index-fullscreen, 1500)',
   paddingBottom: 'env(safe-area-inset-bottom)',
 } as const;
 
@@ -215,7 +226,18 @@ export function FeatView({
   const paneBox = (
     <Box
       ref={paneRef}
-      bg={cyber ? 'term.panel' : 'panel'}
+      // Liquid Glass floating pane — backdrop-filter blurs body
+      // wallpaper behind the pane. Dialogs are portaled to body to
+      // escape the containing-block this creates.
+      bg={isFullscreen ? 'panel' : cyber ? 'term.panel' : 'glass.panel'}
+      backdropFilter={isFullscreen ? undefined : 'blur(16px) saturate(180%)'}
+      borderWidth={isFullscreen ? 0 : '1px'}
+      borderColor={cyber ? 'term.line' : 'glass.line'}
+      borderRadius={isFullscreen ? 'none' : 'xs'}
+      boxShadow={isFullscreen ? 'none' : 'glass'}
+      // Smooth transitions for the mode toggles (normal ↔ minimized
+      // ↔ fullscreen) so the pane chrome morphs instead of snapping.
+      transition="border-radius 280ms ease, box-shadow 280ms ease, background-color 280ms ease"
       color={cyber ? 'term.ink2' : 'ink'}
       position={isFullscreen ? 'fixed' : 'relative'}
       flex={
@@ -279,18 +301,28 @@ export function FeatView({
   }
 
   // Fullscreen: keep a same-sized placeholder in the grid so layout
-  // doesn't reflow underneath, then portal-style render the pane via
-  // position:fixed on top.
+  // doesn't reflow underneath, then **portal** the fullscreen pane to
+  // `document.body` so it escapes every ancestor stacking / containing
+  // context. The Liquid Glass `backdrop-filter` on TopBar would
+  // otherwise trap a fixed-positioned descendant inside the topbar's
+  // bounding box (backdrop-filter creates a containing block for fixed
+  // children per CSS spec) — visible regression: USR.MAIN in topbar
+  // fullscreening into the topbar slot instead of the viewport.
+  const portalTarget = typeof document === 'undefined' ? null : document.body;
   return (
     <>
       <Box ref={placeholderRef} gridArea={gridArea} h="100%" minH={0} visibility="hidden" />
-      {paneBox}
+      {portalTarget === null ? paneBox : createPortal(paneBox, portalTarget)}
     </>
   );
 }
 
-function cornerStyle(corner: 'tl' | 'br', cyber: boolean): Record<string, unknown> {
-  const color = cyber ? 'var(--chakra-colors-term-green)' : 'var(--chakra-colors-accent)';
+function cornerStyle(corner: 'tl' | 'br', _cyber: boolean): Record<string, unknown> {
+  void _cyber;
+  // Single accent (朱砂) regardless of cyber mode — keeps the geek
+  // angle markers as a consistent brand fingerprint instead of
+  // splitting red/green between cyber and normal panes.
+  const color = 'var(--chakra-colors-accent)';
   const base: Record<string, unknown> = {
     content: '""',
     position: 'absolute',
@@ -350,18 +382,20 @@ function FeatViewHeader(props: FeatViewHeaderProps): React.ReactElement {
       gap="8px"
       px="10px"
       h={cyber ? '30px' : '28px'}
-      bg={cyber ? 'term.panel' : 'panel'}
+      // Header is transparent so the parent pane's glass + ambient
+      // mesh reads through unbroken. Only a hairline divider stays.
+      bg="transparent"
       borderBottomWidth="1px"
-      borderBottomColor={cyber ? 'term.line' : 'line'}
+      borderBottomColor={cyber ? 'term.line' : 'glass.line'}
       flexShrink={0}
       color={cyber ? 'term.ink3' : 'ink3'}
     >
       <Text
         fontFamily="mono"
-        fontSize="10px"
+        fontSize="xs"
         letterSpacing="0.18em"
         fontWeight="700"
-        color={cyber ? 'term.green' : 'accent'}
+        color="accent"
         whiteSpace="nowrap"
         flexShrink={0}
       >
@@ -378,7 +412,7 @@ function FeatViewHeader(props: FeatViewHeaderProps): React.ReactElement {
           align="center"
           gap="6px"
           fontFamily="mono"
-          fontSize="10px"
+          fontSize="xs"
           letterSpacing="0.06em"
           flexShrink={0}
         >
@@ -389,7 +423,7 @@ function FeatViewHeader(props: FeatViewHeaderProps): React.ReactElement {
         ml="auto"
         gap="10px"
         fontFamily="mono"
-        fontSize="10px"
+        fontSize="xs"
         letterSpacing="0.06em"
         color={cyber ? 'term.ink3' : 'ink3'}
         flexShrink={0}
@@ -435,9 +469,11 @@ function FeatViewHeaderTall({
       px="10px"
       py="2px"
       h={{ base: '44px', md: '52px' }}
-      bg={cyber ? 'term.panel' : 'panel'}
-      borderBottomWidth="2px"
-      borderBottomColor={cyber ? 'term.green' : 'accent'}
+      // Tall header is transparent — sits inside the TopBar's own
+      // glass surface, so its only chrome is a hairline divider.
+      bg="transparent"
+      borderBottomWidth="1px"
+      borderBottomColor={cyber ? 'term.line' : 'glass.line'}
       flexShrink={0}
       color={cyber ? 'term.ink3' : 'ink3'}
       justify="space-between"
@@ -445,10 +481,10 @@ function FeatViewHeaderTall({
       <Flex align="center" gap="8px" flexShrink={0} minW={0}>
         <Text
           fontFamily="mono"
-          fontSize="11px"
+          fontSize="xs"
           letterSpacing="0.18em"
           fontWeight="700"
-          color={cyber ? 'term.green' : 'accent'}
+          color="accent"
           whiteSpace="nowrap"
           flexShrink={0}
         >
@@ -465,7 +501,7 @@ function FeatViewHeaderTall({
             align="center"
             gap="6px"
             fontFamily="mono"
-            fontSize="10px"
+            fontSize="xs"
             letterSpacing="0.06em"
             flex="1"
             minW={0}
@@ -478,7 +514,7 @@ function FeatViewHeaderTall({
           ml="auto"
           gap="10px"
           fontFamily="mono"
-          fontSize="10px"
+          fontSize="xs"
           letterSpacing="0.06em"
           color={cyber ? 'term.ink3' : 'ink3'}
           flexShrink={0}
@@ -497,7 +533,7 @@ function FeatViewHeaderTall({
         align="center"
         gap="6px"
         fontFamily="mono"
-        fontSize="10px"
+        fontSize="xs"
         letterSpacing="0.06em"
         flexShrink={0}
         minW={0}
@@ -621,7 +657,15 @@ function OverlayBody({
   }, [anchorRef, onDismiss]);
 
   if (rect === null) return null;
-  return (
+  // **Critical**: render through a portal to `document.body`. The TopBar
+  // applies `backdrop-filter` (for its glass effect), and per the CSS
+  // spec that creates a new containing block for ALL fixed-positioned
+  // descendants. Without the portal, this `position:fixed` would be
+  // clipped/stacked relative to the TopBar (the OverlayBody is a child
+  // of the topbar-mounted FeatView via anchorRef), and SYS / USR
+  // dropdowns rendered behind the TopBar instead of below it. The
+  // portal lifts the node to body, escaping that containment.
+  const overlay = (
     <Box
       ref={overlayRef}
       position="fixed"
@@ -629,17 +673,24 @@ function OverlayBody({
         top: `${String(rect.top)}px`,
         left: `${String(rect.left)}px`,
         width: `${String(rect.width)}px`,
-        zIndex: 1100,
+        zIndex: 'var(--chakra-z-index-overlay, 1000)',
       }}
       maxH="60vh"
       overflow="auto"
-      bg={cyber ? 'term.panel' : 'panel'}
+      // Floating popover — Liquid Glass surface. Cyber mode reuses
+      // the term glass palette (frosted dark with the slight green
+      // edge); normal mode uses the standard light/dark glass.
+      bg={cyber ? 'term.panel' : 'glass.panel'}
+      backdropFilter="blur(20px) saturate(180%)"
       color={cyber ? 'term.ink2' : 'ink'}
       borderWidth="1px"
-      borderColor={cyber ? 'term.line' : 'line'}
-      boxShadow="card"
+      borderColor={cyber ? 'term.line' : 'glass.line'}
+      borderRadius="xs"
+      boxShadow="glass"
     >
       {children}
     </Box>
   );
+  if (typeof document === 'undefined') return overlay;
+  return createPortal(overlay, document.body);
 }

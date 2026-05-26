@@ -41,6 +41,8 @@ export function FeatTermMain(): React.ReactElement {
       bg={logoBg}
       position="relative"
       overflow="hidden"
+      backdropFilter="blur(20px) saturate(180%)"
+      css={{ WebkitBackdropFilter: 'blur(20px) saturate(180%)' }}
     >
       <CrtOverlay />
 

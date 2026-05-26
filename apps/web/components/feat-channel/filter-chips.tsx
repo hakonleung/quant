@@ -61,7 +61,7 @@ export function FilterChips({ state, onChange }: FilterChipsProps): React.ReactE
       px="14px"
       py="6px"
       fontFamily="mono"
-      fontSize="10px"
+      fontSize="xs"
       color="term.ink3"
       flexWrap="wrap"
     >
@@ -114,7 +114,7 @@ function Chip({ active, label, onClick }: ChipProps): React.ReactElement {
       bg={active ? 'term.panel' : 'transparent'}
       letterSpacing="0.04em"
       fontFamily="mono"
-      fontSize="10px"
+      fontSize="xs"
       cursor="pointer"
       _hover={{ borderColor: active ? 'term.green' : 'term.ink3' }}
     >

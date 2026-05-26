@@ -90,7 +90,7 @@ export function FeatAiEq({ code }: Props): React.ReactElement {
       titleSlot={
         <Text
           fontFamily="mono"
-          fontSize="11px"
+          fontSize="xs"
           letterSpacing="0.06em"
           color="term.ink2"
           whiteSpace="nowrap"

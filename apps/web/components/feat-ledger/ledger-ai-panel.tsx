@@ -17,7 +17,7 @@ export function LedgerAiPanel({
   if (loading) {
     return (
       <Flex p="14px" align="center" justify="center" minH="120px">
-        <Text fontSize="11px" color="term.ink3" fontFamily="mono">
+        <Text fontSize="xs" color="term.ink3" fontFamily="mono">
           AI 分析中…
         </Text>
       </Flex>
@@ -26,7 +26,7 @@ export function LedgerAiPanel({
   if (error !== null) {
     return (
       <Flex p="14px" align="center" justify="center" minH="120px">
-        <Text fontSize="11px" color="fall" fontFamily="mono">
+        <Text fontSize="xs" color="fall" fontFamily="mono">
           {error}
         </Text>
       </Flex>
@@ -35,7 +35,7 @@ export function LedgerAiPanel({
   if (analysis === null) {
     return (
       <Flex p="14px" align="center" justify="center" minH="120px">
-        <Text fontSize="11px" color="term.ink3" fontFamily="mono">
+        <Text fontSize="xs" color="term.ink3" fontFamily="mono">
           点击 ANALYZE 对最近 30 日记录进行复盘
         </Text>
       </Flex>
@@ -66,7 +66,7 @@ export function LedgerAiPanel({
         {bp.disciplineBreaches.length > 0 && (
           <Box mt="4px">
             <Text
-              fontSize="9px"
+              fontSize="xs"
               letterSpacing="0.14em"
               color="term.ink3"
               fontFamily="mono"
@@ -77,7 +77,7 @@ export function LedgerAiPanel({
             {bp.disciplineBreaches.map((b) => (
               <Text
                 key={b.date}
-                fontSize="11px"
+                fontSize="xs"
                 color="term.ink"
                 fontFamily="mono"
                 lineHeight="1.5"
@@ -94,7 +94,7 @@ export function LedgerAiPanel({
           {analysis.marketMicrostructure.map((p) => (
             <Text
               key={p.timeframe}
-              fontSize="11px"
+              fontSize="xs"
               color="term.ink"
               fontFamily="mono"
               lineHeight="1.5"
@@ -110,13 +110,13 @@ export function LedgerAiPanel({
         <Section label="系统熔断规则">
           {analysis.systemicInterventions.map((iv) => (
             <Box key={iv.command} mb="6px">
-              <Text fontSize="11px" color="rise" fontFamily="mono" fontWeight="700">
+              <Text fontSize="xs" color="rise" fontFamily="mono" fontWeight="700">
                 {iv.command}
               </Text>
-              <Text fontSize="11px" color="term.ink" fontFamily="mono" lineHeight="1.5">
+              <Text fontSize="xs" color="term.ink" fontFamily="mono" lineHeight="1.5">
                 {`if (${iv.condition}) → ${iv.action}`}
               </Text>
-              <Text fontSize="10px" color="term.ink3" fontFamily="mono" lineHeight="1.5">
+              <Text fontSize="xs" color="term.ink3" fontFamily="mono" lineHeight="1.5">
                 {iv.rationale}
               </Text>
             </Box>
@@ -124,7 +124,7 @@ export function LedgerAiPanel({
         </Section>
       )}
 
-      <Text fontSize="9px" color="term.ink3" fontFamily="mono" letterSpacing="0.12em">
+      <Text fontSize="xs" color="term.ink3" fontFamily="mono" letterSpacing="0.12em">
         {`${analysis.windowStart} → ${analysis.windowEnd}  ·  ${analysis.provider || 'unknown'}  ·  ${String(analysis.entryCount)} 条`}
       </Text>
     </Flex>
@@ -141,7 +141,7 @@ function Section({
   return (
     <Box>
       <Text
-        fontSize="9px"
+        fontSize="xs"
         letterSpacing="0.16em"
         color="accent"
         fontFamily="mono"
@@ -159,7 +159,7 @@ function Section({
 
 function Metric({ k, v }: { readonly k: string; readonly v: string }): React.ReactElement {
   return (
-    <Flex gap="8px" fontFamily="mono" fontSize="12px" lineHeight="1.5">
+    <Flex gap="8px" fontFamily="mono" fontSize="sm" lineHeight="1.5">
       <Text color="term.ink3" minW="72px">
         {k}
       </Text>

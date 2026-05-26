@@ -1,6 +1,7 @@
 'use client';
 
 import { Box, Button, Flex, Text } from '@chakra-ui/react';
+import { DialogPortal } from '../../components/feat-view/dialog-portal.js';
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 
 export interface ConfirmOptions {
@@ -83,14 +84,15 @@ function ConfirmDialog({ opts, onConfirm, onCancel }: DialogProps): React.ReactE
     cancelBtnRef.current?.focus();
   }, []);
   return (
-    <Box
+    <DialogPortal>
+      <Box
       role="dialog"
       aria-modal="true"
       aria-label={title}
       position="fixed"
       inset={0}
       bg="overlay"
-      zIndex={2000}
+      zIndex="modal"
       display="flex"
       alignItems="center"
       justifyContent="center"
@@ -100,13 +102,13 @@ function ConfirmDialog({ opts, onConfirm, onCancel }: DialogProps): React.ReactE
         onClick={(e): void => {
           e.stopPropagation();
         }}
-        bg="panel"
+        className="glass-strong"
         color="ink"
         w="440px"
         maxW="92vw"
         borderWidth="1px"
-        borderColor="accent"
-        boxShadow="card"
+        borderRadius="lg"
+        boxShadow="glassStrong"
       >
         <Flex
           align="center"
@@ -114,12 +116,13 @@ function ConfirmDialog({ opts, onConfirm, onCancel }: DialogProps): React.ReactE
           px="14px"
           h="36px"
           borderBottomWidth="1px"
-          borderColor="line"
-          bg="panel3"
+          borderColor="glass.line"
+          bg="glass.panelSoft"
+          backdropFilter="blur(12px)"
         >
           <Text
             fontFamily="mono"
-            fontSize="11px"
+            fontSize="xs"
             color="accent"
             fontWeight="700"
             letterSpacing="0.18em"
@@ -128,7 +131,7 @@ function ConfirmDialog({ opts, onConfirm, onCancel }: DialogProps): React.ReactE
           </Text>
           <Text
             fontFamily="mono"
-            fontSize="11px"
+            fontSize="xs"
             color="ink2"
             letterSpacing="0.18em"
             textTransform="uppercase"
@@ -136,7 +139,7 @@ function ConfirmDialog({ opts, onConfirm, onCancel }: DialogProps): React.ReactE
             {title}
           </Text>
         </Flex>
-        <Box px="16px" py="14px" fontFamily="mono" fontSize="12px" color="ink2" lineHeight="1.7">
+        <Box px="16px" py="14px" fontFamily="mono" fontSize="sm" color="ink2" lineHeight="1.7">
           {opts.message}
         </Box>
         <Flex
@@ -145,8 +148,9 @@ function ConfirmDialog({ opts, onConfirm, onCancel }: DialogProps): React.ReactE
           px="14px"
           py="10px"
           borderTopWidth="1px"
-          borderColor="line"
-          bg="panel3"
+          borderColor="glass.line"
+          bg="glass.panelSoft"
+          backdropFilter="blur(12px)"
         >
           <Button
             ref={cancelBtnRef}
@@ -159,9 +163,9 @@ function ConfirmDialog({ opts, onConfirm, onCancel }: DialogProps): React.ReactE
             px="14px"
             py="6px"
             fontFamily="mono"
-            fontSize="11px"
+            fontSize="xs"
             letterSpacing="0.18em"
-            borderRadius="0"
+            borderRadius="sm"
             _hover={{ borderColor: 'ink2' }}
           >
             {cancelLabel}
@@ -175,10 +179,10 @@ function ConfirmDialog({ opts, onConfirm, onCancel }: DialogProps): React.ReactE
             px="16px"
             py="6px"
             fontFamily="mono"
-            fontSize="11px"
+            fontSize="xs"
             fontWeight="700"
             letterSpacing="0.18em"
-            borderRadius="0"
+            borderRadius="sm"
             _hover={{ bg: 'accent', opacity: 0.85 }}
           >
             {confirmLabel}
@@ -186,5 +190,6 @@ function ConfirmDialog({ opts, onConfirm, onCancel }: DialogProps): React.ReactE
         </Flex>
       </Box>
     </Box>
+    </DialogPortal>
   );
 }

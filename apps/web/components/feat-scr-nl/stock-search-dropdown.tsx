@@ -68,7 +68,7 @@ export const SearchDropdown = React.forwardRef<HTMLDivElement, DropdownProps>(
       <Box
         ref={ref}
         position="fixed"
-        zIndex={1500}
+        zIndex="overlay"
         bg="term.panel"
         borderWidth={open ? '1px' : 0}
         borderColor="term.line"
@@ -115,7 +115,7 @@ function DropdownBody(props: BodyProps): React.ReactElement {
   if (matches.length === 0) {
     if (!open) return <></>;
     return (
-      <Box px="12px" py="10px" fontFamily="mono" fontSize="11px" color="term.ink3">
+      <Box px="12px" py="10px" fontFamily="mono" fontSize="xs" color="term.ink3">
         // no matches
       </Box>
     );
@@ -167,10 +167,10 @@ function DropdownRow(p: RowProps): React.ReactElement {
       bg={active ? 'term.line' : 'transparent'}
       cursor="pointer"
       fontFamily="mono"
-      fontSize="12px"
+      fontSize="sm"
     >
       {showMarketCol ? (
-        <Text color={active ? 'term.green' : 'term.ink3'} fontSize="10px">
+        <Text color={active ? 'term.green' : 'term.ink3'} fontSize="xs">
           [{stock.market}]
         </Text>
       ) : null}
@@ -182,7 +182,7 @@ function DropdownRow(p: RowProps): React.ReactElement {
       </Text>
       <Text
         color="term.ink3"
-        fontSize="10px"
+        fontSize="xs"
         textAlign="right"
         overflow="hidden"
         textOverflow="ellipsis"

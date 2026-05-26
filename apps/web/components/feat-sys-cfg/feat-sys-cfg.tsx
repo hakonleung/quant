@@ -61,7 +61,7 @@ export function FeatSysCfg({ bare }: FeatSysCfgProps = {}): React.ReactElement {
         bg="term.panel"
         color="term.ink2"
         fontFamily="mono"
-        fontSize="11px"
+        fontSize="xs"
         overflow="hidden"
       >
         <SectionNav active={section} onSelect={setSection} />
@@ -103,7 +103,7 @@ function ThemeSection(): React.ReactElement {
   return (
     <Flex direction="column" p="12px" gap="8px">
       <Text
-        fontSize="9px"
+        fontSize="xs"
         letterSpacing="0.18em"
         color="term.ink3"
         textTransform="uppercase"
@@ -130,22 +130,22 @@ function ThemeSection(): React.ReactElement {
             _hover={{ borderColor: 'term.green', color: 'term.green' }}
           >
             <Flex align="baseline" gap="8px">
-              <Text fontSize="12px" fontWeight="700" color={selected ? 'term.green' : 'term.ink'}>
+              <Text fontSize="sm" fontWeight="700" color={selected ? 'term.green' : 'term.ink'}>
                 {opt.label}
               </Text>
               {selected && (
-                <Text fontSize="9px" color="term.green" letterSpacing="0.18em" ml="auto">
+                <Text fontSize="xs" color="term.green" letterSpacing="0.18em" ml="auto">
                   ACTIVE
                 </Text>
               )}
             </Flex>
-            <Text fontSize="11px" color="term.ink2" mt="4px" lineHeight="1.5">
+            <Text fontSize="xs" color="term.ink2" mt="4px" lineHeight="1.5">
               {opt.description}
             </Text>
           </Box>
         );
       })}
-      <Text fontSize="10px" color="term.ink3" mt="4px" lineHeight="1.5">
+      <Text fontSize="xs" color="term.ink3" mt="4px" lineHeight="1.5">
         // 首次访问读系统 prefers-color-scheme，之后这里的选择会写回 sys-cfg。
       </Text>
     </Flex>
@@ -177,7 +177,7 @@ function GesturesSection(): React.ReactElement {
   return (
     <Flex direction="column" p="12px" gap="8px">
       <Text
-        fontSize="9px"
+        fontSize="xs"
         letterSpacing="0.18em"
         color="term.ink3"
         textTransform="uppercase"
@@ -204,22 +204,22 @@ function GesturesSection(): React.ReactElement {
             _hover={{ borderColor: 'term.green', color: 'term.green' }}
           >
             <Flex align="baseline" gap="8px">
-              <Text fontSize="12px" fontWeight="700" color={selected ? 'term.green' : 'term.ink'}>
+              <Text fontSize="sm" fontWeight="700" color={selected ? 'term.green' : 'term.ink'}>
                 {opt.label}
               </Text>
               {selected && (
-                <Text fontSize="9px" color="term.green" letterSpacing="0.18em" ml="auto">
+                <Text fontSize="xs" color="term.green" letterSpacing="0.18em" ml="auto">
                   ACTIVE
                 </Text>
               )}
             </Flex>
-            <Text fontSize="11px" color="term.ink2" mt="4px" lineHeight="1.5">
+            <Text fontSize="xs" color="term.ink2" mt="4px" lineHeight="1.5">
               {opt.description}
             </Text>
           </Box>
         );
       })}
-      <Text fontSize="10px" color="term.ink3" mt="4px" lineHeight="1.5">
+      <Text fontSize="xs" color="term.ink3" mt="4px" lineHeight="1.5">
         // 影响 EQ.CHART 与 LDG.MAIN 的日线 / 累计图拖拽方向。
       </Text>
     </Flex>
@@ -232,7 +232,7 @@ function PresetsSection(): React.ReactElement {
   return (
     <Flex direction="column" p="12px" gap="8px">
       <Text
-        fontSize="9px"
+        fontSize="xs"
         letterSpacing="0.18em"
         color="term.ink3"
         textTransform="uppercase"
@@ -259,27 +259,27 @@ function PresetsSection(): React.ReactElement {
             _hover={{ borderColor: 'term.green', color: 'term.green' }}
           >
             <Flex align="baseline" gap="8px">
-              <Text fontSize="12px" fontWeight="700" color={selected ? 'term.green' : 'term.ink'}>
+              <Text fontSize="sm" fontWeight="700" color={selected ? 'term.green' : 'term.ink'}>
                 {p.label}
               </Text>
-              <Text fontSize="9px" color="term.ink3" letterSpacing="0.12em">
+              <Text fontSize="xs" color="term.ink3" letterSpacing="0.12em">
                 {p.id}
               </Text>
               {selected && (
-                <Text fontSize="9px" color="term.green" letterSpacing="0.18em" ml="auto">
+                <Text fontSize="xs" color="term.green" letterSpacing="0.18em" ml="auto">
                   ACTIVE
                 </Text>
               )}
             </Flex>
             {p.description !== undefined && (
-              <Text fontSize="11px" color="term.ink2" mt="4px" lineHeight="1.5">
+              <Text fontSize="xs" color="term.ink2" mt="4px" lineHeight="1.5">
                 {p.description}
               </Text>
             )}
           </Box>
         );
       })}
-      <Text fontSize="10px" color="term.ink3" mt="4px" lineHeight="1.5">
+      <Text fontSize="xs" color="term.ink3" mt="4px" lineHeight="1.5">
         // 提示：拖动列宽或最小化任意面板会清掉 ACTIVE 标记 — //
         预设只是一次性的状态注入，之后是用户自由布局。
       </Text>
@@ -313,7 +313,7 @@ function FiltersSection(): React.ReactElement {
   return (
     <Flex direction="column" p="12px" gap="8px">
       <Text
-        fontSize="9px"
+        fontSize="xs"
         letterSpacing="0.18em"
         color="term.ink3"
         textTransform="uppercase"
@@ -340,22 +340,22 @@ function FiltersSection(): React.ReactElement {
             _hover={{ borderColor: 'term.green', color: 'term.green' }}
           >
             <Flex align="baseline" gap="8px">
-              <Text fontSize="12px" fontWeight="700" color={selected ? 'term.green' : 'term.ink'}>
+              <Text fontSize="sm" fontWeight="700" color={selected ? 'term.green' : 'term.ink'}>
                 {opt.label}
               </Text>
               {selected && (
-                <Text fontSize="9px" color="term.green" letterSpacing="0.18em" ml="auto">
+                <Text fontSize="xs" color="term.green" letterSpacing="0.18em" ml="auto">
                   ACTIVE
                 </Text>
               )}
             </Flex>
-            <Text fontSize="11px" color="term.ink2" mt="4px" lineHeight="1.5">
+            <Text fontSize="xs" color="term.ink2" mt="4px" lineHeight="1.5">
               {opt.description}
             </Text>
           </Box>
         );
       })}
-      <Text fontSize="10px" color="term.ink3" mt="4px" lineHeight="1.5">
+      <Text fontSize="xs" color="term.ink3" mt="4px" lineHeight="1.5">
         // 在 columns 区域配置的列筛选阈值，按此作用域应用到 EQ.LIST。
       </Text>
     </Flex>
@@ -385,7 +385,7 @@ function SectionNav({ active, onSelect }: SectionNavProps): React.ReactElement {
             px="12px"
             py="8px"
             fontFamily="mono"
-            fontSize="11px"
+            fontSize="xs"
             letterSpacing="0.16em"
             textTransform="uppercase"
             color={selected ? 'term.green' : 'term.ink2'}

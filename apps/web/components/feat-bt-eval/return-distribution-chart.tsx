@@ -101,7 +101,7 @@ function HeaderLabel({ text }: { readonly text: string }): React.ReactElement {
   return (
     <Box
       fontFamily="mono"
-      fontSize="10px"
+      fontSize="xs"
       color="ink3"
       letterSpacing="0.04em"
       mb="2px"

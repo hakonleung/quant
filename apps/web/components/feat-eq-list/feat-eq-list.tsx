@@ -309,7 +309,7 @@ function FeatEqListInner({ bare, onCountsChange }: FeatEqListProps = {}): React.
     confirmGuard({
       title: 'remove from sector',
       message: (
-        <Text fontFamily="mono" fontSize="12px" color="ink2" lineHeight="1.7">
+        <Text fontFamily="mono" fontSize="sm" color="ink2" lineHeight="1.7">
           remove{' '}
           <Text as="span" color="accent">
             {display}
@@ -358,7 +358,7 @@ function FeatEqListInner({ bare, onCountsChange }: FeatEqListProps = {}): React.
           <Box
             as="span"
             fontFamily="mono"
-            fontSize="10px"
+            fontSize="xs"
             color="ink3"
             letterSpacing="0.12em"
             whiteSpace="nowrap"

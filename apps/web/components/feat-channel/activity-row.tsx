@@ -62,11 +62,11 @@ export function ActivityRow({ row }: ActivityRowProps): React.ReactElement {
       borderColor="term.line"
       _hover={{ bg: 'term.bgElev' }}
     >
-      <Text fontSize="10px" color="term.ink3" flexShrink={0} minW="58px" lineHeight="1.5">
+      <Text fontSize="xs" color="term.ink3" flexShrink={0} minW="58px" lineHeight="1.5">
         {formatTime(row.ts)}
       </Text>
       <Text
-        fontSize="10px"
+        fontSize="xs"
         color={SRC_COLOR[row.source]}
         flexShrink={0}
         minW="28px"
@@ -76,7 +76,7 @@ export function ActivityRow({ row }: ActivityRowProps): React.ReactElement {
         {SRC_LABEL[row.source]}
       </Text>
       <Text
-        fontSize="10px"
+        fontSize="xs"
         color="term.ink3"
         flexShrink={0}
         minW="44px"
@@ -86,7 +86,7 @@ export function ActivityRow({ row }: ActivityRowProps): React.ReactElement {
         {row.channel}
       </Text>
       <Text
-        fontSize="10px"
+        fontSize="xs"
         color="term.ink"
         flexShrink={0}
         minW="80px"
@@ -97,26 +97,26 @@ export function ActivityRow({ row }: ActivityRowProps): React.ReactElement {
       </Text>
       <Box flex="1" minW={0} lineHeight="1.5">
         {row.title !== undefined ? (
-          <Text fontSize="11px" color="term.ink" fontWeight="600" mb="1px">
+          <Text fontSize="xs" color="term.ink" fontWeight="600" mb="1px">
             {row.title}
           </Text>
         ) : null}
-        <Text fontSize="11px" color="term.ink2" whiteSpace="pre-wrap" wordBreak="break-word">
+        <Text fontSize="xs" color="term.ink2" whiteSpace="pre-wrap" wordBreak="break-word">
           {row.text}
         </Text>
         {row.error !== undefined ? (
-          <Text fontSize="10px" color="up" mt="2px">
+          <Text fontSize="xs" color="up" mt="2px">
             err: {row.error}
           </Text>
         ) : null}
       </Box>
       <Box flexShrink={0} textAlign="right" minW="64px">
         {row.status !== undefined ? (
-          <Text fontSize="10px" color={STATUS_COLOR[row.status]} letterSpacing="0.04em">
+          <Text fontSize="xs" color={STATUS_COLOR[row.status]} letterSpacing="0.04em">
             {row.status}
           </Text>
         ) : row.sender !== undefined ? (
-          <Text fontSize="10px" color="term.ink3">
+          <Text fontSize="xs" color="term.ink3">
             {row.sender}
           </Text>
         ) : null}

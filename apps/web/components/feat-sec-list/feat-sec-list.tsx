@@ -59,14 +59,14 @@ export function FeatSecList({ bare }: FeatSecListProps = {}): React.ReactElement
       title: 'delete sector',
       message: (
         <>
-          <Text fontFamily="mono" fontSize="12px" color="ink2" lineHeight="1.7">
+          <Text fontFamily="mono" fontSize="sm" color="ink2" lineHeight="1.7">
             delete sector{' '}
             <Text as="span" color="accent">
               {sector.name}
             </Text>
             ?
           </Text>
-          <Text fontFamily="mono" fontSize="11px" color="ink3" mt="8px">
+          <Text fontFamily="mono" fontSize="xs" color="ink3" mt="8px">
             // {String(sector.codes.length)} member(s) · this can&apos;t be undone
           </Text>
         </>
@@ -89,14 +89,14 @@ export function FeatSecList({ bare }: FeatSecListProps = {}): React.ReactElement
       title: `${verb} sector`,
       message: (
         <>
-          <Text fontFamily="mono" fontSize="12px" color="ink2" lineHeight="1.7">
+          <Text fontFamily="mono" fontSize="sm" color="ink2" lineHeight="1.7">
             {verb}{' '}
             <Text as="span" color="accent">
               {sector.name}
             </Text>
             ?
           </Text>
-          <Text fontFamily="mono" fontSize="11px" color="ink3" mt="8px">
+          <Text fontFamily="mono" fontSize="xs" color="ink3" mt="8px">
             //{' '}
             {sector.published
               ? 'other users will no longer see this sector'
@@ -299,10 +299,10 @@ function SectorChip({
         {isDynamic && (
           <Text
             fontFamily="mono"
-            fontSize="8px"
+            fontSize="xs"
             fontWeight="700"
             letterSpacing="0.14em"
-            color="accent"
+            color="link"
             aria-label="dynamic sector"
           >
             [D]
@@ -311,10 +311,10 @@ function SectorChip({
         {sector.published === true && (
           <Text
             fontFamily="mono"
-            fontSize="8px"
+            fontSize="xs"
             fontWeight="700"
             letterSpacing="0.14em"
-            color="up"
+            color="accent"
             aria-label="published sector"
           >
             [PUB]
@@ -322,7 +322,7 @@ function SectorChip({
         )}
         <Text
           fontFamily="mono"
-          fontSize="10px"
+          fontSize="xs"
           color={selected ? 'ink' : 'ink2'}
           fontWeight={selected ? '700' : '500'}
           letterSpacing="0.04em"
@@ -351,12 +351,12 @@ function SectorChip({
         )}
       </Flex>
       {avgChgPct !== null ? (
-        <Text fontFamily="mono" fontSize="11px" color={avgChgPct >= 0 ? 'up' : 'down'}>
+        <Text fontFamily="mono" fontSize="xs" color={avgChgPct >= 0 ? 'up' : 'down'}>
           {avgChgPct >= 0 ? '+' : ''}
           {(avgChgPct * 100).toFixed(2)}%
         </Text>
       ) : (
-        <Text fontFamily="mono" fontSize="11px" color="ink3">
+        <Text fontFamily="mono" fontSize="xs" color="ink3">
           —
         </Text>
       )}

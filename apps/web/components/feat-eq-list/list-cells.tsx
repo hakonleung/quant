@@ -21,14 +21,14 @@ interface PriceCellProps {
 export function PriceCell({ pct, price }: PriceCellProps): React.ReactElement {
   if (price === null) {
     return (
-      <Text fontFamily="mono" fontSize="11px" color="ink3">
+      <Text fontFamily="mono" fontSize="xs" color="ink3">
         —
       </Text>
     );
   }
   const color = pct === null ? 'ink3' : pct > 0 ? 'up' : pct < 0 ? 'down' : 'ink3';
   return (
-    <Text fontFamily="mono" fontSize="11px" color={color} fontWeight="600">
+    <Text fontFamily="mono" fontSize="xs" color={color} fontWeight="600">
       {price.toFixed(2)}
     </Text>
   );
@@ -44,7 +44,7 @@ interface ValueCellProps {
 export function ScoreCell({ value }: ValueCellProps): React.ReactElement {
   if (value === null) {
     return (
-      <Text fontFamily="mono" fontSize="11px" color="ink3">
+      <Text fontFamily="mono" fontSize="xs" color="ink3">
         —
       </Text>
     );
@@ -52,7 +52,7 @@ export function ScoreCell({ value }: ValueCellProps): React.ReactElement {
   const color = value > 0 ? 'up' : value < 0 ? 'down' : 'ink3';
   const sign = value > 0 ? '+' : '';
   return (
-    <Text fontFamily="mono" fontSize="11px" color={color} fontWeight="600">
+    <Text fontFamily="mono" fontSize="xs" color={color} fontWeight="600">
       {sign}
       {value.toFixed(0)}
     </Text>
@@ -103,7 +103,7 @@ function formatSub(label: string, v: number | null): string {
 export function WcmiCell({ value, sub }: WcmiCellProps): React.ReactElement {
   if (value === null) {
     return (
-      <Text fontFamily="mono" fontSize="11px" color="ink3">
+      <Text fontFamily="mono" fontSize="xs" color="ink3">
         —
       </Text>
     );
@@ -124,7 +124,7 @@ export function WcmiCell({ value, sub }: WcmiCellProps): React.ReactElement {
       as="span"
       title={tooltip}
       fontFamily="mono"
-      fontSize="11px"
+      fontSize="xs"
       color={wcmiBinColor(value)}
       fontWeight="600"
     >
@@ -143,14 +143,14 @@ export function WcmiCell({ value, sub }: WcmiCellProps): React.ReactElement {
 export function WcmiSubCell({ value }: ValueCellProps): React.ReactElement {
   if (value === null) {
     return (
-      <Text fontFamily="mono" fontSize="11px" color="ink3">
+      <Text fontFamily="mono" fontSize="xs" color="ink3">
         —
       </Text>
     );
   }
   const color = value >= 70 ? 'up' : value < 30 ? 'ink3' : 'ink2';
   return (
-    <Text fontFamily="mono" fontSize="11px" color={color}>
+    <Text fontFamily="mono" fontSize="xs" color={color}>
       {value.toFixed(0)}
     </Text>
   );
@@ -159,7 +159,7 @@ export function WcmiSubCell({ value }: ValueCellProps): React.ReactElement {
 export function ChgPctCell({ value }: ValueCellProps): React.ReactElement {
   if (value === null) {
     return (
-      <Text fontFamily="mono" fontSize="11px" color="ink3">
+      <Text fontFamily="mono" fontSize="xs" color="ink3">
         —
       </Text>
     );
@@ -168,7 +168,7 @@ export function ChgPctCell({ value }: ValueCellProps): React.ReactElement {
   const color = pct > 0 ? 'up' : pct < 0 ? 'down' : 'ink3';
   const sign = pct > 0 ? '+' : '';
   return (
-    <Text fontFamily="mono" fontSize="11px" color={color} fontWeight="600">
+    <Text fontFamily="mono" fontSize="xs" color={color} fontWeight="600">
       {sign}
       {pct.toFixed(2)}%
     </Text>
@@ -177,7 +177,7 @@ export function ChgPctCell({ value }: ValueCellProps): React.ReactElement {
 
 export function PctCell({ value }: ValueCellProps): React.ReactElement {
   return (
-    <Text fontFamily="mono" fontSize="11px" color={value === null ? 'ink3' : 'ink2'}>
+    <Text fontFamily="mono" fontSize="xs" color={value === null ? 'ink3' : 'ink2'}>
       {value === null ? '—' : `${(value * 100).toFixed(2)}%`}
     </Text>
   );
@@ -186,7 +186,7 @@ export function PctCell({ value }: ValueCellProps): React.ReactElement {
 export function CnyCell({ value }: ValueCellProps): React.ReactElement {
   if (value === null) {
     return (
-      <Text fontFamily="mono" fontSize="11px" color="ink3">
+      <Text fontFamily="mono" fontSize="xs" color="ink3">
         —
       </Text>
     );
@@ -200,7 +200,7 @@ export function CnyCell({ value }: ValueCellProps): React.ReactElement {
         ? `${(value / wan).toFixed(0)}万`
         : value.toFixed(0);
   return (
-    <Text fontFamily="mono" fontSize="11px" color="ink2">
+    <Text fontFamily="mono" fontSize="xs" color="ink2">
       {text}
     </Text>
   );
@@ -214,7 +214,7 @@ export function CnyCell({ value }: ValueCellProps): React.ReactElement {
 export function CnyDeltaCell({ value }: ValueCellProps): React.ReactElement {
   if (value === null) {
     return (
-      <Text fontFamily="mono" fontSize="11px" color="ink3">
+      <Text fontFamily="mono" fontSize="xs" color="ink3">
         —
       </Text>
     );
@@ -227,7 +227,7 @@ export function CnyDeltaCell({ value }: ValueCellProps): React.ReactElement {
   const color = value > 0 ? 'up' : value < 0 ? 'down' : 'ink3';
   const sign = value >= 0 ? '+' : '-';
   return (
-    <Text fontFamily="mono" fontSize="11px" color={color} fontWeight="600">
+    <Text fontFamily="mono" fontSize="xs" color={color} fontWeight="600">
       {sign}
       {body}
     </Text>

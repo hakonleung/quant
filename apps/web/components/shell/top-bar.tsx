@@ -52,9 +52,15 @@ export function TopBar({ session }: TopBarProps = {}): React.ReactElement {
   return (
     <Flex
       minH={`${String(isMobile ? BRAND_HEIGHT_MOBILE : BRAND_HEIGHT)}px`}
-      bg="panel"
-      borderBottomWidth="2px"
-      borderBottomColor="accent"
+      // Transparent TopBar — the body wallpaper (logo bg recipe)
+      // shows through directly, so the Brand visually integrates with
+      // the canvas (no border, no glass strip separating them). The
+      // TopBar acts as a Flex container with gap/padding so SYS / USR
+      // float as glass tiles on the same wallpaper as the main grid.
+      bg="transparent"
+      gap="4px"
+      px="4px"
+      pt="4px"
       align="stretch"
       style={{ paddingTop: 'env(safe-area-inset-top)' }}
     >
@@ -90,7 +96,6 @@ function Brand({ compact = false, stretch = false }: BrandProps): React.ReactEle
   const termLogoGlow = useTokenColor('brand.logoGlow');
   const gridColor = useTokenColor('brand.gridColor');
   const scanlineAlpha = useTokenColor('brand.scanlineAlpha');
-  const focusRing = useTokenColor('brand.termGlowBorder');
   const onToggle = (): void => {
     runViewTransition(typeof document === 'undefined' ? null : document, () => {
       setAppMode('term');
@@ -117,11 +122,16 @@ function Brand({ compact = false, stretch = false }: BrandProps): React.ReactEle
       cursor="pointer"
       border="0"
       overflow="hidden"
-      style={{ background: termBg, viewTransitionName: 'app-logo' }}
+      // No own bg — body wallpaper IS the logo bg recipe, so the
+      // brand text floats on the canvas with zero seam.
+      style={{ viewTransitionName: 'app-logo' }}
       _hover={{ filter: 'brightness(1.15)' }}
-      _focus={{ outline: 'none', boxShadow: `0 0 0 2px ${focusRing} inset` }}
+      // Solid 2-px Apple-blue ring (≥3:1 contrast on every CRT bg)
+      // replaces the old translucent inset ring that washed out
+      // against the brand backdrop. `outlineOffset:-2px` keeps the
+      // ring inside the button so it doesn't bleed into the topbar.
+      _focusVisible={{ outline: '2px solid', outlineColor: 'link', outlineOffset: '-2px' }}
     >
-      <CrtBackdrop gridColor={gridColor} scanlineAlpha={scanlineAlpha} />
       <Box position="relative" zIndex={2}>
         <LogoArt
           color={termLogoColor}
@@ -149,10 +159,11 @@ interface CrtBackdropProps {
  */
 function CrtBackdrop({ gridColor, scanlineAlpha }: CrtBackdropProps): React.ReactElement {
   // Empty token values during SSR — fall back so the first paint is not
-  // a transparent panel that pops on hydration. Production hex is
-  // identical to the prior literal.
-  const grid = gridColor.length > 0 ? gridColor : 'rgb(26,58,38)';
-  const scan = scanlineAlpha.length > 0 ? scanlineAlpha : 'rgba(0,0,0,0.32)';
+  // a transparent panel that pops on hydration. Values mirror the
+  // Liquid Glass `brand.gridColor` / `brand.scanlineAlpha` low-alpha
+  // tokens so the first paint matches the post-hydration look.
+  const grid = gridColor.length > 0 ? gridColor : 'rgba(255,255,255,0.04)';
+  const scan = scanlineAlpha.length > 0 ? scanlineAlpha : 'rgba(0,0,0,0.10)';
   return (
     <>
       <Box
@@ -160,7 +171,11 @@ function CrtBackdrop({ gridColor, scanlineAlpha }: CrtBackdropProps): React.Reac
         inset="0"
         pointerEvents="none"
         zIndex={0}
-        opacity={0.32}
+        // Dialled from 0.32 → 0.85 because the underlying gridColor
+        // alpha is now 0.04 (was 0.10): we let the texture be present
+        // but very subtle, matching the "glass with a hint of mesh"
+        // feel of Apple's frosted toolbars.
+        opacity={0.85}
         backgroundImage={`linear-gradient(${grid} 1px, transparent 1px), linear-gradient(90deg, ${grid} 1px, transparent 1px)`}
         backgroundSize="16px 16px"
       />

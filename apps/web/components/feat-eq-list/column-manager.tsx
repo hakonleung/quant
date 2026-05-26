@@ -126,14 +126,14 @@ export function ColumnManager(): React.ReactElement {
                 borderBottomWidth="1px"
                 borderColor="term.line"
                 fontFamily="mono"
-                fontSize="11px"
+                fontSize="xs"
                 _hover={{ bg: 'term.bgElev' }}
               >
                 <Flex align="center" gap="6px">
                   <Text flex="1" color="term.ink" whiteSpace="nowrap">
                     {spec.label}
                   </Text>
-                  <Text color="term.ink3" fontSize="9px" whiteSpace="nowrap">
+                  <Text color="term.ink3" fontSize="xs" whiteSpace="nowrap">
                     {spec.group}
                   </Text>
                   <MonoButton
@@ -187,13 +187,13 @@ export function ColumnManager(): React.ReactElement {
               borderBottomWidth="1px"
               borderColor="term.line"
               fontFamily="mono"
-              fontSize="11px"
+              fontSize="xs"
               _hover={{ bg: 'term.bgElev' }}
             >
               <Text flex="1" color="term.ink" whiteSpace="nowrap">
                 {spec.label}
               </Text>
-              <Text color="term.ink3" fontSize="9px" whiteSpace="nowrap">
+              <Text color="term.ink3" fontSize="xs" whiteSpace="nowrap">
                 {spec.group}
               </Text>
               <MonoButton
@@ -218,7 +218,7 @@ interface FilterRowProps {
 
 const SELECT_STYLE: React.CSSProperties = {
   fontFamily: 'var(--chakra-fonts-mono, ui-monospace, monospace)',
-  fontSize: '11px',
+  fontSize: 'var(--chakra-font-sizes-xs, 11px)',
   background: 'var(--chakra-colors-term-panel, transparent)',
   color: 'var(--chakra-colors-term-ink, inherit)',
   border: '1px solid var(--chakra-colors-term-line, currentColor)',
@@ -268,7 +268,7 @@ function FilterRow({ filter, onChange }: FilterRowProps): React.ReactElement {
 
   return (
     <Flex align="center" gap="6px" pl="2px">
-      <Text color="term.ink3" fontSize="9px" letterSpacing="0.16em" w="38px">
+      <Text color="term.ink3" fontSize="xs" letterSpacing="0.16em" w="38px">
         FILTER
       </Text>
       <select value={op} onChange={onOpChange} style={SELECT_STYLE}>
@@ -332,7 +332,7 @@ function PaneSection({
         px="10px"
         py="6px"
         fontFamily="mono"
-        fontSize="9px"
+        fontSize="xs"
         letterSpacing="0.18em"
         color="term.ink3"
         fontWeight="700"
@@ -353,7 +353,7 @@ function Empty({ children }: { children: React.ReactNode }): React.ReactElement 
       px="10px"
       py="10px"
       fontFamily="mono"
-      fontSize="10px"
+      fontSize="xs"
       color="term.ink3"
       letterSpacing="0.12em"
     >

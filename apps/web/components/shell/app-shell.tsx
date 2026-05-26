@@ -30,6 +30,7 @@ import { useLayoutStore } from '../../lib/stores/layout.store.js';
 import { useSettingsStore } from '../../lib/stores/settings.store.js';
 import { FeatNotify } from '../feat-notify/feat-notify.js';
 
+import { PageBackdrop } from './page-backdrop.js';
 import { TopBar } from './top-bar.js';
 
 // xterm + the entire `@quant/terminal` engine only run in `term` mode,
@@ -88,7 +89,6 @@ export function AppShell({ children, session }: AppShellProps): React.ReactEleme
   return (
     <Box
       h="100dvh"
-      bg="bg"
       display="flex"
       flexDirection="column"
       overflow="hidden"
@@ -102,6 +102,11 @@ export function AppShell({ children, session }: AppShellProps): React.ReactEleme
         paddingRight: 'env(safe-area-inset-right)',
       }}
     >
+      {/* Page wallpaper — single render of the brand CrtBackdrop
+          recipe pinned at z-index:-1 so every pane / topbar / dialog
+          sees the same canvas underneath. Term mode skips this (its
+          BigLogo CRT chrome owns its own bg). */}
+      <PageBackdrop />
       {/* Visually-hidden until focused — the only Tab stop above the
           topbar so keyboard users skip the ASCII brand + sys capsules
           and land in the live workbench. */}

@@ -37,7 +37,7 @@ export const DEFAULT_VOL_H = 36;
  * and feed the resulting `readonly string[]` through
  * {@link getMaColors} to rebuild the `Record<MaKey, string>` map.
  */
-export const MA_COLOR_PATHS = ['link', 'accent', 'violet', 'down'] as const;
+export const MA_COLOR_PATHS = ['link', 'up', 'violet', 'down'] as const;
 
 export function getMaColors(resolved: readonly string[]): Readonly<Record<MaKey, string>> {
   return {

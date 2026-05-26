@@ -284,7 +284,7 @@ export function Tooltip({
       top={`${String(top)}px`}
       px="6px"
       py="2px"
-      fontSize="10px"
+      fontSize="xs"
       fontFamily="mono"
       color="ink"
       bg="panel"

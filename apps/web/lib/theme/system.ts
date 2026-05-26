@@ -1,23 +1,28 @@
 /**
  * Chakra UI v3 system: design tokens + semantic tokens for the
- * pro-geek workbench. Everything else in the app must consume tokens
- * from here, never raw hex (CLAUDE.md §1.2).
+ * Liquid Glass workbench. Everything else in the app must consume
+ * tokens from here, never raw hex (CLAUDE.md §1.2).
  *
  * Theme switching is driven by Chakra's `_dark` conditional value, which
  * fires when `color-scheme: dark` is on the element. `globals.css`
  * just maps `[data-theme='dark'] → color-scheme: dark`; every colour
  * token below auto-flips. No hand-rolled CSS-var override block.
  *
- * Semantic-token set was trimmed in task #6 — see THEME_DESIGN.md
- * "瘦身记录". Aliases were collapsed onto their canonical token, near-
- * duplicate accent/panel/shadow variants merged.
+ * Token surface (post task #16 — Liquid Glass × 中国传统色):
+ *   - `colors.*`  workbench surfaces (clean Apple gray) + 中国 accents
+ *   - `colors.term.*`  frosted-glass terminal slot
+ *   - `colors.glass.*`  semi-transparent glass cells for floats
+ *   - `colors.brand.*`  CRT chrome (dialled-down for glass coexistence)
+ *   - `fontSizes.*`  Apple-style type scale (11/12/13/15/17/22/28)
+ *   - `radii.*`  Apple-style radius scale (4/8/12/16/22)
+ *   - `shadows.*`  layered Apple-style elevation shadows
  */
 
 import { createSystem, defaultConfig, defineConfig, defineRecipe } from '@chakra-ui/react';
 
-import { fonts, palette } from './tokens.js';
+import { fonts, fontSizes, palette, radii } from './tokens.js';
 
-const { light, dark, term, termLight, brand } = palette;
+const { light, dark, term, termLight, brand, glass } = palette;
 
 /**
  * `monoButton` — a single-glyph mono icon button used inside pane chrome
@@ -75,16 +80,44 @@ const config = defineConfig({
   globalCss: {
     'html, body': {
       margin: 0,
-      bg: '{colors.bg}',
       color: '{colors.ink}',
       fontFamily: '{fonts.body}',
       // 13 px on the workbench is the legibility sweet spot — the
       // dense table chrome stays compact, but body prose / form
       // labels regain enough x-height to read for hours. Mobile gets
-      // a 1-px nudge in `app/layout.tsx` so the touch reading
-      // distance compensates for thumb-eye geometry.
-      fontSize: '13px',
+      // a 1-px nudge in `app/globals.css`. Apple SF Pro renders
+      // slightly tighter than Inter, so 13px → 14px translation on
+      // mobile carries over.
+      fontSize: '{fontSizes.body}',
       lineHeight: '1.5',
+      // Apple HIG: enable optical sizing + grayscale antialiasing so
+      // SF Pro on non-retina screens stays crisp without sub-pixel
+      // colour fringing.
+      WebkitFontSmoothing: 'antialiased',
+      MozOsxFontSmoothing: 'grayscale',
+      textRendering: 'optimizeLegibility',
+      fontFeatureSettings: '"ss01", "cv11"', // SF Pro stylistic alt + alt 0
+    },
+    /**
+     * Liquid Glass ambient canvas — the layered radial gradients
+     * underneath every workbench surface are what make the frosted
+     * glass actually *visible*. Without them, a `rgba(255,255,255,0.72)`
+     * panel on a solid `#F5F5F7` bg looks identical to a solid panel.
+     *
+     * The light wash uses three soft accents (cinnabar tint + jade
+     * tint + indigo tint) at very low alpha so the canvas reads as
+     * "ambient daylight on a colored wallpaper". Dark mode mirrors
+     * with the same hues at higher saturation, evoking deep ink
+     * with a warm seal-stamp glow.
+     */
+    body: {
+      bg: '{colors.bg}',
+      minHeight: '100dvh',
+      // No body backgroundImage — the wallpaper is rendered by the
+      // `<PageBackdrop>` component (a fixed-position `z-index:-1`
+      // remount of `CrtBackdrop` at viewport scale). One source of
+      // truth, theme-aware via `useTokenColor`, exact same recipe as
+      // the brand logo.
     },
     '*': { boxSizing: 'border-box' },
     '.num, .mono': {
@@ -93,6 +126,28 @@ const config = defineConfig({
       fontVariantNumeric: 'tabular-nums',
     },
     '.blink': { animation: 'blink 1s steps(2) infinite' },
+    // Liquid Glass utility class — apply with `className="glass"` on
+    // a Box to get the standard frosted glass surface. Equivalent to
+    // setting `bg="glass.panel"` + `backdropFilter="..."` manually,
+    // but cuts the boilerplate at every dialog / popover call site.
+    '.glass': {
+      backgroundColor: '{colors.glass.panel}',
+      backdropFilter: 'blur(16px) saturate(180%)',
+      WebkitBackdropFilter: 'blur(16px) saturate(180%)',
+      borderColor: '{colors.glass.line}',
+    },
+    '.glass-strong': {
+      backgroundColor: '{colors.glass.panelStrong}',
+      backdropFilter: 'blur(24px) saturate(180%)',
+      WebkitBackdropFilter: 'blur(24px) saturate(180%)',
+      borderColor: '{colors.glass.lineStrong}',
+    },
+    '.glass-soft': {
+      backgroundColor: '{colors.glass.panelSoft}',
+      backdropFilter: 'blur(30px) saturate(160%)',
+      WebkitBackdropFilter: 'blur(30px) saturate(160%)',
+      borderColor: '{colors.glass.line}',
+    },
   },
   theme: {
     tokens: {
@@ -100,11 +155,70 @@ const config = defineConfig({
         body: { value: fonts.sans },
         heading: { value: fonts.sans },
         mono: { value: fonts.mono },
+        geek: { value: fonts.geek },
+        pixel: { value: fonts.pixel },
+      },
+      // Apple-style type scale. Reference via `fontSize="md"` etc. in
+      // Chakra props; the workbench default body is `body` (13px).
+      fontSizes: {
+        xs: { value: fontSizes.xs },
+        sm: { value: fontSizes.sm },
+        body: { value: fontSizes.body },
+        md: { value: fontSizes.md },
+        lg: { value: fontSizes.lg },
+        xl: { value: fontSizes.xl },
+        '2xl': { value: fontSizes['2xl'] },
+      },
+      // Apple-style radius scale. FeatView panes intentionally stay
+      // `radii.none` to preserve the geek angle markers; dialogs /
+      // popovers / inputs use `sm` / `md` / `lg`.
+      radii: {
+        none: { value: radii.none },
+        xs: { value: radii.xs },
+        sm: { value: radii.sm },
+        md: { value: radii.md },
+        lg: { value: radii.lg },
+        xl: { value: radii.xl },
+        pill: { value: radii.pill },
+      },
+      /**
+       * Unified z-index scale (`tokens.zIndex`, not semanticTokens —
+       * Chakra v3 only emits `--chakra-z-index-*` CSS vars for the
+       * `tokens.zIndex` slot). Every `position:fixed` surface MUST
+       * pull from here. Numerical gaps between layers leave room for
+       * future inserts without renumbering.
+       *
+       * Layer order, low → high:
+       *   base       0      default
+       *   sticky     100    sticky table headers, sticky toolbars
+       *   dropdown   900    inline select dropdowns
+       *   overlay    1000   pane bodyOverlay anchored to chrome
+       *   dialog     1200   regular modal dialogs (NewSector, etc)
+       *   scrim      1300   modal scrim wash
+       *   modal      1400   above-scrim modal contents (confirm)
+       *   fullscreen 1500   FeatView fullscreen
+       *   toast      1600   FeatNotify toast / notification queue
+       *   hint       1700   FeatHotkeyHint window
+       *   scopeBadge 1700   ScopeBadge floating pill (same layer as hint)
+       *   tooltip    1800   text tooltips (top-most)
+       */
+      zIndex: {
+        base: { value: 0 },
+        sticky: { value: 100 },
+        dropdown: { value: 900 },
+        overlay: { value: 1000 },
+        dialog: { value: 1200 },
+        scrim: { value: 1300 },
+        modal: { value: 1400 },
+        fullscreen: { value: 1500 },
+        toast: { value: 1600 },
+        hint: { value: 1700 },
+        scopeBadge: { value: 1700 },
+        tooltip: { value: 1800 },
       },
       colors: {
-        // ---- light workbench raw palette (kept for legacy semantic
-        // references and any business component that still imports
-        // `palette.light.*`)
+        // Raw workbench palette kept for legacy semantic references and
+        // any business component that still imports `palette.light.*`.
         light: {
           bg: { value: light.bg },
           panel: { value: light.panel },
@@ -121,17 +235,6 @@ const config = defineConfig({
           blue: { value: light.blue },
           violet: { value: light.violet },
         },
-        // ---- cyber terminal palette (dark)
-        term: {
-          bg: { value: term.bg },
-          panel: { value: term.panel },
-          bgElev: { value: term.bgElev },
-          line: { value: term.line },
-          ink: { value: term.ink },
-          ink2: { value: term.ink2 },
-          ink3: { value: term.ink3 },
-          green: { value: term.green },
-        },
       },
     },
     recipes: {
@@ -139,7 +242,7 @@ const config = defineConfig({
     },
     semanticTokens: {
       colors: {
-        // ---- workbench surface (auto-flips on color-scheme: dark)
+        // ---- workbench surfaces (auto-flips on color-scheme: dark)
         bg: { value: { base: light.bg, _dark: dark.bg } },
         panel: { value: { base: light.panel, _dark: dark.panel } },
         panel3: { value: { base: light.panel3, _dark: dark.panel3 } },
@@ -150,26 +253,45 @@ const config = defineConfig({
         ink3: { value: { base: light.ink3, _dark: dark.ink3 } },
         accent: { value: { base: light.amber, _dark: dark.amber } },
         accentBg: { value: { base: light.amberBg, _dark: dark.amberBg } },
-        // `up` doubles as `danger`: stocks-up red and form-error red
-        // are intentionally the same hue. Login/form callers reach for
-        // `up` directly now that the alias is gone.
+        // `up` doubles as `danger`: stocks-up red and form-error red are
+        // intentionally the same hue (CN market convention + design economy).
         up: { value: { base: light.up, _dark: dark.up } },
-        // `down` doubles as the CLI prompt-success green — same hue
-        // family, no need for a separate `prompt` token.
+        // `down` doubles as the CLI prompt-success green.
         down: { value: { base: light.down, _dark: dark.down } },
         link: { value: { base: light.blue, _dark: dark.blue } },
         violet: { value: { base: light.violet, _dark: dark.violet } },
 
         // Backdrop scrim for modals / popovers. Both modes use a
-        // translucent dark wash, but the light variant is intentionally
-        // lighter — a 55% black on a near-white page creates a harsh
-        // funnel that fights the "frosted card on top" affordance.
-        overlay: { value: { base: 'rgba(20,24,32,0.32)', _dark: 'rgba(15,17,22,0.55)' } },
+        // translucent wash; the light variant is intentionally lighter
+        // so a frosted glass card on top of it doesn't lose contrast.
+        overlay: { value: { base: 'rgba(20,22,28,0.28)', _dark: 'rgba(0,0,0,0.55)' } },
 
-        // ---- term slot (light variant ↔ dark cyberpunk)
-        // Trimmed to the cells consumers actually reference; xterm-theme
-        // and other 16-slot ANSI palettes pull straight from the raw
-        // `palette.term` / `palette.termLight` constants instead.
+        // ---- Liquid Glass surfaces. Pair with backdrop-filter (or
+        // use the `.glass` / `.glass-strong` / `.glass-soft` utility
+        // classes from globalCss). `panel` = standard cards,
+        // `panelStrong` = dialog / strong popover, `panelSoft` = chrome
+        // strip on top of busy content.
+        glass: {
+          panel: { value: { base: glass.light.panel, _dark: glass.dark.panel } },
+          panelStrong: {
+            value: { base: glass.light.panelStrong, _dark: glass.dark.panelStrong },
+          },
+          panelSoft: {
+            value: { base: glass.light.panelSoft, _dark: glass.dark.panelSoft },
+          },
+          line: { value: { base: glass.light.line, _dark: glass.dark.line } },
+          lineStrong: {
+            value: { base: glass.light.lineStrong, _dark: glass.dark.lineStrong },
+          },
+          highlight: {
+            value: { base: glass.light.highlight, _dark: glass.dark.highlight },
+          },
+        },
+
+        // ---- term slot (frosted glass — light + dark variants)
+        // Same shape as before; only the underlying palette values
+        // changed (`palette.term` / `palette.termLight` now ship glass
+        // alpha values that need backdrop-filter on the container).
         term: {
           bg: { value: { base: termLight.bg, _dark: term.bg } },
           panel: { value: { base: termLight.panel, _dark: term.panel } },
@@ -181,26 +303,7 @@ const config = defineConfig({
           green: { value: { base: termLight.green, _dark: term.green } },
         },
 
-        // ---- distribution / KDE viz
-        // Only `mean` and `median` keep dedicated hues — magenta + cyan
-        // are visually distinct from the workbench palette and from
-        // each other, and the two stat lines coexist on screen.
-        // Removed in task #8 — callers now use these workbench tokens
-        // directly (see THEME_DESIGN.md 瘦身记录):
-        //   chart.ma.fast  → link        chart.ma.short → accent
-        //   chart.ma.mid   → violet      chart.ma.slow  → down
-        //   chart.focus.range → link (SVG fillOpacity={0.06})
-        //   dist.stat.zero    → ink3
-        //   dist.stat.baseline → accent
-        //   dist.bar.fill     → ink2 (SVG fillOpacity={0.35})
-        dist: {
-          stat: {
-            mean: { value: { base: '#c0147a', _dark: '#ff3ea5' } },
-            median: { value: { base: '#007f8b', _dark: '#00e5ff' } },
-          },
-        },
-
-        // ---- brand / logo CRT chrome
+        // ---- brand / logo CRT chrome (dialled down for glass coexistence)
         brand: {
           logoBg: { value: { base: brand.light.logoBg, _dark: brand.dark.logoBg } },
           logoColor: { value: { base: brand.light.logoColor, _dark: brand.dark.logoColor } },
@@ -209,10 +312,6 @@ const config = defineConfig({
           scanlineAlpha: {
             value: { base: brand.light.scanlineAlpha, _dark: brand.dark.scanlineAlpha },
           },
-          // Frosted overlay tint + a single glow-border that doubles as
-          // focus ring and phosphor accent. Hover state reuses the same
-          // `panelAlpha` (callers don't need a "stronger" variant — the
-          // 0.78 light / 0.72 dark looks identical against the CRT bg).
           panelAlpha: {
             value: { base: brand.light.panelAlpha, _dark: brand.dark.panelAlpha },
           },
@@ -224,22 +323,60 @@ const config = defineConfig({
           },
         },
       },
-      // Drop-shadow tokens for floating cards / hints / toasts. The
-      // light variants drop overall opacity and shift the wash to a
-      // cool blue — black drop-shadow on near-white reads as "bruised"
-      // rather than "elevated". `card` stays distinct (heavier wash
-      // for dialogs); `float` is the unified hint+toast cell.
+      // Apple-style layered elevation shadows. The light variants stay
+      // cool-bluish (pure black on near-white reads as "bruised");
+      // dark variants combine a heavier wash with a 1-px white inset
+      // highlight so cards read as "glass with a lit top edge".
       shadows: {
+        // Hairline elevation — buttons, inputs.
+        xs: {
+          value: {
+            base: '0 1px 2px rgba(15,17,22,0.06), 0 1px 1px rgba(15,17,22,0.04)',
+            _dark: '0 1px 2px rgba(0,0,0,0.40), 0 1px 1px rgba(0,0,0,0.25)',
+          },
+        },
+        // Card / dropdown elevation.
+        sm: {
+          value: {
+            base: '0 4px 12px rgba(15,17,22,0.08), 0 1px 3px rgba(15,17,22,0.04)',
+            _dark: '0 4px 12px rgba(0,0,0,0.45), 0 1px 3px rgba(0,0,0,0.30)',
+          },
+        },
+        // Popover / menu elevation.
+        md: {
+          value: {
+            base: '0 8px 24px rgba(15,17,22,0.10), 0 2px 6px rgba(15,17,22,0.05)',
+            _dark: '0 8px 24px rgba(0,0,0,0.50), 0 2px 6px rgba(0,0,0,0.32)',
+          },
+        },
+        // Dialog elevation.
+        lg: {
+          value: {
+            base: '0 20px 60px rgba(15,17,22,0.18), 0 4px 16px rgba(15,17,22,0.08)',
+            _dark: '0 20px 60px rgba(0,0,0,0.65), 0 4px 16px rgba(0,0,0,0.40)',
+          },
+        },
+        // Glass surfaces — same as `sm` / `lg` but with an inset
+        // white highlight baked in so the top edge catches "light".
+        glass: {
+          value: { base: glass.light.shadow, _dark: glass.dark.shadow },
+        },
+        glassStrong: {
+          value: { base: glass.light.shadowStrong, _dark: glass.dark.shadowStrong },
+        },
+        // Legacy aliases kept to avoid touching every caller in one
+        // shot. `card` ≈ `lg`, `float` ≈ `md` — the older two-stop
+        // shadow set still resolves to the right elevation.
         card: {
           value: {
-            base: '0 14px 48px rgba(20,30,60,0.18)',
-            _dark: '0 14px 48px rgba(0,0,0,0.55)',
+            base: '0 20px 60px rgba(15,17,22,0.18), 0 4px 16px rgba(15,17,22,0.08)',
+            _dark: '0 20px 60px rgba(0,0,0,0.65), 0 4px 16px rgba(0,0,0,0.40)',
           },
         },
         float: {
           value: {
-            base: '0 7px 25px rgba(20,30,60,0.19)',
-            _dark: '0 7px 25px rgba(0,0,0,0.45)',
+            base: '0 8px 24px rgba(15,17,22,0.10), 0 2px 6px rgba(15,17,22,0.05)',
+            _dark: '0 8px 24px rgba(0,0,0,0.50), 0 2px 6px rgba(0,0,0,0.32)',
           },
         },
       },

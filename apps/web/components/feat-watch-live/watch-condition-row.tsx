@@ -56,7 +56,7 @@ export function ConditionsList({
   return (
     <Box mt="6px">
       <Flex justify="space-between" align="center" mb="4px">
-        <Text fontSize="11px" color="term.ink3" letterSpacing="0.14em">
+        <Text fontSize="xs" color="term.ink3" letterSpacing="0.14em">
           CONDITIONS · ANY-OF
         </Text>
         {readOnly ? null : (
@@ -102,7 +102,7 @@ function ConditionRow({
 }: ConditionRowProps): React.ReactElement {
   if (readOnly) {
     return (
-      <Flex gap="6px" wrap="wrap" align="center" color="term.ink3" fontSize="11px">
+      <Flex gap="6px" wrap="wrap" align="center" color="term.ink3" fontSize="xs">
         <Text fontFamily="mono">{describeCondition(cond)}</Text>
       </Flex>
     );
@@ -163,7 +163,7 @@ function PctConditionFields({ cond, onChange }: FieldsProps): React.ReactElement
               onChange({ ...cond, windowSec: e.target.value });
             }}
           />
-          <Text color="term.ink3" fontSize="11px">
+          <Text color="term.ink3" fontSize="xs">
             s
           </Text>
         </Flex>
@@ -209,7 +209,7 @@ function MaConditionFields({ cond, onChange }: FieldsProps): React.ReactElement 
           onChange({ ...cond, maOp: v });
         }}
       />
-      <Text color="term.ink3" fontSize="11px">
+      <Text color="term.ink3" fontSize="xs">
         A-share only
       </Text>
     </>

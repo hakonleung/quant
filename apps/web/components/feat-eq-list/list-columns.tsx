@@ -73,7 +73,7 @@ function makeIndexColumn(): ColumnDef {
     sticky: true,
     sortable: false,
     render: (_r, i) => (
-      <Text fontFamily="mono" fontSize="10px" color="ink3">
+      <Text fontFamily="mono" fontSize="xs" color="ink3">
         {i + 1}
       </Text>
     ),
@@ -92,7 +92,7 @@ function makeCodeColumn(): ColumnDef {
       <Flex gap="6px" align="baseline" minW={0}>
         <Text
           fontFamily="mono"
-          fontSize="11px"
+          fontSize="xs"
           color="ink"
           fontWeight="600"
           overflow="hidden"
@@ -101,7 +101,7 @@ function makeCodeColumn(): ColumnDef {
         >
           {r.name}
         </Text>
-        <Text fontFamily="mono" fontSize="10px" color="ink3" letterSpacing="0.04em" flexShrink={0}>
+        <Text fontFamily="mono" fontSize="xs" color="ink3" letterSpacing="0.04em" flexShrink={0}>
           {r.code}
         </Text>
       </Flex>
@@ -159,7 +159,7 @@ function makeAppliedColumn(key: ColumnKey): ColumnDef | null {
         render: (r) => (
           <Text
             fontFamily="mono"
-            fontSize="11px"
+            fontSize="xs"
             color={r.statsReady && r.consecUpDays > 0 ? 'up' : 'ink3'}
           >
             {r.statsReady ? `${String(r.consecUpDays)}d` : '—'}
@@ -287,7 +287,7 @@ function derivedColumn(
       const v = sortValue(r);
       if (v === null) {
         return (
-          <Text fontFamily="mono" fontSize="11px" color="ink3">
+          <Text fontFamily="mono" fontSize="xs" color="ink3">
             —
           </Text>
         );
@@ -296,7 +296,7 @@ function derivedColumn(
       if (format === 'cny-delta') return <CnyDeltaCell value={v} />;
       if (format === 'pct') return <ChgPctCell value={v} />;
       return (
-        <Text fontFamily="mono" fontSize="11px" color="ink2">
+        <Text fontFamily="mono" fontSize="xs" color="ink2">
           {v.toFixed(2)}
         </Text>
       );
@@ -345,7 +345,7 @@ function renderEvidenceCell(kind: EvidenceColumnKind, raw: unknown): React.React
     return <ChgPctCell value={toNumberOrNull(raw)} />;
   }
   return (
-    <Text fontFamily="mono" fontSize="11px" color="ink2">
+    <Text fontFamily="mono" fontSize="xs" color="ink2">
       {formatEvidence(raw)}
     </Text>
   );

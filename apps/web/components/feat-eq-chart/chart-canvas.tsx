@@ -86,7 +86,11 @@ const CHART_COLOR_PATHS = [
   'line',
   'up',
   'down',
-  'accentBg',
+  // focus column tint (`focusBg`): used to be `accentBg` (amber),
+  // which bled through hollow up-candles and made the hovered bar
+  // read as amber-tinted. `hover` is a neutral subtle wash that
+  // signals "this column is focused" without staining the candle.
+  'hover',
   // focus-range fill: was `chart.focus.range` (rgba blue @ 6%); now
   // resolves to plain `link` and the SVG applies `fillOpacity={0.06}`
   // at draw time. Avoids carrying a chart-specific token whose only

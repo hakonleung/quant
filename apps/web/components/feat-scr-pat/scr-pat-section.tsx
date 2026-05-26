@@ -55,7 +55,7 @@ export function ScrPatSection(): React.ReactElement {
         borderColor="line"
         bg="panel3"
         fontFamily="mono"
-        fontSize="10px"
+        fontSize="xs"
         color="ink3"
         letterSpacing="0.16em"
       >
@@ -114,7 +114,7 @@ function RefBanner({ data }: { data: PatternFindSimilarResponse }): React.ReactE
       gap="14px"
       align="baseline"
       fontFamily="mono"
-      fontSize="10px"
+      fontSize="xs"
       color="ink3"
       letterSpacing="0.10em"
     >
@@ -144,16 +144,16 @@ function MatchRow({ match }: { match: PatternMatch }): React.ReactElement {
   return (
     <Flex align="stretch" gap="12px" px="14px" py="8px" borderBottomWidth="1px" borderColor="line">
       <Box minW="120px" pt="2px">
-        <Text fontFamily="mono" fontSize="12px" color="ink" fontWeight="600">
+        <Text fontFamily="mono" fontSize="sm" color="ink" fontWeight="600">
           {match.name === '' ? match.code : match.name}
         </Text>
-        <Text fontFamily="mono" fontSize="10px" color="ink3" letterSpacing="0.06em">
+        <Text fontFamily="mono" fontSize="xs" color="ink3" letterSpacing="0.06em">
           {match.code}
         </Text>
       </Box>
       <Box flex="1" minW={0}>
         {bars.length === 0 ? (
-          <Text fontFamily="mono" fontSize="10px" color="ink3">
+          <Text fontFamily="mono" fontSize="xs" color="ink3">
             // no kline cached
           </Text>
         ) : (
@@ -172,16 +172,16 @@ function MatchRow({ match }: { match: PatternMatch }): React.ReactElement {
         )}
       </Box>
       <Box minW="170px" textAlign="right" pt="2px">
-        <Text fontFamily="mono" fontSize="10px" color="ink3">
+        <Text fontFamily="mono" fontSize="xs" color="ink3">
           {match.startDate} → {match.endDate}
         </Text>
         <Flex justify="flex-end" gap="10px" mt="2px">
-          <Text fontFamily="mono" fontSize="11px" color="accent" fontWeight="700">
+          <Text fontFamily="mono" fontSize="xs" color="accent" fontWeight="700">
             S={match.similarity.toFixed(2)}
           </Text>
           <Text
             fontFamily="mono"
-            fontSize="11px"
+            fontSize="xs"
             fontWeight="700"
             color={match.periodReturn >= 0 ? 'up' : 'down'}
           >
@@ -204,7 +204,7 @@ function formatPct(v: number): string {
 
 function Empty({ hint }: { hint: string }): React.ReactElement {
   return (
-    <Text px="14px" py="14px" fontFamily="mono" fontSize="11px" color="ink3" letterSpacing="0.12em">
+    <Text px="14px" py="14px" fontFamily="mono" fontSize="xs" color="ink3" letterSpacing="0.12em">
       // {hint}
     </Text>
   );

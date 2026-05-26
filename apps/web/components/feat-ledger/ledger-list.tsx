@@ -62,7 +62,7 @@ function EmptyState({
 }): React.ReactElement {
   return (
     <Flex ref={hostRef} flex="1" align="center" justify="center" minH="120px">
-      <Text fontSize="11px" color="term.ink3" fontFamily="mono">
+      <Text fontSize="xs" color="term.ink3" fontFamily="mono">
         暂无记录
       </Text>
     </Flex>
@@ -93,7 +93,7 @@ function RowsBody({ rows, tier, onEdit, onDelete, busy }: RowsBodyProps): React.
       overflowY="auto"
       position="relative"
       fontFamily="mono"
-      fontSize="11px"
+      fontSize="xs"
     >
       <Box position="relative" style={{ height: `${String(virtualizer.getTotalSize())}px` }}>
         {virtualizer.getVirtualItems().map((vRow) => {
@@ -130,7 +130,7 @@ function Header({ tier }: HeaderProps): React.ReactElement {
       py="4px"
       gap="12px"
       fontFamily="mono"
-      fontSize="9px"
+      fontSize="xs"
       letterSpacing="0.12em"
       color="term.ink3"
       flexShrink={0}
@@ -237,12 +237,12 @@ function OptionalCells({ entry, tier, pctTone }: OptionalCellsProps): React.Reac
         {new Decimal(entry.derivedDailyPct).toFixed(2)}%
       </Box>
       <Flex w="100px" justify="flex-end" align="center" gap="4px" flexShrink={0}>
-        <Text fontSize="11px">{new Decimal(entry.derivedClosingPosition).toFixed(2)}</Text>
+        <Text fontSize="xs">{new Decimal(entry.derivedClosingPosition).toFixed(2)}</Text>
         {!entry.closingProvided && <DerivedBadge title="链式推导值" />}
       </Flex>
       {tier === 'wide' && (
         <Flex w="80px" justify="flex-end" align="center" gap="4px" flexShrink={0} color="term.ink3">
-          <Text fontSize="11px">{cashFlowDisplay}</Text>
+          <Text fontSize="xs">{cashFlowDisplay}</Text>
           {/* CASHFLOW is itself a derived field. `~` mirrors CLOSING. */}
           {!cashFlow.isZero() && <DerivedBadge title="派生字段：Δclosing − pnlAmount" />}
         </Flex>
@@ -285,7 +285,7 @@ function DerivedBadge({ title }: { readonly title: string }): React.ReactElement
   return (
     <Text
       as="span"
-      fontSize="8px"
+      fontSize="xs"
       color="term.ink3"
       letterSpacing="0.1em"
       border="1px dashed"

@@ -38,7 +38,7 @@ export function ScopeBadge(): React.ReactElement | null {
       position="fixed"
       right={showsBadgeNeighbour ? RIGHT_OFFSET_WITH_BADGE : RIGHT_OFFSET}
       bottom={BOTTOM_OFFSET_HIDDEN}
-      zIndex={9998}
+      zIndex="scopeBadge"
       bg="brand.panelAlpha"
       color="ink2"
       borderWidth="1px"
@@ -47,7 +47,7 @@ export function ScopeBadge(): React.ReactElement | null {
       px="8px"
       py="4px"
       fontFamily="mono"
-      fontSize="10px"
+      fontSize="xs"
       letterSpacing="0.16em"
       cursor="pointer"
       _hover={{ color: 'accent', borderColor: 'accent' }}
@@ -64,7 +64,7 @@ export function ScopeBadge(): React.ReactElement | null {
       <Text as="span" color="accent" fontWeight="700">
         {label}
       </Text>{' '}
-      <Text as="span" color="ink3" fontSize="9px">
+      <Text as="span" color="ink3" fontSize="xs">
         ?
       </Text>
     </Box>

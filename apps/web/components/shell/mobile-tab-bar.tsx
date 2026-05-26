@@ -88,7 +88,7 @@ function TabButton({ spec, active, onSelect }: TabButtonProps): React.ReactEleme
     >
       <Text
         fontFamily="mono"
-        fontSize="11px"
+        fontSize="xs"
         letterSpacing="0.16em"
         fontWeight={active ? '700' : '500'}
         color={active ? 'accent' : 'ink2'}

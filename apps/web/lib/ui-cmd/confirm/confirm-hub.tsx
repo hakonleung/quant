@@ -10,6 +10,7 @@
  */
 
 import { Box, Button, Flex, Text } from '@chakra-ui/react';
+import { DialogPortal } from '../../../components/feat-view/dialog-portal.js';
 import { useEffect, useRef } from 'react';
 
 import { useFocusStore } from '../store/focus.js';
@@ -64,14 +65,15 @@ function Dialog({ opts, onConfirm, onCancel }: DialogProps): React.ReactElement 
     cancelBtnRef.current?.focus();
   }, []);
   return (
-    <Box
+    <DialogPortal>
+      <Box
       role="dialog"
       aria-modal="true"
       aria-label={title}
       position="fixed"
       inset={0}
       bg="overlay"
-      zIndex={2000}
+      zIndex="modal"
       display="flex"
       alignItems="center"
       justifyContent="center"
@@ -81,13 +83,13 @@ function Dialog({ opts, onConfirm, onCancel }: DialogProps): React.ReactElement 
         onClick={(e): void => {
           e.stopPropagation();
         }}
-        bg="panel"
+        className="glass-strong"
         color="ink"
         w="440px"
         maxW="92vw"
         borderWidth="1px"
-        borderColor="accent"
-        boxShadow="card"
+        borderRadius="lg"
+        boxShadow="glassStrong"
       >
         <Flex
           align="center"
@@ -95,12 +97,13 @@ function Dialog({ opts, onConfirm, onCancel }: DialogProps): React.ReactElement 
           px="14px"
           h="36px"
           borderBottomWidth="1px"
-          borderColor="line"
-          bg="panel3"
+          borderColor="glass.line"
+          bg="glass.panelSoft"
+          backdropFilter="blur(12px)"
         >
           <Text
             fontFamily="mono"
-            fontSize="11px"
+            fontSize="xs"
             color="accent"
             fontWeight="700"
             letterSpacing="0.18em"
@@ -109,7 +112,7 @@ function Dialog({ opts, onConfirm, onCancel }: DialogProps): React.ReactElement 
           </Text>
           <Text
             fontFamily="mono"
-            fontSize="11px"
+            fontSize="xs"
             color="ink2"
             letterSpacing="0.18em"
             textTransform="uppercase"
@@ -117,7 +120,7 @@ function Dialog({ opts, onConfirm, onCancel }: DialogProps): React.ReactElement 
             {title}
           </Text>
         </Flex>
-        <Box px="16px" py="14px" fontFamily="mono" fontSize="12px" color="ink2" lineHeight="1.7">
+        <Box px="16px" py="14px" fontFamily="mono" fontSize="sm" color="ink2" lineHeight="1.7">
           {opts.message}
         </Box>
         <Flex
@@ -126,8 +129,9 @@ function Dialog({ opts, onConfirm, onCancel }: DialogProps): React.ReactElement 
           px="14px"
           py="10px"
           borderTopWidth="1px"
-          borderColor="line"
-          bg="panel3"
+          borderColor="glass.line"
+          bg="glass.panelSoft"
+          backdropFilter="blur(12px)"
         >
           <Button
             ref={cancelBtnRef}
@@ -140,9 +144,9 @@ function Dialog({ opts, onConfirm, onCancel }: DialogProps): React.ReactElement 
             px="14px"
             py="6px"
             fontFamily="mono"
-            fontSize="11px"
+            fontSize="xs"
             letterSpacing="0.18em"
-            borderRadius="0"
+            borderRadius="sm"
             _hover={{ borderColor: 'ink2' }}
           >
             {cancelLabel}
@@ -156,10 +160,10 @@ function Dialog({ opts, onConfirm, onCancel }: DialogProps): React.ReactElement 
             px="16px"
             py="6px"
             fontFamily="mono"
-            fontSize="11px"
+            fontSize="xs"
             fontWeight="700"
             letterSpacing="0.18em"
-            borderRadius="0"
+            borderRadius="sm"
             _hover={{ bg: 'accent', opacity: 0.85 }}
           >
             {confirmLabel}
@@ -167,5 +171,6 @@ function Dialog({ opts, onConfirm, onCancel }: DialogProps): React.ReactElement 
         </Flex>
       </Box>
     </Box>
+    </DialogPortal>
   );
 }

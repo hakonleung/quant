@@ -101,7 +101,14 @@ export const TermConsole = forwardRef<TermConsoleHandle, TermConsoleProps>(funct
   );
 
   return (
-    <Flex h="100%" minH={0} bg="term.bg" position="relative">
+    <Flex
+      h="100%"
+      minH={0}
+      bg="term.bg"
+      position="relative"
+      backdropFilter="blur(20px) saturate(180%)"
+      css={{ WebkitBackdropFilter: 'blur(20px) saturate(180%)' }}
+    >
       {showLineNumbers && (
         <LineNumberGutter termRef={termRef} fontSize={fontSize} mounted={mountedRef.current} />
       )}

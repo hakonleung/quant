@@ -27,12 +27,11 @@ export const viewport: Viewport = {
   // The `<meta name="theme-color">` tag must inline a literal colour —
   // it is parsed before our CSS / JS run, so CSS vars (and therefore
   // `useTokenColor`) are not an option. Keep these two hex values in
-  // sync with the workbench `bg` semantic token (light = `palette.light.bg`,
-  // dark = `palette.term.bg` — TERM.MAIN is the dark-mode root surface).
-  // See `apps/web/lib/theme/tokens.ts`.
+  // sync with `palette.light.bg` / `palette.dark.bg` from
+  // `apps/web/lib/theme/tokens.ts` (Liquid Glass workbench canvas).
   themeColor: [
-    { media: '(prefers-color-scheme: light)', color: '#f4f5f7' },
-    { media: '(prefers-color-scheme: dark)', color: '#06080a' },
+    { media: '(prefers-color-scheme: light)', color: '#F5F5F7' },
+    { media: '(prefers-color-scheme: dark)', color: '#0B0C10' },
   ],
 };
 
@@ -41,6 +40,10 @@ export default function RootLayout({ children }: RootLayoutProps): ReactNode {
     <html lang="zh-CN" suppressHydrationWarning>
       <head>
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        {/* Inter Variable as the cross-platform SF Pro fallback (loads
+            instantly on Apple devices since they prefer system SF
+            Pro). JetBrains Mono / Space Mono as cross-platform SF
+            Mono fallback. Press Start 2P only for the BigLogo. */}
         <link
           href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=Space+Mono:wght@400;700&family=Press+Start+2P&display=swap"
           rel="stylesheet"

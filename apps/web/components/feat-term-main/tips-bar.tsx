@@ -35,12 +35,14 @@ export function TipsBar({ state }: Props): React.ReactElement {
       px="18px"
       py="6px"
       borderTopWidth="1px"
-      borderTopColor="term.line"
+      borderTopColor="glass.line"
       bg="brand.panelAlpha"
+      backdropFilter="blur(16px) saturate(160%)"
+      css={{ WebkitBackdropFilter: 'blur(16px) saturate(160%)' }}
       align="center"
       gap="14px"
-      fontFamily="mono"
-      fontSize="11px"
+      fontFamily="geek"
+      fontSize="xs"
       letterSpacing="0.14em"
       color="term.ink2"
       flexShrink={0}

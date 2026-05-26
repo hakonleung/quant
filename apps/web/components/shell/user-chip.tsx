@@ -19,7 +19,7 @@ export function UserChip({ displayName, mode }: UserChipProps): React.ReactEleme
       align="center"
       gap="8px"
       fontFamily="mono"
-      fontSize="11px"
+      fontSize="xs"
       color="term.ink2"
       letterSpacing="0.06em"
     >

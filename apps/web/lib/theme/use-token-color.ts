@@ -24,10 +24,23 @@ import { useSettingsStore } from '../stores/settings.store.js';
 
 /**
  * `dist.stat.mean` → `--chakra-colors-dist-stat-mean`.
- * Chakra v3 lowercases the segments and joins with `-`.
+ * `brand.logoColor` → `--chakra-colors-brand-logo-color`.
+ * `glass.panelStrong` → `--chakra-colors-glass-panel-strong`.
+ *
+ * Chakra v3 emits CSS variable names by ① splitting the dotted token
+ * path into segments, ② kebab-casing each segment (camelCase →
+ * lower-case-with-hyphens), and ③ joining with `-`. The kebab-case
+ * step is critical — callers may pass `brand.logoColor` (camelCase)
+ * but the actual CSS variable name in the document is
+ * `--chakra-colors-brand-logo-color`. Skipping this step makes the
+ * `getPropertyValue` lookup silently return `''`.
  */
 function tokenPathToCssVar(path: string): string {
-  return `--chakra-colors-${path.replace(/\./g, '-')}`;
+  const kebab = path
+    .split('.')
+    .map((seg) => seg.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase())
+    .join('-');
+  return `--chakra-colors-${kebab}`;
 }
 
 function readVar(name: string): string {

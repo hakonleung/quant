@@ -7,7 +7,7 @@
  * geometry and hands the shapes off here.
  */
 
-import { fonts, palette } from '../../lib/theme/tokens.js';
+import { fonts } from '../../lib/theme/tokens.js';
 import { fmtAxisY } from './ledger-chart-series.js';
 
 export const HEIGHT = 220;
@@ -26,6 +26,43 @@ export const AXIS_TEXT_STYLE: React.CSSProperties = {
   fontSize: '9px',
 };
 
+/**
+ * Theme-resolved colors for ledger chart layers. The parent
+ * (`ChartFrame`) batches the `useTokenColors` call once and threads the
+ * resolved values through these prop bags — that way the SVG sub-layers
+ * stay pure render and the colors actually flip with theme.
+ *
+ * Positional contract with `LEDGER_CHART_COLOR_PATHS` below — see the
+ * `useTokenColors` call site.
+ */
+export interface LedgerChartColors {
+  readonly axisLine: string; // axis grid lines (uses `line`)
+  readonly axisTick: string; // axis tick text (uses `ink3`)
+  readonly crosshair: string; // crosshair stroke (uses `accent`)
+  readonly crosshairBg: string; // crosshair label rect fill (uses `accentBg`)
+  readonly crosshairLabel: string; // crosshair label text (uses `ink`)
+}
+
+export const LEDGER_CHART_COLOR_PATHS = [
+  'line',
+  'ink3',
+  'accent',
+  'accentBg',
+  'ink',
+] as const;
+
+export function makeLedgerChartColors(
+  tokens: readonly string[],
+): LedgerChartColors {
+  return {
+    axisLine: tokens[0] ?? '',
+    axisTick: tokens[1] ?? '',
+    crosshair: tokens[2] ?? '',
+    crosshairBg: tokens[3] ?? '',
+    crosshairLabel: tokens[4] ?? '',
+  };
+}
+
 export interface YAxisProps {
   readonly width: number;
   readonly yTicks: readonly number[];
@@ -33,6 +70,7 @@ export interface YAxisProps {
   readonly yMin: number;
   readonly yMax: number;
   readonly showZero: boolean;
+  readonly colors: LedgerChartColors;
 }
 
 export function YAxisLayer({
@@ -42,6 +80,7 @@ export function YAxisLayer({
   yMin,
   yMax,
   showZero,
+  colors,
 }: YAxisProps): React.ReactElement {
   return (
     <g>
@@ -49,12 +88,12 @@ export function YAxisLayer({
         const y = yFor(v);
         return (
           <g key={`yt-${String(i)}`}>
-            <line x1={PRICE_AXIS_W - 3} x2={width} y1={y} y2={y} stroke={palette.term.line} />
+            <line x1={PRICE_AXIS_W - 3} x2={width} y1={y} y2={y} stroke={colors.axisLine} />
             <text
               x={PRICE_AXIS_W - 6}
               y={y + 3}
               style={AXIS_TEXT_STYLE}
-              fill={palette.term.ink3}
+              fill={colors.axisTick}
               textAnchor="end"
             >
               {fmtAxisY(v)}
@@ -63,7 +102,7 @@ export function YAxisLayer({
         );
       })}
       {showZero && yMin < 0 && yMax > 0 && (
-        <line x1={PRICE_AXIS_W} x2={width} y1={yFor(0)} y2={yFor(0)} stroke={palette.term.line} />
+        <line x1={PRICE_AXIS_W} x2={width} y1={yFor(0)} y2={yFor(0)} stroke={colors.axisLine} />
       )}
     </g>
   );
@@ -76,6 +115,7 @@ export interface XAxisProps {
   readonly cxAt: (i: number) => number;
   readonly dateAt: (i: number) => string;
   readonly hoverCx: number | null;
+  readonly colors: LedgerChartColors;
 }
 
 export function XAxisLayer({
@@ -85,6 +125,7 @@ export function XAxisLayer({
   cxAt,
   dateAt,
   hoverCx,
+  colors,
 }: XAxisProps): React.ReactElement {
   return (
     <>
@@ -103,7 +144,7 @@ export function XAxisLayer({
             x={cx}
             y={PRICE_H + DATE_AXIS_H - 5}
             style={AXIS_TEXT_STYLE}
-            fill={palette.term.ink3}
+            fill={colors.axisTick}
             textAnchor={anchor}
           >
             {dateAt(i).slice(5)}
@@ -120,6 +161,7 @@ export interface CrosshairProps {
   readonly hoverCy: number;
   readonly hoverDate: string;
   readonly priceAtY: number;
+  readonly colors: LedgerChartColors;
 }
 
 /**
@@ -134,6 +176,7 @@ export function CrosshairLayer({
   hoverCy,
   hoverDate,
   priceAtY,
+  colors,
 }: CrosshairProps): React.ReactElement {
   return (
     <g pointerEvents="none">
@@ -142,7 +185,7 @@ export function CrosshairLayer({
         x2={PRICE_AXIS_W + hoverCx}
         y1={INNER_TOP}
         y2={INNER_BOTTOM}
-        stroke={palette.light.amber}
+        stroke={colors.crosshair}
         strokeDasharray="2 3"
         opacity={0.7}
       />
@@ -151,12 +194,12 @@ export function CrosshairLayer({
         x2={width}
         y1={hoverCy}
         y2={hoverCy}
-        stroke={palette.light.amber}
+        stroke={colors.crosshair}
         strokeDasharray="2 3"
         opacity={0.7}
       />
-      <YHoverLabel hoverCy={hoverCy} priceAtY={priceAtY} />
-      <XHoverLabel width={width} hoverCx={hoverCx} hoverDate={hoverDate} />
+      <YHoverLabel hoverCy={hoverCy} priceAtY={priceAtY} colors={colors} />
+      <XHoverLabel width={width} hoverCx={hoverCx} hoverDate={hoverDate} colors={colors} />
     </g>
   );
 }
@@ -164,9 +207,11 @@ export function CrosshairLayer({
 function YHoverLabel({
   hoverCy,
   priceAtY,
+  colors,
 }: {
   readonly hoverCy: number;
   readonly priceAtY: number;
+  readonly colors: LedgerChartColors;
 }): React.ReactElement {
   return (
     <g>
@@ -175,14 +220,14 @@ function YHoverLabel({
         y={hoverCy - 7}
         width={PRICE_AXIS_W - 4}
         height={14}
-        fill={palette.light.amberBg}
-        stroke={palette.light.amber}
+        fill={colors.crosshairBg}
+        stroke={colors.crosshair}
       />
       <text
         x={PRICE_AXIS_W - 6}
         y={hoverCy + 3}
         style={AXIS_TEXT_STYLE}
-        fill={palette.light.amberDark}
+        fill={colors.crosshairLabel}
         textAnchor="end"
         fontWeight="700"
       >
@@ -196,10 +241,12 @@ function XHoverLabel({
   width,
   hoverCx,
   hoverDate,
+  colors,
 }: {
   readonly width: number;
   readonly hoverCx: number;
   readonly hoverDate: string;
+  readonly colors: LedgerChartColors;
 }): React.ReactElement {
   const labelW = 44;
   const cxAbs = PRICE_AXIS_W + hoverCx;
@@ -211,14 +258,14 @@ function XHoverLabel({
         y={PRICE_H + 2}
         width={labelW}
         height={DATE_AXIS_H - 4}
-        fill={palette.light.amberBg}
-        stroke={palette.light.amber}
+        fill={colors.crosshairBg}
+        stroke={colors.crosshair}
       />
       <text
         x={cx}
         y={PRICE_H + DATE_AXIS_H - 5}
         style={AXIS_TEXT_STYLE}
-        fill={palette.light.amberDark}
+        fill={colors.crosshairLabel}
         textAnchor="middle"
         fontWeight="700"
       >

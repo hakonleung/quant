@@ -42,7 +42,7 @@ export function LedgerSummaryBar({ enriched, today }: LedgerSummaryBarProps): Re
   if (summary.empty) {
     return (
       <Flex px="10px" py="8px" borderBottomWidth="1px" borderColor="term.line" flexShrink={0}>
-        <Text fontSize="11px" color="term.ink3" fontFamily="mono">
+        <Text fontSize="xs" color="term.ink3" fontFamily="mono">
           账本为空，先添加首条记录（必须包含当日收盘仓位）。
         </Text>
       </Flex>
@@ -90,10 +90,10 @@ function Stat({ label, value, tone = 'flat', muted = false }: StatProps): React.
   const glyph = tone === 'pos' ? '▲' : tone === 'neg' ? '▼' : '';
   return (
     <Box>
-      <Text fontSize="9px" letterSpacing="0.16em" color="term.ink3" fontFamily="mono">
+      <Text fontSize="xs" letterSpacing="0.16em" color="term.ink3" fontFamily="mono">
         {label.toUpperCase()}
       </Text>
-      <Text fontSize="13px" color={color} fontFamily="mono" fontWeight="600">
+      <Text fontSize="body" color={color} fontFamily="mono" fontWeight="600">
         {glyph !== '' && (
           <Text as="span" mr="3px" aria-hidden="true">
             {glyph}

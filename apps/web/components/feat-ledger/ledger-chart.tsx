@@ -23,11 +23,15 @@ import { useCallback, useMemo } from 'react';
 
 import { type VisibleSlice, visibleSlice } from '../../lib/fp/chart-view.js';
 import { priceTicks, sparseIndices } from '../../lib/fp/kline-chart.js';
+import { useTokenColors } from '../../lib/theme/use-token-color.js';
 import {
   CrosshairLayer,
   HEIGHT,
   INNER_BOTTOM,
   INNER_H,
+  LEDGER_CHART_COLOR_PATHS,
+  type LedgerChartColors,
+  makeLedgerChartColors,
   PRICE_AXIS_W,
   PRICE_TICK_COUNT,
   XAxisLayer,
@@ -61,7 +65,7 @@ export function LedgerChart({ enriched, mode, today }: LedgerChartProps): React.
   if (series === null) {
     return (
       <Flex flex="1" align="center" justify="center" minH="180px">
-        <Text fontSize="11px" color="term.ink3" fontFamily="mono">
+        <Text fontSize="xs" color="term.ink3" fontFamily="mono">
           {enriched.length === 0 ? '暂无数据' : '至少需要 2 条记录才能绘图'}
         </Text>
       </Flex>
@@ -83,6 +87,15 @@ function ChartFrame({ series }: { readonly series: ChartSeries }): React.ReactEl
   const hover = useChartHover({ slice, seriesCount: series.count, innerW, isDragging });
   const geom = useChartGeometry(series, slice, vp.candleW);
   const view = computeHoverView(hover, slice, series, geom.cxAt, geom.range);
+  // Single batched token resolution at the frame level — axis lines /
+  // ticks / crosshair / labels stay theme-aware so the chart flips on
+  // theme toggle (previously hardcoded to `palette.light.*`, which
+  // made the crosshair label invisible in dark mode).
+  const colorTokens = useTokenColors(LEDGER_CHART_COLOR_PATHS);
+  const colors = useMemo<LedgerChartColors>(
+    () => makeLedgerChartColors(colorTokens),
+    [colorTokens],
+  );
   return (
     <Box ref={wrapRef} position="relative" flex="1" minH="200px" overflow="hidden">
       <ChartSvg
@@ -95,6 +108,7 @@ function ChartFrame({ series }: { readonly series: ChartSeries }): React.ReactEl
         isDragging={isDragging}
         onMouseDown={onMouseDown}
         geom={geom}
+        colors={colors}
       />
       {view.tooltip !== null && <HoverInfoBox tooltip={view.tooltip} />}
     </Box>
@@ -146,6 +160,7 @@ interface ChartSvgProps {
   readonly isDragging: boolean;
   readonly onMouseDown: (e: React.MouseEvent<SVGSVGElement>) => void;
   readonly geom: ChartGeometry;
+  readonly colors: LedgerChartColors;
 }
 
 function ChartSvg(p: ChartSvgProps): React.ReactElement {
@@ -171,6 +186,7 @@ function ChartScene({
   width,
   view,
   geom,
+  colors,
 }: ChartSvgProps): React.ReactElement {
   return (
     <>
@@ -181,6 +197,7 @@ function ChartScene({
         yMin={series.yMin}
         yMax={series.yMax}
         showZero={series.hasZero}
+        colors={colors}
       />
       <g transform={`translate(${String(PRICE_AXIS_W)},0)`}>
         <BarsLayer
@@ -198,6 +215,7 @@ function ChartScene({
           cxAt={geom.cxAt}
           dateAt={series.dateAt}
           hoverCx={view.cx}
+          colors={colors}
         />
       </g>
       {view.cx !== null && view.cy !== null && view.date !== null && (
@@ -207,6 +225,7 @@ function ChartScene({
           hoverCy={view.cy}
           hoverDate={view.date}
           priceAtY={view.priceAtY ?? 0}
+          colors={colors}
         />
       )}
     </>
@@ -257,14 +276,17 @@ function HoverInfoBox({ tooltip }: { readonly tooltip: ChartTooltip }): React.Re
       position="absolute"
       top="6px"
       right="8px"
-      px="6px"
-      py="2px"
-      fontSize="10px"
+      px="8px"
+      py="4px"
+      fontSize="xs"
       fontFamily="mono"
-      color="term.ink"
-      bg="term.panel"
-      border="1px solid"
-      borderColor="term.line"
+      color="ink"
+      bg="glass.panel"
+      backdropFilter="blur(20px) saturate(180%)"
+      borderWidth="1px"
+      borderColor="glass.line"
+      borderRadius="sm"
+      boxShadow="glass"
       whiteSpace="nowrap"
       pointerEvents="none"
       lineHeight="1.3"

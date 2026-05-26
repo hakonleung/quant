@@ -70,7 +70,7 @@ export function TermSelect<V extends string>(props: TermSelectProps<V>): React.R
             borderWidth="1px"
             color="term.ink"
             fontFamily="mono"
-            fontSize="12px"
+            fontSize="sm"
           >
             {items.map((item) => (
               <Select.Item key={item.value} item={item} _hover={{ bg: 'term.line' }}>

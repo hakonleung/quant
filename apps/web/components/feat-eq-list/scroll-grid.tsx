@@ -149,7 +149,7 @@ export function ScrollGrid({
   if (rows.length === 0) {
     return (
       <Box flex="1" overflow="auto" px="14px" py="14px">
-        <Text fontFamily="mono" fontSize="11px" color="ink3" letterSpacing="0.12em">
+        <Text fontFamily="mono" fontSize="xs" color="ink3" letterSpacing="0.12em">
           // {emptyHint}
         </Text>
       </Box>
@@ -263,7 +263,7 @@ function ColumnHeader({
             textAlign={c.align}
             color={active ? 'accent' : 'ink3'}
             fontFamily="mono"
-            fontSize="10px"
+            fontSize="xs"
             letterSpacing={c.w <= 50 ? '0.04em' : '0.16em'}
             textTransform="uppercase"
             fontWeight="700"

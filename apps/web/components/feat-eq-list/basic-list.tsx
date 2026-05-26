@@ -96,7 +96,7 @@ export function BasicList({ sector, market, bare }: BasicListProps): React.React
     guard({
       title: 'remove from sector',
       message: (
-        <Text fontFamily="mono" fontSize="12px" color="ink2" lineHeight="1.7">
+        <Text fontFamily="mono" fontSize="sm" color="ink2" lineHeight="1.7">
           remove{' '}
           <Text as="span" color="accent">
             {display}
@@ -132,7 +132,7 @@ export function BasicList({ sector, market, bare }: BasicListProps): React.React
           <Box
             as="span"
             fontFamily="mono"
-            fontSize="10px"
+            fontSize="xs"
             color="ink3"
             letterSpacing="0.12em"
             whiteSpace="nowrap"
@@ -156,7 +156,7 @@ export function BasicList({ sector, market, bare }: BasicListProps): React.React
         </Box>
         <Box ref={scrollRef} flex="1" overflow="auto" minH={0}>
           {rows.length === 0 ? (
-            <Text px="10px" py="14px" fontFamily="mono" fontSize="11px" color="ink3">
+            <Text px="10px" py="14px" fontFamily="mono" fontSize="xs" color="ink3">
               // sector has no members — pick stocks above
             </Text>
           ) : (
@@ -178,7 +178,7 @@ export function BasicList({ sector, market, bare }: BasicListProps): React.React
                     gap="10px"
                     px="10px"
                     fontFamily="mono"
-                    fontSize="11px"
+                    fontSize="xs"
                     cursor="pointer"
                     bg={focused ? 'accentBg' : 'transparent'}
                     color={focused ? 'ink' : 'ink2'}

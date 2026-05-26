@@ -58,7 +58,7 @@ function ActionButtons(
         color="panel"
         borderRadius="0"
         fontFamily="mono"
-        fontSize="10px"
+        fontSize="xs"
         letterSpacing="0.14em"
         fontWeight="700"
         loading={p.pending}
@@ -77,7 +77,7 @@ function ActionButtons(
           borderColor="line"
           borderRadius="0"
           fontFamily="mono"
-          fontSize="10px"
+          fontSize="xs"
           letterSpacing="0.14em"
           onClick={p.onCancel}
         >
@@ -92,7 +92,7 @@ function CacheChip({ label }: { readonly label: string }): React.ReactElement {
   return (
     <Text
       fontFamily="mono"
-      fontSize="10px"
+      fontSize="xs"
       color={label === 'cache' ? 'accent' : 'ink3'}
       letterSpacing="0.12em"
     >
@@ -112,7 +112,7 @@ interface FieldProps {
 function Field({ label, value, onChange, width, placeholder }: FieldProps): React.ReactElement {
   return (
     <Flex gap="4px" align="center">
-      <Box fontFamily="mono" fontSize="10px" color="ink3" letterSpacing="0.06em">
+      <Box fontFamily="mono" fontSize="xs" color="ink3" letterSpacing="0.06em">
         {label}
       </Box>
       <Input
@@ -123,7 +123,7 @@ function Field({ label, value, onChange, width, placeholder }: FieldProps): Reac
         borderColor="line"
         borderRadius="0"
         fontFamily="mono"
-        fontSize="11px"
+        fontSize="xs"
         color="ink1"
         px="6px"
         value={value}

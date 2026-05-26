@@ -10,6 +10,7 @@
  */
 
 import { Box, Button, Flex, Input, Text } from '@chakra-ui/react';
+import { DialogPortal } from '../feat-view/dialog-portal.js';
 import type { NlToDslResult, WatchMarket } from '@quant/shared';
 import { useState } from 'react';
 
@@ -120,21 +121,25 @@ export function NewSectorDialog({ open, onClose }: Props): React.ReactElement | 
   };
 
   return (
-    <Box
+    <DialogPortal>
+      <Box
       position="fixed"
       inset={0}
       bg="overlay"
-      zIndex={2000}
+      zIndex="dialog"
       display="flex"
       alignItems="center"
       justifyContent="center"
       onClick={closeAndReset}
     >
       <Box
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="sec-new-dialog-title"
         onClick={(e) => {
           e.stopPropagation();
         }}
-        bg="panel"
+        className="glass-strong"
         color="ink"
         w="640px"
         maxW="92vw"
@@ -142,8 +147,8 @@ export function NewSectorDialog({ open, onClose }: Props): React.ReactElement | 
         display="flex"
         flexDirection="column"
         borderWidth="1px"
-        borderColor="accent"
-        boxShadow="card"
+        borderRadius="lg"
+        boxShadow="glassStrong"
       >
         <Header onClose={closeAndReset} />
         <Tabs tab={tab} setTab={setTab} />
@@ -181,6 +186,7 @@ export function NewSectorDialog({ open, onClose }: Props): React.ReactElement | 
         />
       </Box>
     </Box>
+    </DialogPortal>
   );
 }
 
@@ -192,13 +198,15 @@ function Header({ onClose }: { onClose: () => void }): React.ReactElement {
       px="14px"
       h="36px"
       borderBottomWidth="1px"
-      borderColor="line"
-      bg="panel3"
+      borderColor="glass.line"
+      bg="glass.panelSoft"
+      backdropFilter="blur(12px)"
       flexShrink={0}
     >
       <Text
+        id="sec-new-dialog-title"
         fontFamily="mono"
-        fontSize="11px"
+        fontSize="xs"
         color="accent"
         fontWeight="700"
         letterSpacing="0.18em"
@@ -207,7 +215,7 @@ function Header({ onClose }: { onClose: () => void }): React.ReactElement {
       </Text>
       <Text
         fontFamily="mono"
-        fontSize="11px"
+        fontSize="xs"
         color="ink2"
         letterSpacing="0.18em"
         textTransform="uppercase"
@@ -224,7 +232,7 @@ function Header({ onClose }: { onClose: () => void }): React.ReactElement {
         display="grid"
         placeItems="center"
         fontFamily="mono"
-        fontSize="13px"
+        fontSize="body"
         color="ink3"
         bg="transparent"
         cursor="pointer"
@@ -238,7 +246,7 @@ function Header({ onClose }: { onClose: () => void }): React.ReactElement {
 
 function Tabs({ tab, setTab }: { tab: Tab; setTab: (t: Tab) => void }): React.ReactElement {
   return (
-    <Flex borderBottomWidth="1px" borderColor="line" bg="panel" flexShrink={0}>
+    <Flex borderBottomWidth="1px" borderColor="glass.line" bg="transparent" flexShrink={0}>
       {(['user', 'dynamic'] as const).map((id) => {
         const active = tab === id;
         return (
@@ -256,7 +264,7 @@ function Tabs({ tab, setTab }: { tab: Tab; setTab: (t: Tab) => void }): React.Re
             borderBottomWidth={active ? '2px' : 0}
             borderBottomColor="accent"
             fontFamily="mono"
-            fontSize="11px"
+            fontSize="xs"
             letterSpacing="0.18em"
             textTransform="uppercase"
             fontWeight={active ? '700' : '500'}
@@ -298,8 +306,8 @@ function UserForm({
           h="32px"
           px="10px"
           fontFamily="mono"
-          fontSize="12px"
-          borderRadius="0"
+          fontSize="sm"
+          borderRadius="sm"
           _focus={{ borderColor: 'accent', boxShadow: 'none' }}
         />
       </Field>
@@ -317,13 +325,14 @@ function UserForm({
                 px="12px"
                 h="28px"
                 fontFamily="mono"
-                fontSize="11px"
+                fontSize="xs"
                 letterSpacing="0.18em"
                 textTransform="uppercase"
                 borderWidth="1px"
                 borderColor={active ? 'accent' : 'line'}
                 bg={active ? 'accentBg' : 'panel'}
                 color={active ? 'accent' : 'ink2'}
+                borderRadius="sm"
                 cursor="pointer"
                 _hover={active ? {} : { borderColor: 'ink2' }}
               >
@@ -378,8 +387,8 @@ function DynamicForm({
           h="32px"
           px="10px"
           fontFamily="mono"
-          fontSize="12px"
-          borderRadius="0"
+          fontSize="sm"
+          borderRadius="sm"
           _focus={{ borderColor: 'accent', boxShadow: 'none' }}
         />
       </Field>
@@ -403,8 +412,8 @@ function DynamicForm({
             h="32px"
             px="10px"
             fontFamily="mono"
-            fontSize="12px"
-            borderRadius="0"
+            fontSize="sm"
+            borderRadius="sm"
             _focus={{ borderColor: 'accent', boxShadow: 'none' }}
           />
           <Button
@@ -416,10 +425,10 @@ function DynamicForm({
             h="32px"
             px="14px"
             fontFamily="mono"
-            fontSize="11px"
+            fontSize="xs"
             fontWeight="700"
             letterSpacing="0.16em"
-            borderRadius="0"
+            borderRadius="sm"
             _hover={{ bg: 'accent' }}
           >
             RUN ▶
@@ -427,7 +436,7 @@ function DynamicForm({
         </Flex>
       </Field>
       {error !== null && (
-        <Text color="up" fontFamily="mono" fontSize="11px">
+        <Text color="up" fontFamily="mono" fontSize="xs">
           ✘ {error}
         </Text>
       )}
@@ -435,7 +444,7 @@ function DynamicForm({
         <Flex direction="column" gap="8px">
           <Text
             fontFamily="mono"
-            fontSize="10px"
+            fontSize="xs"
             color="ink3"
             letterSpacing="0.16em"
             textTransform="uppercase"
@@ -446,9 +455,11 @@ function DynamicForm({
             maxH="320px"
             overflow="auto"
             borderWidth="1px"
-            borderColor="line"
+            borderColor="glass.line"
+            borderRadius="sm"
             p="10px"
-            bg="panel3"
+            bg="glass.panelSoft"
+            backdropFilter="blur(12px)"
           >
             <DslTree
               screenPlan={preview.screenPlan}
@@ -471,7 +482,7 @@ function Field({
 }): React.ReactElement {
   return (
     <Flex direction="column" gap="4px">
-      <Text fontFamily="mono" fontSize="9px" color="ink3" letterSpacing="0.18em" fontWeight="700">
+      <Text fontFamily="mono" fontSize="xs" color="ink3" letterSpacing="0.18em" fontWeight="700">
         {label}
       </Text>
       {children}
@@ -481,7 +492,7 @@ function Field({
 
 function Hint({ children }: { children: React.ReactNode }): React.ReactElement {
   return (
-    <Text fontFamily="mono" fontSize="11px" color="ink3" letterSpacing="0.06em">
+    <Text fontFamily="mono" fontSize="xs" color="ink3" letterSpacing="0.06em">
       {children}
     </Text>
   );
@@ -502,8 +513,9 @@ function Footer({ onCancel, onSave, canSave, saveLabel }: FooterProps): React.Re
       px="14px"
       py="10px"
       borderTopWidth="1px"
-      borderColor="line"
-      bg="panel3"
+      borderColor="glass.line"
+      bg="glass.panelSoft"
+      backdropFilter="blur(12px)"
       flexShrink={0}
     >
       <Button
@@ -516,9 +528,9 @@ function Footer({ onCancel, onSave, canSave, saveLabel }: FooterProps): React.Re
         px="14px"
         py="6px"
         fontFamily="mono"
-        fontSize="11px"
+        fontSize="xs"
         letterSpacing="0.18em"
-        borderRadius="0"
+        borderRadius="sm"
         _hover={{ borderColor: 'ink2' }}
       >
         CANCEL
@@ -533,10 +545,10 @@ function Footer({ onCancel, onSave, canSave, saveLabel }: FooterProps): React.Re
         px="16px"
         py="6px"
         fontFamily="mono"
-        fontSize="11px"
+        fontSize="xs"
         fontWeight="700"
         letterSpacing="0.18em"
-        borderRadius="0"
+        borderRadius="sm"
         _hover={canSave ? { bg: 'accent', opacity: 0.85 } : {}}
       >
         {saveLabel}

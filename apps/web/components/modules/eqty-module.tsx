@@ -67,7 +67,11 @@ function EqtyModuleDesktop(): React.ReactElement {
   const setRightWidth = useLayoutStore((s) => s.setRightWidth);
 
   return (
-    <Flex h="100%" bg="line" gap="0" align="stretch">
+    // Liquid Glass floating-island workbench. Outer container is
+    // transparent (the body ambient mesh shows through), padding +
+    // gap separate each pane so the canvas reads BETWEEN them too —
+    // panes look like floating glass tiles, not flush columns.
+    <Flex h="100%" bg="transparent" gap="4px" p="4px" align="stretch">
       <Column width={`${String(leftWidth)}px`}>
         <FeatMkt />
       </Column>
@@ -80,7 +84,6 @@ function EqtyModuleDesktop(): React.ReactElement {
       />
       <Column flex="1">{code !== null && <FeatEqChart code={code} />}</Column>
       <Divider
-        // Drag right edge: dragging *right* shrinks the right column.
         getNext={(dx, start): number => start - dx}
         startWidth={rightWidth}
         commit={setRightWidth}
@@ -103,6 +106,9 @@ interface ColumnProps {
 
 function Column({ width, flex, children }: ColumnProps): React.ReactElement {
   return (
+    // Floating-island column — transparent bg + 10px gap so stacked
+    // panes within a column also separate (ambient canvas peeks
+    // between them).
     <Box
       w={width}
       flex={flex}
@@ -110,8 +116,8 @@ function Column({ width, flex, children }: ColumnProps): React.ReactElement {
       h="100%"
       display="flex"
       flexDirection="column"
-      gap="1px"
-      bg="line"
+      gap="4px"
+      bg="transparent"
     >
       {children}
     </Box>
@@ -190,14 +196,19 @@ function Divider({ startWidth, getNext, commit, min, max }: DividerProps): React
       role="separator"
       aria-orientation="vertical"
       aria-label="resize column"
+      // Floating-island gap between columns — drag handle is now
+       // visually invisible (transparent) but still keeps the 4px hit
+       // zone + accent flash on hover/drag to telegraph the resize
+       // affordance.
       w="4px"
       h="100%"
-      bg={dragging ? 'accent' : 'line'}
+      bg={dragging ? 'accent' : 'transparent'}
+      borderRadius="pill"
       cursor="col-resize"
       flexShrink={0}
       position="relative"
-      _hover={{ bg: 'accent' }}
-      transition="background 120ms ease"
+      _hover={{ bg: 'accent', opacity: 0.5 }}
+      transition="background 120ms ease, opacity 120ms ease"
       _before={DIVIDER_HIT_BEFORE}
       css={DIVIDER_HIT_CSS}
     />

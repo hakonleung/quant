@@ -66,7 +66,7 @@ export function GroupRow({
   };
   return (
     <Flex gap="6px" align="center" mb="6px" wrap="wrap">
-      <Text fontSize="11px" color="term.ink3" letterSpacing="0.14em">
+      <Text fontSize="xs" color="term.ink3" letterSpacing="0.14em">
         GROUP
       </Text>
       <TermSelect<string>
@@ -88,18 +88,18 @@ export function GroupRow({
             }}
           />
           {state.newGroupName.length > 0 && invalid ? (
-            <Text fontSize="11px" color="up">
+            <Text fontSize="xs" color="up">
               1–32 chars · letters/digits/space/_/-
             </Text>
           ) : null}
           {duplicate ? (
-            <Text fontSize="11px" color="up">
+            <Text fontSize="xs" color="up">
               name already exists
             </Text>
           ) : null}
         </>
       ) : (
-        <Text fontSize="11px" color="term.ink3">
+        <Text fontSize="xs" color="term.ink3">
           conds · intervals owned by this group (read-only)
         </Text>
       )}
@@ -159,7 +159,7 @@ export function SectorImportRow({ onBatchPick }: SectorImportRowProps): React.Re
   if (sectors.length === 0) return null;
   return (
     <Flex gap="4px" wrap="wrap" align="center" mb="6px">
-      <Text fontSize="11px" color="term.ink3" letterSpacing="0.14em" mr="2px">
+      <Text fontSize="xs" color="term.ink3" letterSpacing="0.14em" mr="2px">
         SECTOR
       </Text>
       {sectors.map((sec, idx) => (
@@ -210,7 +210,7 @@ export function PickRow({ state, setState }: RowProps): React.ReactElement {
       <SectorImportRow onBatchPick={onBatchPick} />
       <FeatScrNl onPick={onPick} onBatchPick={onBatchPick} />
       {state.picked.length === 0 ? (
-        <Text mt="4px" fontSize="11px" color="term.ink3">
+        <Text mt="4px" fontSize="xs" color="term.ink3">
           search and pick one or more stocks · same condition applies to all
         </Text>
       ) : (
@@ -233,7 +233,7 @@ export function PickRow({ state, setState }: RowProps): React.ReactElement {
               borderColor="term.green"
               color="term.green"
               fontFamily="mono"
-              fontSize="11px"
+              fontSize="xs"
             >
               <Text>
                 [{p.market}] {p.code} · {p.name}
@@ -270,7 +270,7 @@ export function SubmitRow({
 }: SubmitRowProps): React.ReactElement {
   return (
     <Flex gap="6px" mt="6px" align="center">
-      <Text color="term.ink3" fontSize="11px">
+      <Text color="term.ink3" fontSize="xs">
         interval
       </Text>
       <Input
@@ -283,10 +283,10 @@ export function SubmitRow({
           setState((s) => ({ ...s, intervalMin: v }));
         }}
       />
-      <Text color="term.ink3" fontSize="11px">
+      <Text color="term.ink3" fontSize="xs">
         m
       </Text>
-      <Text color="term.ink3" fontSize="11px">
+      <Text color="term.ink3" fontSize="xs">
         push≥
       </Text>
       <Input
@@ -299,7 +299,7 @@ export function SubmitRow({
           setState((s) => ({ ...s, pushIntervalMin: v }));
         }}
       />
-      <Text color="term.ink3" fontSize="11px">
+      <Text color="term.ink3" fontSize="xs">
         m
       </Text>
       <MonoButton

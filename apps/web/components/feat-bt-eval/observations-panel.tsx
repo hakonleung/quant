@@ -26,7 +26,7 @@ export function ObservationsPanel({
 }: ObservationsPanelProps): React.ReactElement {
   if (observations.length === 0) {
     return (
-      <Text fontFamily="mono" fontSize="10px" color="ink3" letterSpacing="0.06em">
+      <Text fontFamily="mono" fontSize="xs" color="ink3" letterSpacing="0.06em">
         // no observations at holding={String(holding)}d
       </Text>
     );
@@ -38,7 +38,7 @@ export function ObservationsPanel({
         as="table"
         width="100%"
         fontFamily="mono"
-        fontSize="10px"
+        fontSize="xs"
         style={{ borderCollapse: 'collapse' }}
       >
         <HeaderRow />
@@ -49,7 +49,7 @@ export function ObservationsPanel({
         </Box>
       </Box>
       {observations.length > MAX_ROWS && (
-        <Text fontFamily="mono" fontSize="9px" color="ink3" mt="2px">
+        <Text fontFamily="mono" fontSize="xs" color="ink3" mt="2px">
           // showing first {String(MAX_ROWS)} of {String(observations.length)}
         </Text>
       )}

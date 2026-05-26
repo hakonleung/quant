@@ -301,7 +301,7 @@ function CyberInput(p: InputProps): React.ReactElement {
           'repeating-linear-gradient(to bottom, rgba(255,255,255,0.012) 0 1px, transparent 1px 3px)',
       }}
     >
-      <Text color="term.green" fontFamily="mono" fontSize="12px" fontWeight="600" zIndex={1}>
+      <Text color="term.green" fontFamily="mono" fontSize="sm" fontWeight="600" zIndex={1}>
         &gt;
       </Text>
       <Input
@@ -334,7 +334,7 @@ function PlainInput(p: InputProps): React.ReactElement {
       borderColor="term.line"
       color="term.ink"
       fontFamily="mono"
-      fontSize="12px"
+      fontSize="sm"
       h="26px"
       px="8px"
       placeholder={p.placeholder}

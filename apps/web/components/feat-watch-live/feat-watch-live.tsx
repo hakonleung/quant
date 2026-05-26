@@ -181,7 +181,7 @@ export function FeatWatchLive({ bare }: FeatWatchLiveProps = {}): React.ReactEle
       await guard({
         title: 'delete group',
         message: (
-          <Text fontFamily="mono" fontSize="12px" color="term.ink2" lineHeight="1.7">
+          <Text fontFamily="mono" fontSize="sm" color="term.ink2" lineHeight="1.7">
             delete group{' '}
             <Text as="span" color="accent">
               {group.name}
@@ -220,7 +220,7 @@ export function FeatWatchLive({ bare }: FeatWatchLiveProps = {}): React.ReactEle
       await guard({
         title: 'delete selected',
         message: (
-          <Text fontFamily="mono" fontSize="12px" color="term.ink2" lineHeight="1.7">
+          <Text fontFamily="mono" fontSize="sm" color="term.ink2" lineHeight="1.7">
             delete{' '}
             <Text as="span" color="up">
               {String(keys.length)}
@@ -288,7 +288,7 @@ export function FeatWatchLive({ bare }: FeatWatchLiveProps = {}): React.ReactEle
         minH={0}
         color="term.ink2"
         fontFamily="mono"
-        fontSize="12px"
+        fontSize="sm"
         lineHeight="1.7"
       >
         <Box px="14px" pt="10px" flexShrink={0}>
@@ -306,7 +306,7 @@ export function FeatWatchLive({ bare }: FeatWatchLiveProps = {}): React.ReactEle
               bg="term.bgElev"
               color="term.green"
               fontFamily="mono"
-              fontSize="12px"
+              fontSize="sm"
               letterSpacing="0.18em"
               cursor="pointer"
               _hover={{ bg: 'term.bgElev' }}
@@ -365,7 +365,7 @@ export function FeatWatchLive({ bare }: FeatWatchLiveProps = {}): React.ReactEle
             bg="term.panel"
             color="accent"
             fontFamily="mono"
-            fontSize="11px"
+            fontSize="xs"
             letterSpacing="0.06em"
             flexShrink={0}
           >
@@ -545,7 +545,7 @@ function Group({
             titleLines.map((line, i) => (
               <Text
                 key={`line-${String(i)}`}
-                fontSize="10px"
+                fontSize="xs"
                 lineHeight="1.2"
                 color="term.ink"
                 fontFamily="mono"
@@ -558,7 +558,7 @@ function Group({
             ))
           ) : (
             <Text
-              fontSize="10px"
+              fontSize="xs"
               lineHeight="1.2"
               color="term.ink3"
               fontFamily="mono"
@@ -568,12 +568,12 @@ function Group({
             </Text>
           )}
         </Flex>
-        <Text fontSize="10px" color="term.ink3" letterSpacing="0.14em" flexShrink={0}>
+        <Text fontSize="xs" color="term.ink3" letterSpacing="0.14em" flexShrink={0}>
           ×{group.tasks.length}
         </Text>
         {!group.enabled && (
           <Text
-            fontSize="9px"
+            fontSize="xs"
             color="up"
             letterSpacing="0.18em"
             fontWeight="600"
@@ -708,14 +708,14 @@ function RowSummary({ task }: { readonly task: WatchTask }): React.ReactElement 
   // on one row — no layout regression on desktop.
   return (
     <Flex flex="1" minW={0} align="baseline" gap="6px" lineHeight="1.3" flexWrap="wrap">
-      <Text fontSize="11px" color="term.ink3" letterSpacing="0.04em" flexShrink={0}>
+      <Text fontSize="xs" color="term.ink3" letterSpacing="0.04em" flexShrink={0}>
         [{task.market}]
       </Text>
-      <Text fontSize="11px" color="term.green" fontWeight="600" flexShrink={0}>
+      <Text fontSize="xs" color="term.green" fontWeight="600" flexShrink={0}>
         {task.code}
       </Text>
       <Text
-        fontSize="11px"
+        fontSize="xs"
         color="term.ink"
         flexShrink={1}
         minW={0}
@@ -727,10 +727,10 @@ function RowSummary({ task }: { readonly task: WatchTask }): React.ReactElement 
       </Text>
       <Box flex="1" />
       <Flex align="baseline" gap="6px" flexShrink={0}>
-        <Text fontSize="9px" color={task.enabled ? 'term.ink3' : 'up'} letterSpacing="0.02em">
+        <Text fontSize="xs" color={task.enabled ? 'term.ink3' : 'up'} letterSpacing="0.02em">
           {task.enabled ? `↺${formatMinutes(task.pushIntervalSec)}` : 'off'}
         </Text>
-        <Text fontSize="9px" color={task.hitCount > 0 ? 'accent' : 'term.ink3'}>
+        <Text fontSize="xs" color={task.hitCount > 0 ? 'link' : 'term.ink3'}>
           ✦{String(task.hitCount)}
         </Text>
       </Flex>

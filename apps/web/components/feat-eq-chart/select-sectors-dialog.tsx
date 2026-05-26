@@ -18,6 +18,7 @@
  */
 
 import { Box, Button, Flex, Text } from '@chakra-ui/react';
+import { DialogPortal } from '../feat-view/dialog-portal.js';
 import { useEffect, useMemo, useState } from 'react';
 
 import {
@@ -76,121 +77,131 @@ export function SelectSectorsDialog({ open, code, onClose }: Props): React.React
   const dirty = !setEquals(selected, initial);
 
   return (
-    <Flex
-      position="fixed"
-      top={0}
-      left={0}
-      w="100vw"
-      h="100vh"
-      bg="overlay"
-      align="center"
-      justify="center"
-      zIndex={1100}
-      onClick={onClose}
-    >
-      <Box
-        bg="panel"
-        borderWidth="1px"
-        borderColor="line"
-        w="380px"
-        maxH="80vh"
-        display="flex"
-        flexDirection="column"
-        onClick={(e): void => {
-          e.stopPropagation();
-        }}
+    <DialogPortal>
+      <Flex
+        position="fixed"
+        top={0}
+        left={0}
+        w="100vw"
+        h="100vh"
+        bg="overlay"
+        align="center"
+        justify="center"
+        zIndex="dialog"
+        onClick={onClose}
       >
-        <Flex
-          align="center"
-          gap="8px"
-          px="14px"
-          py="10px"
-          borderBottomWidth="1px"
-          borderColor="line"
-          bg="panel3"
-          fontFamily="mono"
-          fontSize="11px"
-          letterSpacing="0.18em"
-          color="ink2"
-          fontWeight="600"
-          textTransform="uppercase"
+        <Box
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="select-sectors-dialog-title"
+          className="glass-strong"
+          borderWidth="1px"
+          borderRadius="lg"
+          boxShadow="glassStrong"
+          w="380px"
+          maxH="80vh"
+          display="flex"
+          flexDirection="column"
+          onClick={(e): void => {
+            e.stopPropagation();
+          }}
         >
-          select sectors for {code}
-        </Flex>
-        <Box flex="1" overflow="auto" maxH="50vh">
-          {userSectors.length === 0 ? (
-            <Text px="14px" py="14px" fontFamily="mono" fontSize="11px" color="ink3">
-              // no user sectors — create one in SEC.LIST first
-            </Text>
-          ) : (
-            userSectors.map((s) => {
-              const checked = selected.has(s.id);
-              return (
-                <Flex
-                  key={s.id}
-                  align="center"
-                  gap="8px"
-                  px="14px"
-                  py="8px"
-                  borderBottomWidth="1px"
-                  borderColor="line"
-                  cursor="pointer"
-                  _hover={{ bg: 'hover' }}
-                  onClick={(): void => {
-                    toggle(s.id);
-                  }}
-                >
-                  <Checkbox checked={checked} />
-                  <Text fontFamily="mono" fontSize="12px" color="ink" flex="1">
-                    {s.name}
-                  </Text>
-                  <Text fontFamily="mono" fontSize="10px" color="ink3">
-                    {`${String(s.codes.length)} members`}
-                  </Text>
-                </Flex>
-              );
-            })
-          )}
-          {dynamicSectors.length > 0 && <DynamicSection sectors={dynamicSectors} code={code} />}
-        </Box>
-        <Flex
-          gap="8px"
-          px="14px"
-          py="10px"
-          borderTopWidth="1px"
-          borderColor="line"
-          justify="flex-end"
-        >
-          <Button
-            h="28px"
+          <Flex
+            id="select-sectors-dialog-title"
+            align="center"
+            gap="8px"
             px="14px"
-            bg="panel"
+            py="10px"
+            borderBottomWidth="1px"
+            borderColor="glass.line"
+            bg="glass.panelSoft"
+            backdropFilter="blur(12px)"
+            fontFamily="mono"
+            fontSize="xs"
+            letterSpacing="0.18em"
             color="ink2"
-            borderWidth="1px"
-            borderColor="line"
-            borderRadius="0"
-            fontFamily="mono"
-            fontSize="11px"
-            onClick={onClose}
+            fontWeight="600"
+            textTransform="uppercase"
           >
-            cancel
-          </Button>
-          <Button
-            h="28px"
+            select sectors for {code}
+          </Flex>
+          <Box flex="1" overflow="auto" maxH="50vh">
+            {userSectors.length === 0 ? (
+              <Text px="14px" py="14px" fontFamily="mono" fontSize="xs" color="ink3">
+                // no user sectors — create one in SEC.LIST first
+              </Text>
+            ) : (
+              userSectors.map((s) => {
+                const checked = selected.has(s.id);
+                return (
+                  <Flex
+                    key={s.id}
+                    align="center"
+                    gap="8px"
+                    px="14px"
+                    py="8px"
+                    borderBottomWidth="1px"
+                    borderColor="glass.line"
+                    cursor="pointer"
+                    _hover={{ bg: 'hover' }}
+                    onClick={(): void => {
+                      toggle(s.id);
+                    }}
+                  >
+                    <Checkbox checked={checked} />
+                    <Text fontFamily="mono" fontSize="sm" color="ink" flex="1">
+                      {s.name}
+                    </Text>
+                    <Text fontFamily="mono" fontSize="xs" color="ink3">
+                      {`${String(s.codes.length)} members`}
+                    </Text>
+                  </Flex>
+                );
+              })
+            )}
+            {dynamicSectors.length > 0 && <DynamicSection sectors={dynamicSectors} code={code} />}
+          </Box>
+          <Flex
+            gap="8px"
             px="14px"
-            bg="accent"
-            color="panel"
-            borderRadius="0"
-            fontFamily="mono"
-            fontSize="11px"
-            disabled={!dirty}
-            onClick={apply}
+            py="10px"
+            borderTopWidth="1px"
+            borderColor="glass.line"
+            bg="glass.panelSoft"
+            backdropFilter="blur(12px)"
+            justify="flex-end"
           >
-            apply
-          </Button>
-        </Flex>
-      </Box>
-    </Flex>
+            <Button
+              h="28px"
+              px="14px"
+              bg="panel"
+              color="ink2"
+              borderWidth="1px"
+              borderColor="line"
+              borderRadius="sm"
+              fontFamily="mono"
+              fontSize="xs"
+              onClick={onClose}
+            >
+              cancel
+            </Button>
+            <Button
+              h="28px"
+              px="14px"
+              bg="accent"
+              color="panel"
+              borderRadius="sm"
+              fontFamily="mono"
+              fontSize="xs"
+              disabled={!dirty}
+              onClick={apply}
+            >
+              apply
+            </Button>
+          </Flex>
+        </Box>
+      </Flex>
+    </DialogPortal>
   );
 }
 
@@ -205,7 +216,7 @@ function Checkbox({ checked }: { checked: boolean }): React.ReactElement {
       color="panel"
       display="grid"
       placeItems="center"
-      fontSize="9px"
+      fontSize="xs"
       flexShrink={0}
     >
       {checked ? '✓' : ''}
@@ -226,14 +237,15 @@ function DynamicSection({
         px="14px"
         py="6px"
         fontFamily="mono"
-        fontSize="9px"
+        fontSize="xs"
         letterSpacing="0.18em"
         color="ink3"
         fontWeight="700"
-        bg="panel3"
+        bg="glass.panelSoft"
+        backdropFilter="blur(12px)"
         borderTopWidth="1px"
         borderBottomWidth="1px"
-        borderColor="line"
+        borderColor="glass.line"
       >
         // DYNAMIC (read-only)
       </Text>
@@ -247,15 +259,15 @@ function DynamicSection({
             px="14px"
             py="8px"
             borderBottomWidth="1px"
-            borderColor="line"
+            borderColor="glass.line"
             opacity={0.6}
             cursor="not-allowed"
           >
             <Box w="12px" h="12px" flexShrink={0} />
-            <Text fontFamily="mono" fontSize="12px" color="ink" flex="1">
+            <Text fontFamily="mono" fontSize="sm" color="ink" flex="1">
               [D] {s.name}
             </Text>
-            <Text fontFamily="mono" fontSize="10px" color={has ? 'accent' : 'ink3'}>
+            <Text fontFamily="mono" fontSize="xs" color={has ? 'accent' : 'ink3'}>
               {has ? 'matches' : 'no match'}
             </Text>
           </Flex>

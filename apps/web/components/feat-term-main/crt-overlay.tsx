@@ -35,10 +35,13 @@ export function CrtOverlay(): React.ReactElement {
   const phosphor = useTokenColor('brand.termGlowBorder');
   const scanlineAlpha = useTokenColor('brand.scanlineAlpha');
   const vignette = useTokenColor('brand.vignette');
-  const scan = scanlineAlpha.length > 0 ? scanlineAlpha : 'rgba(0, 0, 0, 0.32)';
+  // Fallback only applies during SSR (useTokenColor returns ''). Pick
+  // values consistent with the dialled-down glass-era tokens so the
+  // server-rendered first paint doesn't flash a heavy CRT scanline.
+  const scan = scanlineAlpha.length > 0 ? scanlineAlpha : 'rgba(0,0,0,0.10)';
   return (
     <>
-      {/* z=0 — coarse grid */}
+      {/* z=0 — coarse grid (subtle glass texture, was the loud CRT mesh) */}
       <Box
         position="absolute"
         inset="0"
@@ -48,7 +51,7 @@ export function CrtOverlay(): React.ReactElement {
         backgroundImage={`linear-gradient(${gridColor} 1px, transparent 1px), linear-gradient(90deg, ${gridColor} 1px, transparent 1px)`}
         backgroundSize="32px 32px"
       />
-      {/* z=1 — phosphor dot mesh */}
+      {/* z=1 — phosphor dot mesh (near-invisible, just a hint) */}
       <Box
         position="absolute"
         inset="0"
@@ -58,7 +61,7 @@ export function CrtOverlay(): React.ReactElement {
         backgroundImage={`radial-gradient(${phosphor} 1px, transparent 1px)`}
         backgroundSize="3px 3px"
       />
-      {/* z=4 — horizontal scanlines */}
+      {/* z=4 — horizontal scanlines (alpha already near-zero in token) */}
       <Box
         position="absolute"
         inset="0"
@@ -67,14 +70,14 @@ export function CrtOverlay(): React.ReactElement {
         background={`repeating-linear-gradient(0deg, ${scan} 0px, ${scan} 1px, transparent 1px, transparent 3px)`}
         css={{ mixBlendMode: 'multiply' }}
       />
-      {/* z=6 — vignette + soft inner glow */}
+      {/* z=6 — vignette becomes a soft ambient halo on the glass edge */}
       <Box
         position="absolute"
         inset="0"
         pointerEvents="none"
         zIndex={6}
         boxShadow={vignette}
-        borderRadius="12px"
+        borderRadius="md"
       />
     </>
   );

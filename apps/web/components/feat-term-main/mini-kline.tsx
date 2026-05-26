@@ -41,7 +41,7 @@ const X_TICKS = 5;
 export function MiniKline({ bars, cols = 36, rows = 6 }: Props): React.ReactElement {
   if (bars.length === 0) {
     return (
-      <Text color="term.ink3" fontSize="11px">
+      <Text color="term.ink3" fontSize="xs">
         no kline cached — run `update`
       </Text>
     );
@@ -60,7 +60,7 @@ export function MiniKline({ bars, cols = 36, rows = 6 }: Props): React.ReactElem
   );
 
   return (
-    <Box fontFamily="mono" fontSize="10px" color="term.green" lineHeight="1.05">
+    <Box fontFamily="geek" fontSize="xs" color="term.green" lineHeight="1.05">
       {grid.map((row, r) => (
         <Box key={r} display="flex">
           <Box
@@ -102,7 +102,7 @@ export function MiniKline({ bars, cols = 36, rows = 6 }: Props): React.ReactElem
 
       {/* Volume strip */}
       <Flex mt="6px">
-        <Box as="span" color="term.ink3" w="34px" textAlign="right" pr="6px" fontSize="9px">
+        <Box as="span" color="term.ink3" w="34px" textAlign="right" pr="6px" fontSize="xs">
           vol
         </Box>
         <Box as="span" color="term.ink3">

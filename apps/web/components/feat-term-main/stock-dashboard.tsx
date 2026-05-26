@@ -36,10 +36,10 @@ export function StockDashboard({ code }: Props): React.ReactElement {
   if (code === null) {
     return (
       <Frame>
-        <Text color="term.ink3" fontSize="11px">
+        <Text color="term.ink3" fontSize="xs">
           ▸ FOCUS — none
         </Text>
-        <Text color="term.ink3" fontSize="10px" mt="6px">
+        <Text color="term.ink3" fontSize="xs" mt="6px">
           run `focus &lt;code&gt;` or pick a stock
         </Text>
       </Frame>
@@ -62,7 +62,7 @@ function FocusPanel({ code }: { code: string }): React.ReactElement {
       {/* K-LINE — top */}
       <Flex align="center" gap="6px" mb="4px">
         <Text color="accent">◆</Text>
-        <Text color="term.ink3" fontSize="10px" letterSpacing="0.18em">
+        <Text color="term.ink3" fontSize="xs" letterSpacing="0.18em">
           {code} 90D
         </Text>
       </Flex>
@@ -73,16 +73,16 @@ function FocusPanel({ code }: { code: string }): React.ReactElement {
       {/* HEADER — code/name on the left, price/chg% on the right */}
       <Flex align="center" gap="6px">
         <Text color="accent">▸</Text>
-        <Text color="term.ink3" fontSize="10px" letterSpacing="0.18em">
+        <Text color="term.ink3" fontSize="xs" letterSpacing="0.18em">
           FOCUS
         </Text>
       </Flex>
       <Flex mt="4px" gap="12px" align="flex-end" justify="space-between">
         <Box minW={0}>
-          <Text color="term.ink" fontSize="22px" fontFamily="mono" fontWeight="700" lineHeight="1">
+          <Text color="term.ink" fontSize="xl" fontFamily="mono" fontWeight="700" lineHeight="1">
             {code}
           </Text>
-          <Text color="term.ink2" fontSize="11px" mt="3px">
+          <Text color="term.ink2" fontSize="xs" mt="3px">
             {meta?.name ?? '—'}
             <Text as="span" color="term.ink3" ml="6px">
               · {meta?.industries ?? '—'}
@@ -117,14 +117,14 @@ function PriceLine({
   const chgArrow = change === null ? '·' : change >= 0 ? '▲' : '▼';
   return (
     <Flex direction="column" align="flex-end" flexShrink={0}>
-      <Text color="term.ink" fontSize="20px" fontFamily="mono" fontWeight="700" lineHeight="1">
+      <Text color="term.ink" fontSize="xl" fontFamily="mono" fontWeight="700" lineHeight="1">
         {fmtNum(price)}
       </Text>
       <Flex align="baseline" gap="4px" color={chgColor} mt="3px">
-        <Text fontSize="12px" fontWeight="700">
+        <Text fontSize="sm" fontWeight="700">
           {chgArrow}
         </Text>
-        <Text fontSize="12px" fontWeight="700">
+        <Text fontSize="sm" fontWeight="700">
           {change === null ? '—' : `${change >= 0 ? '+' : ''}${change.toFixed(2)}%`}
         </Text>
       </Flex>
@@ -177,7 +177,7 @@ function SentimentBlock({ sent }: { sent: Sentiment }): React.ReactElement {
     <Box mt="14px" pt="10px" borderTopWidth="1px" borderTopColor="term.line">
       <Flex align="center" gap="6px">
         <Text color="accent">◆</Text>
-        <Text color="term.ink3" fontSize="10px" letterSpacing="0.18em">
+        <Text color="term.ink3" fontSize="xs" letterSpacing="0.18em">
           SENTIMENT
         </Text>
       </Flex>
@@ -187,12 +187,12 @@ function SentimentBlock({ sent }: { sent: Sentiment }): React.ReactElement {
         <WrapRow k="driver" v={topDriver} />
         {sent.brief.length > 0 && (
           <Box mt="6px">
-            <Text color="term.ink3" fontSize="10px" letterSpacing="0.18em" mb="3px">
+            <Text color="term.ink3" fontSize="xs" letterSpacing="0.18em" mb="3px">
               brief
             </Text>
             <Text
               color="term.ink"
-              fontSize="11px"
+              fontSize="xs"
               lineHeight="1.45"
               whiteSpace="pre-wrap"
               wordBreak="break-word"
@@ -215,7 +215,7 @@ function ScoreRow({ score }: { score: number | null }): React.ReactElement {
   const fillW = `${String(Math.round(t * 100))}%`;
   const color = t >= 0.75 ? 'term.green' : t <= 0.25 ? 'up' : 'accent';
   return (
-    <Flex justify="space-between" align="center" fontSize="11px" mt="3px" gap="8px">
+    <Flex justify="space-between" align="center" fontSize="xs" mt="3px" gap="8px">
       <Text color="term.ink3">score</Text>
       <Flex flex="1" align="center" gap="6px" justify="flex-end">
         <Text color={color} fontWeight="700">
@@ -255,9 +255,11 @@ function Frame({ children }: { children: React.ReactNode }): React.ReactElement 
       px="12px"
       py="12px"
       bg="brand.panelAlpha"
+      backdropFilter="blur(20px) saturate(180%)"
+      css={{ WebkitBackdropFilter: 'blur(20px) saturate(180%)' }}
       borderLeftWidth="1px"
       borderLeftColor="term.line"
-      fontFamily="mono"
+      fontFamily="geek"
       color="term.ink2"
       overflow="auto"
       position="relative"
@@ -270,7 +272,7 @@ function Frame({ children }: { children: React.ReactNode }): React.ReactElement 
 
 function KvRow({ k, v }: { k: string; v: string }): React.ReactElement {
   return (
-    <Flex justify="space-between" align="baseline" fontSize="11px" mt="3px" gap="6px" minW={0}>
+    <Flex justify="space-between" align="baseline" fontSize="xs" mt="3px" gap="6px" minW={0}>
       <Text color="term.ink3" whiteSpace="nowrap">
         {k}
       </Text>
@@ -296,7 +298,7 @@ function KvRow({ k, v }: { k: string; v: string }): React.ReactElement {
  */
 function WrapRow({ k, v }: { k: string; v: string }): React.ReactElement {
   return (
-    <Flex justify="space-between" align="flex-start" fontSize="11px" mt="3px" gap="6px" minW={0}>
+    <Flex justify="space-between" align="flex-start" fontSize="xs" mt="3px" gap="6px" minW={0}>
       <Text color="term.ink3" whiteSpace="nowrap" flexShrink={0}>
         {k}
       </Text>

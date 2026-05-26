@@ -86,7 +86,7 @@ export function FeatMkt(): React.ReactElement {
         <Flex align="baseline" gap="8px" minW={0}>
           <Text
             fontFamily="mono"
-            fontSize="10px"
+            fontSize="xs"
             letterSpacing="0.18em"
             textTransform="uppercase"
             fontWeight="600"
@@ -101,7 +101,7 @@ export function FeatMkt(): React.ReactElement {
             <Box
               as="span"
               fontFamily="mono"
-              fontSize="10px"
+              fontSize="xs"
               color="ink3"
               letterSpacing="0.12em"
               whiteSpace="nowrap"

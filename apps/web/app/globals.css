@@ -9,12 +9,32 @@
  *
  * Contents:
  *   - `.blink` strobe + reduced-motion guard
- *   - `:focus-visible` 1-px accent outline
- *   - `.skip-link` keyboard skip-to-main pattern
+ *   - `:focus-visible` Apple-blue 2-px outline ring
+ *   - `.skip-link` keyboard skip-to-main pattern (glass-styled)
  *   - `[data-theme="..."]` → `color-scheme` switch (Chakra's `_dark`
  *     conditional tokens do the colour rewrite)
  *   - `@media (max-width:767px)` mobile font-size bump
+ *   - `@media (prefers-reduced-transparency: reduce)` — disables
+ *     backdrop-filter glass surfaces and falls back to opaque panel
+ *     bg so users with the OS-level transparency-reduction setting
+ *     get a flat, readable workbench.
  */
+
+/*
+ * TopBar height exposed as a :root CSS var so FeatView's
+ * fullscreen carve-out can reference it. Mirrors the
+ * BRAND_HEIGHT / BRAND_HEIGHT_MOBILE constants in
+ * `components/shell/top-bar.tsx` (52 / 44). Mobile breakpoint
+ * matches `useViewport`'s 768px threshold.
+ */
+:root {
+  --app-topbar-h: 52px;
+}
+@media (max-width: 767px) {
+  :root {
+    --app-topbar-h: 44px;
+  }
+}
 
 @keyframes blink {
   50% {
@@ -37,26 +57,43 @@
   }
 }
 
+/*
+ * Apple-style focus ring — 2 px Apple system blue with a 2-px offset
+ * AND a 4-px panel-coloured halo behind the ring. The halo creates a
+ * neutral background between the ring and any coloured button beneath
+ * it (朱砂 accent, 石绿 down, etc.), guaranteeing the ring stays
+ * visible at ≥3:1 even on saturated surfaces.
+ */
 :focus-visible {
-  outline: 1px solid var(--chakra-colors-accent, #b87514);
-  outline-offset: 1px;
+  outline: 2px solid var(--chakra-colors-link, #0066cc);
+  outline-offset: 2px;
+  border-radius: var(--chakra-radii-xs, 4px);
+  box-shadow: 0 0 0 4px var(--chakra-colors-panel, #ffffff);
 }
 
+/* Glass skip-link: same Apple-blue affordance as the focus ring,
+ * sitting on a frosted-white pill so it reads regardless of the page
+ * background underneath. */
 .skip-link {
   position: fixed;
   top: 8px;
   left: 8px;
   z-index: 2000;
-  padding: 6px 12px;
-  background: var(--chakra-colors-panel, #fff);
-  color: var(--chakra-colors-accent, #b87514);
-  font-family: 'Space Mono', monospace;
-  font-size: 11px;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  border: 1px solid currentColor;
+  padding: 8px 14px;
+  background: var(--chakra-colors-glass-panel-strong, rgba(255, 255, 255, 0.88));
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  color: var(--chakra-colors-link, #0a84ff);
+  font-family:
+    -apple-system, BlinkMacSystemFont, 'SF Pro Text', Inter, system-ui, sans-serif;
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0;
+  border: 1px solid var(--chakra-colors-glass-line, rgba(60, 60, 67, 0.10));
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(15, 17, 22, 0.10);
   transform: translateY(-200%);
-  transition: transform 120ms ease;
+  transition: transform 180ms cubic-bezier(0.32, 0.72, 0, 1);
 }
 .skip-link:focus {
   transform: translateY(0);
@@ -80,5 +117,22 @@
   html,
   body {
     font-size: 14px !important;
+  }
+}
+
+/*
+ * A11y: respect the OS-level "reduce transparency" setting (Apple's
+ * `prefers-reduced-transparency: reduce`). When the user has it on,
+ * every glass surface flattens to its solid `panel` equivalent so the
+ * workbench stays readable for low-vision users without us needing to
+ * hand-fix every dialog.
+ */
+@media (prefers-reduced-transparency: reduce) {
+  .glass,
+  .glass-strong,
+  .glass-soft {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    background-color: var(--chakra-colors-panel) !important;
   }
 }

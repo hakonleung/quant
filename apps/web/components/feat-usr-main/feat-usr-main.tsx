@@ -22,9 +22,10 @@
  */
 
 import { Box, Flex } from '@chakra-ui/react';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 import { Feat } from '../../lib/eqty/feat.js';
+import { useLayoutStore } from '../../lib/stores/layout.store.js';
 import { useFocusStore } from '../../lib/ui-cmd/store/focus.js';
 import { FeatLedger } from '../feat-ledger/feat-ledger.js';
 import { FeatSysCfg } from '../feat-sys-cfg/feat-sys-cfg.js';
@@ -71,6 +72,20 @@ export function FeatUsrMain({ embedded, session }: FeatUsrMainProps = {}): React
     useFocusStore.getState().pushSubFocus(token);
     return (): void => useFocusStore.getState().popSubFocus();
   }, [tab]);
+  // Clicking a sub-tab while USR is minimized auto-restores it to
+  // `normal` so the picked tab's content actually surfaces. Without
+  // this, the click silently flips the active tab inside the closed
+  // dropdown — confusing UX.
+  const setFeatViewMode = useLayoutStore((s) => s.setFeatViewMode);
+  const onPickTab = useCallback(
+    (id: Tab): void => {
+      setTab(id);
+      if (embedded !== 'mobile') {
+        setFeatViewMode(Feat.UsrMain, 'normal');
+      }
+    },
+    [embedded, setFeatViewMode],
+  );
   const tabs = (
     <Flex gap="2px">
       {TAB_ORDER.map((t) => (
@@ -78,7 +93,7 @@ export function FeatUsrMain({ embedded, session }: FeatUsrMainProps = {}): React
           key={t.id}
           active={tab === t.id}
           onClick={(): void => {
-            setTab(t.id);
+            onPickTab(t.id);
           }}
         >
           {t.label}
@@ -146,15 +161,15 @@ function TabButton({ active, onClick, children }: TabButtonProps): React.ReactEl
       as="button"
       px="8px"
       py="2px"
-      fontSize="10px"
+      fontSize="xs"
       fontFamily="mono"
       letterSpacing="0.18em"
       fontWeight="700"
-      color={active ? 'term.green' : 'term.ink3'}
+      color={active ? 'accent' : 'term.ink3'}
       borderBottomWidth="1px"
-      borderColor={active ? 'term.green' : 'transparent'}
+      borderColor={active ? 'accent' : 'transparent'}
       cursor="pointer"
-      _hover={{ color: 'term.green' }}
+      _hover={{ color: 'accent' }}
       onClick={onClick}
     >
       {children}

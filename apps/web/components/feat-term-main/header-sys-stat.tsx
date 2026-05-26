@@ -37,8 +37,8 @@ export function HeaderSysStat(): React.ReactElement {
       direction="column"
       align="flex-end"
       gap="3px"
-      fontFamily="mono"
-      fontSize="11px"
+      fontFamily="geek"
+      fontSize="xs"
       letterSpacing="0.16em"
       color="term.ink2"
     >

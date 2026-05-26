@@ -66,7 +66,7 @@ export function FeatNotify(): ReactElement | null {
   return (
     <Box
       position="fixed"
-      zIndex={1300}
+      zIndex="toast"
       pointerEvents="none"
       // Desktop pin to top-right under the topbar accent border;
       // mobile pin to the bottom so the soft keyboard / tab bar can
@@ -141,7 +141,7 @@ function Toast({ entry, onDismiss }: ToastProps): ReactElement {
     >
       <Text
         fontFamily="mono"
-        fontSize="12px"
+        fontSize="sm"
         fontWeight="700"
         color={TONE_BAR[entry.tone]}
         lineHeight="1.5"
@@ -153,11 +153,11 @@ function Toast({ entry, onDismiss }: ToastProps): ReactElement {
       </Text>
       <Box flex="1" minW={0}>
         <Flex align="baseline" gap="6px">
-          <Text fontFamily="mono" fontSize="12px" fontWeight="600" color="ink" flex="1" minW={0}>
+          <Text fontFamily="mono" fontSize="sm" fontWeight="600" color="ink" flex="1" minW={0}>
             {entry.title}
           </Text>
           {entry.code !== undefined && (
-            <Text fontFamily="mono" fontSize="9px" color="ink3" letterSpacing="0.12em">
+            <Text fontFamily="mono" fontSize="xs" color="ink3" letterSpacing="0.12em">
               {entry.code}
             </Text>
           )}
@@ -165,7 +165,7 @@ function Toast({ entry, onDismiss }: ToastProps): ReactElement {
         {entry.body !== undefined && (
           <Text
             fontFamily="mono"
-            fontSize="11px"
+            fontSize="xs"
             color="ink2"
             mt="2px"
             whiteSpace="pre-wrap"
@@ -177,7 +177,7 @@ function Toast({ entry, onDismiss }: ToastProps): ReactElement {
       </Box>
       <Text
         fontFamily="mono"
-        fontSize="10px"
+        fontSize="xs"
         color="ink3"
         letterSpacing="0.16em"
         flexShrink={0}

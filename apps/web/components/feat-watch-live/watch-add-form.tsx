@@ -152,7 +152,7 @@ export function WatchAddForm({ initial, onSubmitted }: AddFormProps): React.Reac
       {errs.length > 0 ? (
         <Box mt="6px">
           {errs.map((e, i) => (
-            <Text key={`err-${String(i)}`} color="up" fontSize="11px">
+            <Text key={`err-${String(i)}`} color="up" fontSize="xs">
               {e}
             </Text>
           ))}

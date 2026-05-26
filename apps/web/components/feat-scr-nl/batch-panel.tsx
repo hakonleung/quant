@@ -30,7 +30,7 @@ export function BatchPanel({ result, loading, onApply }: Props): React.ReactElem
       bg="panel"
       p="10px"
       fontFamily="mono"
-      fontSize="11px"
+      fontSize="xs"
       color="ink2"
     >
       <BatchHeader result={result} canApply={canApply} onApply={onApply} />
@@ -48,7 +48,7 @@ interface HeaderProps {
 function BatchHeader({ result, canApply, onApply }: HeaderProps): React.ReactElement {
   return (
     <Flex align="center" gap="10px" mb="6px">
-      <Text color="down" letterSpacing="0.16em" fontSize="10px" fontWeight="700">
+      <Text color="down" letterSpacing="0.16em" fontSize="xs" fontWeight="700">
         ▎ BATCH
       </Text>
       <BatchStatus result={result} />
@@ -63,7 +63,7 @@ function BatchHeader({ result, canApply, onApply }: HeaderProps): React.ReactEle
         borderWidth="1px"
         borderColor={canApply ? 'accent' : 'line'}
         fontFamily="mono"
-        fontSize="10px"
+        fontSize="xs"
         letterSpacing="0.16em"
         fontWeight="700"
         disabled={!canApply}
@@ -96,7 +96,7 @@ function BatchBody({ result }: { result: BatchMatchResult }): React.ReactElement
   if (result.kind === 'partial' && result.unmatched.length > 0) {
     return (
       <Box maxH="120px" overflow="auto">
-        <Text color="ink3" mb="2px" fontSize="10px">
+        <Text color="ink3" mb="2px" fontSize="xs">
           // unmatched entries:
         </Text>
         <Flex wrap="wrap" gap="6px">
@@ -108,7 +108,7 @@ function BatchBody({ result }: { result: BatchMatchResult }): React.ReactElement
               borderWidth="1px"
               borderColor="down"
               color="down"
-              fontSize="10px"
+              fontSize="xs"
             >
               {u}
             </Text>
@@ -129,7 +129,7 @@ function BatchBody({ result }: { result: BatchMatchResult }): React.ReactElement
               borderWidth="1px"
               borderColor="line"
               color="ink2"
-              fontSize="10px"
+              fontSize="xs"
             >
               <Text as="span" color="ink3" mr="4px">
                 [{it.market}]
@@ -138,7 +138,7 @@ function BatchBody({ result }: { result: BatchMatchResult }): React.ReactElement
             </Text>
           ))}
           {result.items.length > 50 && (
-            <Text color="ink3" fontSize="10px">
+            <Text color="ink3" fontSize="xs">
               +{result.items.length - 50} more
             </Text>
           )}

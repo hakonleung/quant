@@ -82,7 +82,7 @@ function NlEditor({ sector }: { sector: Sector }): React.ReactElement {
         <Text
           color="down"
           fontFamily="mono"
-          fontSize="12px"
+          fontSize="sm"
           fontWeight="700"
           mt="2px"
           flexShrink={0}
@@ -102,7 +102,7 @@ function NlEditor({ sector }: { sector: Sector }): React.ReactElement {
             borderColor="accent"
             borderRadius="0"
             fontFamily="mono"
-            fontSize="12px"
+            fontSize="sm"
             color="ink"
             px="8px"
             py="4px"
@@ -114,7 +114,7 @@ function NlEditor({ sector }: { sector: Sector }): React.ReactElement {
         ) : (
           <Text
             fontFamily="mono"
-            fontSize="12px"
+            fontSize="sm"
             color="ink"
             whiteSpace="pre-wrap"
             wordBreak="break-word"
@@ -141,7 +141,7 @@ function NlEditor({ sector }: { sector: Sector }): React.ReactElement {
         />
       </Flex>
       {screen.isError && (
-        <Text mt="4px" fontFamily="mono" fontSize="10px" color="up">
+        <Text mt="4px" fontFamily="mono" fontSize="xs" color="up">
           // {screen.error.message}
         </Text>
       )}
@@ -176,7 +176,7 @@ function NlEditButtons({
           borderColor="line"
           borderRadius="0"
           fontFamily="mono"
-          fontSize="10px"
+          fontSize="xs"
           letterSpacing="0.14em"
           onClick={onCancel}
           disabled={pending}
@@ -193,7 +193,7 @@ function NlEditButtons({
         borderColor={editing ? 'accent' : 'line'}
         borderRadius="0"
         fontFamily="mono"
-        fontSize="10px"
+        fontSize="xs"
         letterSpacing="0.14em"
         fontWeight="700"
         loading={pending}
@@ -224,7 +224,7 @@ function EmptyHint({ sector }: { sector: Sector | null }): React.ReactElement {
         ? 'no plan available'
         : 'pick a dynamic sector';
   return (
-    <Text fontFamily="mono" fontSize="11px" color="ink3" letterSpacing="0.06em">
+    <Text fontFamily="mono" fontSize="xs" color="ink3" letterSpacing="0.06em">
       // {hint}
     </Text>
   );

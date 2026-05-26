@@ -43,14 +43,18 @@ const DOMAIN_PAD = 0.05;
  * Token paths consumed by {@link DistColors}, in the order required
  * by {@link buildDistColors}.
  */
-// Folded in task #8: stat.zero → ink3 (distinct from KDE's ink2);
-// stat.baseline → accent (amber matches); bar.fill → ink2 + SVG
-// `fillOpacity={0.35}` (same trick as chart.focus.range). Only mean
-// and median keep dedicated hues (unique magenta + cyan).
+// Folded in task #10: every dist-chart reference line now reuses
+// the kline-chart MA palette so the two charts feel like part of
+// the same family. Same mapping the user sees on the candle chart:
+//   stat.zero      → ink3   (neutral baseline)
+//   stat.mean      → violet (= MA20)
+//   stat.median    → link   (= MA5)
+//   stat.baseline  → accent (= MA10)
+// bar.fill stays `ink2` + SVG `fillOpacity={0.35}` (see task #8).
 const DIST_COLOR_PATHS = [
   'ink3',
-  'dist.stat.mean',
-  'dist.stat.median',
+  'violet',
+  'link',
   'accent',
   'ink2',
   'ink2',
@@ -144,7 +148,7 @@ function Legend({ colors }: { readonly colors: DistColors }): React.ReactElement
     { color: colors.kdeLine, label: 'KDE 平滑曲线', dashed: false },
   ];
   return (
-    <Flex gap="10px" fontFamily="mono" fontSize="10px" color="ink3" flexWrap="wrap">
+    <Flex gap="10px" fontFamily="mono" fontSize="xs" color="ink3" flexWrap="wrap">
       {items.map((it) => (
         <Flex key={it.label} align="center" gap="4px">
           <Box

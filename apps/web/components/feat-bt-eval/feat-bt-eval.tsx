@@ -163,7 +163,7 @@ function ProgressBar({ progress }: { readonly progress: ScreenProgressEvent }): 
   const phaseLabel = progress.phase === 'flight' ? 'aggregating' : `screening ${progress.day ?? ''}`;
   return (
     <Flex direction="column" gap="2px">
-      <Text fontFamily="mono" fontSize="10px" color="ink3" letterSpacing="0.06em">
+      <Text fontFamily="mono" fontSize="xs" color="ink3" letterSpacing="0.06em">
         // {phaseLabel} · {String(progress.runDays)}/{String(progress.totalDays)} weekdays ·
         {' '}
         {String(progress.matchedDays)} matched · {String(progress.signals)} signals
@@ -195,7 +195,7 @@ function Results({ data }: { readonly data: BacktestEvaluateResponse }): React.R
   const [expandedHolding, setExpandedHolding] = useState<number | null>(null);
   return (
     <Flex direction="column" gap="6px">
-      <Text fontFamily="mono" fontSize="10px" color="ink3" letterSpacing="0.14em">
+      <Text fontFamily="mono" fontSize="xs" color="ink3" letterSpacing="0.14em">
         // 信号区间 {data.signalDateRange?.[0] ?? '—'} → {data.signalDateRange?.[1] ?? '—'} ·
         平均每日信号 {data.universeSizeAvg.toFixed(1)} 个 · 琥珀色虚线 = 全市场基准均值
       </Text>
@@ -225,7 +225,7 @@ function Results({ data }: { readonly data: BacktestEvaluateResponse }): React.R
 
 function Err({ msg }: { readonly msg: string }): React.ReactElement {
   return (
-    <Text fontFamily="mono" fontSize="10px" color="up">
+    <Text fontFamily="mono" fontSize="xs" color="up">
       // {msg}
     </Text>
   );
@@ -239,7 +239,7 @@ function EmptyHint({ sector }: { sector: Sector | null }): React.ReactElement {
         ? 'pick a dynamic sector'
         : 'sector has no parsed screen plan';
   return (
-    <Text fontFamily="mono" fontSize="11px" color="ink3" letterSpacing="0.06em">
+    <Text fontFamily="mono" fontSize="xs" color="ink3" letterSpacing="0.06em">
       // {hint}
     </Text>
   );

@@ -56,16 +56,16 @@ export function FeatHotkeyHint(): React.ReactElement | null {
         position="fixed"
         right="16px"
         bottom="16px"
-        zIndex={9999}
-        bg="term.panel"
+        zIndex="hint"
+        className="glass"
         color="accent"
         borderWidth="1px"
-        borderColor="term.line"
-        borderRadius="4px"
+        borderRadius="xs"
+        boxShadow="glass"
         px="10px"
         py="6px"
         fontFamily="mono"
-        fontSize="11px"
+        fontSize="xs"
         letterSpacing="0.1em"
         cursor="pointer"
         aria-label={`open keyboard hint (${visible.length} shortcuts)`}
@@ -92,15 +92,14 @@ export function FeatHotkeyHint(): React.ReactElement | null {
       maxW="360px"
       maxH="60vh"
       overflowY="auto"
-      zIndex={9999}
-      bg="term.panel"
+      zIndex="hint"
+      className="glass"
       color="term.ink"
       borderWidth="1px"
-      borderColor="term.line"
-      borderRadius="4px"
-      boxShadow="float"
+      borderRadius="md"
+      boxShadow="glass"
       fontFamily="mono"
-      fontSize="11px"
+      fontSize="xs"
     >
       <Flex
         align="center"
@@ -108,8 +107,9 @@ export function FeatHotkeyHint(): React.ReactElement | null {
         px="10px"
         py="6px"
         borderBottomWidth="1px"
-        borderColor="term.line"
-        bg="term.bgElev"
+        borderColor="glass.line"
+        bg="glass.panelSoft"
+        backdropFilter="blur(12px)"
       >
         <Text fontWeight="700" letterSpacing="0.14em" color="accent">
           KEYS · {ctx.activeFeat ?? 'global'}
@@ -131,7 +131,7 @@ export function FeatHotkeyHint(): React.ReactElement | null {
             <Box key={group} mb="8px">
               <Text
                 color="term.ink2"
-                fontSize="9px"
+                fontSize="xs"
                 letterSpacing="0.18em"
                 mb="3px"
               >
@@ -153,7 +153,7 @@ export function FeatHotkeyHint(): React.ReactElement | null {
             </Box>
           ))
         )}
-        <Text mt="6px" color="term.ink3" fontSize="9px" letterSpacing="0.12em">
+        <Text mt="6px" color="term.ink3" fontSize="xs" letterSpacing="0.12em">
           ? toggle · Esc close · z f fullscreen · z m minimize
         </Text>
       </Box>
@@ -181,8 +181,8 @@ function HeaderButton({ label, onClick, children }: HeaderButtonProps): React.Re
       bg="transparent"
       color="term.ink2"
       borderWidth="1px"
-      borderColor="term.line"
-      borderRadius="2px"
+      borderColor="glass.line"
+      borderRadius="xs"
       cursor="pointer"
       _hover={{ color: 'accent', borderColor: 'accent' }}
       _focusVisible={{

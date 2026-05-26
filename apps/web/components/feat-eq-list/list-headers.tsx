@@ -65,7 +65,7 @@ export function EditableTitle({ value, editable, onSave }: EditableTitleProps): 
         borderColor="accent"
         borderRadius="0"
         fontFamily="mono"
-        fontSize="10px"
+        fontSize="xs"
         letterSpacing="0.12em"
         px="6px"
         textTransform="uppercase"
@@ -75,7 +75,7 @@ export function EditableTitle({ value, editable, onSave }: EditableTitleProps): 
   return (
     <Text
       fontFamily="mono"
-      fontSize="10px"
+      fontSize="xs"
       letterSpacing="0.18em"
       textTransform="uppercase"
       fontWeight="600"
@@ -206,7 +206,7 @@ function DynamicRefreshBar({ sector }: { sector: Sector }): React.ReactElement {
       bg="panel3"
       flexShrink={0}
     >
-      <Text fontFamily="mono" fontSize="10px" color="ink3" letterSpacing="0.14em">
+      <Text fontFamily="mono" fontSize="xs" color="ink3" letterSpacing="0.14em">
         {/* eslint-disable-next-line no-restricted-globals -- relative-time
             display ticks on render; pulling a Clock through props for a
             cosmetic "Nm ago" label isn't worth the plumbing. */}
@@ -214,7 +214,7 @@ function DynamicRefreshBar({ sector }: { sector: Sector }): React.ReactElement {
       </Text>
       <Box flex="1" />
       {error !== null && (
-        <Text fontFamily="mono" fontSize="10px" color="down" letterSpacing="0.06em">
+        <Text fontFamily="mono" fontSize="xs" color="down" letterSpacing="0.06em">
           {error}
         </Text>
       )}

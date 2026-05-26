@@ -41,6 +41,7 @@ import { feDispatch, termOutputToEvents } from '../../lib/instructions/dispatch.
 import type { FeCtx } from '../../lib/instructions/fe-types.js';
 import { useSettingsStore } from '../../lib/stores/settings.store.js';
 import { useUiStore } from '../../lib/stores/ui.store.js';
+import { fonts } from '../../lib/theme/tokens.js';
 import { buildXtermTheme } from '../../lib/theme/xterm-theme.js';
 import { installRunner } from '../../lib/term/install-runner.js';
 
@@ -252,8 +253,7 @@ export function useTermConsole(config: UseTermConsoleConfig): TermConsoleBridge 
         termRef.current = null;
       }
       const term = new Terminal({
-        fontFamily:
-          '"Monaspace Neon", "Monaspace Krypton", "Monaspace Argon", "JetBrains Mono", "SF Mono", ui-monospace, Menlo, monospace',
+        fontFamily: fonts.geek,
         fontSize: config.fontSize,
         letterSpacing: 0,
         lineHeight: 1.2,

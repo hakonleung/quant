@@ -49,7 +49,7 @@ interface SysStatHeaderProps {
  *  prefers {@link SysStatHeaderPrimary} + {@link SysStatHeaderVitals}. */
 export function SysStatHeader(props: SysStatHeaderProps): React.ReactElement {
   return (
-    <Flex gap="14px" align="center" fontFamily="mono" fontSize="10px" letterSpacing="0.14em">
+    <Flex gap="14px" align="center" fontFamily="mono" fontSize="xs" letterSpacing="0.14em">
       <SysStatHeaderPrimary {...props} />
       <SysStatHeaderVitals vitals={props.vitals} />
     </Flex>
@@ -61,7 +61,7 @@ export function SysStatHeader(props: SysStatHeaderProps): React.ReactElement {
 export function SysStatHeaderPrimary(props: SysStatHeaderProps): React.ReactElement {
   const ws = wsAppearance(props.wsStatus);
   return (
-    <Flex gap="14px" align="center" fontFamily="mono" fontSize="10px" letterSpacing="0.14em">
+    <Flex gap="14px" align="center" fontFamily="mono" fontSize="xs" letterSpacing="0.14em">
       <Capsule code="WS">
         <Text as="span" color={ws.color}>
           {ws.glyph}
@@ -98,7 +98,7 @@ export function SysStatHeaderVitals({
   readonly vitals: WebVitals;
 }): React.ReactElement {
   return (
-    <Flex gap="14px" align="center" fontFamily="mono" fontSize="10px" letterSpacing="0.14em">
+    <Flex gap="14px" align="center" fontFamily="mono" fontSize="xs" letterSpacing="0.14em">
       <VitalCapsule code="LCP" sample={vitals.lcp} format={fmtMs} />
       <VitalCapsule code="INP" sample={vitals.inp} format={fmtMs} />
       <VitalCapsule code="CLS" sample={vitals.cls} format={fmtCls} />

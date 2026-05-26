@@ -248,7 +248,7 @@ function NavPill({ dir, onClick }: NavPillProps): React.ReactElement {
       borderColor="line"
       borderRadius="2px"
       fontFamily="mono"
-      fontSize="14px"
+      fontSize="md"
       fontWeight="700"
       lineHeight="1"
       display="grid"
