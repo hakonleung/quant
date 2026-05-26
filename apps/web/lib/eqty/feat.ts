@@ -3,33 +3,43 @@
  *
  * Each `Feat` value is a `[MODULE].[FEATURE]` string displayed in the
  * pane header (e.g. `EQ.CHART`). Module abbreviations:
- *   - MKT    market overview (sector roster + equity list)
- *   - EQ     equity chart
- *   - SCR    screening (NL search, pattern match)
+ *   - MKT    market overview (sector chip slider)
+ *   - EQ     equity workbench (chart / info / list)
+ *   - SCR    screening (NL search, pattern match, DSL editor)
+ *   - BT     backtest (event-study return distribution)
  *   - AI     LLM insight surface
  *   - SYS    system (status + activity feed + watch outputs)
  *   - USR    user surface (ledger / watch tasks / config) — single
  *            FeatView, three tabs in the header
  *
  * `FEAT_CONFIG_MAP` is the single source of truth for static pane
- * metadata — grid placement and the `cyber` skin flag. The header
- * label IS the feat value, so no separate title field is needed.
+ * metadata — the `cyber` skin flag, default-minimized state, and the
+ * `bodyOverlay` flag for topbar-mounted panes. The header label IS
+ * the feat value, so no separate title field is needed.
+ *
+ * **Floating island layout.** The workbench renders each pane as a
+ * separate `<FeatView>` in column flex children — no per-Feat
+ * `gridArea` placement, no parent that wraps multiple Feats under one
+ * pane chrome. Splitting and re-stacking columns happens in
+ * `eqty-module.tsx`.
  */
 
 export const Feat = {
-  // MKT — market overview (sector roster + equity list, one pane)
+  // MKT — sector chip slider (single horizontal row)
   Mkt: 'MKT',
 
-  // EQ — equity chart
+  // EQ — equity workbench, split into three independent panes
   EquityChart: 'EQ',
+  EquityInfo: 'EQ.INFO',
+  EquityList: 'EQ.LIST',
 
-  // SCR — screening
+  // SCR — screening surfaces (independently mounted floating tiles)
   ScreenNL: 'SEARCH',
   ScreenPattern: 'PAT',
-  ScreenDsl: 'SCR.DSL',
+  ScreenDsl: 'DSL',
 
-  // BT — backtest (event-study return distribution for a screen)
-  BtEval: 'BT.EVAL',
+  // BT — backtest
+  BtEval: 'BT',
 
   // AI — LLM surface (AI.SEC = sector aggregate, AI.EQ = single stock)
   AIEq: 'AI.EQ',
@@ -55,7 +65,6 @@ export const Feat = {
 export type Feat = (typeof Feat)[keyof typeof Feat];
 
 export interface FeatConfig {
-  readonly gridArea?: string;
   readonly cyber?: boolean;
   /** When true, the pane mounts in the minimized state (header only). */
   readonly defaultMinimized?: boolean;
@@ -69,23 +78,26 @@ export interface FeatConfig {
 }
 
 export const FEAT_CONFIG_MAP: Readonly<Record<Feat, FeatConfig>> = {
-  [Feat.Mkt]: { gridArea: 'L' },
+  // MKT — sector slider, content-sized header strip
+  [Feat.Mkt]: {},
 
-  [Feat.EquityChart]: { gridArea: 'CMID' },
+  // EQ workbench panes — all three are independent floating tiles
+  [Feat.EquityChart]: {},
+  [Feat.EquityInfo]: { defaultMinimized: true },
+  [Feat.EquityList]: {},
 
-  [Feat.ScreenNL]: { cyber: true },
+  // SCR / BT — minimized by default; show up only when relevant
+  [Feat.ScreenNL]: { cyber: true, defaultMinimized: true },
   [Feat.ScreenPattern]: { defaultMinimized: true },
-  [Feat.ScreenDsl]: {},
+  [Feat.ScreenDsl]: { defaultMinimized: true },
   [Feat.BtEval]: { defaultMinimized: true },
 
-  [Feat.AIEq]: { cyber: true, gridArea: 'CBOT' },
-  [Feat.AISec]: { cyber: true, gridArea: 'R1' },
+  [Feat.AIEq]: { cyber: true },
+  [Feat.AISec]: { cyber: true },
 
   [Feat.SysMain]: { cyber: true, defaultMinimized: true, bodyOverlay: true },
   // USR lives only in the topbar — narrow chrome with no inline space,
-  // so its body floats as a bodyOverlay dropdown. Removed from the
-  // workbench right column (was the bottom-right pane) to avoid two
-  // mount points fighting for the same persisted view-mode.
+  // so its body floats as a bodyOverlay dropdown.
   [Feat.UsrMain]: { cyber: true, defaultMinimized: true, bodyOverlay: true },
   [Feat.Terminal]: { cyber: true, defaultMinimized: true },
   // Sub-feats (rendered as labels inside USR.MAIN). Any pane that

@@ -30,6 +30,7 @@ import {
   type ThemeMode,
 } from '../../lib/stores/settings.store.js';
 import { ColumnManager } from '../feat-eq-list/column-manager.js';
+import { FeatSectionLabel } from '../feat-view/feat-section.js';
 import { FeatView } from '../feat-view/feat-view.js';
 
 type Section = 'theme' | 'gestures' | 'presets' | 'columns' | 'filters';
@@ -102,15 +103,7 @@ function ThemeSection(): React.ReactElement {
   const setTheme = useSettingsStore((s) => s.setTheme);
   return (
     <Flex direction="column" p="12px" gap="8px">
-      <Text
-        fontSize="xs"
-        letterSpacing="0.18em"
-        color="term.ink3"
-        textTransform="uppercase"
-        fontWeight="700"
-      >
-        theme
-      </Text>
+      <FeatSectionLabel cyber>theme</FeatSectionLabel>
       {THEME_OPTIONS.map((opt) => {
         const selected = theme === opt.id;
         return (
@@ -176,15 +169,7 @@ function GesturesSection(): React.ReactElement {
   const setDirection = useSettingsStore((s) => s.setDragDirection);
   return (
     <Flex direction="column" p="12px" gap="8px">
-      <Text
-        fontSize="xs"
-        letterSpacing="0.18em"
-        color="term.ink3"
-        textTransform="uppercase"
-        fontWeight="700"
-      >
-        chart drag
-      </Text>
+      <FeatSectionLabel cyber>chart drag</FeatSectionLabel>
       {DRAG_OPTIONS.map((opt) => {
         const selected = direction === opt.id;
         return (
@@ -231,15 +216,7 @@ function PresetsSection(): React.ReactElement {
   const apply = useLayoutStore((s) => s.applyPreset);
   return (
     <Flex direction="column" p="12px" gap="8px">
-      <Text
-        fontSize="xs"
-        letterSpacing="0.18em"
-        color="term.ink3"
-        textTransform="uppercase"
-        fontWeight="700"
-      >
-        layout presets
-      </Text>
+      <FeatSectionLabel cyber>layout presets</FeatSectionLabel>
       {BUILTIN_PRESETS.map((p) => {
         const selected = activeId === p.id;
         return (
@@ -312,15 +289,7 @@ function FiltersSection(): React.ReactElement {
   const setScope = useSettingsStore((s) => s.setColumnFilterScope);
   return (
     <Flex direction="column" p="12px" gap="8px">
-      <Text
-        fontSize="xs"
-        letterSpacing="0.18em"
-        color="term.ink3"
-        textTransform="uppercase"
-        fontWeight="700"
-      >
-        column filter scope
-      </Text>
+      <FeatSectionLabel cyber>column filter scope</FeatSectionLabel>
       {FILTER_SCOPE_OPTIONS.map((opt) => {
         const selected = scope === opt.id;
         return (

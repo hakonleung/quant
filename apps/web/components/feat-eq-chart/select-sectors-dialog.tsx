@@ -19,6 +19,7 @@
 
 import { Box, Button, Flex, Text } from '@chakra-ui/react';
 import { DialogPortal } from '../feat-view/dialog-portal.js';
+import { FeatSectionBar } from '../feat-view/feat-section.js';
 import { useEffect, useMemo, useState } from 'react';
 
 import {
@@ -106,25 +107,10 @@ export function SelectSectorsDialog({ open, code, onClose }: Props): React.React
             e.stopPropagation();
           }}
         >
-          <Flex
+          <FeatSectionBar
             id="select-sectors-dialog-title"
-            align="center"
-            gap="8px"
-            px="14px"
-            py="10px"
-            borderBottomWidth="1px"
-            borderColor="glass.line"
-            bg="glass.panelSoft"
-            backdropFilter="blur(12px)"
-            fontFamily="mono"
-            fontSize="xs"
-            letterSpacing="0.18em"
-            color="ink2"
-            fontWeight="600"
-            textTransform="uppercase"
-          >
-            select sectors for {code}
-          </Flex>
+            name={`select sectors for ${code}`}
+          />
           <Box flex="1" overflow="auto" maxH="50vh">
             {userSectors.length === 0 ? (
               <Text px="14px" py="14px" fontFamily="mono" fontSize="xs" color="ink3">
@@ -232,23 +218,8 @@ function DynamicSection({
   code: string;
 }): React.ReactElement {
   return (
-    <Box>
-      <Text
-        px="14px"
-        py="6px"
-        fontFamily="mono"
-        fontSize="xs"
-        letterSpacing="0.18em"
-        color="ink3"
-        fontWeight="700"
-        bg="glass.panelSoft"
-        backdropFilter="blur(12px)"
-        borderTopWidth="1px"
-        borderBottomWidth="1px"
-        borderColor="glass.line"
-      >
-        // DYNAMIC (read-only)
-      </Text>
+    <Box borderTopWidth="1px" borderColor="glass.line">
+      <FeatSectionBar name="// DYNAMIC (read-only)" />
       {sectors.map((s) => {
         const has = s.codes.includes(code);
         return (

@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * 101 — Detail / price chart.
+ * EQ — Detail / price chart pane.
  *
  * Always loads 250D kline. Single SVG renders candles, MA lines, an
  * OHLC volume strip, the left price axis, the bottom date axis, a
@@ -19,13 +19,14 @@
  *   - Drag the chart body to pan; +/- overlay zooms by adjusting candle
  *     width.
  *
- * Header actions: select-sectors dialog (multi-select diff). The
- * SCR.PAT pattern-match table is embedded inline below the
- * fundamentals so the pattern range follows the chart's lifecycle.
+ * Header actions: select-sectors dialog (multi-select diff). As of
+ * the 2026-05 floating-island split, the fundamentals card moved to
+ * `EQ.INFO` and the pattern-match table to `PAT` — both mount as
+ * sibling tiles in the same column.
  */
 
 import { Box, Flex, Text } from '@chakra-ui/react';
-import type { KlineBar, StockMetaDto } from '@quant/shared';
+import type { KlineBar } from '@quant/shared';
 import { useEffect, useMemo, useState } from 'react';
 
 import { Feat } from '../../lib/eqty/feat.js';
@@ -49,10 +50,9 @@ import {
 import { MA_COLOR_PATHS, getMaColors } from './chart-canvas-constants.js';
 import type { MaKey } from '../../lib/fp/kline-chart.js';
 import { useTokenColors } from '../../lib/theme/use-token-color.js';
-import { useKline, useStockMetaQuery, useStockSnapshots } from '../../lib/hooks/use-eqty-data.js';
+import { useKline, useStockMetaQuery } from '../../lib/hooks/use-eqty-data.js';
 import { useUiStore } from '../../lib/stores/ui.store.js';
 import { FeatView } from '../feat-view/feat-view.js';
-import { ScrPatSection } from '../feat-scr-pat/scr-pat-section.js';
 import { SelectSectorsDialog } from './select-sectors-dialog.js';
 
 const TOTAL_H = totalChartHeight(DEFAULT_PRICE_H, DEFAULT_VOL_H);
@@ -176,7 +176,7 @@ export function FeatEqChart({ code }: Props): React.ReactElement {
           maColors={maColors}
         />
         <Box flex="1" minH={0}>
-          <Box position="relative" h={`${String(TOTAL_H)}px`} bg="panel">
+          <Box position="relative" h={`${String(TOTAL_H)}px`} bg="transparent">
             {isLoading ? (
               <Centered>loading kline…</Centered>
             ) : bars.length === 0 ? (
@@ -196,8 +196,6 @@ export function FeatEqChart({ code }: Props): React.ReactElement {
               />
             )}
           </Box>
-          <FinancialsSection code={code} meta={meta.data ?? null} />
-          <ScrPatSection />
         </Box>
       </Flex>
       <SelectSectorsDialog
@@ -256,8 +254,9 @@ function FocusLabel({
       py="4px"
       gap="3px"
       borderBottomWidth="1px"
-      borderColor="line"
-      bg="panel3"
+      borderColor="glass.line"
+      bg="glass.panelSoft"
+      backdropFilter="blur(12px)"
       fontFamily="mono"
       fontSize="xs"
       color="ink2"
@@ -442,114 +441,3 @@ function ChartHeaderRight({
   );
 }
 
-interface FinancialsProps {
-  readonly code: string;
-  readonly meta: StockMetaDto | null;
-}
-
-function FinancialsSection({ code, meta }: FinancialsProps): React.ReactElement {
-  const codes = useMemo(() => [code], [code]);
-  const snapshots = useStockSnapshots(codes);
-  const snap = snapshots.byCode.get(code) ?? null;
-  const derived = snap?.derived ?? null;
-  const latestQ =
-    meta !== null && meta.quarterlies.length > 0
-      ? meta.quarterlies[meta.quarterlies.length - 1]!
-      : null;
-
-  return (
-    <Box
-      px="14px"
-      py="10px"
-      borderTopWidth="1px"
-      borderColor="line"
-      bg="panel3"
-      fontFamily="mono"
-      fontSize="xs"
-      color="ink2"
-    >
-      <Text color="ink3" fontSize="xs" letterSpacing="0.16em" textTransform="uppercase" mb="6px">
-        FUNDAMENTALS
-      </Text>
-      <Box display="grid" gridTemplateColumns="repeat(auto-fit, minmax(120px, 1fr))" gap="4px 16px">
-        <FinCell label="MKT CAP" value={fmtCny(derived?.mkt_cap ?? null)} />
-        <FinCell label="FLOAT MC" value={fmtCny(derived?.float_mkt_cap ?? null)} />
-        <FinCell label="PE TTM" value={fmtNum(derived?.pe_ttm ?? null)} />
-        <FinCell label="PE DYN" value={fmtNum(derived?.pe_dynamic ?? null)} />
-        <FinCell label="PB" value={fmtNum(derived?.pb ?? null)} />
-        <FinCell label="PEG" value={fmtNum(derived?.peg ?? null)} />
-        <FinCell label="GM TTM" value={fmtPct(derived?.gross_margin_ttm ?? null)} />
-        <FinCell label="NET ASSETS" value={fmtCny(meta?.net_assets ?? null)} />
-        <FinCell label="TOTAL SHARE" value={fmtShare(meta?.total_share ?? null)} />
-        <FinCell label="FLOAT SHARE" value={fmtShare(meta?.float_share ?? null)} />
-      </Box>
-      {/* Always render the LATEST QUARTER container so the section's
-          height is stable from first paint — prevents CLS when the
-          meta query resolves later. */}
-      <Box mt="8px" pt="6px" borderTopWidth="1px" borderColor="line">
-        <Text color="ink3" fontSize="xs" letterSpacing="0.16em" mb="4px">
-          LATEST QUARTER {latestQ?.period ?? '—'}
-        </Text>
-        <Box
-          display="grid"
-          gridTemplateColumns="repeat(auto-fit, minmax(140px, 1fr))"
-          gap="4px 16px"
-        >
-          <FinCell label="REVENUE" value={fmtCny(latestQ?.revenue ?? null)} />
-          <FinCell label="OP COST" value={fmtCny(latestQ?.operating_cost ?? null)} />
-          <FinCell label="NET PROFIT" value={fmtCny(latestQ?.net_profit ?? null)} />
-          <FinCell label="NET PROFIT EXNR" value={fmtCny(latestQ?.net_profit_excl_nr ?? null)} />
-        </Box>
-      </Box>
-    </Box>
-  );
-}
-
-function FinCell({ label, value }: { label: string; value: string }): React.ReactElement {
-  return (
-    <Flex gap="6px" align="baseline">
-      <Text color="ink3" letterSpacing="0.10em" fontSize="xs" minW="64px">
-        {label}
-      </Text>
-      <Text color={value === '—' ? 'ink3' : 'ink'} fontWeight="600">
-        {value}
-      </Text>
-    </Flex>
-  );
-}
-
-function fmtCny(raw: string | null): string {
-  if (raw === null) return '—';
-  const n = Number(raw);
-  if (!Number.isFinite(n)) return '—';
-  const yi = n / 1e8;
-  if (Math.abs(yi) >= 1) return `${yi.toFixed(2)}亿`;
-  const wan = n / 1e4;
-  if (Math.abs(wan) >= 1) return `${wan.toFixed(2)}万`;
-  return n.toFixed(2);
-}
-
-function fmtNum(raw: string | null): string {
-  if (raw === null) return '—';
-  const n = Number(raw);
-  if (!Number.isFinite(n)) return '—';
-  return n.toFixed(2);
-}
-
-function fmtPct(raw: string | null): string {
-  if (raw === null) return '—';
-  const n = Number(raw);
-  if (!Number.isFinite(n)) return '—';
-  return `${(n * 100).toFixed(2)}%`;
-}
-
-function fmtShare(raw: string | null): string {
-  if (raw === null) return '—';
-  const n = Number(raw);
-  if (!Number.isFinite(n)) return '—';
-  const yi = n / 1e8;
-  if (Math.abs(yi) >= 1) return `${yi.toFixed(2)}亿股`;
-  const wan = n / 1e4;
-  if (Math.abs(wan) >= 1) return `${wan.toFixed(2)}万股`;
-  return `${n.toFixed(0)}股`;
-}

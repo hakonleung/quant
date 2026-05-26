@@ -1,12 +1,16 @@
 'use client';
 
 /**
- * SCR.PAT — pattern-match section embedded inside EQ.CHART.
+ * PAT — pattern-match floating tile.
  *
  * Reads `chartRange` from `useUiStore` (set by shift-drag in EQ.CHART)
  * and exposes a `find similar` action; results render as one row per
- * match with an inline 50D kline (read-only ChartCanvas). Rows are
- * non-interactive — purely informational.
+ * match with an inline 50D kline (read-only ChartCanvas).
+ *
+ * Lives in the same column as EQ.CHART / EQ.INFO so the user can
+ * minimize the chart while keeping the matches visible (or vice
+ * versa) — that's why the find-similar trigger reads the range from
+ * the store rather than via prop drilling.
  */
 
 import { Box, Flex, Text } from '@chakra-ui/react';
@@ -14,15 +18,17 @@ import type { PatternFindSimilarResponse, PatternMatch } from '@quant/shared';
 import { useMutation } from '@tanstack/react-query';
 
 import { findSimilarPatterns } from '../../lib/api/endpoints.js';
+import { Feat } from '../../lib/eqty/feat.js';
 import { DEFAULT_VIEWPORT } from '../../lib/fp/chart-view.js';
 import { useKline } from '../../lib/hooks/use-eqty-data.js';
 import { useUiStore } from '../../lib/stores/ui.store.js';
 import { ChartCanvas, findRangeIndices } from '../feat-eq-chart/chart-canvas.js';
+import { FeatView } from '../feat-view/feat-view.js';
 import { MonoButton } from '../ui/mono-button.js';
 
 const ROW_PRICE_H = 120;
 
-export function ScrPatSection(): React.ReactElement {
+export function FeatScrPat(): React.ReactElement {
   const range = useUiStore((s) => s.chartRange);
   const setChartRange = useUiStore((s) => s.setChartRange);
 
@@ -44,47 +50,41 @@ export function ScrPatSection(): React.ReactElement {
     mutation.mutate();
   };
 
+  const tone = mutation.isError ? 'red' : mutation.isPending ? 'amber' : 'green';
+
   return (
-    <Box borderTopWidth="1px" borderColor="line" bg="panel">
-      <Flex
-        align="center"
-        gap="10px"
-        px="14px"
-        py="6px"
-        borderBottomWidth="1px"
-        borderColor="line"
-        bg="panel3"
-        fontFamily="mono"
-        fontSize="xs"
-        color="ink3"
-        letterSpacing="0.16em"
-      >
-        <Text textTransform="uppercase" fontWeight="700">
-          SCR.PAT
-        </Text>
-        <Text>
+    <FeatView
+      feat={Feat.ScreenPattern}
+      status={tone}
+      statusBlink={mutation.isPending}
+      titleSlot={
+        <Text fontFamily="mono" fontSize="xs" color="ink3" letterSpacing="0.10em">
           {range === null
-            ? '// shift-drag the chart above to pick a reference range'
+            ? '// shift-drag in EQ to pick a reference range'
             : `${range.startDate} → ${range.endDate}`}
         </Text>
-        <Box flex="1" />
-        {range !== null && (
+      }
+      right={
+        <>
+          {range !== null && (
+            <MonoButton
+              icon="delete"
+              label="clear range"
+              onClick={(): void => {
+                setChartRange(null);
+                mutation.reset();
+              }}
+            />
+          )}
           <MonoButton
-            icon="delete"
-            label="clear range"
-            onClick={(): void => {
-              setChartRange(null);
-              mutation.reset();
-            }}
+            icon="search"
+            label={range === null ? 'no range selected' : 'find similar'}
+            onClick={onFind}
+            disabled={range === null || mutation.isPending}
           />
-        )}
-        <MonoButton
-          icon="search"
-          label={range === null ? 'no range selected' : 'find similar'}
-          onClick={onFind}
-          disabled={range === null || mutation.isPending}
-        />
-      </Flex>
+        </>
+      }
+    >
       <Box>
         {mutation.data === undefined ? (
           <Empty hint={range === null ? 'no reference range' : 'press FIND to scan'} />
@@ -99,7 +99,7 @@ export function ScrPatSection(): React.ReactElement {
           </>
         )}
       </Box>
-    </Box>
+    </FeatView>
   );
 }
 
@@ -108,9 +108,10 @@ function RefBanner({ data }: { data: PatternFindSimilarResponse }): React.ReactE
     <Flex
       px="14px"
       py="6px"
-      bg="panel3"
+      bg="glass.panelSoft"
+      backdropFilter="blur(12px)"
       borderBottomWidth="1px"
-      borderColor="line"
+      borderColor="glass.line"
       gap="14px"
       align="baseline"
       fontFamily="mono"
@@ -142,7 +143,14 @@ function MatchRow({ match }: { match: PatternMatch }): React.ReactElement {
   const bars = data ?? [];
   const highlight = findRangeIndices(bars, match.startDate, match.endDate);
   return (
-    <Flex align="stretch" gap="12px" px="14px" py="8px" borderBottomWidth="1px" borderColor="line">
+    <Flex
+      align="stretch"
+      gap="12px"
+      px="14px"
+      py="8px"
+      borderBottomWidth="1px"
+      borderColor="glass.line"
+    >
       <Box minW="120px" pt="2px">
         <Text fontFamily="mono" fontSize="sm" color="ink" fontWeight="600">
           {match.name === '' ? match.code : match.name}

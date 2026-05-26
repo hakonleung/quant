@@ -9,7 +9,7 @@
  * fresh-call mutation).
  */
 
-import { Box, Flex, Text } from '@chakra-ui/react';
+import { Box, Flex } from '@chakra-ui/react';
 import { LEDGER_EXPORT_URL } from '../../lib/api/endpoints.js';
 import { Feat } from '../../lib/eqty/feat.js';
 import { ConfirmCancelled, useConfirm } from '../../lib/hooks/use-confirm.js';
@@ -24,6 +24,7 @@ import type { LedgerEntry } from '@quant/shared';
 import { useState } from 'react';
 
 import { useFeatHotkeys } from '../../lib/ui-cmd/hooks/use-feat-hotkeys.js';
+import { FeatSectionBar } from '../feat-view/feat-section.js';
 import { FeatView } from '../feat-view/feat-view.js';
 import { MonoButton } from '../ui/mono-button.js';
 import { LedgerAddForm } from './ledger-add-form.js';
@@ -245,37 +246,25 @@ export function FeatLedger({ bare }: FeatLedgerProps = {}): React.ReactElement {
           maxH="240px"
           overflow="hidden"
         >
-          <Flex
-            px="10px"
-            py="4px"
-            gap="10px"
-            align="center"
-            borderBottomWidth="1px"
-            borderColor="term.line"
-            flexShrink={0}
-          >
-            <Text
-              fontSize="xs"
-              letterSpacing="0.18em"
-              color="accent"
-              fontFamily="mono"
-              fontWeight="700"
-            >
-              AI 复盘
-            </Text>
-            <Box flex="1" />
-            <MonoButton
-              icon="refresh"
-              label="force refresh"
-              disabled={analyze.isPending}
-              onClick={(): void => {
-                void onAnalyze(true);
-              }}
-            >
-              FORCE
-            </MonoButton>
-            <MonoButton icon="close" label="close ai" onClick={(): void => setAiOpen(false)} />
-          </Flex>
+          <FeatSectionBar
+            cyber
+            name="AI 复盘"
+            right={
+              <>
+                <MonoButton
+                  icon="refresh"
+                  label="force refresh"
+                  disabled={analyze.isPending}
+                  onClick={(): void => {
+                    void onAnalyze(true);
+                  }}
+                >
+                  FORCE
+                </MonoButton>
+                <MonoButton icon="close" label="close ai" onClick={(): void => setAiOpen(false)} />
+              </>
+            }
+          />
           <Box flex="1" minH={0} overflowY="auto">
             <LedgerAiPanel
               analysis={analyze.data ?? cachedAnalysis.data ?? null}

@@ -122,7 +122,7 @@ export function BasicList({ sector, market, bare }: BasicListProps): React.React
 
   return (
     <FeatView
-      feat={Feat.Mkt}
+      feat={Feat.EquityList}
       bare={bare ?? false}
       status={isLoading ? 'amber' : 'green'}
       statusBlink={isLoading}

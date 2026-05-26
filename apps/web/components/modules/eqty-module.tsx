@@ -1,38 +1,31 @@
 'use client';
 
 /**
- * Module 07 §workbench — EQTY (Equity workbench).
+ * EQTY workbench layout — floating-island three-column shell.
  *
- * Layout:
+ * Each tile in the diagram is its own `<FeatView>`; the columns are
+ * Flex containers with a 4 px gap so the page wallpaper reads between
+ * the panes. The 2026-05 split broke the older combined MKT and
+ * EQ.CHART panes into independent islands:
  *
- *   ┌──────────────┬───────────────────────────────┬──────────────┐
- *   │  SEC.LIST    │                               │              │
- *   │  (slider)    │                               │              │
- *   ├──────────────┤                               │              │
- *   │              │                               │              │
- *   │  EQ.LIST     │  EQ.CHART (with SCR.PAT       │  AI.SEC      │
- *   │              │  embedded inline)             │  AI.EQ       │
- *   │              │                               │              │
- *   │              │                               │  WATCH.LIVE  │
- *   │              │                               │              │
- *   └──────────────┴───────────────────────────────┴──────────────┘
+ *   ┌────────────┬──────────────────┬───────────┐
+ *   │   MKT      │   EQ (kline)     │  AI.SEC   │
+ *   ├────────────┤                  │           │
+ *   │ SEARCH ┃   ├──────────────────┤           │
+ *   │ DSL+BT ┃   │   EQ.INFO        │           │
+ *   ├────────────┤                  ├───────────┤
+ *   │  EQ.LIST   ├──────────────────┤  AI.EQ    │
+ *   │            │   PAT            │           │
+ *   └────────────┴──────────────────┴───────────┘
  *
- * Column widths:
- *   left  — `leftWidth`  (resizable, persisted in idb); stacks
- *           SEC.LIST (horizontal chip slider) on top of EQ.LIST.
- *   mid   — flex-fills the gap; hosts EQ.CHART.
- *   right — `rightWidth` (resizable, persisted in idb).
+ * Left column tile #2 is conditional on the active sector kind:
+ *   - user sector   → `<FeatScrNl>` (SEARCH; pick adds to the sector)
+ *   - dynamic sector → `<FeatScrDsl>` + `<FeatBtEval>` stacked
+ *   - All / none    → nothing (saves vertical space)
  *
- * SEC.LIST is the chip strip from `feat-sec-list/`; its inner row keeps
- * its own `overflowX:auto`, so even when `leftWidth` is narrower than
- * the chip total the slider stays scrollable. SCR.PAT is embedded
- * inside EQ.CHART so the pattern range tracks the chart lifecycle.
- * TERM.MAIN no longer mounts here — it has its own top-level mode (see
- * AppShell).
- *
- * Columns flow top-to-bottom by their own content; rows across columns
- * intentionally do not align so minimize / restore in one column does
- * not reflow the others.
+ * Columns flow top-to-bottom by their own content; rows across
+ * columns intentionally do not align so minimize / restore in one
+ * column does not reflow the others.
  */
 
 import { Box, Flex } from '@chakra-ui/react';
@@ -40,21 +33,27 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 
 import { useViewport } from '../../lib/hooks/use-viewport.js';
 import { LAYOUT_LIMITS, useLayoutStore } from '../../lib/stores/layout.store.js';
+import { useSectorsStore } from '../../lib/stores/sectors.store.js';
 import { useUiStore } from '../../lib/stores/ui.store.js';
-import { FeatEqChart } from '../feat-eq-chart/feat-eq-chart.js';
-import { FeatAiSec } from '../feat-ai-sec/feat-ai-sec.js';
-import { FeatMkt } from '../feat-mkt/feat-mkt.js';
+import type { UniverseStock } from '../../lib/hooks/use-stock-universe.js';
 import { FeatAiEq } from '../feat-ai-eq/feat-ai-eq.js';
+import { FeatAiSec } from '../feat-ai-sec/feat-ai-sec.js';
+import { FeatBtEval } from '../feat-bt-eval/feat-bt-eval.js';
+import { FeatEqChart } from '../feat-eq-chart/feat-eq-chart.js';
+import { FeatEqInfo } from '../feat-eq-info/feat-eq-info.js';
+import { FeatEqList } from '../feat-eq-list/feat-eq-list.js';
+import { FeatMkt } from '../feat-mkt/feat-mkt.js';
+import { FeatScrDsl } from '../feat-scr-dsl/feat-scr-dsl.js';
+import { FeatScrNl } from '../feat-scr-nl/feat-scr-nl.js';
+import { FeatScrPat } from '../feat-scr-pat/feat-scr-pat.js';
 
 import { EqtyModuleMobile } from './eqty-module-mobile.js';
 
 export function EqtyModule(): React.ReactElement {
   const { mode } = useViewport();
-  // Tablet falls through to the desktop three-column layout — the
-  // existing min-widths (160 / 280) leave ~324px for the chart at
-  // 768px viewport, which is the smallest tablet portrait we promise
-  // to support. Mobile (<768px) needs a totally different paradigm
-  // (single-Feat tab shell), handled in `EqtyModuleMobile`.
+  // Tablet falls through to the desktop three-column layout. Mobile
+  // (<768px) needs a totally different paradigm (single-Feat tab
+  // shell), handled in `EqtyModuleMobile`.
   if (mode === 'mobile') return <EqtyModuleMobile />;
   return <EqtyModuleDesktop />;
 }
@@ -74,6 +73,8 @@ function EqtyModuleDesktop(): React.ReactElement {
     <Flex h="100%" bg="transparent" gap="4px" p="4px" align="stretch">
       <Column width={`${String(leftWidth)}px`}>
         <FeatMkt />
+        <ScrPanesForActiveSector />
+        <FeatEqList />
       </Column>
       <Divider
         getNext={(dx, start): number => start + dx}
@@ -82,7 +83,11 @@ function EqtyModuleDesktop(): React.ReactElement {
         min={LAYOUT_LIMITS.leftMin}
         max={LAYOUT_LIMITS.leftMax}
       />
-      <Column flex="1">{code !== null && <FeatEqChart code={code} />}</Column>
+      <Column flex="1">
+        {code !== null && <FeatEqChart code={code} />}
+        <FeatEqInfo />
+        <FeatScrPat />
+      </Column>
       <Divider
         getNext={(dx, start): number => start - dx}
         startWidth={rightWidth}
@@ -98,6 +103,73 @@ function EqtyModuleDesktop(): React.ReactElement {
   );
 }
 
+/**
+ * Mounts the screening tiles paired with the active sector kind.
+ * User sector → SEARCH (add-to-sector). Dynamic sector → DSL editor
+ * + BT (event-study backtest). Skipped for the synthetic "All" sector
+ * or when nothing is selected — no point showing screening surfaces
+ * with no target.
+ */
+function ScrPanesForActiveSector(): React.ReactElement | null {
+  const activeSectorId = useUiStore((s) => s.activeSectorId);
+  const sectors = useSectorsStore((s) => s.sectors);
+  const sector = sectors.find((s) => s.id === activeSectorId) ?? null;
+  if (sector === null) return null;
+  if (sector.kind === 'user') return <SearchAddToActiveSector />;
+  // SectorKind is currently `'user' | 'dynamic'`, so this is the
+  // exhaustive other branch — kept explicit (not `else`) so a future
+  // third kind shows up here as a compile error.
+  return (
+    <>
+      <FeatScrDsl />
+      <FeatBtEval />
+    </>
+  );
+}
+
+/**
+ * SEARCH pane wired up to add the picked stock to the active user
+ * sector. The dedicated `FeatScrNl` widget owns the input + dropdown
+ * + batch-paste UI; this thin wrapper only supplies the callbacks.
+ *
+ * Only mounted when `ScrPanesForActiveSector` has already verified
+ * the active sector is a user sector, so no further fallback is
+ * needed here.
+ */
+function SearchAddToActiveSector(): React.ReactElement | null {
+  const activeSectorId = useUiStore((s) => s.activeSectorId);
+  const sectors = useSectorsStore((s) => s.sectors);
+  const upsert = useSectorsStore((s) => s.upsert);
+  const sector = sectors.find((s) => s.id === activeSectorId) ?? null;
+  if (sector?.kind !== 'user') return null;
+  const market = sector.market;
+  const onPick = (stock: UniverseStock): void => {
+    if (sector.codes.includes(stock.code)) return;
+    const next = [...sector.codes, stock.code];
+    upsert({ ...sector, codes: next, count: next.length });
+  };
+  const onBatchPick = (stocks: readonly UniverseStock[]): void => {
+    const existing = new Set(sector.codes);
+    const next = [...sector.codes];
+    for (const s of stocks) {
+      if (existing.has(s.code)) continue;
+      existing.add(s.code);
+      next.push(s.code);
+    }
+    if (next.length === sector.codes.length) return;
+    upsert({ ...sector, codes: next, count: next.length });
+  };
+  // `marketFilter` is required-or-omitted (`exactOptionalPropertyTypes`),
+  // so spread conditionally — never assign `undefined` to it.
+  return (
+    <FeatScrNl
+      {...(market !== undefined ? { marketFilter: market } : {})}
+      onPick={onPick}
+      onBatchPick={onBatchPick}
+    />
+  );
+}
+
 interface ColumnProps {
   readonly width?: string;
   readonly flex?: string;
@@ -106,7 +178,7 @@ interface ColumnProps {
 
 function Column({ width, flex, children }: ColumnProps): React.ReactElement {
   return (
-    // Floating-island column — transparent bg + 10px gap so stacked
+    // Floating-island column — transparent bg + 4px gap so stacked
     // panes within a column also separate (ambient canvas peeks
     // between them).
     <Box
@@ -118,6 +190,7 @@ function Column({ width, flex, children }: ColumnProps): React.ReactElement {
       flexDirection="column"
       gap="4px"
       bg="transparent"
+      overflowY="auto"
     >
       {children}
     </Box>
@@ -197,9 +270,9 @@ function Divider({ startWidth, getNext, commit, min, max }: DividerProps): React
       aria-orientation="vertical"
       aria-label="resize column"
       // Floating-island gap between columns — drag handle is now
-       // visually invisible (transparent) but still keeps the 4px hit
-       // zone + accent flash on hover/drag to telegraph the resize
-       // affordance.
+      // visually invisible (transparent) but still keeps the 4px hit
+      // zone + accent flash on hover/drag to telegraph the resize
+      // affordance.
       w="4px"
       h="100%"
       bg={dragging ? 'accent' : 'transparent'}

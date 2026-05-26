@@ -18,6 +18,7 @@ import { useCurrentUserId } from '../../lib/hooks/use-current-user.js';
 import { useNlToDsl } from '../../lib/hooks/use-nl-to-dsl.js';
 import { useSectorsStore, type Sector } from '../../lib/stores/sectors.store.js';
 import { DslTree } from '../dsl/dsl-tree.js';
+import { FeatSectionBar, FeatSectionLabel } from '../feat-view/feat-section.js';
 
 type Tab = 'user' | 'dynamic';
 
@@ -192,55 +193,30 @@ export function NewSectorDialog({ open, onClose }: Props): React.ReactElement | 
 
 function Header({ onClose }: { onClose: () => void }): React.ReactElement {
   return (
-    <Flex
-      align="center"
-      gap="8px"
-      px="14px"
-      h="36px"
-      borderBottomWidth="1px"
-      borderColor="glass.line"
-      bg="glass.panelSoft"
-      backdropFilter="blur(12px)"
-      flexShrink={0}
-    >
-      <Text
-        id="sec-new-dialog-title"
-        fontFamily="mono"
-        fontSize="xs"
-        color="accent"
-        fontWeight="700"
-        letterSpacing="0.18em"
-      >
-        MKT.NEW
-      </Text>
-      <Text
-        fontFamily="mono"
-        fontSize="xs"
-        color="ink2"
-        letterSpacing="0.18em"
-        textTransform="uppercase"
-      >
-        new sector
-      </Text>
-      <Box
-        as="button"
-        ml="auto"
-        aria-label="close"
-        onClick={onClose}
-        w="20px"
-        h="20px"
-        display="grid"
-        placeItems="center"
-        fontFamily="mono"
-        fontSize="body"
-        color="ink3"
-        bg="transparent"
-        cursor="pointer"
-        _hover={{ color: 'accent' }}
-      >
-        ×
-      </Box>
-    </Flex>
+    <FeatSectionBar
+      id="sec-new-dialog-title"
+      name="MKT.NEW"
+      subtitle="new sector"
+      right={
+        <Box
+          as="button"
+          aria-label="close"
+          onClick={onClose}
+          w="20px"
+          h="20px"
+          display="grid"
+          placeItems="center"
+          fontFamily="mono"
+          fontSize="body"
+          color="ink3"
+          bg="transparent"
+          cursor="pointer"
+          _hover={{ color: 'accent' }}
+        >
+          ×
+        </Box>
+      }
+    />
   );
 }
 
@@ -442,15 +418,7 @@ function DynamicForm({
       )}
       {preview !== null && (
         <Flex direction="column" gap="8px">
-          <Text
-            fontFamily="mono"
-            fontSize="xs"
-            color="ink3"
-            letterSpacing="0.16em"
-            textTransform="uppercase"
-          >
-            // dsl preview · run refresh to populate matches
-          </Text>
+          <FeatSectionLabel>// dsl preview · run refresh to populate matches</FeatSectionLabel>
           <Box
             maxH="320px"
             overflow="auto"
@@ -482,9 +450,7 @@ function Field({
 }): React.ReactElement {
   return (
     <Flex direction="column" gap="4px">
-      <Text fontFamily="mono" fontSize="xs" color="ink3" letterSpacing="0.18em" fontWeight="700">
-        {label}
-      </Text>
+      <FeatSectionLabel>{label}</FeatSectionLabel>
       {children}
     </Flex>
   );

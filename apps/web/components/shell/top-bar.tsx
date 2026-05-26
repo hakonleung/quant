@@ -91,11 +91,10 @@ interface BrandProps {
 
 function Brand({ compact = false, stretch = false }: BrandProps): React.ReactElement {
   const setAppMode = useLayoutStore((s) => s.setAppMode);
-  const termBg = useTokenColor('brand.logoBg');
+  // brand.logoBg / gridColor / scanlineAlpha are owned by `<PageBackdrop>`
+  // now — the brand button just floats on top of the page wallpaper.
   const termLogoColor = useTokenColor('brand.logoColor');
   const termLogoGlow = useTokenColor('brand.logoGlow');
-  const gridColor = useTokenColor('brand.gridColor');
-  const scanlineAlpha = useTokenColor('brand.scanlineAlpha');
   const onToggle = (): void => {
     runViewTransition(typeof document === 'undefined' ? null : document, () => {
       setAppMode('term');
@@ -146,47 +145,3 @@ function Brand({ compact = false, stretch = false }: BrandProps): React.ReactEle
   );
 }
 
-interface CrtBackdropProps {
-  readonly gridColor: string;
-  readonly scanlineAlpha: string;
-}
-
-/**
- * CRT chrome — coarse grid (z=0) + horizontal scanlines (z=1).
- * Extracted from Brand so the latter stays under the per-function
- * line cap; `gridColor` / `scanlineAlpha` are resolved from
- * `brand.*` tokens by the parent so the look auto-flips with theme.
- */
-function CrtBackdrop({ gridColor, scanlineAlpha }: CrtBackdropProps): React.ReactElement {
-  // Empty token values during SSR — fall back so the first paint is not
-  // a transparent panel that pops on hydration. Values mirror the
-  // Liquid Glass `brand.gridColor` / `brand.scanlineAlpha` low-alpha
-  // tokens so the first paint matches the post-hydration look.
-  const grid = gridColor.length > 0 ? gridColor : 'rgba(255,255,255,0.04)';
-  const scan = scanlineAlpha.length > 0 ? scanlineAlpha : 'rgba(0,0,0,0.10)';
-  return (
-    <>
-      <Box
-        position="absolute"
-        inset="0"
-        pointerEvents="none"
-        zIndex={0}
-        // Dialled from 0.32 → 0.85 because the underlying gridColor
-        // alpha is now 0.04 (was 0.10): we let the texture be present
-        // but very subtle, matching the "glass with a hint of mesh"
-        // feel of Apple's frosted toolbars.
-        opacity={0.85}
-        backgroundImage={`linear-gradient(${grid} 1px, transparent 1px), linear-gradient(90deg, ${grid} 1px, transparent 1px)`}
-        backgroundSize="16px 16px"
-      />
-      <Box
-        position="absolute"
-        inset="0"
-        pointerEvents="none"
-        zIndex={1}
-        background={`repeating-linear-gradient(0deg, ${scan} 0px, ${scan} 1px, transparent 1px, transparent 3px)`}
-        css={{ mixBlendMode: 'multiply' }}
-      />
-    </>
-  );
-}

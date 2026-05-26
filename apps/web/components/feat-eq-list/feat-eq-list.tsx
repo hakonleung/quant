@@ -341,7 +341,7 @@ function FeatEqListInner({ bare, onCountsChange }: FeatEqListProps = {}): React.
         : 'green';
   return (
     <FeatView
-      feat={Feat.Mkt}
+      feat={Feat.EquityList}
       bare={bare ?? false}
       status={listTone}
       statusBlink={isLoading || stockListQuery.isLoading}

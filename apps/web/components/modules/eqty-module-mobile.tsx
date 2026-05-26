@@ -16,7 +16,10 @@ import { useUiStore } from '../../lib/stores/ui.store.js';
 import { FeatAiEq } from '../feat-ai-eq/feat-ai-eq.js';
 import { FeatAiSec } from '../feat-ai-sec/feat-ai-sec.js';
 import { FeatEqChart } from '../feat-eq-chart/feat-eq-chart.js';
+import { FeatEqInfo } from '../feat-eq-info/feat-eq-info.js';
+import { FeatEqList } from '../feat-eq-list/feat-eq-list.js';
 import { FeatMkt } from '../feat-mkt/feat-mkt.js';
+import { FeatScrPat } from '../feat-scr-pat/feat-scr-pat.js';
 import { FeatSysMain } from '../feat-sys-main/feat-sys-main.js';
 import { FeatUsrMain } from '../feat-usr-main/feat-usr-main.js';
 import { MobileTabBar } from '../shell/mobile-tab-bar.js';
@@ -28,8 +31,22 @@ export function EqtyModuleMobile(): React.ReactElement {
   return (
     <Flex direction="column" h="100%" bg="line" gap="0">
       <Box flex="1" minH={0} bg="panel" overflow="hidden" display="flex" flexDirection="column">
-        {tab === 'list' && <FeatMkt />}
-        {tab === 'chart' && (code !== null ? <FeatEqChart code={code} /> : <EmptyChart />)}
+        {tab === 'list' && (
+          <Flex direction="column" h="100%" gap="1px" bg="line" overflowY="auto">
+            <FeatMkt />
+            <FeatEqList />
+          </Flex>
+        )}
+        {tab === 'chart' &&
+          (code !== null ? (
+            <Flex direction="column" h="100%" gap="1px" bg="line" overflowY="auto">
+              <FeatEqChart code={code} />
+              <FeatEqInfo />
+              <FeatScrPat />
+            </Flex>
+          ) : (
+            <EmptyChart />
+          ))}
         {tab === 'ai' && (
           <Flex direction="column" h="100%" gap="1px" bg="line" overflowY="auto">
             <FeatAiSec />

@@ -1,6 +1,6 @@
 'use client';
 
-import { Box, Flex, HStack, Text } from '@chakra-ui/react';
+import { Box, Flex, HStack } from '@chakra-ui/react';
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { createPortal, flushSync } from 'react-dom';
 
@@ -92,7 +92,6 @@ export function FeatView({
   if (bare === true) return <>{children}</>;
   const config = FEAT_CONFIG_MAP[feat];
   const cyber = config.cyber ?? false;
-  const gridArea = config.gridArea;
   const bodyOverlay = config.bodyOverlay ?? false;
 
   // Persisted mode keyed by feat id — survives reloads. Missing entries
@@ -311,7 +310,9 @@ export function FeatView({
   const portalTarget = typeof document === 'undefined' ? null : document.body;
   return (
     <>
-      <Box ref={placeholderRef} gridArea={gridArea} h="100%" minH={0} visibility="hidden" />
+      {/* Same-sized placeholder keeps the column from collapsing while
+          the real pane is portaled out to body for fullscreen. */}
+      <Box ref={placeholderRef} h="100%" minH={0} visibility="hidden" />
       {portalTarget === null ? paneBox : createPortal(paneBox, portalTarget)}
     </>
   );
@@ -390,17 +391,12 @@ function FeatViewHeader(props: FeatViewHeaderProps): React.ReactElement {
       flexShrink={0}
       color={cyber ? 'term.ink3' : 'ink3'}
     >
-      <Text
-        fontFamily="mono"
-        fontSize="xs"
-        letterSpacing="0.18em"
-        fontWeight="700"
-        color="accent"
-        whiteSpace="nowrap"
-        flexShrink={0}
-      >
-        {id}
-      </Text>
+      <FeatNameToggle
+        id={id}
+        minimized={mode === 'minimized'}
+        onToggle={mode === 'minimized' ? onRestore : onMinimize}
+        disabled={mode === 'fullscreen'}
+      />
       {status !== undefined && (
         <Box flexShrink={0}>
           <FeatViewStatus tone={status} blink={statusBlink ?? false} />
@@ -429,10 +425,7 @@ function FeatViewHeader(props: FeatViewHeaderProps): React.ReactElement {
         flexShrink={0}
       >
         <FeatViewControls
-          cyber={cyber}
           mode={mode}
-          onMinimize={onMinimize}
-          onRestore={onRestore}
           onFullscreen={onFullscreen}
           onExitFullscreen={onExitFullscreen}
         />
@@ -479,17 +472,12 @@ function FeatViewHeaderTall({
       justify="space-between"
     >
       <Flex align="center" gap="8px" flexShrink={0} minW={0}>
-        <Text
-          fontFamily="mono"
-          fontSize="xs"
-          letterSpacing="0.18em"
-          fontWeight="700"
-          color="accent"
-          whiteSpace="nowrap"
-          flexShrink={0}
-        >
-          {id}
-        </Text>
+        <FeatNameToggle
+          id={id}
+          minimized={mode === 'minimized'}
+          onToggle={mode === 'minimized' ? onRestore : onMinimize}
+          disabled={mode === 'fullscreen'}
+        />
         {status !== undefined && (
           <Box flexShrink={0}>
             <FeatViewStatus tone={status} blink={statusBlink ?? false} />
@@ -520,10 +508,7 @@ function FeatViewHeaderTall({
           flexShrink={0}
         >
           <FeatViewControls
-            cyber={cyber}
             mode={mode}
-            onMinimize={onMinimize}
-            onRestore={onRestore}
             onFullscreen={onFullscreen}
             onExitFullscreen={onExitFullscreen}
           />
@@ -546,38 +531,101 @@ function FeatViewHeaderTall({
 }
 
 interface FeatViewControlsProps {
-  readonly cyber: boolean;
   readonly mode: FeatViewMode;
-  readonly onMinimize: () => void;
-  readonly onRestore: () => void;
   readonly onFullscreen: () => void;
   readonly onExitFullscreen: () => void;
 }
 
+/**
+ * Pane window controls. After the 2026-05 chrome simplification the
+ * minimize / restore button is gone — clicking the pane name in
+ * `<FeatNameToggle>` toggles `minimized` ↔ `normal`. Only fullscreen
+ * remains as an explicit button (no obvious header gesture for it).
+ */
 function FeatViewControls({
-  cyber: _cyber,
   mode,
-  onMinimize,
-  onRestore,
   onFullscreen,
   onExitFullscreen,
 }: FeatViewControlsProps): React.ReactElement {
-  void _cyber;
   return (
     <HStack gap="2px">
       {mode === 'fullscreen' ? (
         <MonoButton icon="exitFullscreen" label="exit fullscreen" onClick={onExitFullscreen} />
       ) : (
-        <>
-          <MonoButton icon="fullscreen" label="fullscreen" onClick={onFullscreen} />
-          {mode === 'minimized' ? (
-            <MonoButton icon="restore" label="restore" onClick={onRestore} />
-          ) : (
-            <MonoButton icon="minimize" label="minimize" onClick={onMinimize} />
-          )}
-        </>
+        <MonoButton icon="fullscreen" label="fullscreen" onClick={onFullscreen} />
       )}
     </HStack>
+  );
+}
+
+interface FeatNameToggleProps {
+  readonly id: string;
+  readonly minimized: boolean;
+  readonly onToggle: () => void;
+  /** Fullscreen panes can't be minimized — the toggle becomes a no-op label. */
+  readonly disabled: boolean;
+}
+
+/**
+ * Pane name button. Clicking it toggles `minimized` ↔ `normal` —
+ * replaces the old minimize/restore icon buttons. The chevron marker
+ * reflects current state (▾ open / ▸ collapsed) so the affordance
+ * reads at a glance. Disabled when fullscreen.
+ */
+const TOGGLE_BTN_STYLE = {
+  bg: 'transparent',
+  border: '0',
+  px: 0,
+  py: 0,
+  align: 'baseline',
+  gap: '6px',
+  flexShrink: 0,
+  _focusVisible: { outline: '2px solid', outlineColor: 'link', outlineOffset: '2px' },
+  style: { font: 'inherit' },
+} as const;
+
+function FeatNameToggle({
+  id,
+  minimized,
+  onToggle,
+  disabled,
+}: FeatNameToggleProps): React.ReactElement {
+  return (
+    <Flex
+      {...TOGGLE_BTN_STYLE}
+      as="button"
+      onClick={disabled ? undefined : onToggle}
+      aria-pressed={minimized}
+      aria-label={`${id} — ${minimized ? 'restore' : 'minimize'}`}
+      aria-disabled={disabled}
+      cursor={disabled ? 'default' : 'pointer'}
+      _hover={disabled ? {} : { color: 'accent' }}
+    >
+      {/* Reserve space even when invisible so the name doesn't shift
+          when entering/exiting fullscreen. */}
+      <Box
+        as="span"
+        fontFamily="mono"
+        fontSize="xs"
+        color="ink3"
+        opacity={disabled ? 0 : 0.7}
+        w="8px"
+        textAlign="center"
+      >
+        {minimized ? '▸' : '▾'}
+      </Box>
+      <Box
+        as="span"
+        fontFamily="mono"
+        fontSize="xs"
+        letterSpacing="0.18em"
+        fontWeight="700"
+        color="accent"
+        whiteSpace="nowrap"
+      >
+        {id}
+      </Box>
+    </Flex>
   );
 }
 
