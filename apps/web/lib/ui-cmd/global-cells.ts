@@ -34,13 +34,23 @@ import {
 const MODULE_KEYS: ReadonlyArray<readonly [letter: string, feat: Feat, label: string]> = [
   ['m', Feat.Mkt, 'Switch to market'],
   ['e', Feat.EquityChart, 'Switch to equity chart'],
+  ['i', Feat.EquityInfo, 'Switch to equity info'],
+  ['l', Feat.EquityList, 'Switch to equity list'],
   ['a', Feat.AIEq, 'Switch to AI (stock)'],
   ['s', Feat.AISec, 'Switch to AI (sector)'],
+  ['f', Feat.ScreenNL, 'Switch to search'],
+  ['p', Feat.ScreenPattern, 'Switch to pattern'],
+  ['d', Feat.ScreenDsl, 'Switch to DSL'],
+  ['b', Feat.BtEval, 'Switch to backtest'],
   // `u` → SET (the ex-USR config tab — kept as the user-surface entry
   // point now that USR is split into SET / LDG / WATCH).
   ['u', Feat.Settings, 'Switch to settings'],
+  ['g', Feat.Ledger, 'Switch to ledger'],
+  ['w', Feat.WatchLive, 'Switch to watch live'],
   ['t', Feat.Terminal, 'Switch to terminal'],
   ['y', Feat.SysMain, 'Switch to system'],
+  ['v', Feat.Dev, 'Switch to dev'],
+  ['h', Feat.Scope, 'Switch to scope'],
 ];
 
 function moduleCellId(feat: Feat): string {
@@ -172,26 +182,15 @@ function advanceSector(delta: number): void {
 }
 
 /**
- * Stocks in the currently-active sector, in the order the equity list
- * renders them. Defers to the universe (all codes) when active sector
- * is the ALL pseudo-sector.
+ * Stocks in the currently-rendered EQ.LIST order. Published by the
+ * list itself (`<FeatEqList>` / `<BasicList>`) into `ui.visibleCodes`
+ * after every sort / filter / sector change, so J/K walks the same
+ * rows the user sees — not the raw `sector.codes` member list (which
+ * has no relation to the active sort and excludes blacklisted codes
+ * in the ALL view).
  */
-function currentSectorCodes(): readonly string[] {
-  const active = useUiStore.getState().activeSectorId;
-  if (active === ALL_SECTOR_ID) {
-    // ALL: no in-list ordering at this layer; the actual stock list
-    // pages do their own filtering / sorting. Bail to an empty list
-    // rather than guess — the user already has 'g s'-style global nav
-    // for switching modules, and stock-level nav inside ALL is rarely
-    // useful.
-    return [];
-  }
-  const sector = useSectorsStore.getState().sectors.find((s) => s.id === active);
-  return sector?.codes ?? [];
-}
-
 function advanceStock(delta: number): void {
-  const codes = currentSectorCodes();
+  const codes = useUiStore.getState().visibleCodes;
   if (codes.length === 0) return;
   const cur = useUiStore.getState().focusCode;
   const idx = cur === null ? -1 : codes.indexOf(cur);

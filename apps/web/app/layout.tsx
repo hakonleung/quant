@@ -35,10 +35,38 @@ export const viewport: Viewport = {
   ],
 };
 
+/**
+ * Inline boot script — runs BEFORE any CSS evaluates so the `<html>`
+ * element carries the right `dark` / `light` class on the very first
+ * paint. Without this, the workbench renders in light mode until the
+ * settings store hydrates from the backend, producing a visible flash
+ * for users on dark mode.
+ *
+ * Resolution order: localStorage cache (`qx-theme`, written by the
+ * settings store as a side-effect of every `setTheme`) → OS
+ * `prefers-color-scheme` → default light. Anything stored on the
+ * backend overrides this once the store finishes hydrating; the boot
+ * script only handles the pre-hydration window.
+ */
+const THEME_BOOT_SCRIPT = `
+(function () {
+  try {
+    var t = localStorage.getItem('qx-theme');
+    if (t !== 'dark' && t !== 'light') {
+      t = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    }
+    var r = document.documentElement;
+    r.dataset.theme = t;
+    r.classList.add(t);
+  } catch (e) {}
+})();
+`;
+
 export default function RootLayout({ children }: RootLayoutProps): ReactNode {
   return (
     <html lang="zh-CN" suppressHydrationWarning>
       <head>
+        <script dangerouslySetInnerHTML={{ __html: THEME_BOOT_SCRIPT }} />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         {/* Inter Variable as the cross-platform SF Pro fallback (loads
             instantly on Apple devices since they prefer system SF

@@ -9,7 +9,7 @@
  * here when nothing else owns Esc.
  */
 
-import { Box, Button } from '@chakra-ui/react';
+import { Box, Button, Flex } from '@chakra-ui/react';
 import { DialogPortal } from '../../../components/feat-view/dialog-portal.js';
 import { FloatingSurface } from '../../../components/feat-view/floating-surface.js';
 import { FeatSectionBar } from '../../../components/feat-view/feat-section.js';
@@ -87,51 +87,82 @@ function Dialog({ opts, onConfirm, onCancel }: DialogProps): React.ReactElement 
           }}
           w="440px"
           maxW="92vw"
+          display="flex"
+          flexDirection="column"
         >
-          <FeatSectionBar name={`! ${title}`} />
+          <FeatSectionBar
+            name={title}
+            subtitle="confirm"
+            right={
+              <Box
+                as="button"
+                aria-label="close"
+                onClick={onCancel}
+                w="20px"
+                h="20px"
+                display="grid"
+                placeItems="center"
+                fontFamily="mono"
+                fontSize="body"
+                color="ink3"
+                bg="transparent"
+                cursor="pointer"
+                _hover={{ color: 'accent' }}
+              >
+                ×
+              </Box>
+            }
+          />
           <Box px="16px" py="14px" fontFamily="mono" fontSize="sm" color="ink2" lineHeight="1.7">
             {opts.message}
           </Box>
-          <FeatSectionBar
-            right={
-              <>
-                <Button
-                  ref={cancelBtnRef}
-                  onClick={onCancel}
-                  bg="transparent"
-                  color="ink2"
-                  borderWidth="1px"
-                  borderColor="line"
-                  h="auto"
-                  px="14px"
-                  py="6px"
-                  fontFamily="mono"
-                  fontSize="xs"
-                  letterSpacing="0.18em"
-                  borderRadius="sm"
-                  _hover={{ borderColor: 'ink2' }}
-                >
-                  {cancelLabel}
-                </Button>
-                <Button
-                  onClick={onConfirm}
-                  bg="accent"
-                  color="panel"
-                  h="auto"
-                  px="16px"
-                  py="6px"
-                  fontFamily="mono"
-                  fontSize="xs"
-                  fontWeight="700"
-                  letterSpacing="0.18em"
-                  borderRadius="sm"
-                  _hover={{ bg: 'accent', opacity: 0.85 }}
-                >
-                  {confirmLabel}
-                </Button>
-              </>
-            }
-          />
+          <Flex
+            align="center"
+            gap="8px"
+            px="14px"
+            py="10px"
+            borderTopWidth="1px"
+            borderColor="glass.line"
+            bg="glass.panelSoft"
+            backdropFilter="blur(12px)"
+            flexShrink={0}
+          >
+            <Button
+              ref={cancelBtnRef}
+              onClick={onCancel}
+              bg="transparent"
+              color="ink2"
+              borderWidth="1px"
+              borderColor="line"
+              h="auto"
+              px="14px"
+              py="6px"
+              fontFamily="mono"
+              fontSize="xs"
+              letterSpacing="0.18em"
+              borderRadius="sm"
+              _hover={{ borderColor: 'ink2' }}
+            >
+              {cancelLabel}
+            </Button>
+            <Button
+              ml="auto"
+              onClick={onConfirm}
+              bg="accent"
+              color="panel"
+              h="auto"
+              px="16px"
+              py="6px"
+              fontFamily="mono"
+              fontSize="xs"
+              fontWeight="700"
+              letterSpacing="0.18em"
+              borderRadius="sm"
+              _hover={{ bg: 'accent', opacity: 0.85 }}
+            >
+              {confirmLabel}
+            </Button>
+          </Flex>
         </FloatingSurface>
       </Box>
     </DialogPortal>

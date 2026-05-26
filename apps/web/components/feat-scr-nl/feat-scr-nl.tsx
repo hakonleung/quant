@@ -54,6 +54,12 @@ export interface StockCommandBarProps {
    * options on top of any filter behaviour the consumer wires up.
    */
   readonly onTextChange?: (text: string) => void;
+  /**
+   * Suppress the search dropdown. Use for the ALL-sector filter wiring
+   * where the input only drives a live filter on EQ.LIST below — the
+   * dropdown duplicates that affordance and steals click focus.
+   */
+  readonly hideDropdown?: boolean;
 }
 
 /**
@@ -71,12 +77,14 @@ export function FeatScrNl({
   onBatchPick,
   onTextChange,
   rightSlot,
+  hideDropdown,
 }: {
   readonly marketFilter?: WatchMarket;
   readonly onPick: (stock: UniverseStock) => void;
   readonly onBatchPick?: (stocks: readonly UniverseStock[]) => void;
   readonly onTextChange?: (text: string) => void;
   readonly rightSlot?: React.ReactNode;
+  readonly hideDropdown?: boolean;
 }): React.ReactElement {
   return (
     <FeatView feat={Feat.ScreenNL} right={rightSlot ?? <FeatViewStatus tone="green" />}>
@@ -84,6 +92,7 @@ export function FeatScrNl({
         {...(marketFilter !== undefined ? { marketFilter } : {})}
         {...(onBatchPick !== undefined ? { onBatchPick } : {})}
         {...(onTextChange !== undefined ? { onTextChange } : {})}
+        {...(hideDropdown === true ? { hideDropdown: true } : {})}
         onPick={onPick}
       />
     </FeatView>
@@ -258,7 +267,7 @@ export function StockCommandBar(props: StockCommandBarProps): React.ReactElement
       )}
       {inBatchMode && batchResult !== null ? (
         <BatchPanel result={batchResult} loading={fullUniverse.isLoading} onApply={onApplyBatch} />
-      ) : (
+      ) : props.hideDropdown === true ? null : (
         <SearchDropdown
           ref={s.dropdownRef}
           open={s.open && s.text.trim().length > 0}

@@ -34,7 +34,7 @@ import { LedgerImportDialog } from './ledger-import-dialog.js';
 import { LedgerList } from './ledger-list.js';
 import { LedgerSummaryBar } from './ledger-summary-bar.js';
 
-type Tab = 'list' | 'daily' | 'cumulative';
+type Tab = 'list' | 'daily' | 'cumulative' | 'ai';
 
 interface FeatLedgerProps {
   /** Hosted inside USR.MAIN as a tab — drop the FeatView chrome. */
@@ -49,7 +49,6 @@ export function FeatLedger({ bare }: FeatLedgerProps = {}): React.ReactElement {
   const { guard: confirmGuard, comp: confirmComp } = useConfirm();
 
   const [tab, setTab] = useState<Tab>('list');
-  const [aiOpen, setAiOpen] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
 
   // `A` — open the add-entry form. Bound here rather than centrally
@@ -149,7 +148,7 @@ export function FeatLedger({ bare }: FeatLedgerProps = {}): React.ReactElement {
         throw err;
       }
     }
-    setAiOpen(true);
+    setTab('ai');
     try {
       await analyze.mutateAsync(force);
       if (force) notify.success({ title: 'AI 复盘完成', body: '已替换缓存内容。' });
@@ -179,6 +178,9 @@ export function FeatLedger({ bare }: FeatLedgerProps = {}): React.ReactElement {
         </TabButton>
         <TabButton active={tab === 'cumulative'} onClick={(): void => setTab('cumulative')}>
           CUM
+        </TabButton>
+        <TabButton active={tab === 'ai'} onClick={(): void => setTab('ai')}>
+          AI
         </TabButton>
         <Box flex="1" />
         <MonoButton
@@ -214,7 +216,7 @@ export function FeatLedger({ bare }: FeatLedgerProps = {}): React.ReactElement {
             void onAnalyze(false);
           }}
         >
-          AI
+          RUN AI
         </MonoButton>
       </Flex>
       <LedgerSummaryBar enriched={enriched} />
@@ -234,23 +236,12 @@ export function FeatLedger({ bare }: FeatLedgerProps = {}): React.ReactElement {
         )}
         {tab === 'daily' && <LedgerChart enriched={enriched} mode="daily" />}
         {tab === 'cumulative' && <LedgerChart enriched={enriched} mode="cumulative" />}
-      </Box>
-      {(aiOpen || cachedAnalysis.data !== null) && (
-        <Box
-          borderTopWidth="1px"
-          borderColor="term.line"
-          flexShrink={0}
-          display="flex"
-          flexDirection="column"
-          minH={0}
-          maxH="240px"
-          overflow="hidden"
-        >
-          <FeatSectionBar
-            cyber
-            name="AI 复盘"
-            right={
-              <>
+        {tab === 'ai' && (
+          <Flex direction="column" flex="1" minH={0}>
+            <FeatSectionBar
+              cyber
+              name="AI 复盘"
+              right={
                 <MonoButton
                   icon="refresh"
                   label="force refresh"
@@ -261,19 +252,18 @@ export function FeatLedger({ bare }: FeatLedgerProps = {}): React.ReactElement {
                 >
                   FORCE
                 </MonoButton>
-                <MonoButton icon="close" label="close ai" onClick={(): void => setAiOpen(false)} />
-              </>
-            }
-          />
-          <Box flex="1" minH={0} overflowY="auto">
-            <LedgerAiPanel
-              analysis={analyze.data ?? cachedAnalysis.data ?? null}
-              loading={analyze.isPending}
-              error={analyze.error instanceof Error ? analyze.error.message : null}
+              }
             />
-          </Box>
-        </Box>
-      )}
+            <Box flex="1" minH={0} overflowY="auto">
+              <LedgerAiPanel
+                analysis={analyze.data ?? cachedAnalysis.data ?? null}
+                loading={analyze.isPending}
+                error={analyze.error instanceof Error ? analyze.error.message : null}
+              />
+            </Box>
+          </Flex>
+        )}
+      </Box>
       {addOpen && (
         <LedgerAddForm
           mode="add"

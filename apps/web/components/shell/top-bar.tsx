@@ -26,7 +26,9 @@ import { useViewport } from '../../lib/hooks/use-viewport.js';
 import { useLayoutStore } from '../../lib/stores/layout.store.js';
 import { useTokenColor } from '../../lib/theme/use-token-color.js';
 
+import { FeatDev } from '../feat-dev/feat-dev.js';
 import { FeatLedger } from '../feat-ledger/feat-ledger.js';
+import { FeatScope } from '../feat-scope/feat-scope.js';
 import { FeatSettings } from '../feat-settings/feat-settings.js';
 import { FeatSysMain } from '../feat-sys-main/feat-sys-main.js';
 import { FeatWatchLive } from '../feat-watch-live/feat-watch-live.js';
@@ -69,6 +71,12 @@ export function TopBar({ session }: TopBarProps = {}): React.ReactElement {
         <>
           <Box flex="1" minW={0} display="flex">
             <FeatSysMain />
+          </Box>
+          <Box display="flex">
+            <FeatScope />
+          </Box>
+          <Box display="flex">
+            <FeatDev />
           </Box>
           <Box display="flex">
             <FeatLedger />

@@ -149,11 +149,13 @@ function Header({ tier }: HeaderProps): React.ReactElement {
           CLOSING
         </HeaderCell>
       )}
-      {tier === 'wide' && (
-        <HeaderCell w="80px" align="right">
-          CASHFLOW
-        </HeaderCell>
-      )}
+      {/* CASHFLOW = the implicit inflow / outflow the row encodes (the
+       *  "入金" the user wanted surfaced). Showing at every tier — at
+       *  narrow we keep just DATE / PNL / CASHFLOW / OPS so users on a
+       *  shrunk-down right column still see deposits. */}
+      <HeaderCell w="80px" align="right">
+        CASHFLOW
+      </HeaderCell>
       <Box flex="1" />
       <HeaderCell w="56px" align="right">
         OPS
@@ -227,10 +229,25 @@ interface OptionalCellsProps {
   readonly pctTone: string;
 }
 
-function OptionalCells({ entry, tier, pctTone }: OptionalCellsProps): React.ReactElement | null {
-  if (tier === 'narrow') return null;
+function OptionalCells({ entry, tier, pctTone }: OptionalCellsProps): React.ReactElement {
   const cashFlow = new Decimal(entry.cashFlow);
   const cashFlowDisplay = cashFlow.isZero() ? '—' : cashFlow.toFixed(2);
+  // Inflow (deposit / 入金) reads red; outflow (withdraw) green — same
+  // 涨红跌绿 convention as PNL. Zero stays neutral.
+  const cashFlowTone =
+    cashFlow.isPositive() && !cashFlow.isZero()
+      ? 'up'
+      : cashFlow.isNegative()
+        ? 'down'
+        : 'term.ink3';
+  const cashFlowCell = (
+    <Flex w="80px" justify="flex-end" align="center" gap="4px" flexShrink={0} color={cashFlowTone}>
+      <Text fontSize="xs">{cashFlowDisplay}</Text>
+      {/* CASHFLOW is a derived field. `~` mirrors CLOSING. */}
+      {!cashFlow.isZero() && <DerivedBadge title="派生字段：Δclosing − pnlAmount" />}
+    </Flex>
+  );
+  if (tier === 'narrow') return cashFlowCell;
   return (
     <>
       <Box w="56px" textAlign="right" color={pctTone} flexShrink={0}>
@@ -240,13 +257,7 @@ function OptionalCells({ entry, tier, pctTone }: OptionalCellsProps): React.Reac
         <Text fontSize="xs">{new Decimal(entry.derivedClosingPosition).toFixed(2)}</Text>
         {!entry.closingProvided && <DerivedBadge title="链式推导值" />}
       </Flex>
-      {tier === 'wide' && (
-        <Flex w="80px" justify="flex-end" align="center" gap="4px" flexShrink={0} color="term.ink3">
-          <Text fontSize="xs">{cashFlowDisplay}</Text>
-          {/* CASHFLOW is itself a derived field. `~` mirrors CLOSING. */}
-          {!cashFlow.isZero() && <DerivedBadge title="派生字段：Δclosing − pnlAmount" />}
-        </Flex>
-      )}
+      {cashFlowCell}
     </>
   );
 }

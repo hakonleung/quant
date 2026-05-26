@@ -56,8 +56,27 @@ interface SettingsState {
   setDragDirection(direction: DragDirection): void;
 }
 
+/**
+ * Read the cached theme written by `setTheme` (and the layout boot
+ * script). The store's initial value MUST match whatever the boot
+ * script applied to `<html>` — otherwise the first `useThemeAttribute`
+ * effect run flips the class back to the default `light` before the
+ * backend hydration arrives, producing a visible flash.
+ */
+function readBootTheme(): ThemeMode {
+  if (typeof window === 'undefined') return 'light';
+  try {
+    const cached = window.localStorage.getItem('qx-theme');
+    if (cached === 'dark' || cached === 'light') return cached;
+  } catch {
+    // localStorage may throw in private mode — fall through to media query.
+  }
+  if (window.matchMedia('(prefers-color-scheme: dark)').matches) return 'dark';
+  return 'light';
+}
+
 export const useSettingsStore = create<SettingsState>()((set) => ({
-  theme: 'light',
+  theme: readBootTheme(),
   slackTargets: [],
   appliedColumns: DEFAULT_APPLIED_COLUMNS,
   columnFilters: {},
@@ -72,11 +91,23 @@ export const useSettingsStore = create<SettingsState>()((set) => ({
     // store subscriber fires, React re-renders, the hook re-reads
     // CSS vars — and they're still on the old theme because the
     // post-render effect that updates the DOM hasn't run yet.
+    //
+    // Also mirror to localStorage so the boot script in
+    // `app/layout.tsx` can apply the right `<html>` class before any
+    // CSS evaluates — eliminates the dark-mode flash on refresh.
     if (typeof document !== 'undefined') {
       const root = document.documentElement;
       root.dataset['theme'] = theme;
       root.classList.toggle('dark', theme === 'dark');
       root.classList.toggle('light', theme === 'light');
+    }
+    if (typeof window !== 'undefined') {
+      try {
+        window.localStorage.setItem('qx-theme', theme);
+      } catch {
+        // Quota / private mode — boot script will fall back to
+        // prefers-color-scheme. Not a fatal error.
+      }
     }
     set({ theme });
   },
@@ -165,8 +196,14 @@ function applyCfg(cfg: SysCfg): void {
     if (!appliedSet.has(k)) continue;
     filters[k] = v;
   }
+  // Theme goes through `setTheme` so the DOM (`<html>` class +
+  // dataset) and localStorage stay in sync with whatever the backend
+  // persisted. Bypassing it via raw `setState` (the old behaviour)
+  // updated the store but left the boot-script's stale class on
+  // `<html>` until the `useThemeAttribute` effect ran on the next
+  // render, producing the "color didn't refresh" symptom.
+  useSettingsStore.getState().setTheme(cfg.theme);
   useSettingsStore.setState({
-    theme: cfg.theme,
     slackTargets: cfg.slackTargets,
     appliedColumns: appliedFinal,
     dragDirection: cfg.dragDirection,

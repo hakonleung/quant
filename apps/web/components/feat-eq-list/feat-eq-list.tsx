@@ -224,6 +224,12 @@ function FeatEqListInner({ bare, onCountsChange }: FeatEqListProps = {}): React.
     onCountsChange?.({ total: baseRows.length, matched: visibleRows.length });
   }, [baseRows.length, visibleRows.length, onCountsChange]);
 
+  // Publish rendered code order so J/K (handled in global-cells.ts via
+  // `useUiStore.visibleCodes`) walks the same row order the user sees,
+  // not the raw `sector.codes` member list. Updates after every sort /
+  // filter / sector change.
+  const setVisibleCodes = useUiStore((s) => s.setVisibleCodes);
+
   // Default sort: dynamic sectors with a rank metric sort by rank_metric
   // (using the rank's order); otherwise mirror the BE's response sort
   // (currently `wcmi desc` — see shared `DEFAULT_SORT_BY_KIND`). Falling
@@ -273,6 +279,10 @@ function FeatEqListInner({ bare, onCountsChange }: FeatEqListProps = {}): React.
     if (sort.dir === 'desc') arr.reverse();
     return arr;
   }, [visibleRows, sort, columnsByKey]);
+
+  useEffect(() => {
+    setVisibleCodes(sortedRows.map((r) => r.code));
+  }, [sortedRows, setVisibleCodes]);
 
   // Auto-default focus to the first visible row of the active sector.
   // Fires when (a) nothing is focused yet, or (b) the persisted focus

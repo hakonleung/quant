@@ -60,6 +60,15 @@ interface UiState {
    * Empty string = no filter. Session-only (not persisted).
    */
   readonly listFilter: string;
+  /**
+   * Codes currently visible in EQ.LIST, in the order they're rendered
+   * (after sort + filter). Published by `<ScrollGrid>` so the J/K
+   * hotkeys (`ui.stock-next` / `ui.stock-prev`) advance focus along
+   * the same row order the user sees — not the raw `sector.codes`
+   * member list, which has no relation to the active sort. Session-
+   * only.
+   */
+  readonly visibleCodes: readonly string[];
   setFocusCode(code: string | null): void;
   setActiveSector(id: string): void;
   setNlResult(result: NlScreenResult | null): void;
@@ -72,6 +81,7 @@ interface UiState {
    */
   readonly setMobileTab: (tab: MobileTab) => void;
   readonly setListFilter: (text: string) => void;
+  readonly setVisibleCodes: (codes: readonly string[]) => void;
 }
 
 export const useUiStore = create<UiState>()(
@@ -83,6 +93,7 @@ export const useUiStore = create<UiState>()(
       chartRange: null,
       mobileTab: MOBILE_TAB_DEFAULT,
       listFilter: '',
+      visibleCodes: [],
       setFocusCode: (code) => {
         set({ focusCode: code, chartRange: null });
       },
@@ -103,6 +114,9 @@ export const useUiStore = create<UiState>()(
       },
       setListFilter: (text) => {
         set({ listFilter: text });
+      },
+      setVisibleCodes: (codes) => {
+        set({ visibleCodes: codes });
       },
     }),
     {

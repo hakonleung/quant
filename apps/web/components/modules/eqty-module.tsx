@@ -142,6 +142,7 @@ function SearchFilterAllSector(): React.ReactElement {
   return (
     <FeatScrNl
       marketFilter="a"
+      hideDropdown
       onPick={(stock): void => {
         setFocusCode(stock.code);
       }}

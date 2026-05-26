@@ -1,18 +1,13 @@
 'use client';
 
 /**
- * DEV — floating overlay surface for perf telemetry.
+ * DEV — perf telemetry strip, rendered inline in the FeatView header.
  *
- * Was a pile of capsules at the right end of the SYS header. Moved
- * out in 2026-05 so the topbar stays readable and the metrics surface
- * stays opt-in: the pane defaults to minimized; clicking `DEV` toggles
- * the body, which renders MEM / FPS / LCP / INP / CLS in an 8 px mono
- * strip — small enough to leave open in the corner without stealing
- * eye time.
- *
- * The pane is `floating`: the consumer wraps it in a fixed-position
- * dock (see `<AppShell>`'s floating dock); FeatView itself just sizes
- * the pane to its content and skips the fullscreen control.
+ * The pane is a topbar tile (`bodyOverlay` + `noFullscreen` in the
+ * feat-config map): all the live numbers (MEM / FPS / LCP / INP / CLS)
+ * sit in the header's `right` slot so they stay visible without
+ * expanding a body. Body is empty by design — the toggle just makes
+ * the tile's chevron flip; there's nothing to reveal.
  */
 
 import { Flex, Text } from '@chakra-ui/react';
@@ -29,26 +24,27 @@ export function FeatDev(): React.ReactElement {
   const memMb = useMemoryMb();
   const vitals = useWebVitals();
   return (
-    <FeatView feat={Feat.Dev}>
-      <Flex
-        direction="row"
-        gap="10px"
-        px="8px"
-        py="4px"
-        fontFamily="mono"
-        // 8 px keeps the whole strip ≤ ~220 px wide so the dock stays
-        // out of the way of the user's actual work.
-        fontSize="8px"
-        letterSpacing="0.10em"
-        whiteSpace="nowrap"
-        color="term.ink3"
-      >
-        <Stat label="MEM" value={formatMemMb(memMb)} valueColor={memColor(memMb)} />
-        <Stat label="FPS" value={String(fps)} valueColor={fpsColor(fps)} />
-        <VitalStat label="LCP" sample={vitals.lcp} fmt={fmtMs} />
-        <VitalStat label="INP" sample={vitals.inp} fmt={fmtMs} />
-        <VitalStat label="CLS" sample={vitals.cls} fmt={fmtCls} />
-      </Flex>
+    <FeatView
+      feat={Feat.Dev}
+      right={
+        <Flex
+          direction="row"
+          gap="10px"
+          fontFamily="mono"
+          fontSize="8px"
+          letterSpacing="0.10em"
+          whiteSpace="nowrap"
+          color="term.ink3"
+        >
+          <Stat label="MEM" value={formatMemMb(memMb)} valueColor={memColor(memMb)} />
+          <Stat label="FPS" value={String(fps)} valueColor={fpsColor(fps)} />
+          <VitalStat label="LCP" sample={vitals.lcp} fmt={fmtMs} />
+          <VitalStat label="INP" sample={vitals.inp} fmt={fmtMs} />
+          <VitalStat label="CLS" sample={vitals.cls} fmt={fmtCls} />
+        </Flex>
+      }
+    >
+      {null}
     </FeatView>
   );
 }

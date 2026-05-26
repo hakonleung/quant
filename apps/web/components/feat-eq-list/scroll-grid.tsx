@@ -216,7 +216,7 @@ function ColumnHeader({
   return (
     <Box
       display="flex"
-      bg="glass.panelSoft" backdropFilter="blur(12px)"
+      bg="glass.panelStrong" backdropFilter="blur(12px)"
       borderBottomWidth="1px"
       borderColor="line"
       flexShrink={0}
@@ -230,7 +230,7 @@ function ColumnHeader({
           flexShrink={0}
           position="sticky"
           left={0}
-          bg="glass.panelSoft" backdropFilter="blur(12px)"
+          bg="glass.panelStrong" backdropFilter="blur(12px)"
           zIndex={4}
         />
       )}
@@ -270,7 +270,8 @@ function ColumnHeader({
             whiteSpace="normal"
             wordBreak="break-word"
             lineHeight="1.1"
-            bg="glass.panelSoft" backdropFilter="blur(12px)"
+            bg={c.sticky === true ? 'glass.panelStrong' : 'transparent'}
+            backdropFilter={c.sticky === true ? 'blur(12px)' : undefined}
             cursor={sortable ? 'pointer' : 'default'}
             _hover={sortable ? { color: 'accent' } : {}}
             position={c.sticky === true ? 'sticky' : 'static'}
@@ -356,11 +357,12 @@ const RowItem = memo(function RowItem({
           display="grid"
           placeItems="center"
           // Sticky delete cell still needs to occlude the rows that
-          // scroll under it horizontally — use the glass-soft tint so
-          // it stays readable as part of the same material as the
-          // pane.
-          bg={focused ? 'accentBg' : 'glass.panelSoft'}
+          // scroll under it horizontally — `panelStrong` (70%) blocks
+          // text that `panelSoft` (28%) leaked through even with
+          // backdrop-blur. Focus accent layered via inset shadow.
+          bg="glass.panelStrong"
           backdropFilter="blur(12px)"
+          boxShadow={focused ? 'inset 0 0 0 9999px var(--chakra-colors-accentBg)' : undefined}
           zIndex={2}
           flexShrink={0}
         >
@@ -392,8 +394,18 @@ const RowItem = memo(function RowItem({
               ? `${String(stickyLeftFor(columns, i, hasRemove))}px`
               : undefined
           }
-          bg={c.sticky === true ? (focused ? 'accentBg' : 'glass.panelSoft') : 'transparent'}
-          backdropFilter={c.sticky === true && !focused ? 'blur(12px)' : undefined}
+          // Sticky cells must fully occlude the rows that scroll under
+          // them horizontally. `glass.panelSoft` (28% opacity) + blur
+          // still let text bleed through; `panelStrong` (70%) blocks
+          // it. Focused rows layer the `accentBg` tint via an inset
+          // shadow on top so the focus accent still reads.
+          bg={c.sticky === true ? 'glass.panelStrong' : 'transparent'}
+          backdropFilter={c.sticky === true ? 'blur(12px)' : undefined}
+          boxShadow={
+            c.sticky === true && focused
+              ? 'inset 0 0 0 9999px var(--chakra-colors-accentBg)'
+              : undefined
+          }
           zIndex={c.sticky === true ? 1 : 0}
           borderBottomWidth={c.sticky === true ? '1px' : 0}
           borderColor="glass.line"

@@ -6,6 +6,7 @@ import { createPortal, flushSync } from 'react-dom';
 
 import { FEAT_CONFIG_MAP, type Feat } from '../../lib/eqty/feat.js';
 import { useLayoutStore, type FeatViewMode } from '../../lib/stores/layout.store.js';
+import { useFocusStore } from '../../lib/ui-cmd/store/focus.js';
 import { MonoButton } from '../ui/mono-button.js';
 import { FeatViewStatus, type FeatViewStatusTone } from './feat-view-header.js';
 import { FloatingSurface } from './floating-surface.js';
@@ -281,9 +282,21 @@ export function FeatView({
   // Safari 2024+); pane height follows from the wrapper's resolved
   // intrinsic height.
 
+  // Any pointer-down anywhere inside the pane focuses this Feat — the
+  // active scope drives the keymap engine + the SCOPE hint window, so
+  // a mouse user clicking into a pane should land them in that pane's
+  // scope just like a `g <letter>` keystroke would.
+  const focusFeat = useCallback((): void => {
+    const focus = useFocusStore.getState();
+    if (focus.activeFeat === feat) return;
+    focus.setActive(feat);
+  }, [feat]);
+
   const paneBox = (
     <Box
       ref={paneRef}
+      onMouseDownCapture={focusFeat}
+      onFocusCapture={focusFeat}
       // Liquid Glass — the container itself is transparent and only
       // applies the backdrop-filter. Tint comes from the semi-
       // transparent header; body is transparent. No box-shadow (the
@@ -733,26 +746,20 @@ function OverlayBody({
     };
   }, [anchorRef]);
 
+  // Esc still dismisses, but outside-click does NOT — bodyOverlay panes
+  // (LDG / SET / WATCH / SYS / SCOPE / DEV) are persistent surfaces the
+  // user wants to keep open while clicking around the workbench (e.g.
+  // glance at SCOPE's keymap while operating MKT). Auto-dismiss made
+  // them feel like ephemeral menus, which they aren't.
   useEffect(() => {
-    const onDocDown = (e: MouseEvent): void => {
-      const ov = overlayRef.current;
-      const an = anchorRef.current;
-      const t = e.target;
-      if (!(t instanceof Node)) return;
-      if (ov?.contains(t) === true) return;
-      if (an?.contains(t) === true) return;
-      onDismiss();
-    };
     const onKey = (e: KeyboardEvent): void => {
       if (e.key === 'Escape') onDismiss();
     };
-    document.addEventListener('mousedown', onDocDown);
     window.addEventListener('keydown', onKey);
     return () => {
-      document.removeEventListener('mousedown', onDocDown);
       window.removeEventListener('keydown', onKey);
     };
-  }, [anchorRef, onDismiss]);
+  }, [onDismiss]);
 
   if (rect === null) return null;
   // **Critical**: render through a portal to `document.body`. The TopBar

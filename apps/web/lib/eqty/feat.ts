@@ -170,9 +170,12 @@ export const FEAT_CONFIG_MAP: Readonly<Record<Feat, FeatConfig>> = {
     noFullscreen: true,
   },
 
-  // Floating overlays — bottom-right dock, no fullscreen.
-  [Feat.Dev]: { cyber: true, defaultMinimized: true, floating: true },
-  [Feat.Scope]: { defaultMinimized: true, floating: true },
+  // SCOPE / DEV — topbar tiles next to SYS. DEV renders its perf strip
+  // directly in the pane header (no body expansion); SCOPE uses the
+  // standard bodyOverlay dropdown so the keymap hint floats below the
+  // tile when restored.
+  [Feat.Dev]: { cyber: true, defaultMinimized: true, bodyOverlay: true, noFullscreen: true },
+  [Feat.Scope]: { defaultMinimized: true, bodyOverlay: true, noFullscreen: true },
 
   [Feat.Terminal]: { cyber: true, defaultMinimized: true },
 };

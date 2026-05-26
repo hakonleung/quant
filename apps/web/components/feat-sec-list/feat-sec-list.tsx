@@ -1,7 +1,7 @@
 'use client';
 
 import { Flex, Text } from '@chakra-ui/react';
-import { useMemo } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 
 import { Feat } from '../../lib/eqty/feat.js';
 import { publishSector } from '../../lib/api/sectors.js';
@@ -243,6 +243,15 @@ function SectorChip({
   onDelete,
   onTogglePublish,
 }: ChipProps): React.ReactElement {
+  // When this chip becomes active (click / j / k), pull it into view
+  // inside the SectorSwiper's horizontal scroll viewport. `nearest`
+  // keeps already-visible chips in place and only scrolls when the
+  // chip is off-screen on either side.
+  const chipRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!selected) return;
+    chipRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
+  }, [selected]);
   const isDynamic = sector.kind === 'dynamic';
   const codes = sector.codes;
   const avgChgPct = (() => {
@@ -265,6 +274,7 @@ function SectorChip({
   // height — net pane height is unchanged.
   return (
     <Flex
+      ref={chipRef}
       as="li"
       role="button"
       tabIndex={0}

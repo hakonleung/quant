@@ -149,25 +149,24 @@ function useGlobalCmdKey({ enabled }: { readonly enabled: boolean }): void {
 }
 
 /**
- * Sync persisted theme → `<html data-theme="...">`. On first paint,
- * seed the store from `prefers-color-scheme` so a user landing on
- * the workbench from a system-dark device gets the dark workbench
- * without a light flash.
+ * Sync persisted theme → `<html data-theme="...">` + Chakra-required
+ * `dark` / `light` class on every theme change.
+ *
+ * The first-paint seed (prefers-color-scheme → cached theme → light)
+ * now lives in the inline boot script in `app/layout.tsx`, which runs
+ * before any CSS evaluates. That eliminates the dark-mode flash on
+ * refresh — the old `useEffect`-based seeding always ran AFTER the
+ * first paint, so users on a system-dark device saw a brief light
+ * frame before the store flip kicked in.
+ *
+ * This effect keeps the `<html>` chrome in lockstep with the store so
+ * later theme switches (manual toggle, backend hydration via
+ * `applyCfg`) propagate to the DOM even though `setTheme` already
+ * syncs synchronously — defensive parity for any code path that
+ * mutates `state.theme` via raw `setState`.
  */
 function useThemeAttribute(): void {
   const theme = useSettingsStore((s) => s.theme);
-  const setTheme = useSettingsStore((s) => s.setTheme);
-  // Seed from system preference once. The settings store hydrates
-  // from the backend asynchronously; until then we use the OS hint
-  // so the first paint is correct on every visit.
-  const seededRef = useRef(false);
-  useEffect(() => {
-    if (seededRef.current) return;
-    seededRef.current = true;
-    if (typeof window === 'undefined') return;
-    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-    if (prefersDark && theme === 'light') setTheme('dark');
-  }, [theme, setTheme]);
   useEffect(() => {
     if (typeof document === 'undefined') return;
     const root = document.documentElement;

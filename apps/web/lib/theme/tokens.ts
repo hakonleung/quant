@@ -75,11 +75,15 @@ export const palette = {
     panel3: '#1F2027', // elevated section chrome (opaque)
     line: 'rgba(255,255,255,0.10)', // Apple dark separator (slightly stronger)
     hover: 'rgba(255,255,255,0.05)', // Apple dark list-row hover
-    ink: '#F5F5F7', // Apple dark label primary
-    ink2: '#B8B8BD', // Apple dark label secondary — bumped from #A1A1A6 for AA on glass
-    ink3: '#9A9AA0', // Apple dark label tertiary — bumped from #6E6E73 (4.62:1 on panel)
-    amber: '#F5F5F7', // Apple dark label primary — monochrome accent
-    amberBg: 'rgba(245,245,247,0.10)',
+    // Dark ink — softened from Apple's #F5F5F7 (near-white) to a less
+    // glaring tone. Pure near-white on a deep-black canvas reads as
+    // harsh OLED glow; #DDDDE2 keeps AAA contrast (~12:1 on panel) while
+    // sitting visually closer to paper than to a flashlight.
+    ink: '#DDDDE2',
+    ink2: '#A8A8AD', // softened proportionally (still ≥ 4.5:1 on panel)
+    ink3: '#8E8E94', // softened proportionally (still ≥ 4.5:1 on panel)
+    amber: '#DDDDE2', // mirrors `ink`
+    amberBg: 'rgba(221,221,226,0.10)',
     up: '#FF6B5E', // 朱红 — financial rising red (CN convention)
     down: '#5FD3A3', // 石绿 — bright jade against ink
     blue: '#5AC8FA', // Apple system teal-blue — better AA on dark panels (~7.5:1)
@@ -97,9 +101,9 @@ export const palette = {
     panel2: 'rgba(15,16,20,0.78)',
     bgElev: 'rgba(28,29,36,0.82)', // dashboard cells / hotkey hint
     line: 'rgba(255,255,255,0.10)', // glass edge
-    ink: '#F5F5F7',
-    ink2: '#B8B8BD', // mirror dark.ink2 (AA on dark glass)
-    ink3: '#9A9AA0', // mirror dark.ink3 (AA on dark panel)
+    ink: '#DDDDE2', // mirror dark.ink — softened to take the OLED glare off
+    ink2: '#A8A8AD', // mirror dark.ink2
+    ink3: '#8E8E94', // mirror dark.ink3
     green: '#5FD3A3', // 石绿 — prompt indicator
     greenDark: '#3A9D74',
     cyan: '#5AC8FA', // Apple system teal — info glyph
