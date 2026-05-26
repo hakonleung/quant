@@ -1,24 +1,27 @@
 'use client';
 
 /**
- * SCOPE — floating pane showing the currently-active Feat.
+ * SCOPE — floating pane showing the currently-active Feat plus the
+ * keymap for that scope.
  *
- * Replaces the standalone `<ScopeBadge/>` pill from 2026-05: the spec
- * asked for scope-wrapped-in-a-pane so chrome (hide/show via name
- * click) matches every other surface. The pane is `floating`, so
- * there's no fullscreen control and only two states (minimized /
- * normal) — clicking `SCOPE` in the header toggles them.
+ * Replaces the old standalone `<ScopeBadge/>` + `<FeatHotkeyHint/>`
+ * pair from earlier 2026-05: the spec asked for scope-wrapped-in-a-
+ * pane and for the SCOPE body to show "the original tips" (i.e. the
+ * grouped key bindings the hint window used to surface). One pane
+ * with min/normal toggle now does both jobs.
  *
- * The full keyboard-shortcut window (`<FeatHotkeyHint/>`) is still a
- * separate overlay reachable via `?`; SCOPE is intentionally
- * minimal — its only job is to tell the user which keymap is live.
+ * The pane is `floating`, so there's no fullscreen control and only
+ * two states — clicking `SCOPE` in the header toggles them. The `?`
+ * global cell toggles the same mode via `setFeatViewMode`, so the
+ * keyboard entry point still works.
  */
 
-import { Box, Text } from '@chakra-ui/react';
+import { Text } from '@chakra-ui/react';
 
 import { Feat } from '../../lib/eqty/feat.js';
 import { useFocusStore } from '../../lib/ui-cmd/store/focus.js';
 import { FeatView } from '../feat-view/feat-view.js';
+import { HintList } from './hint-list.js';
 
 export function FeatScope(): React.ReactElement {
   const activeFeat = useFocusStore((s) => s.activeFeat);
@@ -38,12 +41,7 @@ export function FeatScope(): React.ReactElement {
         </Text>
       }
     >
-      {/* Body is intentionally a single hint line — restoring the pane
-          tells the user how to drill in further without crowding the
-          dock. Full keymap stays in `?` (FeatHotkeyHint). */}
-      <Box px="10px" py="6px" fontFamily="mono" fontSize="xs" color="ink3" letterSpacing="0.10em">
-        active feat — press ? for the full keymap
-      </Box>
+      <HintList />
     </FeatView>
   );
 }

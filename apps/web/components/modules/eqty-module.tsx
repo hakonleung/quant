@@ -104,17 +104,16 @@ function EqtyModuleDesktop(): React.ReactElement {
 }
 
 /**
- * Mounts the screening tiles paired with the active sector kind.
- * User sector → SEARCH (add-to-sector). Dynamic sector → DSL editor
- * + BT (event-study backtest). Skipped for the synthetic "All" sector
- * or when nothing is selected — no point showing screening surfaces
- * with no target.
+ * Mounts the screening tiles paired with the active sector kind:
+ *   - All / no sector → SEARCH bound to `listFilter` (live row filter)
+ *   - User sector     → SEARCH bound to add-to-sector
+ *   - Dynamic sector  → DSL editor + BT (event-study backtest)
  */
 function ScrPanesForActiveSector(): React.ReactElement | null {
   const activeSectorId = useUiStore((s) => s.activeSectorId);
   const sectors = useSectorsStore((s) => s.sectors);
   const sector = sectors.find((s) => s.id === activeSectorId) ?? null;
-  if (sector === null) return null;
+  if (sector === null) return <SearchFilterAllSector />;
   if (sector.kind === 'user') return <SearchAddToActiveSector />;
   // SectorKind is currently `'user' | 'dynamic'`, so this is the
   // exhaustive other branch — kept explicit (not `else`) so a future
@@ -124,6 +123,29 @@ function ScrPanesForActiveSector(): React.ReactElement | null {
       <FeatScrDsl />
       <FeatBtEval />
     </>
+  );
+}
+
+/**
+ * SEARCH pane for the synthetic "All" sector: input text drives a
+ * live filter on EQ.LIST through `ui.listFilter`; picking from the
+ * dropdown additionally focuses the chosen code (matches the existing
+ * row-click behaviour). Mounted whenever the active sector isn't a
+ * real user/dynamic sector (i.e. ALL_SECTOR_ID or nothing selected).
+ */
+function SearchFilterAllSector(): React.ReactElement {
+  const setFocusCode = useUiStore((s) => s.setFocusCode);
+  const setListFilter = useUiStore((s) => s.setListFilter);
+  return (
+    <FeatScrNl
+      marketFilter="a"
+      onPick={(stock): void => {
+        setFocusCode(stock.code);
+      }}
+      onTextChange={(text): void => {
+        setListFilter(text);
+      }}
+    />
   );
 }
 

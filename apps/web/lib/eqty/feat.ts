@@ -88,6 +88,16 @@ export interface FeatConfig {
    * grid.
    */
   readonly floating?: boolean;
+  /**
+   * Hide the fullscreen control without making the pane floating. Use
+   * for topbar tiles (SYS / SET / LDG / WATCH) and helper surfaces
+   * (PAT / SEARCH) where blowing the pane up to viewport size adds
+   * no value — they're either bodyOverlay (already detached) or
+   * intentionally compact.
+   *
+   * Implied by `floating: true`; setting both is fine.
+   */
+  readonly noFullscreen?: boolean;
 }
 
 export const FEAT_CONFIG_MAP: Readonly<Record<Feat, FeatConfig>> = {
@@ -99,9 +109,12 @@ export const FEAT_CONFIG_MAP: Readonly<Record<Feat, FeatConfig>> = {
   [Feat.EquityInfo]: { defaultMinimized: true },
   [Feat.EquityList]: {},
 
-  // SCR / BT — minimized by default; show up only when relevant
-  [Feat.ScreenNL]: { cyber: true, defaultMinimized: true },
-  [Feat.ScreenPattern]: { defaultMinimized: true },
+  // SCR / BT — minimized by default; show up only when relevant.
+  // SEARCH + PAT are helper surfaces; fullscreening them is never the
+  // intent (they pair with a chart / list pane). DSL + BT can still
+  // be fullscreened because their content is substantial.
+  [Feat.ScreenNL]: { cyber: true, defaultMinimized: true, noFullscreen: true },
+  [Feat.ScreenPattern]: { defaultMinimized: true, noFullscreen: true },
   [Feat.ScreenDsl]: { defaultMinimized: true },
   [Feat.BtEval]: { defaultMinimized: true },
 
@@ -110,12 +123,34 @@ export const FEAT_CONFIG_MAP: Readonly<Record<Feat, FeatConfig>> = {
 
   // SYS / SET / LDG / WATCH all live in the topbar — narrow chrome
   // with no inline body space, so `bodyOverlay` floats their bodies
-  // as fixed-position dropdowns anchored to the header rect.
-  [Feat.SysMain]: { cyber: true, defaultMinimized: true, bodyOverlay: true },
-  [Feat.Settings]: { cyber: true, defaultMinimized: true, bodyOverlay: true },
-  [Feat.Ledger]: { defaultMinimized: true, bodyOverlay: true },
-  [Feat.WatchLive]: { cyber: true, defaultMinimized: true, bodyOverlay: true },
-  [Feat.SysCfg]: { cyber: true, defaultMinimized: true, bodyOverlay: true },
+  // as fixed-position dropdowns anchored to the header rect. They
+  // also opt out of fullscreen — the bodyOverlay model is already a
+  // "give me more space" affordance.
+  [Feat.SysMain]: {
+    cyber: true,
+    defaultMinimized: true,
+    bodyOverlay: true,
+    noFullscreen: true,
+  },
+  [Feat.Settings]: {
+    cyber: true,
+    defaultMinimized: true,
+    bodyOverlay: true,
+    noFullscreen: true,
+  },
+  [Feat.Ledger]: { defaultMinimized: true, bodyOverlay: true, noFullscreen: true },
+  [Feat.WatchLive]: {
+    cyber: true,
+    defaultMinimized: true,
+    bodyOverlay: true,
+    noFullscreen: true,
+  },
+  [Feat.SysCfg]: {
+    cyber: true,
+    defaultMinimized: true,
+    bodyOverlay: true,
+    noFullscreen: true,
+  },
 
   // Floating overlays — bottom-right dock, no fullscreen.
   [Feat.Dev]: { cyber: true, defaultMinimized: true, floating: true },

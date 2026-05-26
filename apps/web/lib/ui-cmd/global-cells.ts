@@ -69,8 +69,14 @@ function registerHintCell(): void {
     label: 'Toggle keyboard hint',
     group: 'view',
   });
+  // The hint listing lives inside the SCOPE floating pane now (see
+  // `<FeatScope/>`). `?` toggles that pane's persisted mode rather
+  // than the old `focus.hintOpen` flag — keeps a single source of
+  // truth for "is the keymap visible?".
   uiRegistry.bind(HINT_TOGGLE_CELL_ID, () => {
-    useFocusStore.getState().toggleHintOpen();
+    const layout = useLayoutStore.getState();
+    const current = layout.featViewMode[Feat.Scope] ?? 'minimized';
+    layout.setFeatViewMode(Feat.Scope, current === 'normal' ? 'minimized' : 'normal');
   });
 }
 

@@ -47,6 +47,13 @@ export interface StockCommandBarProps {
    * matching rules dispatch each entry to a market by shape.
    */
   readonly onBatchPick?: (stocks: readonly UniverseStock[]) => void;
+  /**
+   * Live notification on every text change — used by the All-sector
+   * SEARCH pane to drive a filter on EQ.LIST without waiting for a
+   * pick. Independent of `onPick`; the dropdown still surfaces match
+   * options on top of any filter behaviour the consumer wires up.
+   */
+  readonly onTextChange?: (text: string) => void;
 }
 
 /**
@@ -62,11 +69,13 @@ export function FeatScrNl({
   marketFilter,
   onPick,
   onBatchPick,
+  onTextChange,
   rightSlot,
 }: {
   readonly marketFilter?: WatchMarket;
   readonly onPick: (stock: UniverseStock) => void;
   readonly onBatchPick?: (stocks: readonly UniverseStock[]) => void;
+  readonly onTextChange?: (text: string) => void;
   readonly rightSlot?: React.ReactNode;
 }): React.ReactElement {
   return (
@@ -74,6 +83,7 @@ export function FeatScrNl({
       <StockCommandBar
         {...(marketFilter !== undefined ? { marketFilter } : {})}
         {...(onBatchPick !== undefined ? { onBatchPick } : {})}
+        {...(onTextChange !== undefined ? { onTextChange } : {})}
         onPick={onPick}
       />
     </FeatView>
@@ -121,6 +131,9 @@ function useSearchState(props: StockCommandBarProps): SearchState {
     props.onPick(row);
     setText('');
     setOpen(false);
+    // Pick clears the input — mirror that to any text subscriber so
+    // the All-sector filter doesn't stay stuck on the previous query.
+    props.onTextChange?.('');
   };
 
   const onKey = (e: KeyboardEvent<HTMLInputElement>): void => {
@@ -201,6 +214,10 @@ export function StockCommandBar(props: StockCommandBarProps): React.ReactElement
     s.setText(text);
     s.setOpen(true);
     s.setHighlight(0);
+    // Notify the host (e.g. All-sector filter wrapper) on every
+    // keystroke so it can apply the filter live. Commit-style picks
+    // still go through `onPick` separately.
+    props.onTextChange?.(text);
   };
   const onOpen = (): void => {
     s.setOpen(true);

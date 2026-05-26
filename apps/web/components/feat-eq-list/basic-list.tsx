@@ -17,13 +17,9 @@ import { useMemo, useRef } from 'react';
 
 import { Feat } from '../../lib/eqty/feat.js';
 import { ConfirmCancelled, useConfirm } from '../../lib/hooks/use-confirm.js';
-import {
-  useStockUniverse,
-  type UniverseStock,
-} from '../../lib/hooks/use-stock-universe.js';
+import { useStockUniverse } from '../../lib/hooks/use-stock-universe.js';
 import { useSectorsStore, type Sector } from '../../lib/stores/sectors.store.js';
 import { useUiStore } from '../../lib/stores/ui.store.js';
-import { FeatScrNl } from '../feat-scr-nl/feat-scr-nl.js';
 import { FeatView } from '../feat-view/feat-view.js';
 import { MonoButton } from '../ui/mono-button.js';
 
@@ -72,23 +68,10 @@ export function BasicList({ sector, market, bare }: BasicListProps): React.React
     upsert({ ...sector, name: t });
   };
 
-  const onAdd = (s: UniverseStock): void => {
-    if (sector.codes.includes(s.code)) return;
-    const nextCodes = [...sector.codes, s.code];
-    upsert({ ...sector, codes: nextCodes, count: nextCodes.length });
-  };
-
-  const onBatchAdd = (stocks: readonly UniverseStock[]): void => {
-    const existing = new Set(sector.codes);
-    const nextCodes = [...sector.codes];
-    for (const s of stocks) {
-      if (existing.has(s.code)) continue;
-      existing.add(s.code);
-      nextCodes.push(s.code);
-    }
-    if (nextCodes.length === sector.codes.length) return;
-    upsert({ ...sector, codes: nextCodes, count: nextCodes.length });
-  };
+  // Add-to-sector is owned by the outer `SearchAddToActiveSector`
+  // tile in eqty-module — when a user sector is active, that wrapper
+  // mounts a `<FeatScrNl>` wired to this sector's `market`. BasicList
+  // only renders the list itself + the row-remove confirmer.
 
   const onRemove = (code: string): void => {
     const name = codeToName.get(code);
@@ -143,17 +126,6 @@ export function BasicList({ sector, market, bare }: BasicListProps): React.React
       }
     >
       <Flex direction="column" h="100%" minH={0}>
-        <Box flexShrink={0}>
-          <FeatScrNl
-            marketFilter={market}
-            onPick={(s): void => {
-              onAdd(s);
-            }}
-            onBatchPick={(stocks): void => {
-              onBatchAdd(stocks);
-            }}
-          />
-        </Box>
         <Box ref={scrollRef} flex="1" overflow="auto" minH={0}>
           {rows.length === 0 ? (
             <Text px="10px" py="14px" fontFamily="mono" fontSize="xs" color="ink3">

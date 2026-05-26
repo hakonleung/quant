@@ -104,12 +104,14 @@ describe('global cells — view-mode toggles', () => {
 });
 
 describe('global cells — special keys', () => {
-  it('hint toggle flips hintOpen', async () => {
-    expect(useFocusStore.getState().hintOpen).toBe(false);
+  it('hint toggle flips SCOPE pane mode', async () => {
+    // SCOPE pane defaults to `minimized` (FEAT_CONFIG_MAP). The hint
+    // cell toggles it between `minimized` and `normal`.
+    expect(useLayoutStore.getState().featViewMode[Feat.Scope] ?? 'minimized').toBe('minimized');
     await uiRegistry.dispatch(HINT_TOGGLE_CELL_ID);
-    expect(useFocusStore.getState().hintOpen).toBe(true);
+    expect(useLayoutStore.getState().featViewMode[Feat.Scope]).toBe('normal');
     await uiRegistry.dispatch(HINT_TOGGLE_CELL_ID);
-    expect(useFocusStore.getState().hintOpen).toBe(false);
+    expect(useLayoutStore.getState().featViewMode[Feat.Scope]).toBe('minimized');
   });
 });
 

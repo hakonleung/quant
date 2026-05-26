@@ -89,16 +89,19 @@ export function FeatView({
   const cyber = config.cyber ?? false;
   const bodyOverlay = config.bodyOverlay ?? false;
   const floating = config.floating ?? false;
+  // Floating panes implicitly disallow fullscreen — they're already
+  // outside the column grid, so growing edge-to-edge is meaningless.
+  const allowFullscreen = !floating && config.noFullscreen !== true;
 
   // Persisted mode keyed by feat id — survives reloads. Missing entries
   // fall back to the static `defaultMinimized` flag in feat config.
-  // Floating panes have only two states (`minimized`/`normal`) — clamp
-  // any stale `fullscreen` value to `normal` so a config that flips a
-  // pane to `floating` after release doesn't leave it stuck.
+  // Panes that disallow fullscreen (floating or noFullscreen) clamp
+  // any stale `fullscreen` value to `normal` so a config flip after
+  // release doesn't leave the pane stuck in an unreachable mode.
   const persistedMode = useLayoutStore((s) => s.featViewMode[feat]);
   const rawMode: FeatViewMode =
     persistedMode ?? (config.defaultMinimized === true ? 'minimized' : 'normal');
-  const mode: FeatViewMode = floating && rawMode === 'fullscreen' ? 'normal' : rawMode;
+  const mode: FeatViewMode = !allowFullscreen && rawMode === 'fullscreen' ? 'normal' : rawMode;
   const setPersistedMode = useLayoutStore((s) => s.setFeatViewMode);
   const setMode = useCallback(
     (m: FeatViewMode): void => {
@@ -279,7 +282,7 @@ export function FeatView({
         right={right}
         cyber={cyber}
         mode={mode}
-        allowFullscreen={!floating}
+        allowFullscreen={allowFullscreen}
         onMinimize={minimize}
         onRestore={restore}
         onFullscreen={goFullscreen}

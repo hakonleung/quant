@@ -14,7 +14,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useEffect, useState, type ReactNode } from 'react';
 
-import { FeatHotkeyHint } from '../components/feat-hotkey-hint/feat-hotkey-hint.js';
 import { FloatingDock } from '../components/shell/floating-dock.js';
 import { getClientConfig } from './config/config-center-next-client-getter.js';
 import { registerStoreExportGlobal } from './storage/export-stores.js';
@@ -54,7 +53,6 @@ export function Providers({ children }: ProvidersProps): ReactNode {
     <ThemeProvider>
       <QueryClientProvider client={client}>{children}</QueryClientProvider>
       <UiCmdEngine />
-      <FeatHotkeyHint />
       <FloatingDock />
       <ConfirmHub />
     </ThemeProvider>

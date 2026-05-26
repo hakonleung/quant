@@ -206,9 +206,23 @@ function FeatEqListInner({ bare, onCountsChange }: FeatEqListProps = {}): React.
     });
   }, [filteredRows, filterEntries, isDynamic]);
 
+  // SEARCH pane (only mounted for the synthetic All sector) writes its
+  // input into `ui.listFilter`. We narrow `predicateRows` by a case-
+  // insensitive match on either the code or the name; the SEARCH pane
+  // clears the filter on commit (pick) or sector switch, so the All-
+  // view returns to the full universe afterwards.
+  const listFilter = useUiStore((s) => s.listFilter);
+  const visibleRows: readonly ListRow[] = useMemo(() => {
+    if (!isAll || listFilter.trim().length === 0) return predicateRows;
+    const term = listFilter.trim().toLowerCase();
+    return predicateRows.filter(
+      (r) => r.code.toLowerCase().includes(term) || r.name.toLowerCase().includes(term),
+    );
+  }, [predicateRows, listFilter, isAll]);
+
   useEffect(() => {
-    onCountsChange?.({ total: baseRows.length, matched: predicateRows.length });
-  }, [baseRows.length, predicateRows.length, onCountsChange]);
+    onCountsChange?.({ total: baseRows.length, matched: visibleRows.length });
+  }, [baseRows.length, visibleRows.length, onCountsChange]);
 
   // Default sort: dynamic sectors with a rank metric sort by rank_metric
   // (using the rank's order); otherwise mirror the BE's response sort
@@ -251,14 +265,14 @@ function FeatEqListInner({ bare, onCountsChange }: FeatEqListProps = {}): React.
     return m;
   }, [columns]);
   const sortedRows: readonly ListRow[] = useMemo(() => {
-    if (sort === null) return predicateRows;
+    if (sort === null) return visibleRows;
     const col = columnsByKey.get(sort.key);
-    if (col === undefined) return predicateRows;
-    const arr = [...predicateRows];
+    if (col === undefined) return visibleRows;
+    const arr = [...visibleRows];
     arr.sort((a, b) => compareValues(col.sortValue(a), col.sortValue(b)));
     if (sort.dir === 'desc') arr.reverse();
     return arr;
-  }, [predicateRows, sort, columnsByKey]);
+  }, [visibleRows, sort, columnsByKey]);
 
   // Auto-default focus to the first visible row of the active sector.
   // Fires when (a) nothing is focused yet, or (b) the persisted focus
@@ -343,9 +357,9 @@ function FeatEqListInner({ bare, onCountsChange }: FeatEqListProps = {}): React.
             letterSpacing="0.12em"
             whiteSpace="nowrap"
           >
-            {predicateRows.length === baseRows.length
+            {visibleRows.length === baseRows.length
               ? String(baseRows.length)
-              : `${String(predicateRows.length)}/${String(baseRows.length)}`}
+              : `${String(visibleRows.length)}/${String(baseRows.length)}`}
           </Box>
         </Flex>
       }

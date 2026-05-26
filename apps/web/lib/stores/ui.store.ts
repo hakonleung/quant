@@ -52,6 +52,14 @@ interface UiState {
   /** Currently active tab in the mobile shell. Persisted so a refresh
    *  on the phone keeps the user on the same Feat. */
   readonly mobileTab: MobileTab;
+  /**
+   * Live text filter for the EQ.LIST when the synthetic "All" sector
+   * is active. Driven by the SEARCH pane's input (`<FeatScrNl>` with
+   * `onTextChange`) — typing narrows the visible rows in real time;
+   * the user can then click a match or press Enter to focus a code.
+   * Empty string = no filter. Session-only (not persisted).
+   */
+  readonly listFilter: string;
   setFocusCode(code: string | null): void;
   setActiveSector(id: string): void;
   setNlResult(result: NlScreenResult | null): void;
@@ -63,6 +71,7 @@ interface UiState {
    * legacy setters above predate this convention.
    */
   readonly setMobileTab: (tab: MobileTab) => void;
+  readonly setListFilter: (text: string) => void;
 }
 
 export const useUiStore = create<UiState>()(
@@ -73,13 +82,15 @@ export const useUiStore = create<UiState>()(
       nlResult: null,
       chartRange: null,
       mobileTab: MOBILE_TAB_DEFAULT,
+      listFilter: '',
       setFocusCode: (code) => {
         set({ focusCode: code, chartRange: null });
       },
       setActiveSector: (id) => {
-        // Clear focus on sector switch so the list panel's auto-default
-        // effect can pick the first member of the new sector.
-        set({ activeSectorId: id, focusCode: null, chartRange: null });
+        // Clear focus + filter on sector switch so the list panel's
+        // auto-default effect can pick the first member of the new
+        // sector and stale text doesn't carry across sectors.
+        set({ activeSectorId: id, focusCode: null, chartRange: null, listFilter: '' });
       },
       setNlResult: (result) => {
         set({ nlResult: result });
@@ -89,6 +100,9 @@ export const useUiStore = create<UiState>()(
       },
       setMobileTab: (tab) => {
         set({ mobileTab: tab });
+      },
+      setListFilter: (text) => {
+        set({ listFilter: text });
       },
     }),
     {
