@@ -136,3 +136,16 @@
     background-color: var(--chakra-colors-panel) !important;
   }
 }
+
+/*
+ * xterm.js bundled CSS hard-codes `.xterm-viewport { background-color:
+ * #000 }` — that paints solid black behind every terminal regardless
+ * of `theme.background: rgba(0,0,0,0)`. AI.SEC / AI.EQ and any
+ * embedded TermConsole need the underlying pane glass to show through,
+ * so we force the viewport transparent and rely on the host (FeatView
+ * pane or FeatTermMain's dedicated `term.bg` surface in TERM mode) to
+ * supply the readable background.
+ */
+.xterm .xterm-viewport {
+  background-color: transparent !important;
+}

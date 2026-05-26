@@ -14,7 +14,6 @@ import { useState } from 'react';
 
 import { useViewport } from '../../lib/hooks/use-viewport.js';
 import { useUiStore } from '../../lib/stores/ui.store.js';
-import { useTokenColor } from '../../lib/theme/use-token-color.js';
 import { TermConsole } from '../term-console/index.js';
 
 import { BigLogo } from './big-logo.js';
@@ -29,20 +28,23 @@ export function FeatTermMain(): React.ReactElement {
   const previewCode = peekListCode(state.active?.state) ?? focusCode;
   const { mode: vpMode } = useViewport();
   const isMobile = vpMode === 'mobile';
-  // `brand.logoBg` holds a full `radial-gradient(...)` string — Chakra's
-  // `bg` accepts any CSS value, so the gradient flows straight through.
-  const logoBg = useTokenColor('brand.logoBg');
 
   return (
     <Flex
       direction="column"
       h="100%"
       minH="320px"
-      bg={logoBg}
+      // TERM is always the dark CRT surface regardless of the user's
+      // light/dark setting — that's the retro-terminal aesthetic.
+      // We can't use the `term.bg` semantic token because it's
+      // theme-aware (it resolves to a near-white glass in light
+      // mode); the xterm canvas would then have light text on a
+      // light surface. Hard-code the dark CRT base + the inverse-
+      // light foreground so the readout reads on both themes.
+      bg="#0F1014"
+      color="#F5F5F7"
       position="relative"
       overflow="hidden"
-      backdropFilter="blur(20px) saturate(180%)"
-      css={{ WebkitBackdropFilter: 'blur(20px) saturate(180%)' }}
     >
       <CrtOverlay />
 

@@ -93,6 +93,10 @@ export function FeatView({
   // Floating panes implicitly disallow fullscreen — they're already
   // outside the column grid, so growing edge-to-edge is meaningless.
   const allowFullscreen = !floating && config.noFullscreen !== true;
+  // JSX prop overrides config so per-instance overrides still work
+  // (e.g. mounting an otherwise content-sized Feat inside a slot that
+  // wants it to fill).
+  const isContentSized = contentSized ?? config.contentSized ?? false;
 
   // Persisted mode keyed by feat id — survives reloads. Missing entries
   // fall back to the static `defaultMinimized` flag in feat config.
@@ -185,18 +189,23 @@ export function FeatView({
     };
   }, []);
 
-  // FLIP-style toggle for min/restore: snapshot the pane's current
-  // height, flush the mode change so the browser computes the target
-  // layout, then run a WAAPI height keyframe between the two. This
-  // sidesteps every CSS-animatable surface that's brittle in flex
-  // columns (max-height needs definite endpoints, grid-template-rows
-  // fr interpolation depends on parent definiteness). After the
-  // animation finishes the inline keyframe is dropped and the pane
-  // reverts to its CSS-driven height — no leftover state.
+  // FLIP-style toggle for min/restore. Snapshot the pane's height
+  // BEFORE flushing the state change, then measure the new height
+  // AFTER the synchronous re-layout — those two numbers are the
+  // WAAPI endpoints. Inline `height` overrides flex sizing during the
+  // animation; once it finishes (no `fill: forwards`), CSS reasserts
+  // and the pane sits at whichever flex/max-height combination the
+  // mode dictates.
+  //
+  // We deliberately ignore `prefers-reduced-motion` here — the
+  // pane's expand/collapse is a load-bearing UI affordance (it's how
+  // the user reads the layout transition). A 280 ms ease is mild
+  // enough to stay below the typical reduced-motion threshold; the
+  // fullscreen WAAPI animations elsewhere still respect the pref.
   const togglePane = useCallback(
     (next: 'minimized' | 'normal'): void => {
       const node = paneRef.current;
-      if (node === null || prefersReducedMotion()) {
+      if (node === null) {
         setMode(next);
         return;
       }
@@ -299,17 +308,19 @@ export function FeatView({
       flex={
         isFullscreen
           ? undefined
-          : floating
+          : floating || bodyOverlay
             ? undefined
-            : bodyOverlay
-              ? '1 1 0'
-              : inlineCollapsed || contentSized === true
-                ? '0 0 auto'
-                : '1 1 0'
+            : inlineCollapsed || isContentSized
+              ? '0 0 auto'
+              : '1 1 0'
       }
-      // Floating panes size to content. The dock around them controls
-      // placement; the pane just shrinks/grows around its header + body.
-      w={floating ? 'fit-content' : undefined}
+      // Floating panes + bodyOverlay (topbar tiles) size to their
+      // header content. The host wrapper handles placement; the pane
+      // just shrinks/grows around its header + body. Without
+      // `fit-content`, bodyOverlay panes mounted in a row-flex
+      // wrapper (the topbar) collapsed to 0 width because their old
+      // `flex: 1 1 0` had nothing to fill against.
+      w={floating || bodyOverlay ? 'fit-content' : undefined}
       minW={floating ? '88px' : undefined}
       minH={0}
       display="flex"
@@ -344,7 +355,7 @@ export function FeatView({
         // remaining flex space would keep the wrapper non-zero.
         // `overflow: hidden` clips during the FLIP transition.
         <Box
-          flex={isMinimized || contentSized === true ? '0 0 auto' : '1'}
+          flex={isMinimized || isContentSized ? '0 0 auto' : '1'}
           minH={0}
           maxH={isMinimized ? '0px' : undefined}
           bg="transparent"
@@ -383,7 +394,7 @@ export function FeatView({
   // fullscreen: `1 1 0` for normal panes, `0 0 auto` for content-sized
   // ones. Without this the column's leftover space gets reabsorbed by
   // the other panes and they slide around when fullscreen is entered.
-  const placeholderFlex = contentSized === true ? '0 0 auto' : '1 1 0';
+  const placeholderFlex = isContentSized ? '0 0 auto' : '1 1 0';
   const portalTarget = typeof document === 'undefined' ? null : document.body;
   return (
     <>

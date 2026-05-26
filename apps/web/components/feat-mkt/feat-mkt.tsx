@@ -45,7 +45,6 @@ export function FeatMkt(): React.ReactElement {
   return (
     <FeatView
       feat={Feat.Mkt}
-      contentSized
       status={tone}
       statusBlink={isLoading}
       right={

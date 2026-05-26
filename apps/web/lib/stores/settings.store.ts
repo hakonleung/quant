@@ -64,6 +64,20 @@ export const useSettingsStore = create<SettingsState>()((set) => ({
   columnFilterScope: 'all-sectors',
   dragDirection: 'inverted',
   setTheme: (theme) => {
+    // Sync the DOM attributes + classes BEFORE notifying subscribers
+    // so any consumer that resolves CSS custom properties on the
+    // same tick (notably `useTokenColor`, which reads `--chakra-
+    // colors-*` via `getComputedStyle`) sees the new theme's
+    // computed values instead of the previous one. Without this the
+    // store subscriber fires, React re-renders, the hook re-reads
+    // CSS vars — and they're still on the old theme because the
+    // post-render effect that updates the DOM hasn't run yet.
+    if (typeof document !== 'undefined') {
+      const root = document.documentElement;
+      root.dataset['theme'] = theme;
+      root.classList.toggle('dark', theme === 'dark');
+      root.classList.toggle('light', theme === 'light');
+    }
     set({ theme });
   },
   setDragDirection: (direction) => {

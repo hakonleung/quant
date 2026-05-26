@@ -98,26 +98,43 @@ export interface FeatConfig {
    * Implied by `floating: true`; setting both is fine.
    */
   readonly noFullscreen?: boolean;
+  /**
+   * Pane sizes to its content (`flex: 0 0 auto`) instead of flex-
+   * growing to fill its column slot. Use for short helper panes
+   * (SEARCH input, MKT sector strip, fundamentals card) so they
+   * don't claim the same vertical share as a long list / chart that
+   * actually needs the room. Callers can still override per-instance
+   * via the `<FeatView contentSized>` JSX prop.
+   */
+  readonly contentSized?: boolean;
 }
 
 export const FEAT_CONFIG_MAP: Readonly<Record<Feat, FeatConfig>> = {
   // MKT — sector slider, content-sized header strip. Fullscreen
   // doesn't make sense for a single-row chip strip.
-  [Feat.Mkt]: { noFullscreen: true },
+  [Feat.Mkt]: { noFullscreen: true, contentSized: true },
 
-  // EQ workbench panes — all three are independent floating tiles
+  // EQ workbench panes — EQ.CHART fills the column; INFO + LIST
+  // depend on their own content / scroll surface.
   [Feat.EquityChart]: {},
-  [Feat.EquityInfo]: { defaultMinimized: true },
+  [Feat.EquityInfo]: { defaultMinimized: true, contentSized: true },
   [Feat.EquityList]: {},
 
   // SCR / BT — minimized by default; show up only when relevant.
   // SEARCH + PAT are helper surfaces; fullscreening them is never the
   // intent (they pair with a chart / list pane). DSL + BT can still
-  // be fullscreened because their content is substantial.
-  [Feat.ScreenNL]: { cyber: true, defaultMinimized: true, noFullscreen: true },
-  [Feat.ScreenPattern]: { defaultMinimized: true, noFullscreen: true },
-  [Feat.ScreenDsl]: { defaultMinimized: true },
-  [Feat.BtEval]: { defaultMinimized: true },
+  // be fullscreened because their content is substantial. SEARCH is
+  // a one-line input — `contentSized` keeps it from claiming column
+  // share equal to EQ.LIST below it.
+  [Feat.ScreenNL]: {
+    cyber: true,
+    defaultMinimized: true,
+    noFullscreen: true,
+    contentSized: true,
+  },
+  [Feat.ScreenPattern]: { defaultMinimized: true, noFullscreen: true, contentSized: true },
+  [Feat.ScreenDsl]: { defaultMinimized: true, contentSized: true },
+  [Feat.BtEval]: { defaultMinimized: true, contentSized: true },
 
   [Feat.AIEq]: { cyber: true },
   [Feat.AISec]: { cyber: true },
