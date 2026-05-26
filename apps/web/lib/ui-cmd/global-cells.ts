@@ -294,6 +294,68 @@ function registerOpenNewSectorCell(): void {
   // Handler bound by FeatMkt via useFeatHotkeys.
 }
 
+/**
+ * `+` / `-` → zoom the kline chart. The handler is bound by
+ * `FeatEqChart` (its viewport lives in component state); we expose
+ * the cell as `'global'` scope but gate it with a `when` predicate so
+ * the keys only fire while the user is in EQ.CHART or EQ.LIST. That
+ * way the user can zoom without switching panes back to the chart
+ * after walking the list with j/k.
+ */
+const CHART_ZOOM_ACTIVE_FEATS: readonly string[] = [
+  Feat.EquityChart,
+  Feat.EquityList,
+];
+function chartZoomWhen(ctx: { readonly activeFeat: string | null }): boolean {
+  return ctx.activeFeat !== null && CHART_ZOOM_ACTIVE_FEATS.includes(ctx.activeFeat);
+}
+/**
+ * `p d` / `p w` / `p m` → switch the EQ.CHART period. Same `when`
+ * gate as the zoom keys so the user can flip period from the list
+ * pane too. Handlers write straight to the persisted ui store —
+ * FeatEqChart subscribes to the slice and re-derives the resampled
+ * bars on the next render, so no Feat-internal binding is needed.
+ */
+function registerChartPeriodCells(): void {
+  const periods: ReadonlyArray<readonly ['D' | 'W' | 'M', string, string]> = [
+    ['D', 'p d', 'Daily kline'],
+    ['W', 'p w', 'Weekly kline'],
+    ['M', 'p m', 'Monthly kline'],
+  ];
+  for (const [p, seq, label] of periods) {
+    const id = `ui.chart-period-${p.toLowerCase()}`;
+    registerLocalCell(id, {
+      scope: 'global',
+      keys: [seq],
+      label,
+      group: 'view',
+      when: chartZoomWhen,
+    });
+    uiRegistry.bind(id, () => {
+      useUiStore.getState().setChartPeriod(p);
+    });
+  }
+}
+
+function registerChartZoomCells(): void {
+  registerLocalCell('ui.chart-zoom-in', {
+    scope: 'global',
+    // `=` is the unshifted form of `+` on US layouts — accept both so
+    // the user doesn't have to hold Shift to zoom in.
+    keys: ['+', '='],
+    label: 'Zoom in chart',
+    group: 'view',
+    when: chartZoomWhen,
+  });
+  registerLocalCell('ui.chart-zoom-out', {
+    scope: 'global',
+    keys: ['-'],
+    label: 'Zoom out chart',
+    group: 'view',
+    when: chartZoomWhen,
+  });
+}
+
 function registerOpenLedgerAddCell(): void {
   // `A` fires inside the LDG pane scope (LDG is now a standalone
   // floating tile, so the simple feat-scope is enough — no sub-focus
@@ -395,6 +457,8 @@ export function installGlobalCells(): void {
   registerRemoveStockCell();
   registerOpenNewSectorCell();
   registerOpenLedgerAddCell();
+  registerChartZoomCells();
+  registerChartPeriodCells();
   registerAnalyzeBinding();
   registerAnalyzeSectorBinding();
 }

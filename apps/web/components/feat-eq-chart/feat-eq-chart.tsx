@@ -27,7 +27,9 @@
 
 import { Box, Flex, Text } from '@chakra-ui/react';
 import type { KlineBar } from '@quant/shared';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+
+import { uiRegistry } from '../../lib/ui-cmd/registry.js';
 
 import { Feat } from '../../lib/eqty/feat.js';
 import { FeatViewHeaderRight } from '../feat-view/feat-view-header.js';
@@ -40,6 +42,11 @@ import {
   type ChartViewport,
 } from '../../lib/fp/chart-view.js';
 import { pctChangeToLatest } from '../../lib/fp/kline-chart.js';
+import {
+  KlinePeriods,
+  resampleBars,
+  type KlinePeriod,
+} from '../../lib/fp/kline-resample.js';
 import {
   ChartCanvas,
   DEFAULT_PRICE_H,
@@ -65,15 +72,62 @@ export function FeatEqChart({ code }: Props): React.ReactElement {
   const { data, isLoading } = useKline(code, '250D');
   const meta = useStockMetaQuery(code);
   const stockName = meta.data?.name ?? '';
-  const bars = data ?? [];
+  const period = useUiStore((s) => s.chartPeriod);
+  const setPeriod = useUiStore((s) => s.setChartPeriod);
+  const dailyBars = data ?? [];
+  const bars = useMemo(() => resampleBars(dailyBars, period), [dailyBars, period]);
 
-  const [vp, setVp] = useState<ChartViewport>(DEFAULT_VIEWPORT);
+  // Zoom (candleW) is the only persisted slice of the viewport — it
+  // travels with the user across stocks + reloads. `panPx` and `gap`
+  // stay local because they're per-stock framing.
+  const persistedCandleW = useUiStore((s) => s.chartCandleW);
+  const setChartCandleW = useUiStore((s) => s.setChartCandleW);
+  const [vp, setVpState] = useState<ChartViewport>(() => ({
+    ...DEFAULT_VIEWPORT,
+    candleW: persistedCandleW ?? DEFAULT_VIEWPORT.candleW,
+  }));
+  // Wrap setVp so any candleW change (auto-fit, zoom buttons, +/- hotkey,
+  // wheel/pinch) gets mirrored to the persisted store in one shot —
+  // call sites stay oblivious to persistence.
+  const setVp = useCallback(
+    (next: ChartViewport): void => {
+      setVpState(next);
+      setChartCandleW(next.candleW);
+    },
+    [setChartCandleW],
+  );
   const [selectedIdx, setSelectedIdx] = useState<number | null>(null);
   const [hoverIdx, setHoverIdx] = useState<number | null>(null);
   const [hoverPrice, setHoverPrice] = useState<number | null>(null);
   const [showSectorsDialog, setShowSectorsDialog] = useState(false);
   const setChartRange = useUiStore((s) => s.setChartRange);
   const chartRange = useUiStore((s) => s.chartRange);
+
+  // Hotkey handlers need the current `vp` without forcing a re-bind on
+  // every viewport change — refs let the bound closures read fresh
+  // values while the handler object identity stays stable.
+  const vpRef = useRef(vp);
+  vpRef.current = vp;
+  const zoomIn = useCallback((): void => {
+    const cur = vpRef.current;
+    setVp(clampViewport({ ...cur, candleW: Math.min(MAX_CANDLE_W, cur.candleW * 1.4) }));
+  }, [setVp]);
+  const zoomOut = useCallback((): void => {
+    const cur = vpRef.current;
+    setVp(clampViewport({ ...cur, candleW: Math.max(MIN_CANDLE_W, cur.candleW / 1.4) }));
+  }, [setVp]);
+  // The zoom cells live in 'global' scope (gated by a `when`
+  // predicate to EQ.CHART / EQ.LIST); useFeatHotkeys insists on a
+  // scope match, so bind directly. Unbinding on unmount keeps the
+  // dispatch path quiet when no chart is mounted.
+  useEffect(() => {
+    const offIn = uiRegistry.bind('ui.chart-zoom-in', zoomIn);
+    const offOut = uiRegistry.bind('ui.chart-zoom-out', zoomOut);
+    return (): void => {
+      offIn();
+      offOut();
+    };
+  }, [zoomIn, zoomOut]);
 
   // Reset selection on series change. Viewport auto-fits to the new
   // series inside `ChartCanvas` (it knows the inner width); we just
@@ -135,7 +189,9 @@ export function FeatEqChart({ code }: Props): React.ReactElement {
   const focusBar = focusIdx === null ? null : (bars[focusIdx] ?? null);
   const deltaPct =
     focusIdx === null || focusIdx === bars.length - 1 ? null : pctChangeToLatest(bars, focusIdx);
-  const daysAgo = focusIdx === null ? null : bars.length - 1 - focusIdx;
+  // Bars-ago count — unit depends on the active period (d / w / m).
+  // We label it in the focus strip via {@link periodAgoLabel}.
+  const barsAgo = focusIdx === null ? null : bars.length - 1 - focusIdx;
   // Day-over-day change for the focused bar — shown right after the
   // close so the price always carries its immediate context. First
   // bar in the series has no predecessor, so it stays null.
@@ -167,13 +223,15 @@ export function FeatEqChart({ code }: Props): React.ReactElement {
         <FocusLabel
           bar={focusBar}
           deltaPct={deltaPct}
-          daysAgo={daysAgo}
+          barsAgo={barsAgo}
           dayChgPct={dayChgPct}
           selected={selectedIdx !== null}
           hovered={selectedIdx === null && hoverIdx !== null}
           vp={vp}
           setVp={setVp}
           maColors={maColors}
+          period={period}
+          setPeriod={setPeriod}
         />
         <Box flex="1" minH={0}>
           <Box position="relative" h={`${String(TOTAL_H)}px`} bg="transparent">
@@ -193,6 +251,7 @@ export function FeatEqChart({ code }: Props): React.ReactElement {
                 focusIdx={focusIdx}
                 committedRange={committedRange}
                 onBarClick={onBarClick}
+                autoFit={persistedCandleW === null}
               />
             )}
           </Box>
@@ -212,7 +271,8 @@ export function FeatEqChart({ code }: Props): React.ReactElement {
 interface FocusProps {
   readonly bar: KlineBar | null;
   readonly deltaPct: number | null;
-  readonly daysAgo: number | null;
+  /** Bars-ago count from the latest bar; unit derived from `period`. */
+  readonly barsAgo: number | null;
   /** Day-over-day percent change for the focused bar — shown next to close. */
   readonly dayChgPct: number | null;
   readonly selected: boolean;
@@ -222,18 +282,24 @@ interface FocusProps {
   readonly setVp: (vp: ChartViewport) => void;
   /** Theme-resolved MA palette (parent owns the `useTokenColors` call). */
   readonly maColors: Readonly<Record<MaKey, string>>;
+  readonly period: KlinePeriod;
+  readonly setPeriod: (p: KlinePeriod) => void;
 }
+
+const PERIOD_UNIT: Readonly<Record<KlinePeriod, string>> = { D: 'd', W: 'w', M: 'm' };
 
 function FocusLabel({
   bar,
   deltaPct,
-  daysAgo,
+  barsAgo,
   dayChgPct,
   selected,
   hovered,
   vp,
   setVp,
   maColors,
+  period,
+  setPeriod,
 }: FocusProps): React.ReactElement {
   const closeColor =
     bar === null ? 'ink2' : bar.close > bar.open ? 'up' : bar.close < bar.open ? 'down' : 'ink2';
@@ -284,9 +350,9 @@ function FocusLabel({
             {(dayChgPct * 100).toFixed(2)}%
           </Text>
         )}
-        {daysAgo !== null && deltaPct !== null && (
+        {barsAgo !== null && deltaPct !== null && (
           <Stat
-            label={`距今${String(daysAgo)}d`}
+            label={`距今${String(barsAgo)}${PERIOD_UNIT[period]}`}
             value={`${deltaPct >= 0 ? '+' : ''}${deltaPct.toFixed(2)}%`}
             color={deltaPct >= 0 ? 'up' : 'down'}
             bold
@@ -296,10 +362,10 @@ function FocusLabel({
         <Stat label="H" value={bar === null ? '—' : bar.high.toFixed(2)} color="up" />
         <Stat label="L" value={bar === null ? '—' : bar.low.toFixed(2)} color="down" />
         <Stat label="O" value={bar === null ? '—' : bar.open.toFixed(2)} />
-        {/* `ml="auto"` pins the zoom controls to the right edge no
-            matter how many wrap-rows row 1 spans. */}
+        {/* Period toggle pinned right; zoom controls live directly
+            below in row 2 so the two right-aligned widgets stack. */}
         <Box ml="auto">
-          <ZoomControls vp={vp} setVp={setVp} />
+          <PeriodToggle period={period} setPeriod={setPeriod} />
         </Box>
       </Flex>
       {/* Row 2 — focus tag (LATEST / SEL / HOV) + MA5/10/20/60. The
@@ -325,6 +391,9 @@ function FocusLabel({
         <MaInline ma="MA10" value={bar?.ma10 ?? null} color={maColors.ma10} />
         <MaInline ma="MA20" value={bar?.ma20 ?? null} color={maColors.ma20} />
         <MaInline ma="MA60" value={bar?.ma60 ?? null} color={maColors.ma60} />
+        <Box ml="auto">
+          <ZoomControls vp={vp} setVp={setVp} />
+        </Box>
       </Flex>
     </Flex>
   );
@@ -415,6 +484,61 @@ function ZoomControls({ vp, setVp }: ZoomControlsProps): React.ReactElement {
     <Flex gap="4px" align="center">
       <MonoButton icon="minimize" label="zoom out" onClick={zoomOut} />
       <MonoButton icon="add" label="zoom in" onClick={zoomIn} />
+    </Flex>
+  );
+}
+
+interface PeriodToggleProps {
+  readonly period: KlinePeriod;
+  readonly setPeriod: (p: KlinePeriod) => void;
+}
+
+const PERIOD_LABELS: Readonly<Record<KlinePeriod, string>> = {
+  D: 'D',
+  W: 'W',
+  M: 'M',
+};
+
+const PERIOD_ARIA: Readonly<Record<KlinePeriod, string>> = {
+  D: '日线',
+  W: '周线',
+  M: '月线',
+};
+
+function PeriodToggle({ period, setPeriod }: PeriodToggleProps): React.ReactElement {
+  return (
+    <Flex
+      role="group"
+      aria-label="kline period"
+      borderWidth="1px"
+      borderColor="line"
+      fontFamily="mono"
+      fontSize="xs"
+      letterSpacing="0.08em"
+    >
+      {KlinePeriods.map((p) => {
+        const active = p === period;
+        return (
+          <Box
+            as="button"
+            key={p}
+            onClick={(): void => {
+              setPeriod(p);
+            }}
+            px="6px"
+            py="1px"
+            color={active ? 'accent' : 'ink3'}
+            bg={active ? 'accentBg' : 'transparent'}
+            fontWeight="700"
+            cursor="pointer"
+            _hover={active ? {} : { color: 'ink' }}
+            aria-pressed={active}
+            aria-label={PERIOD_ARIA[p]}
+          >
+            {PERIOD_LABELS[p]}
+          </Box>
+        );
+      })}
     </Flex>
   );
 }

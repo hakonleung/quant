@@ -13,6 +13,7 @@ import type { NlScreenResult } from '@quant/shared';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 
+import type { KlinePeriod } from '../fp/kline-resample.js';
 import { idbStorage } from './idb-storage.js';
 
 /** Synthetic sector id for the always-pinned "All" entry — no filter. */
@@ -49,6 +50,19 @@ interface UiState {
   readonly nlResult: NlScreenResult | null;
   /** Pattern-match reference range; null = not selected. */
   readonly chartRange: ChartRangeSelection | null;
+  /**
+   * Persisted candle width (zoom level) for the EQ.CHART pane. Applies
+   * to every stock the user opens — toggling stocks does not reset
+   * zoom. `null` = no preference yet; the chart auto-fits ~75 bars on
+   * first paint and writes the resulting value back here.
+   */
+  readonly chartCandleW: number | null;
+  /**
+   * Persisted period for the EQ.CHART pane (`D` / `W` / `M`). Survives
+   * stock switches AND reloads — switching to weekly view stays weekly
+   * until the user changes it again. Default `D` on first run.
+   */
+  readonly chartPeriod: KlinePeriod;
   /** Currently active tab in the mobile shell. Persisted so a refresh
    *  on the phone keeps the user on the same Feat. */
   readonly mobileTab: MobileTab;
@@ -73,6 +87,8 @@ interface UiState {
   setActiveSector(id: string): void;
   setNlResult(result: NlScreenResult | null): void;
   setChartRange(range: ChartRangeSelection | null): void;
+  readonly setChartCandleW: (w: number) => void;
+  readonly setChartPeriod: (p: KlinePeriod) => void;
   /**
    * Function-property style (rather than method shorthand) so the
    * `@typescript-eslint/unbound-method` rule treats it as a plain
@@ -94,6 +110,8 @@ export const useUiStore = create<UiState>()(
       mobileTab: MOBILE_TAB_DEFAULT,
       listFilter: '',
       visibleCodes: [],
+      chartCandleW: null,
+      chartPeriod: 'D',
       setFocusCode: (code) => {
         set({ focusCode: code, chartRange: null });
       },
@@ -118,21 +136,29 @@ export const useUiStore = create<UiState>()(
       setVisibleCodes: (codes) => {
         set({ visibleCodes: codes });
       },
+      setChartCandleW: (w) => {
+        set({ chartCandleW: w });
+      },
+      setChartPeriod: (p) => {
+        set({ chartPeriod: p });
+      },
     }),
     {
       name: 'ui',
       // Bumped to v2 — mobileTab field added. Existing clients with v1
       // payloads keep their cursor; mobileTab falls back to the default.
-      version: 2,
+      version: 4,
       storage: createJSONStorage(() => idbStorage('ui')),
-      // Only the user's workspace cursor + last mobile tab are
-      // persisted. NL results and chart ranges are session-scoped —
-      // re-deriving them after a refresh would require replaying
-      // server calls we don't have a cache for.
+      // Only the user's workspace cursor + last mobile tab + persisted
+      // chart zoom are kept. NL results and chart ranges are session-
+      // scoped — re-deriving them after a refresh would require
+      // replaying server calls we don't have a cache for.
       partialize: (state) => ({
         activeSectorId: state.activeSectorId,
         focusCode: state.focusCode,
         mobileTab: state.mobileTab,
+        chartCandleW: state.chartCandleW,
+        chartPeriod: state.chartPeriod,
       }),
     },
   ),

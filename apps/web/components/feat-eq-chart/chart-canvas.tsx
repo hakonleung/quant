@@ -171,6 +171,14 @@ export interface ChartCanvasProps {
   readonly setHoverPrice?: (p: number | null) => void;
   readonly focusIdx?: number | null;
   readonly onBarClick?: (idx: number) => void;
+  /**
+   * When ``false`` the chart treats ``vp.candleW`` as authoritative and
+   * skips the "fit ~75 bars on first paint" auto-fit. Used by
+   * EQ.CHART once the user has a persisted zoom level — otherwise the
+   * auto-fit would clobber the restored value on every stock switch.
+   * Defaults to ``true`` for backwards compatibility.
+   */
+  readonly autoFit?: boolean;
 }
 
 export function ChartCanvas({
@@ -190,6 +198,7 @@ export function ChartCanvas({
   setHoverPrice,
   focusIdx = null,
   onBarClick,
+  autoFit = true,
 }: ChartCanvasProps): React.ReactElement {
   const maTokens = useTokenColors(MA_COLOR_PATHS);
   const maColors = useMemo(() => getMaColors(maTokens), [maTokens]);
@@ -266,13 +275,13 @@ export function ChartCanvas({
     widthKnown: false,
   });
   useEffect(() => {
-    if (!interactive) return;
+    if (!interactive || !autoFit) return;
     if (innerW <= 0 || bars.length === 0) return;
     const last = lastFitRef.current;
     if (last.key === seriesKey && last.widthKnown) return;
     lastFitRef.current = { key: seriesKey, widthKnown: true };
     setVp(fitVisibleViewport(innerW, bars.length));
-  }, [interactive, seriesKey, innerW, bars.length, setVp]);
+  }, [interactive, autoFit, seriesKey, innerW, bars.length, setVp]);
 
   // Re-clamp existing panPx whenever bars / width change so a series
   // swap or column resize can't leave the viewport panned past its

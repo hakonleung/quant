@@ -18,7 +18,16 @@
 
 import { Box, Text } from '@chakra-ui/react';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { memo, useCallback, useEffect, useMemo, useRef, type KeyboardEvent } from 'react';
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent,
+} from 'react';
 
 import type { ListRow } from '../../lib/fp/eq-list-fp.js';
 import { MonoButton } from '../ui/mono-button.js';
@@ -47,7 +56,29 @@ export function ScrollGrid({
   emptyHint,
 }: ScrollGridProps): React.ReactElement {
   const scrollRef = useRef<HTMLDivElement>(null);
+  const headerRef = useRef<HTMLDivElement>(null);
+  const [headerH, setHeaderH] = useState(0);
   const removable = onRowRemove !== null;
+
+  // The column header sits inside the scroll container as a `position:
+  // sticky` row, so it occupies the top of the scrollElement's content
+  // box. The virtualizer needs to know that offset — otherwise its
+  // scrollToIndex math is off by headerH and ArrowDown can land focus
+  // one row past the visible bottom (hidden out of view).
+  useLayoutEffect(() => {
+    const el = headerRef.current;
+    if (el === null) return;
+    setHeaderH(el.offsetHeight);
+    const ro = new ResizeObserver((entries) => {
+      const e = entries[0];
+      if (e === undefined) return;
+      setHeaderH(e.contentRect.height);
+    });
+    ro.observe(el);
+    return (): void => {
+      ro.disconnect();
+    };
+  }, []);
   const totalWidth = columns.reduce((acc, c) => acc + c.w, 0) + (removable ? DELETE_COL_W : 0);
 
   // Stable row-level handlers so RowItem's React.memo can bail out for
@@ -78,6 +109,7 @@ export function ScrollGrid({
     getScrollElement: () => scrollRef.current,
     estimateSize: () => ROW_H,
     overscan: 12,
+    scrollMargin: headerH,
   });
 
   // Cache the row index for the currently-focused code so the keyboard
@@ -88,14 +120,38 @@ export function ScrollGrid({
     return rows.findIndex((r) => r.code === focusedCode);
   }, [rows, focusedCode]);
 
+  // Scroll a row index into view, respecting the sticky `ColumnHeader`
+  // that overlays the top `headerH` pixels of the visible area. The
+  // virtualizer's own `scrollToIndex` doesn't fully account for that
+  // overlay (its `scrollMargin` shifts item positions but the visible
+  // window it compares against is still the raw `clientHeight`), so a
+  // bottom-align lands the row `headerH` below the visible bottom —
+  // visually one row past the list, hidden out of view.
+  const scrollRowIntoView = useCallback(
+    (idx: number): void => {
+      const el = scrollRef.current;
+      if (el === null) return;
+      const rowTop = headerH + idx * ROW_H;
+      const rowBottom = rowTop + ROW_H;
+      const visibleTop = el.scrollTop + headerH;
+      const visibleBottom = el.scrollTop + el.clientHeight;
+      if (rowTop < visibleTop) {
+        el.scrollTo({ top: rowTop - headerH });
+      } else if (rowBottom > visibleBottom) {
+        el.scrollTo({ top: rowBottom - el.clientHeight });
+      }
+    },
+    [headerH],
+  );
+
   // External focus changes (J/K hotkeys from the ui-cmd engine mutate
   // useUiStore.focusCode out-of-band) must auto-scroll the new row into
-  // view. The grid's own ArrowDown/Up handler already calls scrollToIndex
-  // — this mirrors that for the external path.
+  // view. The grid's own ArrowDown/Up handler already calls
+  // scrollRowIntoView — this mirrors that for the external path.
   useEffect(() => {
     if (focusedIndex < 0) return;
-    rowVirtualizer.scrollToIndex(focusedIndex, { align: 'auto' });
-  }, [focusedIndex, rowVirtualizer]);
+    scrollRowIntoView(focusedIndex);
+  }, [focusedIndex, scrollRowIntoView]);
 
   // After the user clicks a header to re-sort, snap the table back to
   // the top — otherwise the previous scroll position points into the
@@ -143,7 +199,7 @@ export function ScrollGrid({
     const target = rows[next];
     if (target === undefined) return;
     onRowClick(target);
-    rowVirtualizer.scrollToIndex(next, { align: 'auto' });
+    scrollRowIntoView(next);
   };
 
   if (rows.length === 0) {
@@ -171,10 +227,12 @@ export function ScrollGrid({
       _focusVisible={{ boxShadow: '0 0 0 1px var(--chakra-colors-accent) inset' }}
     >
       <Box w={`${String(totalWidth)}px`} minW="100%">
-        <ColumnHeader columns={columns} sort={sort} setSort={setSort} removable={removable} />
+        <Box ref={headerRef}>
+          <ColumnHeader columns={columns} sort={sort} setSort={setSort} removable={removable} />
+        </Box>
         <Box
           position="relative"
-          h={`${String(rowVirtualizer.getTotalSize())}px`}
+          h={`${String(Math.max(0, rowVirtualizer.getTotalSize() - headerH))}px`}
           w={`${String(totalWidth)}px`}
         >
           {rowVirtualizer.getVirtualItems().map((vi) => {
@@ -186,7 +244,7 @@ export function ScrollGrid({
                 row={row}
                 rowIndex={vi.index}
                 columns={columns}
-                top={vi.start}
+                top={vi.start - headerH}
                 h={vi.size}
                 focused={focusedCode !== null && row.code === focusedCode}
                 onSelect={onSelectByCode}
@@ -216,7 +274,8 @@ function ColumnHeader({
   return (
     <Box
       display="flex"
-      bg="glass.panelStrong" backdropFilter="blur(12px)"
+      bg="glass.panelStrong"
+      backdropFilter="blur(12px)"
       borderBottomWidth="1px"
       borderColor="line"
       flexShrink={0}
@@ -230,7 +289,8 @@ function ColumnHeader({
           flexShrink={0}
           position="sticky"
           left={0}
-          bg="glass.panelStrong" backdropFilter="blur(12px)"
+          bg="glass.panelStrong"
+          backdropFilter="blur(12px)"
           zIndex={4}
         />
       )}
@@ -276,9 +336,7 @@ function ColumnHeader({
             _hover={sortable ? { color: 'accent' } : {}}
             position={c.sticky === true ? 'sticky' : 'static'}
             left={
-              c.sticky === true
-                ? `${String(stickyLeftFor(columns, i, removable))}px`
-                : undefined
+              c.sticky === true ? `${String(stickyLeftFor(columns, i, removable))}px` : undefined
             }
             zIndex={c.sticky === true ? 4 : 3}
             borderColor="line"
@@ -389,11 +447,7 @@ const RowItem = memo(function RowItem({
           alignItems="center"
           justifyContent={c.align === 'right' ? 'flex-end' : 'flex-start'}
           position={c.sticky === true ? 'sticky' : 'static'}
-          left={
-            c.sticky === true
-              ? `${String(stickyLeftFor(columns, i, hasRemove))}px`
-              : undefined
-          }
+          left={c.sticky === true ? `${String(stickyLeftFor(columns, i, hasRemove))}px` : undefined}
           // Sticky cells must fully occlude the rows that scroll under
           // them horizontally. `glass.panelSoft` (28% opacity) + blur
           // still let text bleed through; `panelStrong` (70%) blocks
@@ -420,11 +474,7 @@ const RowItem = memo(function RowItem({
 
 /** Pixel offset for a sticky cell at `i`, summing the delete-column gutter
  *  (when shown) plus the widths of every sticky column before it. */
-function stickyLeftFor(
-  columns: readonly ColumnDef[],
-  i: number,
-  hasRemove: boolean,
-): number {
+function stickyLeftFor(columns: readonly ColumnDef[], i: number, hasRemove: boolean): number {
   let left = hasRemove ? DELETE_COL_W : 0;
   for (let j = 0; j < i; j += 1) {
     const col = columns[j];
