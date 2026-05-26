@@ -16,20 +16,15 @@ const TRANSITION_MS = 280;
 const prefersReducedMotion = (): boolean =>
   typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-// Fullscreen geometry — the pane sits BELOW the topbar so brand / SYS /
-// USR / theme toggle stay reachable (Apple HIG: full-window apps keep
-// the menu bar). The same values drive both the static CSS style and
-// the WAAPI keyframe endpoints so the animation lands exactly where
-// CSS takes over — without this match the pane jumps the difference
-// between `top: 0` (old keyframe end) and `top: 52px` (CSS) at the end
-// of the animation.
-const FULLSCREEN_TOP = 'calc(var(--app-topbar-h, 52px) + env(safe-area-inset-top))';
-const FULLSCREEN_HEIGHT = 'calc(100dvh - var(--app-topbar-h, 52px) - env(safe-area-inset-top))';
+// Fullscreen geometry — the pane covers the entire viewport (incl.
+// topbar). The same values drive both the static CSS style and the
+// WAAPI keyframe endpoints so the animation lands exactly where CSS
+// takes over.
 const FULLSCREEN_KEYFRAME = {
-  top: FULLSCREEN_TOP,
+  top: '0px',
   left: '0px',
   width: '100vw',
-  height: FULLSCREEN_HEIGHT,
+  height: '100dvh',
 } as const;
 
 /**
@@ -40,11 +35,12 @@ const FULLSCREEN_KEYFRAME = {
  * messages can still surface.
  */
 const FULLSCREEN_STYLE = {
-  top: FULLSCREEN_TOP,
+  top: 0,
   left: 0,
   width: '100vw',
-  height: FULLSCREEN_HEIGHT,
+  height: '100dvh',
   zIndex: 'var(--chakra-z-index-fullscreen, 1500)',
+  paddingTop: 'env(safe-area-inset-top)',
   paddingBottom: 'env(safe-area-inset-bottom)',
 } as const;
 
@@ -471,8 +467,36 @@ function FeatViewHeader(props: FeatViewHeaderProps): React.ReactElement {
     onExitFullscreen,
     allowFullscreen,
   } = props;
+  const canToggle = mode !== 'fullscreen';
+  // Whole header strip is the toggle hit zone — clicking any empty
+  // space (or the pane name) flips minimized ↔ normal. Interactive
+  // children inside (status pellet, titleSlot widgets, action
+  // buttons, fullscreen toggle) are wrapped in
+  // `<HeaderInteractive>` which stops the click from bubbling up
+  // to this handler, so individual controls still do their own
+  // thing.
+  const onHeaderClick = canToggle
+    ? (e: React.MouseEvent<HTMLDivElement>): void => {
+        // Defensive: ignore clicks that originated on a real
+        // interactive descendant even if the wrapper was missed.
+        const t = e.target;
+        if (t instanceof HTMLElement && t.closest('button, a, input, textarea, select') !== null)
+          return;
+        if (mode === 'minimized') onRestore();
+        else onMinimize();
+      }
+    : undefined;
   return (
     <Flex
+      as="div"
+      role={canToggle ? 'button' : undefined}
+      tabIndex={canToggle ? 0 : undefined}
+      aria-pressed={mode === 'minimized'}
+      aria-label={
+        canToggle
+          ? `${id} — ${mode === 'minimized' ? 'restore' : 'minimize'}`
+          : id
+      }
       align="center"
       gap="8px"
       px="10px"
@@ -487,11 +511,23 @@ function FeatViewHeader(props: FeatViewHeaderProps): React.ReactElement {
       borderBottomColor="glass.line"
       flexShrink={0}
       color="ink3"
+      cursor={canToggle ? 'pointer' : 'default'}
+      onClick={onHeaderClick}
+      onKeyDown={
+        canToggle
+          ? (e): void => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                if (mode === 'minimized') onRestore();
+                else onMinimize();
+              }
+            }
+          : undefined
+      }
     >
       <FeatNameToggle
         id={id}
         minimized={mode === 'minimized'}
-        onToggle={mode === 'minimized' ? onRestore : onMinimize}
         disabled={mode === 'fullscreen'}
       />
       {status !== undefined && (
@@ -499,9 +535,11 @@ function FeatViewHeader(props: FeatViewHeaderProps): React.ReactElement {
           <FeatViewStatus tone={status} blink={statusBlink ?? false} />
         </Box>
       )}
-      {titleSlot !== undefined && <Box flexShrink={0}>{titleSlot}</Box>}
+      {titleSlot !== undefined && (
+        <HeaderInteractive flexShrink={0}>{titleSlot}</HeaderInteractive>
+      )}
       {right !== undefined && (
-        <Flex
+        <HeaderInteractive
           align="center"
           gap="6px"
           fontFamily="mono"
@@ -510,7 +548,7 @@ function FeatViewHeader(props: FeatViewHeaderProps): React.ReactElement {
           flexShrink={0}
         >
           {right}
-        </Flex>
+        </HeaderInteractive>
       )}
       <HStack
         ml="auto"
@@ -520,6 +558,9 @@ function FeatViewHeader(props: FeatViewHeaderProps): React.ReactElement {
         letterSpacing="0.06em"
         color="ink3"
         flexShrink={0}
+        onClick={(e): void => {
+          e.stopPropagation();
+        }}
       >
         <FeatViewControls
           mode={mode}
@@ -528,6 +569,28 @@ function FeatViewHeader(props: FeatViewHeaderProps): React.ReactElement {
           onExitFullscreen={onExitFullscreen}
         />
       </HStack>
+    </Flex>
+  );
+}
+
+/**
+ * Header slot wrapper that stops click propagation so the slot's
+ * own interactive children (refresh buttons, dropdowns, etc.) don't
+ * trigger the header's min/restore toggle. Renders as a Flex so the
+ * caller doesn't have to switch element shape.
+ */
+function HeaderInteractive({
+  children,
+  ...rest
+}: React.ComponentProps<typeof Flex>): React.ReactElement {
+  return (
+    <Flex
+      {...rest}
+      onClick={(e): void => {
+        e.stopPropagation();
+      }}
+    >
+      {children}
     </Flex>
   );
 }
@@ -570,46 +633,24 @@ function FeatViewControls({
 interface FeatNameToggleProps {
   readonly id: string;
   readonly minimized: boolean;
-  readonly onToggle: () => void;
-  /** Fullscreen panes can't be minimized — the toggle becomes a no-op label. */
+  /** Fullscreen panes can't be minimized — the chevron marker hides. */
   readonly disabled: boolean;
 }
 
 /**
- * Pane name button. Clicking it toggles `minimized` ↔ `normal` —
- * replaces the old minimize/restore icon buttons. The chevron marker
- * reflects current state (▾ open / ▸ collapsed) so the affordance
- * reads at a glance. Disabled when fullscreen.
+ * Pane name label — chevron + accent ID, kept content-sized. The
+ * whole `<FeatViewHeader>` is the click target now (any empty space
+ * in the header strip toggles min/normal), so this is just the
+ * visual marker. `aria-hidden` so AT users hear the wrapping
+ * "header is a button" affordance once instead of twice.
  */
-const TOGGLE_BTN_STYLE = {
-  bg: 'transparent',
-  border: '0',
-  px: 0,
-  py: 0,
-  align: 'baseline',
-  gap: '6px',
-  flexShrink: 0,
-  _focusVisible: { outline: '2px solid', outlineColor: 'link', outlineOffset: '2px' },
-  style: { font: 'inherit' },
-} as const;
-
 function FeatNameToggle({
   id,
   minimized,
-  onToggle,
   disabled,
 }: FeatNameToggleProps): React.ReactElement {
   return (
-    <Flex
-      {...TOGGLE_BTN_STYLE}
-      as="button"
-      onClick={disabled ? undefined : onToggle}
-      aria-pressed={minimized}
-      aria-label={`${id} — ${minimized ? 'restore' : 'minimize'}`}
-      aria-disabled={disabled}
-      cursor={disabled ? 'default' : 'pointer'}
-      _hover={disabled ? {} : { color: 'accent' }}
-    >
+    <Flex align="baseline" gap="6px" flexShrink={0} aria-hidden="true">
       {/* Reserve space even when invisible so the name doesn't shift
           when entering/exiting fullscreen. */}
       <Box
