@@ -25,7 +25,11 @@ const { xterm } = palette;
 export function buildXtermTheme(mode: ThemeMode): ITheme {
   const p = mode === 'dark' ? xterm.dark : xterm.light;
   return {
-    background: p.bg,
+    // Transparent xterm canvas — the host pane already supplies the
+    // glass surface via backdrop-filter. xterm's `allowTransparency`
+    // option (set at construction in `use-term-console.ts`) lets the
+    // rgba composite through to the wallpaper.
+    background: 'rgba(0,0,0,0)',
     foreground: p.ink,
     cursor: p.cursor,
     cursorAccent: p.cursorAccent,

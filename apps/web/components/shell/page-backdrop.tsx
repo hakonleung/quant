@@ -29,13 +29,11 @@ export function PageBackdrop(): React.ReactElement {
   const scanlineAlpha = useTokenColor('brand.scanlineAlpha');
   // SSR fallbacks: read empty `useTokenColor` before hydration. Pick
   // values that mirror `palette.brand.light.*` so the first paint
-  // matches the post-hydration look.
-  const bg =
-    logoBg.length > 0
-      ? logoBg
-      : 'radial-gradient(ellipse at center, rgba(255,255,255,0.95) 0%, rgba(245,245,247,0.88) 60%, rgba(235,235,238,0.82) 100%)';
-  const grid = gridColor.length > 0 ? gridColor : 'rgba(29,29,31,0.04)';
-  const scan = scanlineAlpha.length > 0 ? scanlineAlpha : 'rgba(29,29,31,0.015)';
+  // matches the post-hydration look. Solid near-white now — the
+  // radial gradient read as a gray vignette at viewport scale.
+  const bg = logoBg.length > 0 ? logoBg : '#FAFAFC';
+  const grid = gridColor.length > 0 ? gridColor : 'rgba(29,29,31,0.08)';
+  const scan = scanlineAlpha.length > 0 ? scanlineAlpha : 'rgba(29,29,31,0.04)';
   return (
     <Box position="fixed" inset="0" pointerEvents="none" zIndex={0} background={bg}>
       <Box

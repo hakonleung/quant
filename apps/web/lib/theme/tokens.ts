@@ -39,9 +39,9 @@ export const palette = {
    * keeps its cultural fingerprint.
    */
   light: {
-    bg: '#D5D8E0', // canvas — pulled darker than systemGray6 (#F5F5F7) so
-                  // panels and glass surfaces above it have visible contrast;
-                  // pairs with the ambient gradient (see system.ts → body)
+    bg: '#FAFAFC', // near-white porcelain canvas — the page wallpaper is
+                  // intentionally barely-off-white so the floating glass
+                  // tiles + grid hairlines carry the visual weight.
     panel: '#FFFFFF', // solid white card — pane container handles glass via backdrop-filter
     panel3: '#F7F7F9', // subtle elevation (sticky chrome) — opaque against pane container
     line: 'rgba(60,60,67,0.14)', // Apple separator (slightly stronger for contrast)
@@ -68,7 +68,9 @@ export const palette = {
    * elevated-surface system so glass layers read clearly against it.
    */
   dark: {
-    bg: '#040508', // canvas — even deeper so glass layers have room to glow
+    bg: '#0E0F13', // near-black canvas with a hint of warmth — pure
+                  // black crushes glass contrast; one step up keeps
+                  // grid hairlines visible.
     panel: '#16171D', // solid dark panel — opaque, glass at container level
     panel3: '#1F2027', // elevated section chrome (opaque)
     line: 'rgba(255,255,255,0.10)', // Apple dark separator (slightly stronger)
@@ -191,12 +193,15 @@ export const palette = {
    */
   brand: {
     light: {
-      logoBg:
-        'radial-gradient(ellipse at center, rgba(255,255,255,0.95) 0%, rgba(245,245,247,0.88) 60%, rgba(235,235,238,0.82) 100%)',
+      // Solid near-white — the radial gradient read as a gray vignette
+      // when scaled up to viewport size. Light theme wants the page
+      // canvas to be barely-off-white so the floating glass tiles +
+      // grid hairlines carry the visual weight.
+      logoBg: '#FAFAFC',
       logoColor: '#1D1D1F', // monochrome brand mark — Apple graphite
       logoGlow: '0 0 1px rgba(29,29,31,0.35), 0 0 12px rgba(29,29,31,0.12)',
-      gridColor: 'rgba(29,29,31,0.10)', // workbench-visible while still subtle in Brand at logo size
-      scanlineAlpha: 'rgba(29,29,31,0.06)', // multiply blend makes 6% read as clear scanline
+      gridColor: 'rgba(29,29,31,0.08)', // hairlines visible against the near-white canvas
+      scanlineAlpha: 'rgba(29,29,31,0.04)', // multiply blend keeps it just-perceptible
       panelAlpha: 'rgba(255,255,255,0.72)', // glass card alpha
       panelAlphaStrong: 'rgba(255,255,255,0.86)',
       tipsBarBg: 'rgba(250,250,251,0.78)',
@@ -207,13 +212,15 @@ export const palette = {
         'rgba(29,29,31,0.04) 0 0 80px inset, rgba(31,138,92,0.03) 0 0 40px inset',
     },
     dark: {
-      logoBg:
-        'radial-gradient(ellipse at center, rgba(28,29,36,0.92) 0%, rgba(15,16,20,0.88) 60%, rgba(8,9,13,0.82) 100%)',
+      // Solid near-black with a hint of warmth — pure #000 reads as
+      // dead and crushes the glass tiles' contrast. Picked one step
+      // up from gray-950 so the grid hairlines still register.
+      logoBg: '#0E0F13',
       logoColor: '#F5F5F7', // monochrome brand mark — clean white
       logoGlow:
         '0 0 1px rgba(245,245,247,0.55), 0 0 14px rgba(245,245,247,0.22), 0 0 32px rgba(245,245,247,0.10)',
-      gridColor: 'rgba(255,255,255,0.08)', // dark — bump for workbench-scale visibility
-      scanlineAlpha: 'rgba(0,0,0,0.40)', // multiply needs higher alpha on dark base
+      gridColor: 'rgba(255,255,255,0.06)', // dark — keep barely visible
+      scanlineAlpha: 'rgba(0,0,0,0.30)', // multiply needs higher alpha on dark base
       panelAlpha: 'rgba(21,22,28,0.72)', // dark glass alpha
       panelAlphaStrong: 'rgba(21,22,28,0.88)',
       tipsBarBg: 'rgba(15,16,20,0.78)',

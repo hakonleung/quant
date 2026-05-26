@@ -51,8 +51,13 @@ export function TopBar({ session }: TopBarProps = {}): React.ReactElement {
       // shows through directly, so the Brand visually integrates with
       // the canvas (no border, no glass strip separating them). Each
       // pane self-margins (4 px) so the topbar doesn't compose gaps.
+      //
+      // `flex-start` cross-axis: bodyOverlay panes are header-only
+      // tiles. With `stretch` they grew to the topbar's 52 px and
+      // showed an empty strip below the header. `flex-start` lets
+      // each pane size to its actual content (just the header).
       bg="transparent"
-      align="stretch"
+      align="flex-start"
       style={{ paddingTop: 'env(safe-area-inset-top)' }}
     >
       <Brand compact={isMobile} stretch={isMobile} />
@@ -62,16 +67,16 @@ export function TopBar({ session }: TopBarProps = {}): React.ReactElement {
        * when restored (bodyOverlay config). */}
       {!isMobile && (
         <>
-          <Box flex="1" minW={0} display="flex" alignItems="stretch">
+          <Box flex="1" minW={0} display="flex">
             <FeatSysMain />
           </Box>
-          <Box display="flex" alignItems="stretch">
+          <Box display="flex">
             <FeatLedger />
           </Box>
-          <Box display="flex" alignItems="stretch">
+          <Box display="flex">
             <FeatWatchLive />
           </Box>
-          <Box display="flex" alignItems="stretch">
+          <Box display="flex">
             <FeatSettings session={session} />
           </Box>
         </>

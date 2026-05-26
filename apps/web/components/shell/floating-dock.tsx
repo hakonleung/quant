@@ -24,19 +24,22 @@ export function FloatingDock(): React.ReactElement {
   return (
     <Box
       position="fixed"
-      // Pushed left of the hint window's `right: 16px` corner so the
-      // floating panes don't overlap the `?` toggle when the hint is
-      // open. The dock keeps a 16 px gutter above the home indicator
-      // / bottom safe-area on iOS.
-      right="16px"
-      bottom="56px"
+      // Pinned to the very bottom-right of the viewport — the spec
+      // wants the dock flush with the corner so it reads as a single
+      // chrome cluster. Safe-area padding pushes it back inboard on
+      // iOS so the home indicator doesn't overlap the SCOPE pill.
+      right={0}
+      bottom={0}
       zIndex="scopeBadge"
       display="flex"
       flexDirection="column-reverse"
       alignItems="flex-end"
-      gap="8px"
+      gap="4px"
       pointerEvents="none"
-      style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
+      style={{
+        paddingRight: 'env(safe-area-inset-right)',
+        paddingBottom: 'env(safe-area-inset-bottom)',
+      }}
       // Each child pane re-enables pointer events on itself; the
       // wrapper stays transparent to clicks so the workbench beneath
       // the dock is still reachable in the gaps between pills.

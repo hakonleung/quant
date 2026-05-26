@@ -83,7 +83,7 @@ export function LineNumberGutter({
     <Box
       ref={hostRef}
       flexShrink={0}
-      bg="term.bg"
+      bg="transparent"
       color="term.ink3"
       fontFamily='"Monaspace Neon", "JetBrains Mono", "SF Mono", ui-monospace, Menlo, monospace'
       fontSize={`${String(fontSize)}px`}

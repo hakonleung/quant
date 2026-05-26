@@ -104,10 +104,13 @@ export const TermConsole = forwardRef<TermConsoleHandle, TermConsoleProps>(funct
     <Flex
       h="100%"
       minH={0}
-      bg="term.bg"
+      // Transparent surface — the host pane (or floating dock)
+      // already supplies the glass material via its own
+      // backdrop-filter. Stacking another opaque term.bg layer
+      // here made AI.SEC / AI.EQ read as "solid dark cards" on
+      // top of the wallpaper instead of glass tiles.
+      bg="transparent"
       position="relative"
-      backdropFilter="blur(20px) saturate(180%)"
-      css={{ WebkitBackdropFilter: 'blur(20px) saturate(180%)' }}
     >
       {showLineNumbers && (
         <LineNumberGutter termRef={termRef} fontSize={fontSize} mounted={mountedRef.current} />

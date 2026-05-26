@@ -325,7 +325,6 @@ export function FeatView({
         {...(statusBlink !== undefined ? { statusBlink } : {})}
         titleSlot={titleSlot}
         right={right}
-        cyber={cyber}
         mode={mode}
         allowFullscreen={allowFullscreen}
         onMinimize={minimize}
@@ -339,13 +338,15 @@ export function FeatView({
         </OverlayBody>
       ) : renderInlineBody ? (
         // Transparent body — the pane container already supplies the
-        // glass surface. Height transitions are driven by the FLIP
-        // animation on the pane itself; we just need `overflow:
-        // hidden` here so children clip cleanly while the pane
-        // shrinks. Scroll surface lives on the inner Box.
+        // glass surface. `max-height: 0` clamps the wrapper to 0 px
+        // when minimized so the pane shrinks to header-only after
+        // the FLIP lands; otherwise children intrinsic-sized to the
+        // remaining flex space would keep the wrapper non-zero.
+        // `overflow: hidden` clips during the FLIP transition.
         <Box
           flex={isMinimized || contentSized === true ? '0 0 auto' : '1'}
           minH={0}
+          maxH={isMinimized ? '0px' : undefined}
           bg="transparent"
           overflow="hidden"
         >
@@ -435,7 +436,6 @@ interface FeatViewHeaderProps {
   readonly statusBlink?: boolean;
   readonly titleSlot?: ReactNode;
   readonly right?: ReactNode;
-  readonly cyber: boolean;
   readonly mode: FeatViewMode;
   /** Floating panes hide the fullscreen button — they're already
    *  detached from the column grid, so growing edge-to-edge is a no-op. */
@@ -453,7 +453,6 @@ function FeatViewHeader(props: FeatViewHeaderProps): React.ReactElement {
     statusBlink,
     titleSlot,
     right,
-    cyber,
     mode,
     onMinimize,
     onRestore,
@@ -466,15 +465,17 @@ function FeatViewHeader(props: FeatViewHeaderProps): React.ReactElement {
       align="center"
       gap="8px"
       px="10px"
-      h={cyber ? '30px' : '28px'}
-      // Semi-transparent header — supplies the pane's tint while the
-      // outer container stays bg-transparent + backdrop-filter. Cyber
-      // skins use the term glass; normal skins use Liquid Glass soft.
-      bg={cyber ? 'term.bgElev' : 'glass.panelSoft'}
+      h="28px"
+      // Single header surface across every pane — cyber-skinned panes
+      // (TERM / AI / SYS / SET / WATCH / SCR.NL etc.) used to swap to
+      // `term.bgElev`, but that made adjacent panes look mismatched
+      // depending on their `cyber` flag. The caller no longer
+      // configures the header bg — uniformity wins.
+      bg="glass.panelSoft"
       borderBottomWidth="1px"
-      borderBottomColor={cyber ? 'term.line' : 'glass.line'}
+      borderBottomColor="glass.line"
       flexShrink={0}
-      color={cyber ? 'term.ink3' : 'ink3'}
+      color="ink3"
     >
       <FeatNameToggle
         id={id}
@@ -506,7 +507,7 @@ function FeatViewHeader(props: FeatViewHeaderProps): React.ReactElement {
         fontFamily="mono"
         fontSize="xs"
         letterSpacing="0.06em"
-        color={cyber ? 'term.ink3' : 'ink3'}
+        color="ink3"
         flexShrink={0}
       >
         <FeatViewControls

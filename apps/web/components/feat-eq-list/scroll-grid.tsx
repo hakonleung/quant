@@ -333,10 +333,14 @@ const RowItem = memo(function RowItem({
       display="flex"
       alignItems="center"
       borderBottomWidth="1px"
-      borderColor="line"
+      borderColor="glass.line"
       borderLeftWidth={focused ? '2px' : 0}
       borderLeftColor="accent"
-      bg={focused ? 'accentBg' : 'panel'}
+      // Transparent default — the pane glass shows through every row.
+      // Focused row carries a wash + a 2 px accent border so it
+      // reads against the grid; hover adds a subtle ink wash so the
+      // pointer feedback is visible against the glass canvas.
+      bg={focused ? 'accentBg' : 'transparent'}
       cursor="pointer"
       _hover={focused ? {} : { bg: 'hover' }}
       onClick={onClick}
@@ -351,7 +355,12 @@ const RowItem = memo(function RowItem({
           w={`${String(DELETE_COL_W)}px`}
           display="grid"
           placeItems="center"
-          bg={focused ? 'accentBg' : 'panel'}
+          // Sticky delete cell still needs to occlude the rows that
+          // scroll under it horizontally — use the glass-soft tint so
+          // it stays readable as part of the same material as the
+          // pane.
+          bg={focused ? 'accentBg' : 'glass.panelSoft'}
+          backdropFilter="blur(12px)"
           zIndex={2}
           flexShrink={0}
         >
@@ -383,10 +392,11 @@ const RowItem = memo(function RowItem({
               ? `${String(stickyLeftFor(columns, i, hasRemove))}px`
               : undefined
           }
-          bg={c.sticky === true ? (focused ? 'accentBg' : 'panel') : 'transparent'}
+          bg={c.sticky === true ? (focused ? 'accentBg' : 'glass.panelSoft') : 'transparent'}
+          backdropFilter={c.sticky === true && !focused ? 'blur(12px)' : undefined}
           zIndex={c.sticky === true ? 1 : 0}
           borderBottomWidth={c.sticky === true ? '1px' : 0}
-          borderColor="line"
+          borderColor="glass.line"
           flexShrink={0}
         >
           {c.render(row, rowIndex)}

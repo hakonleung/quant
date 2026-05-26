@@ -262,6 +262,12 @@ export function useTermConsole(config: UseTermConsoleConfig): TermConsoleBridge 
         cursorWidth: 2,
         convertEol: true,
         scrollback: 1000,
+        // `allowTransparency` lets the xterm canvas paint over the
+        // pane's backdrop-filter glass — required for the AI panes
+        // to read as floating tiles rather than solid dark cards.
+        // Default false would force an opaque background even if
+        // `theme.background` were rgba.
+        allowTransparency: true,
         // ANSI palette derived from the workbench theme — see
         // `lib/theme/xterm-theme.ts` for the slot map. A theme-store
         // subscription below swaps the palette live on theme flips
