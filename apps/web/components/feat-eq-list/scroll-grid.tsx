@@ -34,6 +34,14 @@ import { MonoButton } from '../ui/mono-button.js';
 
 import { DELETE_COL_W, ROW_H, type ColumnDef, type SortState } from './list-types.js';
 
+/**
+ * How many rows of visual padding to keep between the focused row and
+ * the viewport edge — once the cursor enters the trailing N rows the
+ * list starts auto-scrolling instead of waiting until the focus row
+ * sits flush against the edge.
+ */
+const SCROLL_BUFFER_ROWS = 2;
+
 interface ScrollGridProps {
   readonly columns: readonly ColumnDef[];
   readonly rows: readonly ListRow[];
@@ -127,18 +135,24 @@ export function ScrollGrid({
   // window it compares against is still the raw `clientHeight`), so a
   // bottom-align lands the row `headerH` below the visible bottom —
   // visually one row past the list, hidden out of view.
+  //
+  // {@link SCROLL_BUFFER_ROWS} keeps a small visual margin between the
+  // focused row and the viewport edge — once the cursor steps into the
+  // last (or first) couple of rows the list starts scrolling instead
+  // of waiting until the focus lands flush against the edge.
   const scrollRowIntoView = useCallback(
     (idx: number): void => {
       const el = scrollRef.current;
       if (el === null) return;
+      const buffer = SCROLL_BUFFER_ROWS * ROW_H;
       const rowTop = headerH + idx * ROW_H;
       const rowBottom = rowTop + ROW_H;
-      const visibleTop = el.scrollTop + headerH;
-      const visibleBottom = el.scrollTop + el.clientHeight;
+      const visibleTop = el.scrollTop + headerH + buffer;
+      const visibleBottom = el.scrollTop + el.clientHeight - buffer;
       if (rowTop < visibleTop) {
-        el.scrollTo({ top: rowTop - headerH });
+        el.scrollTo({ top: Math.max(0, rowTop - headerH - buffer) });
       } else if (rowBottom > visibleBottom) {
-        el.scrollTo({ top: rowBottom - el.clientHeight });
+        el.scrollTo({ top: rowBottom - el.clientHeight + buffer });
       }
     },
     [headerH],
