@@ -8,6 +8,7 @@ import { FEAT_CONFIG_MAP, type Feat } from '../../lib/eqty/feat.js';
 import { useLayoutStore, type FeatViewMode } from '../../lib/stores/layout.store.js';
 import { MonoButton } from '../ui/mono-button.js';
 import { FeatViewStatus, type FeatViewStatusTone } from './feat-view-header.js';
+import { FloatingSurface } from './floating-surface.js';
 
 const TRANSITION_MS = 280;
 
@@ -184,13 +185,47 @@ export function FeatView({
     };
   }, []);
 
+  // FLIP-style toggle for min/restore: snapshot the pane's current
+  // height, flush the mode change so the browser computes the target
+  // layout, then run a WAAPI height keyframe between the two. This
+  // sidesteps every CSS-animatable surface that's brittle in flex
+  // columns (max-height needs definite endpoints, grid-template-rows
+  // fr interpolation depends on parent definiteness). After the
+  // animation finishes the inline keyframe is dropped and the pane
+  // reverts to its CSS-driven height — no leftover state.
+  const togglePane = useCallback(
+    (next: 'minimized' | 'normal'): void => {
+      const node = paneRef.current;
+      if (node === null || prefersReducedMotion()) {
+        setMode(next);
+        return;
+      }
+      const from = node.getBoundingClientRect().height;
+      flushSync(() => {
+        setMode(next);
+      });
+      const target = paneRef.current;
+      if (target === null) return;
+      const to = target.getBoundingClientRect().height;
+      if (Math.abs(from - to) < 1) return;
+      target.animate(
+        [
+          { height: `${String(from)}px`, overflow: 'hidden' },
+          { height: `${String(to)}px`, overflow: 'hidden' },
+        ],
+        { duration: TRANSITION_MS, easing: 'ease' },
+      );
+    },
+    [setMode],
+  );
+
   const minimize = useCallback((): void => {
-    setMode('minimized');
-  }, []);
+    togglePane('minimized');
+  }, [togglePane]);
 
   const restore = useCallback((): void => {
-    setMode('normal');
-  }, []);
+    togglePane('normal');
+  }, [togglePane]);
 
   // Esc exits fullscreen.
   useEffect(() => {
@@ -225,32 +260,42 @@ export function FeatView({
   // away.
   const renderInlineBody = !overlayActive && !(bodyOverlay && isMinimized);
 
-  // Pane flex changes instantly when toggling minimized; we drive the
-  // collapse animation through the body wrapper's `grid-template-rows`
-  // (`1fr` ↔ `0fr`). The old `max-height: 4000px → 0` approach wasted
-  // the first ~75 % of the animation because max-height only starts
-  // changing visible height once it drops below the content's natural
-  // height — small panes felt like they "snapped" after a delay.
-  // grid-template-rows interpolation is baseline in evergreen Chrome
-  // and Safari (2024+) and degrades to instant-collapse otherwise.
+  // The min/restore animation runs on the body wrapper's
+  // `grid-template-rows`, interpolating `1fr ↔ 0fr`. The key insight
+  // is that the wrapper KEEPS `flex: 1` constant — only the grid
+  // fraction toggles. Switching `flex` together with the row size
+  // would cause an instant flex-relayout that masks the row
+  // transition.
+  //
+  // In normal mode the pane is `flex: 1` (fills column), wrapper is
+  // `flex: 1` (fills pane minus header), grid row `1fr` = wrapper
+  // height. In minimized mode the pane is `flex: 0 0 auto` (sizes to
+  // content), wrapper is still `flex: 1` (indefinite parent → sizes
+  // to content), grid row `0fr` = 0. Browser interpolates the fr
+  // values per the CSS Grid spec (baseline in evergreen Chrome /
+  // Safari 2024+); pane height follows from the wrapper's resolved
+  // intrinsic height.
 
   const paneBox = (
     <Box
       ref={paneRef}
-      // Liquid Glass floating pane — backdrop-filter blurs body
-      // wallpaper behind the pane. Dialogs are portaled to body to
-      // escape the containing-block this creates.
-      bg={isFullscreen ? 'panel' : cyber ? 'term.panel' : 'glass.panel'}
-      backdropFilter={isFullscreen ? undefined : 'blur(16px) saturate(180%)'}
+      // Liquid Glass — the container itself is transparent and only
+      // applies the backdrop-filter. Tint comes from the semi-
+      // transparent header; body is transparent. No box-shadow (the
+      // wallpaper + border are enough to read the floating tile).
+      bg="transparent"
+      backdropFilter={'blur(16px) saturate(180%)'}
       borderWidth={isFullscreen ? 0 : '1px'}
       borderColor={cyber ? 'term.line' : 'glass.line'}
       borderRadius={isFullscreen ? 'none' : 'xs'}
-      boxShadow={isFullscreen ? 'none' : 'glass'}
-      // Smooth transitions for the mode toggles (normal ↔ minimized
-      // ↔ fullscreen) so the pane chrome morphs instead of snapping.
-      transition="border-radius 280ms ease, box-shadow 280ms ease, background-color 280ms ease"
+      // Smooth chrome transitions on min/restore + fullscreen toggles.
+      transition="border-radius 280ms ease, background-color 280ms ease"
       color={cyber ? 'term.ink2' : 'ink'}
       position={isFullscreen ? 'fixed' : 'relative'}
+      // 4 px margin around every pane — the column/dock no longer owns
+      // the gap. Suppressed in fullscreen + floating (those positions
+      // already control their own offsets).
+      m={isFullscreen || floating ? undefined : '4px'}
       flex={
         isFullscreen
           ? undefined
@@ -293,20 +338,16 @@ export function FeatView({
           {children}
         </OverlayBody>
       ) : renderInlineBody ? (
-        // Wrapper carries the collapse animation via grid-template-rows
-        // (`1fr` open / `0fr` minimized). Inner Box owns the actual
-        // scroll surface; `min-height: 0` lets the grid row shrink to
-        // 0 instead of clamping to content's intrinsic height.
+        // Transparent body — the pane container already supplies the
+        // glass surface. Height transitions are driven by the FLIP
+        // animation on the pane itself; we just need `overflow:
+        // hidden` here so children clip cleanly while the pane
+        // shrinks. Scroll surface lives on the inner Box.
         <Box
           flex={isMinimized || contentSized === true ? '0 0 auto' : '1'}
           minH={0}
-          display="grid"
-          gridTemplateRows={isMinimized ? '0fr' : '1fr'}
+          bg="transparent"
           overflow="hidden"
-          style={{
-            opacity: isMinimized ? 0 : 1,
-            transition: `grid-template-rows ${TRANSITION_MS}ms ease, opacity ${TRANSITION_MS}ms ease`,
-          }}
         >
           <Box
             minH={0}
@@ -314,6 +355,7 @@ export function FeatView({
             overflowY={isMinimized ? 'hidden' : 'auto'}
             display="flex"
             flexDirection="column"
+            h="100%"
           >
             {children}
           </Box>
@@ -425,9 +467,10 @@ function FeatViewHeader(props: FeatViewHeaderProps): React.ReactElement {
       gap="8px"
       px="10px"
       h={cyber ? '30px' : '28px'}
-      // Header is transparent so the parent pane's glass + ambient
-      // mesh reads through unbroken. Only a hairline divider stays.
-      bg="transparent"
+      // Semi-transparent header — supplies the pane's tint while the
+      // outer container stays bg-transparent + backdrop-filter. Cyber
+      // skins use the term glass; normal skins use Liquid Glass soft.
+      bg={cyber ? 'term.bgElev' : 'glass.panelSoft'}
       borderBottomWidth="1px"
       borderBottomColor={cyber ? 'term.line' : 'glass.line'}
       flexShrink={0}
@@ -668,8 +711,9 @@ function OverlayBody({
   // dropdowns rendered behind the TopBar instead of below it. The
   // portal lifts the node to body, escaping that containment.
   const overlay = (
-    <Box
+    <FloatingSurface
       ref={overlayRef}
+      cyber={cyber}
       position="fixed"
       style={{
         top: `${String(rect.top)}px`,
@@ -679,19 +723,9 @@ function OverlayBody({
       }}
       maxH="60vh"
       overflow="auto"
-      // Floating popover — Liquid Glass surface. Cyber mode reuses
-      // the term glass palette (frosted dark with the slight green
-      // edge); normal mode uses the standard light/dark glass.
-      bg={cyber ? 'term.panel' : 'glass.panel'}
-      backdropFilter="blur(20px) saturate(180%)"
-      color={cyber ? 'term.ink2' : 'ink'}
-      borderWidth="1px"
-      borderColor={cyber ? 'term.line' : 'glass.line'}
-      borderRadius="xs"
-      boxShadow="glass"
     >
       {children}
-    </Box>
+    </FloatingSurface>
   );
   if (typeof document === 'undefined') return overlay;
   return createPortal(overlay, document.body);

@@ -2,6 +2,8 @@
 
 import { Box, Button, Flex, Text } from '@chakra-ui/react';
 import { DialogPortal } from '../feat-view/dialog-portal.js';
+import { FeatSectionBar } from '../feat-view/feat-section.js';
+import { FloatingSurface } from '../feat-view/floating-surface.js';
 import { LedgerEntrySchema, type LedgerEntry } from '@quant/shared';
 import { useRef, useState } from 'react';
 import { z } from 'zod';
@@ -67,30 +69,16 @@ export function LedgerImportDialog({
         if (e.target === e.currentTarget) onCancel();
       }}
     >
-      <Box
+      <FloatingSurface
         role="dialog"
         aria-modal="true"
         aria-labelledby="ldg-import-dialog-title"
         aria-describedby="ldg-import-dialog-desc"
-        className="glass-strong"
-        borderWidth="1px"
-        borderRadius="lg"
-        boxShadow="glassStrong"
-        p="16px"
         minW="360px"
         maxW="92vw"
       >
-        <Text
-          id="ldg-import-dialog-title"
-          fontSize="xs"
-          letterSpacing="0.18em"
-          color="accent"
-          fontFamily="mono"
-          fontWeight="700"
-          mb="10px"
-        >
-          LDG.IMPORT
-        </Text>
+        <FeatSectionBar id="ldg-import-dialog-title" name="LDG.IMPORT" />
+        <Box p="16px">
         <Text id="ldg-import-dialog-desc" fontSize="xs" color="ink2" mb="10px">
           选择导出的 JSON 文件 — 同日期记录会被覆盖。
         </Text>
@@ -143,7 +131,8 @@ export function LedgerImportDialog({
             导入
           </Button>
         </Flex>
-      </Box>
+        </Box>
+      </FloatingSurface>
     </Flex>
     </DialogPortal>
   );

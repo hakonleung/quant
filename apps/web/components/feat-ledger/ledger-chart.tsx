@@ -281,12 +281,13 @@ function HoverInfoBox({ tooltip }: { readonly tooltip: ChartTooltip }): React.Re
       fontSize="xs"
       fontFamily="mono"
       color="ink"
-      bg="glass.panel"
-      backdropFilter="blur(20px) saturate(180%)"
+      // Tooltip is itself a floating layer over the chart canvas —
+      // stays transparent + blurred to match the pane material.
+      bg="transparent"
+      backdropFilter="blur(16px) saturate(180%)"
       borderWidth="1px"
       borderColor="glass.line"
       borderRadius="sm"
-      boxShadow="glass"
       whiteSpace="nowrap"
       pointerEvents="none"
       lineHeight="1.3"

@@ -123,10 +123,15 @@ function Toast({ entry, onDismiss }: ToastProps): ReactElement {
       role={TONE_ROLE[entry.tone]}
       onClick={onDismiss}
       pointerEvents="auto"
-      bg="panel"
+      // Notification card uses the same Liquid Glass material as
+      // panes/dialogs: transparent bg + backdrop-filter + hairline
+      // border, no shadow. Tone is conveyed by the 3 px left bar
+      // alone.
+      bg="transparent"
+      backdropFilter="blur(16px) saturate(180%)"
       color="ink"
       borderWidth="1px"
-      borderColor="line"
+      borderColor="glass.line"
       borderLeftWidth="3px"
       borderLeftColor={TONE_BAR[entry.tone]}
       px="12px"
@@ -136,7 +141,6 @@ function Toast({ entry, onDismiss }: ToastProps): ReactElement {
       minW={{ base: 'auto', md: '280px' }}
       maxW={{ base: '100%', md: '420px' }}
       cursor="pointer"
-      boxShadow="float"
       _hover={{ borderLeftColor: 'accent' }}
     >
       <Text

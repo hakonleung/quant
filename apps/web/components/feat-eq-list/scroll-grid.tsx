@@ -216,7 +216,7 @@ function ColumnHeader({
   return (
     <Box
       display="flex"
-      bg="panel3"
+      bg="glass.panelSoft" backdropFilter="blur(12px)"
       borderBottomWidth="1px"
       borderColor="line"
       flexShrink={0}
@@ -230,7 +230,7 @@ function ColumnHeader({
           flexShrink={0}
           position="sticky"
           left={0}
-          bg="panel3"
+          bg="glass.panelSoft" backdropFilter="blur(12px)"
           zIndex={4}
         />
       )}
@@ -270,7 +270,7 @@ function ColumnHeader({
             whiteSpace="normal"
             wordBreak="break-word"
             lineHeight="1.1"
-            bg="panel3"
+            bg="glass.panelSoft" backdropFilter="blur(12px)"
             cursor={sortable ? 'pointer' : 'default'}
             _hover={sortable ? { color: 'accent' } : {}}
             position={c.sticky === true ? 'sticky' : 'static'}

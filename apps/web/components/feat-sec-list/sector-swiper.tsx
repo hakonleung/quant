@@ -142,7 +142,7 @@ export function SectorSwiper({ children, height = 40 }: Props): React.ReactEleme
   };
 
   return (
-    <Box position="relative" h={`${String(height)}px`} bg="panel">
+    <Box position="relative" h={`${String(height)}px`} bg="transparent">
       <Flex
         ref={scrollRef}
         as="ul"

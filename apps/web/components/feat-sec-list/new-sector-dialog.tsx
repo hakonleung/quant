@@ -19,6 +19,7 @@ import { useNlToDsl } from '../../lib/hooks/use-nl-to-dsl.js';
 import { useSectorsStore, type Sector } from '../../lib/stores/sectors.store.js';
 import { DslTree } from '../dsl/dsl-tree.js';
 import { FeatSectionBar, FeatSectionLabel } from '../feat-view/feat-section.js';
+import { FloatingSurface } from '../feat-view/floating-surface.js';
 
 type Tab = 'user' | 'dynamic';
 
@@ -133,23 +134,18 @@ export function NewSectorDialog({ open, onClose }: Props): React.ReactElement | 
       justifyContent="center"
       onClick={closeAndReset}
     >
-      <Box
+      <FloatingSurface
         role="dialog"
         aria-modal="true"
         aria-labelledby="sec-new-dialog-title"
         onClick={(e) => {
           e.stopPropagation();
         }}
-        className="glass-strong"
-        color="ink"
         w="640px"
         maxW="92vw"
         maxH="86vh"
         display="flex"
         flexDirection="column"
-        borderWidth="1px"
-        borderRadius="lg"
-        boxShadow="glassStrong"
       >
         <Header onClose={closeAndReset} />
         <Tabs tab={tab} setTab={setTab} />
@@ -185,7 +181,7 @@ export function NewSectorDialog({ open, onClose }: Props): React.ReactElement | 
           }
           saveLabel={tab === 'user' ? 'CREATE' : 'SAVE'}
         />
-      </Box>
+      </FloatingSurface>
     </Box>
     </DialogPortal>
   );

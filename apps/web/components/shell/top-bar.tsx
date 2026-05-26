@@ -49,14 +49,9 @@ export function TopBar({ session }: TopBarProps = {}): React.ReactElement {
       minH={`${String(isMobile ? BRAND_HEIGHT_MOBILE : BRAND_HEIGHT)}px`}
       // Transparent TopBar — the body wallpaper (logo bg recipe)
       // shows through directly, so the Brand visually integrates with
-      // the canvas (no border, no glass strip separating them). The
-      // TopBar acts as a Flex container with gap/padding so SYS / SET
-      // / LDG / WATCH float as glass tiles on the same wallpaper as
-      // the main grid.
+      // the canvas (no border, no glass strip separating them). Each
+      // pane self-margins (4 px) so the topbar doesn't compose gaps.
       bg="transparent"
-      gap="4px"
-      px="4px"
-      pt="4px"
       align="stretch"
       style={{ paddingTop: 'env(safe-area-inset-top)' }}
     >

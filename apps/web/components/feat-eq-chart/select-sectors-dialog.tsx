@@ -20,6 +20,7 @@
 import { Box, Button, Flex, Text } from '@chakra-ui/react';
 import { DialogPortal } from '../feat-view/dialog-portal.js';
 import { FeatSectionBar } from '../feat-view/feat-section.js';
+import { FloatingSurface } from '../feat-view/floating-surface.js';
 import { useEffect, useMemo, useState } from 'react';
 
 import {
@@ -91,14 +92,10 @@ export function SelectSectorsDialog({ open, code, onClose }: Props): React.React
         zIndex="dialog"
         onClick={onClose}
       >
-        <Box
+        <FloatingSurface
           role="dialog"
           aria-modal="true"
           aria-labelledby="select-sectors-dialog-title"
-          className="glass-strong"
-          borderWidth="1px"
-          borderRadius="lg"
-          boxShadow="glassStrong"
           w="380px"
           maxH="80vh"
           display="flex"
@@ -185,7 +182,7 @@ export function SelectSectorsDialog({ open, code, onClose }: Props): React.React
               apply
             </Button>
           </Flex>
-        </Box>
+        </FloatingSurface>
       </Flex>
     </DialogPortal>
   );

@@ -2,6 +2,8 @@
 
 import { Box, Button, Flex, Input, Text } from '@chakra-ui/react';
 import { DialogPortal } from '../feat-view/dialog-portal.js';
+import { FeatSectionBar } from '../feat-view/feat-section.js';
+import { FloatingSurface } from '../feat-view/floating-surface.js';
 import { LedgerEntrySchema, type LedgerEntry } from '@quant/shared';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
@@ -237,15 +239,11 @@ interface DialogCardProps {
 
 function DialogCard({ ref, isMobile, title, children }: DialogCardProps): React.ReactElement {
   const cardStyle = isMobile
-    ? { w: '100vw', h: '100dvh', minW: 'unset', maxW: 'unset', p: '20px' }
-    : { minW: '360px', maxW: '92vw', p: '16px' };
+    ? { w: '100vw', h: '100dvh', minW: 'unset', maxW: 'unset' }
+    : { minW: '360px', maxW: '92vw' };
   return (
-    <Box
+    <FloatingSurface
       ref={ref}
-      bg="panel"
-      borderWidth={isMobile ? '0' : '1px'}
-      borderColor="line"
-      boxShadow={isMobile ? 'none' : 'shadowCard'}
       display="flex"
       flexDirection="column"
       overflow="auto"
@@ -254,20 +252,11 @@ function DialogCard({ ref, isMobile, title, children }: DialogCardProps): React.
         e.stopPropagation();
       }}
     >
-      <Text
-        fontSize="xs"
-        letterSpacing="0.18em"
-        color="accent"
-        fontFamily="mono"
-        fontWeight="700"
-        mb="12px"
-      >
-        {title}
-      </Text>
-      <Flex direction="column" gap="10px" flex="1" minH={0}>
+      <FeatSectionBar name={title} />
+      <Flex direction="column" gap="10px" flex="1" minH={0} p={isMobile ? '20px' : '16px'}>
         {children}
       </Flex>
-    </Box>
+    </FloatingSurface>
   );
 }
 

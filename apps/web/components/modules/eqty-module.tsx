@@ -70,7 +70,10 @@ function EqtyModuleDesktop(): React.ReactElement {
     // transparent (the body ambient mesh shows through), padding +
     // gap separate each pane so the canvas reads BETWEEN them too —
     // panes look like floating glass tiles, not flush columns.
-    <Flex h="100%" bg="transparent" gap="4px" p="4px" align="stretch">
+    /* Outer container no longer owns gap/padding — each FeatView
+        carries its own 4 px margin. The Flex just routes the three
+        columns + 4 px drag dividers. */
+    <Flex h="100%" bg="transparent" align="stretch">
       <Column width={`${String(leftWidth)}px`}>
         <FeatMkt />
         <ScrPanesForActiveSector />
@@ -200,9 +203,9 @@ interface ColumnProps {
 
 function Column({ width, flex, children }: ColumnProps): React.ReactElement {
   return (
-    // Floating-island column — transparent bg + 4px gap so stacked
-    // panes within a column also separate (ambient canvas peeks
-    // between them).
+    // Floating-island column — transparent, no gap. Each child pane
+    // self-margins (4 px) so the ambient canvas reads between them
+    // without the column having to compose the spacing.
     <Box
       w={width}
       flex={flex}
@@ -210,7 +213,6 @@ function Column({ width, flex, children }: ColumnProps): React.ReactElement {
       h="100%"
       display="flex"
       flexDirection="column"
-      gap="4px"
       bg="transparent"
       overflowY="auto"
     >

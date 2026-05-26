@@ -9,8 +9,10 @@
  * here when nothing else owns Esc.
  */
 
-import { Box, Button, Flex, Text } from '@chakra-ui/react';
+import { Box, Button } from '@chakra-ui/react';
 import { DialogPortal } from '../../../components/feat-view/dialog-portal.js';
+import { FloatingSurface } from '../../../components/feat-view/floating-surface.js';
+import { FeatSectionBar } from '../../../components/feat-view/feat-section.js';
 import { useEffect, useRef } from 'react';
 
 import { useFocusStore } from '../store/focus.js';
@@ -67,110 +69,71 @@ function Dialog({ opts, onConfirm, onCancel }: DialogProps): React.ReactElement 
   return (
     <DialogPortal>
       <Box
-      role="dialog"
-      aria-modal="true"
-      aria-label={title}
-      position="fixed"
-      inset={0}
-      bg="overlay"
-      zIndex="modal"
-      display="flex"
-      alignItems="center"
-      justifyContent="center"
-      onClick={onCancel}
-    >
-      <Box
-        onClick={(e): void => {
-          e.stopPropagation();
-        }}
-        className="glass-strong"
-        color="ink"
-        w="440px"
-        maxW="92vw"
-        borderWidth="1px"
-        borderRadius="lg"
-        boxShadow="glassStrong"
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+        position="fixed"
+        inset={0}
+        bg="overlay"
+        zIndex="modal"
+        display="flex"
+        alignItems="center"
+        justifyContent="center"
+        onClick={onCancel}
       >
-        <Flex
-          align="center"
-          gap="8px"
-          px="14px"
-          h="36px"
-          borderBottomWidth="1px"
-          borderColor="glass.line"
-          bg="glass.panelSoft"
-          backdropFilter="blur(12px)"
+        <FloatingSurface
+          onClick={(e): void => {
+            e.stopPropagation();
+          }}
+          w="440px"
+          maxW="92vw"
         >
-          <Text
-            fontFamily="mono"
-            fontSize="xs"
-            color="accent"
-            fontWeight="700"
-            letterSpacing="0.18em"
-          >
-            !
-          </Text>
-          <Text
-            fontFamily="mono"
-            fontSize="xs"
-            color="ink2"
-            letterSpacing="0.18em"
-            textTransform="uppercase"
-          >
-            {title}
-          </Text>
-        </Flex>
-        <Box px="16px" py="14px" fontFamily="mono" fontSize="sm" color="ink2" lineHeight="1.7">
-          {opts.message}
-        </Box>
-        <Flex
-          align="center"
-          gap="8px"
-          px="14px"
-          py="10px"
-          borderTopWidth="1px"
-          borderColor="glass.line"
-          bg="glass.panelSoft"
-          backdropFilter="blur(12px)"
-        >
-          <Button
-            ref={cancelBtnRef}
-            onClick={onCancel}
-            bg="transparent"
-            color="ink2"
-            borderWidth="1px"
-            borderColor="line"
-            h="auto"
-            px="14px"
-            py="6px"
-            fontFamily="mono"
-            fontSize="xs"
-            letterSpacing="0.18em"
-            borderRadius="sm"
-            _hover={{ borderColor: 'ink2' }}
-          >
-            {cancelLabel}
-          </Button>
-          <Button
-            ml="auto"
-            onClick={onConfirm}
-            bg="accent"
-            color="panel"
-            h="auto"
-            px="16px"
-            py="6px"
-            fontFamily="mono"
-            fontSize="xs"
-            fontWeight="700"
-            letterSpacing="0.18em"
-            borderRadius="sm"
-            _hover={{ bg: 'accent', opacity: 0.85 }}
-          >
-            {confirmLabel}
-          </Button>
-        </Flex>
+          <FeatSectionBar name={`! ${title}`} />
+          <Box px="16px" py="14px" fontFamily="mono" fontSize="sm" color="ink2" lineHeight="1.7">
+            {opts.message}
+          </Box>
+          <FeatSectionBar
+            right={
+              <>
+                <Button
+                  ref={cancelBtnRef}
+                  onClick={onCancel}
+                  bg="transparent"
+                  color="ink2"
+                  borderWidth="1px"
+                  borderColor="line"
+                  h="auto"
+                  px="14px"
+                  py="6px"
+                  fontFamily="mono"
+                  fontSize="xs"
+                  letterSpacing="0.18em"
+                  borderRadius="sm"
+                  _hover={{ borderColor: 'ink2' }}
+                >
+                  {cancelLabel}
+                </Button>
+                <Button
+                  onClick={onConfirm}
+                  bg="accent"
+                  color="panel"
+                  h="auto"
+                  px="16px"
+                  py="6px"
+                  fontFamily="mono"
+                  fontSize="xs"
+                  fontWeight="700"
+                  letterSpacing="0.18em"
+                  borderRadius="sm"
+                  _hover={{ bg: 'accent', opacity: 0.85 }}
+                >
+                  {confirmLabel}
+                </Button>
+              </>
+            }
+          />
+        </FloatingSurface>
       </Box>
-    </Box>
     </DialogPortal>
   );
 }
