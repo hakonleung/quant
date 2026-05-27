@@ -34,15 +34,13 @@ export function FeatTermMain(): React.ReactElement {
       direction="column"
       h="100%"
       minH="320px"
-      // TERM is always the dark CRT surface regardless of the user's
-      // light/dark setting — that's the retro-terminal aesthetic.
-      // We can't use the `term.bg` semantic token because it's
-      // theme-aware (it resolves to a near-white glass in light
-      // mode); the xterm canvas would then have light text on a
-      // light surface. Hard-code the dark CRT base + the inverse-
-      // light foreground so the readout reads on both themes.
-      bg="#0F1014"
-      color="#F5F5F7"
+      // TERM follows the active theme: the xterm palette is built
+      // from `useSettingsStore.theme` (see `xterm-theme.ts`), so the
+      // host surface must match — otherwise light-mode xterm paints
+      // near-black ink on a hardcoded dark surface and the readout
+      // is invisible.
+      bg="term.bg"
+      color="term.ink"
       position="relative"
       overflow="hidden"
     >
