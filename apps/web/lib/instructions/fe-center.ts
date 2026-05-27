@@ -52,6 +52,7 @@ import { buildStockInfoCell } from './cells/stock-info.cell.js';
 import { buildStockKlineCell } from './cells/stock-kline.cell.js';
 import { buildTaCell } from './cells/ta.cell.js';
 import { buildTaSectorCell } from './cells/ta-sector.cell.js';
+import { buildThemeCell } from './cells/theme.cell.js';
 import { buildUpdateCell } from './cells/update.cell.js';
 import { buildUsrCell } from './cells/usr.cell.js';
 
@@ -64,6 +65,7 @@ import { buildUsrCell } from './cells/usr.cell.js';
 export type FeMigratedIds =
   | 'usr'
   | 'clear'
+  | 'theme'
   | 'cache'
   | 'focus'
   | 'update'
@@ -112,6 +114,7 @@ export function buildFeCenter(): InstructionCenter<FeEnv, Excluded> {
   const cfg: InstructionConfig<FeEnv, Excluded> = {
     usr: buildUsrCell(),
     clear: buildClearCell(),
+    theme: buildThemeCell(),
     cache: buildCacheCell(),
     focus: buildFocusCell(),
     update: buildUpdateCell(),

@@ -124,6 +124,25 @@ export const ClearResultSchema = z.discriminatedUnion('kind', [
 ]);
 export type ClearResult = z.infer<typeof ClearResultSchema>;
 
+/**
+ * `/theme` — flip the workbench theme. Absent `mode` toggles; an
+ * explicit `light` / `dark` sets unconditionally. Aliased so users can
+ * also type `theme light` / `theme dark`.
+ */
+export const ThemeArgsSchema = z
+  .object({
+    mode: z.enum(['light', 'dark', 'toggle']).optional(),
+  })
+  .strict();
+
+export const ThemeResultSchema = z
+  .object({
+    previous: z.enum(['light', 'dark']),
+    current: z.enum(['light', 'dark']),
+  })
+  .strict();
+export type ThemeResult = z.infer<typeof ThemeResultSchema>;
+
 /** `/cache` result — either cache stats (default `sub=stats`) or a clear ack. */
 export const CacheResultSchema = z.discriminatedUnion('kind', [
   z
