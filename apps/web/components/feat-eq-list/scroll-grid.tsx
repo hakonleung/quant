@@ -241,9 +241,13 @@ export function ScrollGrid({
       _focusVisible={{ boxShadow: '0 0 0 1px var(--chakra-colors-accent) inset' }}
     >
       <Box w={`${String(totalWidth)}px`} minW="100%">
-        <Box ref={headerRef}>
-          <ColumnHeader columns={columns} sort={sort} setSort={setSort} removable={removable} />
-        </Box>
+        <ColumnHeader
+          ref={headerRef}
+          columns={columns}
+          sort={sort}
+          setSort={setSort}
+          removable={removable}
+        />
         <Box
           position="relative"
           h={`${String(Math.max(0, rowVirtualizer.getTotalSize() - headerH))}px`}
@@ -277,6 +281,7 @@ interface ColumnHeaderProps {
   readonly sort: SortState | null;
   readonly setSort: (s: SortState | null) => void;
   readonly removable: boolean;
+  readonly ref?: React.Ref<HTMLDivElement>;
 }
 
 function ColumnHeader({
@@ -284,9 +289,11 @@ function ColumnHeader({
   sort,
   setSort,
   removable,
+  ref,
 }: ColumnHeaderProps): React.ReactElement {
   return (
     <Box
+      ref={ref}
       display="flex"
       bg="glass.panelStrong"
       backdropFilter="blur(12px)"
