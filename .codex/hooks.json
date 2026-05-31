@@ -1,0 +1,25 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "'/Users/hakon/Desktop/workspace/quant/.codex/hooks/post_edit_remind_review.sh'"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "'/Users/hakon/Desktop/workspace/quant/.codex/hooks/post_stop_remind_docs.sh'"
+          }
+        ]
+      }
+    ]
+  }
+}
