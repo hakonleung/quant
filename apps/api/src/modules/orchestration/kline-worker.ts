@@ -28,6 +28,8 @@ import { StockMetricsComputeService } from '../stock-meta/stock-metrics-compute.
 import { ORCH_FLIGHT_CLIENT } from './flight.token.js';
 import type { JobEnvelope, JobProcessor, KlineJob, ReQueue } from './domain/types.js';
 
+const KLINE_SYNC_DEADLINE_MS = 120_000;
+
 @Injectable()
 export class KlineWorker implements JobProcessor<KlineJob> {
   private readonly logger = new Logger(KlineWorker.name);
@@ -46,7 +48,7 @@ export class KlineWorker implements JobProcessor<KlineJob> {
     const result = await this.flight.doGet(
       'sync_kline_for_code',
       { code, trace_id: traceId },
-      { traceId, deadlineMs: 30_000 },
+      { traceId, deadlineMs: KLINE_SYNC_DEADLINE_MS },
     );
     const report = readSyncKlineReport(result.value);
     const rows = arrowTableToKlineRows(result.value);

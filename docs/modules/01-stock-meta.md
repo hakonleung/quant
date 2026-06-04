@@ -13,7 +13,7 @@
 | Source  | `services/py/quant_io/sources/akshare_stock_meta.py`         | akshare 拉取沪深主板 + 创业板 + 科创板 + 北交所列表         |
 | Repo    | `services/py/quant_cache/parquet_stock_meta_repo.py`         | 单文件 Parquet 全表存储（schema 见 `stock_meta_schema.py`） |
 | Service | `services/py/quant_core/services/stock_meta_service.py`      | 查询 / 过滤 / 拼音匹配                                      |
-| Sync    | `services/py/quant_core/services/stock_meta_sync_service.py` | 拉取最新 + 全量覆盖写 + 拼音回填（pypinyin）                |
+| Sync    | `services/py/quant_core/services/stock_meta_sync_service.py` | 拉取最新 + diff/合并 enriched 字段；返回 upsert 给 NestJS   |
 | RPC     | `services/py/quant_rpc/ops/stock_meta*.py`                   | 见下表                                                      |
 | API     | `apps/api/src/modules/stock-meta/`                           | `GET /api/stocks/{code}`（支持批量 `?codes=`）              |
 | Web     | `feat-sec-list`                                              | 全宇宙搜索 / 板块（sector）管理                             |
@@ -32,8 +32,8 @@
 
 ## 缓存策略
 
-- **存储**：`data/meta/stocks.parquet`（约 5500 行）。
-- **更新**：手动触发或 BJT 16:00 cron；写入走 `tempfile + os.replace` 原子写 + `FileLock`。
+- **存储**：`data/stock_metas.parquet`（约 5500 行，由 NestJS 统一写入）。
+- **更新**：手动触发或 BJT 16:00 cron；每批先跑 `sync_stock_meta_full` 刷新股票宇宙，再补全基础信息与财务字段。
 - **读取**：内存缓存（首次加载 polars DataFrame，后续命中复用）；外部触发 sync 后失效重载。
 - **校验**：schema 版本写入 Parquet metadata，启动时不匹配则报 `META_STALE`。
 
@@ -54,11 +54,11 @@ IO 用到「最近 N 日主力净流入 / N 日成交额」。
 
 ### 字段（落 `stock_metas.parquet`，全部 nullable）
 
-| 列名                          | 含义                                |
-| ----------------------------- | ----------------------------------- |
-| `dde_main_net_inflow_<N>d`    | 近 N 日主力净流入金额（CNY，可负）  |
-| `dde_main_inflow_ratio_<N>d`  | 净流入 / 近 N 日成交额（可负）      |
-| `dde_updated_at`              | 最近一次 DDE 同步的 UTC 时间戳      |
+| 列名                         | 含义                               |
+| ---------------------------- | ---------------------------------- |
+| `dde_main_net_inflow_<N>d`   | 近 N 日主力净流入金额（CNY，可负） |
+| `dde_main_inflow_ratio_<N>d` | 净流入 / 近 N 日成交额（可负）     |
+| `dde_updated_at`             | 最近一次 DDE 同步的 UTC 时间戳     |
 
 `<N>` ∈ {3, 5, 10, 20}。每次 upsert 写满 9 列（8 决策值 + 1 时间戳）。
 
@@ -93,15 +93,15 @@ $$\mathrm{WCMI}(c) = 10 \cdot \sum_i w_i \cdot \mathrm{pct}_i(c) \in [0, 1000]$$
 - **子分**：7 个维度（per-code 横截面百分位 × 100）一并落库，
   composite null 时子分也都为 null：
 
-  | 列名                  | 含义                                              |
-  | --------------------- | ------------------------------------------------- |
-  | `wcmi_rhythm`         | 滚动 ret_w 和 swing density 的"节奏"近 target 程度 |
-  | `wcmi_ma_support`     | 收盘价对 MA20 的支撑/位置稳定度                   |
-  | `wcmi_up_wave`        | 上行波段（连续阳柱簇）质量                        |
-  | `wcmi_yang_dom`       | 阳柱主导度（实体 + 占比）                         |
-  | `wcmi_shadow_clean`   | H−O / C−L 上下影线"干净"程度                      |
-  | `wcmi_stage_gain`     | 自 `bars[0]` 起的阶段累计收益                     |
-  | `wcmi_crash_avoid`    | 单日大跌 / 低开 / 未恢复 的避险表现               |
+  | 列名                | 含义                                               |
+  | ------------------- | -------------------------------------------------- |
+  | `wcmi_rhythm`       | 滚动 ret_w 和 swing density 的"节奏"近 target 程度 |
+  | `wcmi_ma_support`   | 收盘价对 MA20 的支撑/位置稳定度                    |
+  | `wcmi_up_wave`      | 上行波段（连续阳柱簇）质量                         |
+  | `wcmi_yang_dom`     | 阳柱主导度（实体 + 占比）                          |
+  | `wcmi_shadow_clean` | H−O / C−L 上下影线"干净"程度                       |
+  | `wcmi_stage_gain`   | 自 `bars[0]` 起的阶段累计收益                      |
+  | `wcmi_crash_avoid`  | 单日大跌 / 低开 / 未恢复 的避险表现                |
 
 - **合成公式**：每个子分先做横截面百分位 $\text{pct}_i \in [0, 1]$，再按权重加权后缩放到 $[0, 1000]$：
 
@@ -118,7 +118,7 @@ $$\mathrm{WCMI}(c) = 10 \cdot \sum_i w_i \cdot \mathrm{pct}_i(c) \in [0, 1000]$$
   rhythm 维持落库但权重为 0，自评结果显示与 label rhythm
   反相关（详 backtest changelog 2026-05-22 round 6）。
 - **写盘**：composite 与 7 个子分通过 `LocalStockMetaWriterService.
-  upsertMetrics` 一并落库，FE 通过 `StockListRow.wcmi*` 字段消费；
+upsertMetrics` 一并落库，FE 通过 `StockListRow.wcmi*` 字段消费；
   EQ.LIST WCMI 列展示 composite，hover tooltip 列出 7 个子分百分位。
 - **Screen 暴露**：`wcmi` 与 8 个子分（`wcmi_rhythm` / `wcmi_ma_support` /
   `wcmi_up_wave` / `wcmi_yang_dom` / `wcmi_shadow_clean` / `wcmi_stage_gain` /

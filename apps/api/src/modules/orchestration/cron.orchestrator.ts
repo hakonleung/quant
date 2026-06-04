@@ -29,12 +29,12 @@ import { Inject, Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nest
 import { ServerConfigCenter } from '@quant/config/server';
 import { newTraceId, type ScanAccepted, type ScanResult } from '@quant/shared';
 import { isPyFlightDown } from '../../adapters/flight/flight-errors.js';
-import { StockMetricsBackfillService } from '../stock-meta/stock-metrics-backfill.service.js';
 import { BatchSettler } from './batch-settler.js';
 import { CacheInspector } from './cache-inspector.js';
 import { KLINE_QUEUE, META_QUEUE } from './flight.token.js';
 import type { InMemoryQueue } from './domain/in-memory-queue.js';
 import type { KlineJob, MetaJob } from './domain/types.js';
+import type { MetaScanItem } from './cache-inspector.js';
 
 /**
  * Milliseconds from `now` until the next scheduled BJT hour. If we're
@@ -65,8 +65,6 @@ export class CronOrchestrator implements OnModuleInit, OnModuleDestroy {
     @Inject(KLINE_QUEUE) private readonly klineQueue: InMemoryQueue<KlineJob>,
     @Inject(CacheInspector) private readonly inspector: CacheInspector,
     @Inject(BatchSettler) private readonly settler: BatchSettler,
-    @Inject(StockMetricsBackfillService)
-    private readonly metricsBackfill: StockMetricsBackfillService,
   ) {}
 
   onModuleInit(): void {
@@ -101,9 +99,7 @@ export class CronOrchestrator implements OnModuleInit, OnModuleDestroy {
     const startedAt = new Date().toISOString();
     const traceId = newTraceId();
     const wasInflight = this.inFlight !== null;
-    this.logger.log(
-      `manual_scan_fired traceId=${traceId} coalesced=${String(wasInflight)}`,
-    );
+    this.logger.log(`manual_scan_fired traceId=${traceId} coalesced=${String(wasInflight)}`);
     void this.triggerScan(traceId).catch((err: unknown) => {
       this.logScanFailure('manual', err);
     });
@@ -130,29 +126,13 @@ export class CronOrchestrator implements OnModuleInit, OnModuleDestroy {
     const t0 = Date.now();
     const batchId = traceId;
     const result = await this.enqueueBatch(traceId, batchId);
-    if (result === null) {
-      return {
-        traceId,
-        startedAt,
-        elapsedMs: Date.now() - t0,
-        metaEnqueued: 0,
-        klineEnqueued: 0,
-      };
-    }
     const [metaEnqueued, klineEnqueued] = result;
-    this.settler.register({
+    await this.settler.register({
       batchId,
       metaCount: metaEnqueued,
       klineCount: klineEnqueued,
       traceId,
     });
-    try {
-      await this.metricsBackfill.run(traceId);
-    } catch (err) {
-      this.logger.warn(
-        `metrics_backfill_failed traceId=${traceId} err=${err instanceof Error ? err.message : String(err)}`,
-      );
-    }
     const elapsedMs = Date.now() - t0;
     this.logger.log(
       `cron_scan_done traceId=${traceId} meta_enqueued=${String(metaEnqueued)} kline_enqueued=${String(klineEnqueued)} elapsedMs=${String(elapsedMs)}`,
@@ -160,32 +140,23 @@ export class CronOrchestrator implements OnModuleInit, OnModuleDestroy {
     return { traceId, startedAt, elapsedMs, metaEnqueued, klineEnqueued };
   }
 
-  /** Returns `[metaEnqueued, klineEnqueued]` or `null` when the inspector
-   *  itself failed (caller emits an empty `ScanResult`). */
-  private async enqueueBatch(
-    traceId: string,
-    batchId: string,
-  ): Promise<readonly [number, number] | null> {
-    try {
-      await this.inspector.syncBulkFinancials(traceId);
-      const [meta, kline] = await Promise.all([
-        this.scanMeta(traceId, batchId),
-        this.scanKline(traceId, batchId),
-      ]);
-      return [meta, kline];
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      if (isPyFlightDown(err)) {
-        this.logger.warn(`inspector skipped — py flight unreachable. traceId=${traceId}`);
-      } else {
-        this.logger.error(`inspector failed traceId=${traceId} err=${msg}`);
-      }
-      return null;
-    }
+  private async enqueueBatch(traceId: string, batchId: string): Promise<readonly [number, number]> {
+    const base = await this.inspector.syncStockMetaFull(traceId);
+    this.logger.log(
+      `stock_meta_full_synced fetched=${String(base.fetched)} updated=${String(base.updated)} traceId=${traceId}`,
+    );
+    await this.inspector.syncBulkFinancials(traceId);
+    const [metaItems, klineCodes] = await Promise.all([
+      this.inspector.findMetaWork(traceId),
+      this.inspector.findStaleKline(traceId),
+    ]);
+    return [
+      this.enqueueMeta(metaItems, traceId, batchId),
+      this.enqueueKline(klineCodes, traceId, batchId),
+    ];
   }
 
-  private async scanMeta(traceId: string, batchId: string): Promise<number> {
-    const items = await this.inspector.findMetaWork(traceId);
+  private enqueueMeta(items: readonly MetaScanItem[], traceId: string, batchId: string): number {
     return this.metaQueue.addBulk(
       items.map((it) => ({
         data: {
@@ -201,8 +172,7 @@ export class CronOrchestrator implements OnModuleInit, OnModuleDestroy {
     );
   }
 
-  private async scanKline(traceId: string, batchId: string): Promise<number> {
-    const codes = await this.inspector.findStaleKline(traceId);
+  private enqueueKline(codes: readonly string[], traceId: string, batchId: string): number {
     return this.klineQueue.addBulk(
       codes.map((code) => ({
         data: {

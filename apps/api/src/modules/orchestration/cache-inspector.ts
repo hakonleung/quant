@@ -113,6 +113,26 @@ export class CacheInspector {
   }
 
   /**
+   * Refresh the canonical stock universe before inspecting per-code
+   * completeness. The Python op returns only added/changed rows; the
+   * service preserves enriched fields when the bulk source is partial.
+   */
+  async syncStockMetaFull(traceId: string): Promise<{
+    readonly fetched: number;
+    readonly updated: number;
+  }> {
+    const result = await this.flight.doGet('sync_stock_meta_full', {}, { traceId });
+    const rows = arrowTableToStockMetaDtos(result.value);
+    if (rows.length > 0) {
+      await this.metaWriter.upsertMetas(rows);
+    }
+    return {
+      fetched: readSchemaInt(result.value.schema.metadata, 'fetched'),
+      updated: rows.length,
+    };
+  }
+
+  /**
    * Synchronous bulk financials sync (8 quarters of `stock_yjbb_em` ⇒
    * one Flight call). Cheap full-market prepass — the per-code
    * `find_stale_financials` watermark is computed *after* this lands.
@@ -225,12 +245,12 @@ function isFinancialsStale(meta: StockMetaDto, cutoffMs: number): boolean {
 }
 
 function readSchemaInt(
-  meta: ReadonlyMap<string, string> | Record<string, string> | null | undefined,
+  meta: ReadonlyMap<string, string> | null | undefined,
   key: string,
   fallback = 0,
 ): number {
   if (meta === null || meta === undefined) return fallback;
-  const raw = meta instanceof Map ? meta.get(key) : (meta as Record<string, string>)[key];
+  const raw = meta.get(key);
   if (raw === undefined) return fallback;
   const n = Number(raw);
   return Number.isFinite(n) ? n : fallback;

@@ -16,7 +16,7 @@ Pure orchestration: no IO of its own; sources / repo / clock are ports.
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -117,11 +117,13 @@ class StockMetaSyncService:
             if prev is None:
                 added += 1
                 to_upsert.append(item)
-            elif prev != item:
-                changed += 1
-                to_upsert.append(item)
             else:
-                unchanged += 1
+                merged = _merge_basic_snapshot(prev, item)
+                if merged == prev:
+                    unchanged += 1
+                    continue
+                changed += 1
+                to_upsert.append(merged)
         report = SyncReport(
             source=source_name,
             fetched=len(items),
@@ -141,3 +143,13 @@ class StockMetaSyncService:
             },
         )
         return report
+
+
+def _merge_basic_snapshot(existing: StockMeta, incoming: StockMeta) -> StockMeta:
+    """Apply a bulk-listing row without erasing enriched fields."""
+    return replace(
+        existing,
+        name=incoming.name,
+        name_pinyin=incoming.name_pinyin,
+        updated_at=incoming.updated_at,
+    )

@@ -14,7 +14,9 @@
  *      This is **not** done up-front any more so the meta + kline
  *      sync work always operates on yesterday's blacklist; the result
  *      flows into the *next* batch's cache-inspector pass.
- *   2. Full dynamic-sectors recompute — every `kind === 'dynamic'`
+ *   2. DDE fund-flow sync.
+ *   3. Full-universe metrics / WCMI backfill after kline writes finish.
+ *   4. Full dynamic-sectors recompute — every `kind === 'dynamic'`
  *      sector in `SectorsStore` is re-screened with bounded concurrency.
  *
  * Settlement failures are logged but do not roll back the batch (which
@@ -31,6 +33,7 @@ import { SectorsService } from '../sectors/sectors.service.js';
 import { SectorsStore } from '../sectors/sectors.store.js';
 import { isPyFlightDown } from '../../adapters/flight/flight-errors.js';
 import { StockFundFlowSyncService } from '../stock-meta/stock-fund-flow.sync.service.js';
+import { StockMetricsBackfillService } from '../stock-meta/stock-metrics-backfill.service.js';
 import { KLINE_QUEUE, META_QUEUE } from './flight.token.js';
 import type { InMemoryQueue } from './domain/in-memory-queue.js';
 import type { JobTerminalEvent, KlineJob, MetaJob } from './domain/types.js';
@@ -47,6 +50,7 @@ interface BatchState {
   failedKline: number;
   readonly traceId: string;
   readonly startedAt: number;
+  readonly resolve: () => void;
 }
 
 export interface BatchRegistration {
@@ -62,6 +66,7 @@ export class BatchSettler {
   private readonly batches = new Map<string, BatchState>();
   /** Guards concurrent settle invocations for the same batchId. */
   private readonly settling = new Set<string>();
+  private readonly earlyTerminals = new Map<string, { meta: number; kline: number }>();
 
   constructor(
     @Inject(META_QUEUE) private readonly metaQueue: InMemoryQueue<MetaJob>,
@@ -70,6 +75,8 @@ export class BatchSettler {
     @Inject(SectorsService) private readonly sectors: SectorsService,
     @Inject(SectorsStore) private readonly sectorsStore: SectorsStore,
     @Inject(StockFundFlowSyncService) private readonly fundFlow: StockFundFlowSyncService,
+    @Inject(StockMetricsBackfillService)
+    private readonly metricsBackfill: StockMetricsBackfillService,
   ) {
     this.metaQueue.onTerminal((ev) => {
       this.handleTerminal(ev, 'meta');
@@ -87,26 +94,42 @@ export class BatchSettler {
    * tail-off still runs (the blacklist is recomputed every 16:00
    * regardless of whether per-code work was needed).
    */
-  register(reg: BatchRegistration): void {
+  register(reg: BatchRegistration): Promise<void> {
+    let resolve = (): void => undefined;
+    const done = new Promise<void>((complete) => {
+      resolve = complete;
+    });
     const total = reg.metaCount + reg.klineCount;
     if (total === 0) {
       this.logger.log(`batch_empty batch_id=${reg.batchId} trace_id=${reg.traceId} — settling now`);
-      void this.settle(reg.batchId, reg.traceId);
-      return;
+      void this.settle(reg.batchId, reg.traceId, resolve);
+      return done;
     }
+    const early = this.earlyTerminals.get(reg.batchId);
+    this.earlyTerminals.delete(reg.batchId);
     this.batches.set(reg.batchId, {
       totalMeta: reg.metaCount,
       totalKline: reg.klineCount,
-      settledMeta: 0,
-      settledKline: 0,
+      settledMeta: early?.meta ?? 0,
+      settledKline: early?.kline ?? 0,
       failedMeta: 0,
       failedKline: 0,
       traceId: reg.traceId,
       startedAt: Date.now(),
+      resolve,
     });
     this.logger.log(
       `batch_registered batch_id=${reg.batchId} meta=${String(reg.metaCount)} kline=${String(reg.klineCount)} trace_id=${reg.traceId}`,
     );
+    const state = this.batches.get(reg.batchId);
+    if (
+      state !== undefined &&
+      state.settledMeta >= state.totalMeta &&
+      state.settledKline >= state.totalKline
+    ) {
+      void this.settle(reg.batchId, state.traceId, state.resolve);
+    }
+    return done;
   }
 
   private handleTerminal(
@@ -117,20 +140,43 @@ export class BatchSettler {
     const batchId = data.batchId;
     if (batchId === undefined) return; // ad-hoc push, not a tracked batch
     const state = this.batches.get(batchId);
-    if (state === undefined) return; // unknown batch (settler restarted mid-flight)
-    if (queueKind === 'meta') {
-      state.settledMeta += 1;
-      if (event.reason === 'failed') state.failedMeta += 1;
-    } else {
-      state.settledKline += 1;
-      if (event.reason === 'failed') state.failedKline += 1;
+    if (state === undefined) {
+      this.recordEarlyTerminal(batchId, queueKind);
+      return;
     }
-    if (state.settledMeta >= state.totalMeta && state.settledKline >= state.totalKline) {
-      void this.settle(batchId, state.traceId);
+    this.recordTerminal(state, queueKind, event.reason);
+    if (this.isComplete(state)) {
+      void this.settle(batchId, state.traceId, state.resolve);
     }
   }
 
-  private async settle(batchId: string, traceId: string): Promise<void> {
+  private recordEarlyTerminal(batchId: string, queueKind: 'meta' | 'kline'): void {
+    const early = this.earlyTerminals.get(batchId) ?? { meta: 0, kline: 0 };
+    this.earlyTerminals.set(batchId, {
+      meta: early.meta + (queueKind === 'meta' ? 1 : 0),
+      kline: early.kline + (queueKind === 'kline' ? 1 : 0),
+    });
+  }
+
+  private recordTerminal(
+    state: BatchState,
+    queueKind: 'meta' | 'kline',
+    reason: 'succeeded' | 'failed',
+  ): void {
+    if (queueKind === 'meta') {
+      state.settledMeta += 1;
+      if (reason === 'failed') state.failedMeta += 1;
+      return;
+    }
+    state.settledKline += 1;
+    if (reason === 'failed') state.failedKline += 1;
+  }
+
+  private isComplete(state: BatchState): boolean {
+    return state.settledMeta >= state.totalMeta && state.settledKline >= state.totalKline;
+  }
+
+  private async settle(batchId: string, traceId: string, resolve: () => void): Promise<void> {
     if (this.settling.has(batchId)) return;
     this.settling.add(batchId);
     const state = this.batches.get(batchId);
@@ -142,9 +188,21 @@ export class BatchSettler {
     try {
       await this.runBlacklist(traceId);
       await this.runFundFlow(traceId);
+      await this.runMetricsBackfill(traceId);
       await this.refreshAllDynamicSectors(traceId);
     } finally {
       this.settling.delete(batchId);
+      resolve();
+    }
+  }
+
+  private async runMetricsBackfill(traceId: string): Promise<void> {
+    try {
+      await this.metricsBackfill.run(traceId);
+    } catch (err) {
+      this.logger.warn(
+        `batch_settle_metrics_failed trace_id=${traceId} err=${err instanceof Error ? err.message : String(err)}`,
+      );
     }
   }
 
@@ -157,7 +215,9 @@ export class BatchSettler {
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       if (isPyFlightDown(err)) {
-        this.logger.warn(`batch_settle_fund_flow_skipped reason=py_flight_down trace_id=${traceId}`);
+        this.logger.warn(
+          `batch_settle_fund_flow_skipped reason=py_flight_down trace_id=${traceId}`,
+        );
       } else {
         this.logger.warn(`batch_settle_fund_flow_failed trace_id=${traceId} err=${msg}`);
       }

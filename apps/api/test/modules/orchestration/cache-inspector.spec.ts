@@ -7,6 +7,7 @@
  * field-completeness + watermark rules that used to live in Python's
  * `FinancialsService.find_stale_financials`.
  */
+/* eslint-disable no-restricted-globals -- this legacy spec pins Date.now for staleness boundaries. */
 
 import type { StockMetaDto } from '@quant/shared';
 
@@ -56,7 +57,7 @@ function meta(overrides: Partial<StockMetaDto> & Pick<StockMetaDto, 'code'>): St
 
 function fakeStockMeta(rows: readonly StockMetaDto[]): StockMetaService {
   return {
-    listAll: async () => rows,
+    listAll: () => Promise.resolve(rows),
   } as unknown as StockMetaService;
 }
 
@@ -187,3 +188,70 @@ describe('CacheInspector.findMetaWork', () => {
     expect(work).toEqual([]);
   });
 });
+
+describe('CacheInspector.syncStockMetaFull', () => {
+  it('persists rows returned by the full-universe sync', async () => {
+    const rows = [meta({ code: '600519' })];
+    const first = rows[0];
+    if (first === undefined) throw new Error('fixture row missing');
+    const writes: StockMetaDto[][] = [];
+    const flight = {
+      doGet: () =>
+        Promise.resolve({
+          value: {
+            numRows: 1,
+            get: () => ({ toJSON: () => metaArrowRow(first) }),
+            schema: { metadata: new Map([['fetched', '5512']]) },
+          },
+        }),
+    } as unknown as FlightClient;
+    const writer = {
+      upsertMetas: (items: readonly StockMetaDto[]) => {
+        writes.push([...items]);
+        return Promise.resolve();
+      },
+    } as unknown as LocalStockMetaWriterService;
+    const inspector = new CacheInspector(
+      flight,
+      fakeBlacklist(new Set()),
+      fakeStockMeta([]),
+      NO_KLINE,
+      writer,
+    );
+
+    const result = await inspector.syncStockMetaFull('tr-full');
+
+    expect({ result, writtenCode: writes[0]?.[0]?.code }).toEqual({
+      result: { fetched: 5512, updated: 1 },
+      writtenCode: '600519',
+    });
+  });
+
+  it('propagates full sync failure so the batch cannot claim completeness', async () => {
+    const flight = {
+      doGet: async () => Promise.reject(new Error('source down')),
+    } as unknown as FlightClient;
+    const inspector = new CacheInspector(
+      flight,
+      fakeBlacklist(new Set()),
+      fakeStockMeta([]),
+      NO_KLINE,
+      NO_WRITER,
+    );
+
+    await expect(inspector.syncStockMetaFull('tr-full')).rejects.toThrow('source down');
+  });
+});
+
+function metaArrowRow(row: StockMetaDto): Record<string, unknown> {
+  return {
+    ...row,
+    list_date: new Date(`${row.list_date}T00:00:00Z`),
+    updated_at: new Date(row.updated_at),
+    net_assets_period:
+      row.net_assets_period === null ? null : new Date(`${row.net_assets_period}T00:00:00Z`),
+    quarterlies_json: JSON.stringify(row.quarterlies),
+    financials_updated_at:
+      row.financials_updated_at === null ? null : new Date(row.financials_updated_at),
+  };
+}

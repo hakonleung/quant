@@ -10,7 +10,9 @@ Storage-unify: the service no longer persists. Tests assert the
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import UTC, datetime
+from decimal import Decimal
 from typing import TYPE_CHECKING
 
 import pytest
@@ -109,6 +111,31 @@ class TestFullSyncReport:
         assert report.unchanged == len(SEED) - 1
         # The changed row appears in upserts; the rest are filtered out.
         assert {m.code for m in report.upserts} == {"600519"}
+
+    def test_bulk_snapshot_preserves_existing_enriched_fields(
+        self,
+        meta_path: Path,
+        repo: ParquetStockMetaRepo,
+        clock: FrozenClock,
+    ) -> None:
+        existing = replace(
+            make_meta("600519", name="贵州茅台", industries="食品饮料,白酒"),
+            total_share=Decimal("1256197800"),
+        )
+        seed_stock_meta_parquet(meta_path, (existing,))
+        partial = replace(
+            make_meta("600519", name="贵州茅台股份", industries=""),
+            updated_at=datetime(2026, 5, 2, tzinfo=UTC),
+        )
+
+        report = _make_service([FakeStockMetaSource(items=(partial,))], repo, clock).run_full_sync()
+
+        updated = report.upserts[0]
+        assert (updated.industries, updated.total_share, updated.name) == (
+            "食品饮料,白酒",
+            Decimal("1256197800"),
+            "贵州茅台股份",
+        )
 
 
 @pytest.mark.integration

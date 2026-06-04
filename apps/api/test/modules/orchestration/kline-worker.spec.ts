@@ -13,6 +13,7 @@
  * proves the wiring (Arrow → writer + in-process compute → writer)
  * without depending on the Python process being up.
  */
+/* eslint-disable no-restricted-globals -- Arrow date fixture requires a Date cell. */
 
 import type { Table } from 'apache-arrow';
 import type { FlightClient } from '../../../src/adapters/flight/flight-client.js';
@@ -21,10 +22,12 @@ import type { KlineWriterService } from '../../../src/modules/kline/kline-writer
 import type { LocalStockMetaWriterService } from '../../../src/modules/stock-meta/local-stock-meta-writer.service.js';
 import type { StockMetricsComputeService } from '../../../src/modules/stock-meta/stock-metrics-compute.service.js';
 import type { KlineRow } from '../../../src/modules/kline/kline.row.js';
+import type { StockMetricsRow } from '../../../src/modules/stock-meta/local-stock-meta-writer.service.js';
 import type {
-  StockMetricsRow,
-} from '../../../src/modules/stock-meta/local-stock-meta-writer.service.js';
-import type { JobEnvelope, KlineJob, ReQueue } from '../../../src/modules/orchestration/domain/types.js';
+  JobEnvelope,
+  KlineJob,
+  ReQueue,
+} from '../../../src/modules/orchestration/domain/types.js';
 
 interface FakeProxy {
   toJSON(): Record<string, unknown>;
@@ -32,7 +35,7 @@ interface FakeProxy {
 
 class FakeTable {
   constructor(
-    private readonly rows: ReadonlyArray<Record<string, unknown>>,
+    private readonly rows: readonly Record<string, unknown>[],
     private readonly metadata: Record<string, string> = {},
   ) {}
   get numRows(): number {
@@ -48,13 +51,21 @@ class FakeTable {
   }
 }
 
-function flightStub(handlers: Record<string, FakeTable | Error>): FlightClient {
+function flightStub(
+  handlers: Record<string, FakeTable | Error>,
+  optionsSeen: { traceId?: string; deadlineMs?: number }[] = [],
+): FlightClient {
   return {
-    doGet: async (op: string): Promise<{ value: Table }> => {
+    doGet: (
+      op: string,
+      _args: Readonly<Record<string, unknown>>,
+      options?: { traceId?: string; deadlineMs?: number },
+    ): Promise<{ value: Table }> => {
+      if (options !== undefined) optionsSeen.push(options);
       const slot = handlers[op];
-      if (slot === undefined) throw new Error(`unexpected op: ${op}`);
-      if (slot instanceof Error) throw slot;
-      return { value: slot as unknown as Table };
+      if (slot === undefined) return Promise.reject(new Error(`unexpected op: ${op}`));
+      if (slot instanceof Error) return Promise.reject(slot);
+      return Promise.resolve({ value: slot as unknown as Table });
     },
   } as unknown as FlightClient;
 }
@@ -91,7 +102,7 @@ class FakeMetricsCompute {
 }
 
 const NOOP_QUEUE: ReQueue<KlineJob> = {
-  enqueue: async () => undefined,
+  enqueue: () => Promise.resolve(undefined),
 } as unknown as ReQueue<KlineJob>;
 
 function makeJob(code = '600519'): JobEnvelope<KlineJob> {
@@ -125,7 +136,8 @@ const SAMPLE_METRICS_ROW: StockMetricsRow = {
   wcmi_yang_dom: null,
   wcmi_shadow_clean: null,
   wcmi_stage_gain: null,
-  wcmi_crash_avoid: null, wcmi_recent_strength: null,
+  wcmi_crash_avoid: null,
+  wcmi_recent_strength: null,
 };
 
 const SYNC_BARS_TABLE = new FakeTable(
@@ -187,6 +199,21 @@ describe('KlineWorker.process', () => {
     expect(metaWriter.metrics).toHaveLength(1);
     expect(metaWriter.metrics[0]?.[0]?.code).toBe('600519');
     expect(metaWriter.metrics[0]?.[0]?.metricsPrice).toBe('1705');
+  });
+
+  it('allows enough time for a full-history recompute', async () => {
+    const optionsSeen: { traceId?: string; deadlineMs?: number }[] = [];
+    const flight = flightStub({ sync_kline_for_code: SYNC_BARS_TABLE }, optionsSeen);
+    const worker = makeWorker(
+      flight,
+      new FakeKlineWriter(),
+      new FakeMetaWriter(),
+      new FakeMetricsCompute(),
+    );
+
+    await worker.process(makeJob(), NOOP_QUEUE);
+
+    expect(optionsSeen).toEqual([{ traceId: 'tr-1', deadlineMs: 120_000 }]);
   });
 
   it('treats metrics-compute failure as best-effort', async () => {

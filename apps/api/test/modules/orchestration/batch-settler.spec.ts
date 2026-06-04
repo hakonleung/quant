@@ -53,9 +53,17 @@ class FakeSectorsStore {
 
 class FakeFundFlow {
   calls = 0;
-  async syncAll(_trace?: string): Promise<{ ranked: number; written: number }> {
+  syncAll(_trace?: string): Promise<{ ranked: number; written: number }> {
     this.calls += 1;
-    return { ranked: 0, written: 0 };
+    return Promise.resolve({ ranked: 0, written: 0 });
+  }
+}
+
+class FakeMetricsBackfill {
+  calls = 0;
+  run(_traceId: string): Promise<{ scanned: number; projected: number }> {
+    this.calls += 1;
+    return Promise.resolve({ scanned: 0, projected: 0 });
   }
 }
 
@@ -110,10 +118,10 @@ describe('BatchSettler', () => {
       sectorsService as never,
       sectorsStore as never,
       new FakeFundFlow() as never,
+      new FakeMetricsBackfill() as never,
     );
 
-    settler.register({ batchId: 'b0', metaCount: 0, klineCount: 0, traceId: 't0' });
-    await jest.advanceTimersByTimeAsync(50);
+    await settler.register({ batchId: 'b0', metaCount: 0, klineCount: 0, traceId: 't0' });
     expect(blacklist.calls).toBe(1);
     expect(sectorsService.refreshed).toEqual(['s1']);
   });
@@ -130,10 +138,11 @@ describe('BatchSettler', () => {
       sectorsService as never,
       sectorsStore as never,
       new FakeFundFlow() as never,
+      new FakeMetricsBackfill() as never,
     );
 
     const batchId = 'b1';
-    settler.register({ batchId, metaCount: 1, klineCount: 1, traceId: 't1' });
+    const done = settler.register({ batchId, metaCount: 1, klineCount: 1, traceId: 't1' });
     metaQueue.add(
       {
         kind: 'meta_pkg',
@@ -150,6 +159,7 @@ describe('BatchSettler', () => {
       { id: `kline:${batchId}:600000` },
     );
     await jest.advanceTimersByTimeAsync(100);
+    await done;
     expect(blacklist.calls).toBe(1);
     expect(sectorsService.refreshed).toEqual(['s1']);
   });
@@ -182,9 +192,10 @@ describe('BatchSettler', () => {
       sectorsService as never,
       sectorsStore as never,
       new FakeFundFlow() as never,
+      new FakeMetricsBackfill() as never,
     );
 
-    settler.register({ batchId: 'b2', metaCount: 1, klineCount: 0, traceId: 't2' });
+    const done = settler.register({ batchId: 'b2', metaCount: 1, klineCount: 0, traceId: 't2' });
     metaWithRetry.add(
       {
         kind: 'meta_pkg',
@@ -197,6 +208,58 @@ describe('BatchSettler', () => {
       { id: 'meta:b2:600519' },
     );
     await jest.advanceTimersByTimeAsync(100);
+    await done;
+    expect(blacklist.calls).toBe(1);
+  });
+
+  it('returns a promise that resolves only after the settlement tail', async () => {
+    const { metaQueue, klineQueue } = newQueues();
+    const metrics = new FakeMetricsBackfill();
+    const settler = new BatchSettler(
+      metaQueue,
+      klineQueue,
+      new FakeBlacklist() as never,
+      new FakeSectorsService() as never,
+      new FakeSectorsStore([]) as never,
+      new FakeFundFlow() as never,
+      metrics as never,
+    );
+
+    const observed: number[] = [];
+    const done = settler.register({ batchId: 'b3', metaCount: 0, klineCount: 0, traceId: 't3' });
+    observed.push(metrics.calls);
+    await done;
+    observed.push(metrics.calls);
+    expect(observed).toEqual([0, 1]);
+  });
+
+  it('settles when a fast job finishes before batch registration', async () => {
+    const { metaQueue, klineQueue } = newQueues();
+    const blacklist = new FakeBlacklist();
+    const settler = new BatchSettler(
+      metaQueue,
+      klineQueue,
+      blacklist as never,
+      new FakeSectorsService() as never,
+      new FakeSectorsStore([]) as never,
+      new FakeFundFlow() as never,
+      new FakeMetricsBackfill() as never,
+    );
+    metaQueue.add(
+      {
+        kind: 'meta_pkg',
+        code: '600519',
+        needBasic: true,
+        needFinancials: false,
+        traceId: 't4',
+        batchId: 'b4',
+      },
+      { id: 'meta:b4:600519' },
+    );
+    await jest.advanceTimersByTimeAsync(0);
+
+    await settler.register({ batchId: 'b4', metaCount: 1, klineCount: 0, traceId: 't4' });
+
     expect(blacklist.calls).toBe(1);
   });
 });
