@@ -108,7 +108,7 @@ const NOOP_QUEUE: ReQueue<KlineJob> = {
 function makeJob(code = '600519'): JobEnvelope<KlineJob> {
   return {
     id: 'job-1',
-    data: { code, traceId: 'tr-1' },
+    data: { kind: 'kline_pkg', code, latestTradeDay: '2026-05-15', traceId: 'tr-1' },
   } as JobEnvelope<KlineJob>;
 }
 
@@ -229,7 +229,7 @@ describe('KlineWorker.process', () => {
     expect(metaWriter.metrics).toHaveLength(0);
   });
 
-  it('skips appendBars when sync returns no bars', async () => {
+  it('rejects empty source results for stale kline jobs', async () => {
     const flight = flightStub({
       sync_kline_for_code: new FakeTable([], {
         code: '600519',
@@ -246,9 +246,36 @@ describe('KlineWorker.process', () => {
     metricsCompute.result = null;
     const worker = makeWorker(flight, klineWriter, metaWriter, metricsCompute);
 
-    await worker.process(makeJob(), NOOP_QUEUE);
+    await expect(worker.process(makeJob(), NOOP_QUEUE)).rejects.toThrow('kline_source_lagging');
 
     expect(klineWriter.appended).toHaveLength(0);
     expect(metaWriter.metrics).toHaveLength(0);
+  });
+
+  it('rejects lagging source results before writing bars', async () => {
+    const flight = flightStub({ sync_kline_for_code: SYNC_BARS_TABLE });
+    const klineWriter = new FakeKlineWriter();
+    const metaWriter = new FakeMetaWriter();
+    const metricsCompute = new FakeMetricsCompute();
+    const worker = makeWorker(flight, klineWriter, metaWriter, metricsCompute);
+
+    await expect(
+      worker.process(
+        {
+          id: 'job-lagging',
+          data: {
+            kind: 'kline_pkg',
+            code: '600519',
+            latestTradeDay: '2026-05-16',
+            traceId: 'tr-1',
+          },
+          attemptsMade: 1,
+        },
+        NOOP_QUEUE,
+      ),
+    ).rejects.toThrow('kline_source_lagging');
+
+    expect(klineWriter.appended).toHaveLength(0);
+    expect(metricsCompute.calls).toEqual([]);
   });
 });

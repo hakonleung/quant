@@ -155,7 +155,7 @@ describe('BatchSettler', () => {
       { id: `meta:${batchId}:600000` },
     );
     klineQueue.add(
-      { kind: 'kline_pkg', code: '600000', traceId: 't1', batchId },
+      { kind: 'kline_pkg', code: '600000', latestTradeDay: '2026-06-05', traceId: 't1', batchId },
       { id: `kline:${batchId}:600000` },
     );
     await jest.advanceTimersByTimeAsync(100);

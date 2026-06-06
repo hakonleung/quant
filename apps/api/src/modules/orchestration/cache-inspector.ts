@@ -46,6 +46,11 @@ export interface MetaScanItem {
   readonly needFinancials: boolean;
 }
 
+export interface KlineScanItem {
+  readonly code: string;
+  readonly latestTradeDay: string;
+}
+
 @Injectable()
 export class CacheInspector {
   private readonly logger = new Logger(CacheInspector.name);
@@ -162,7 +167,7 @@ export class CacheInspector {
     }
   }
 
-  async findStaleKline(traceId: string): Promise<readonly string[]> {
+  async findStaleKline(traceId: string): Promise<readonly KlineScanItem[]> {
     const [metas, latestTradeDay] = await Promise.all([
       this.stockMeta.listAll(traceId),
       this.fetchLatestTradeDay(traceId),
@@ -188,7 +193,7 @@ export class CacheInspector {
     const stale = rows
       .filter((r) => r.lastDate === null || r.lastDate < latestTradeDay)
       .filter((r) => this.shouldSyncBlacklisted(r.code, r.lastDate, todayMs))
-      .map((r) => r.code);
+      .map((r) => ({ code: r.code, latestTradeDay }));
     this.logger.debug(
       `stale_kline_count=${String(stale.length)} latest_trade_day=${latestTradeDay}`,
     );

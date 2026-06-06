@@ -35,6 +35,7 @@ export interface MetaJob {
 export interface KlineJob {
   readonly kind: 'kline_pkg';
   readonly code: string;
+  readonly latestTradeDay: string;
   readonly traceId: string;
   readonly batchId?: string;
 }

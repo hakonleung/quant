@@ -34,7 +34,7 @@ import { CacheInspector } from './cache-inspector.js';
 import { KLINE_QUEUE, META_QUEUE } from './flight.token.js';
 import type { InMemoryQueue } from './domain/in-memory-queue.js';
 import type { KlineJob, MetaJob } from './domain/types.js';
-import type { MetaScanItem } from './cache-inspector.js';
+import type { KlineScanItem, MetaScanItem } from './cache-inspector.js';
 
 /**
  * Milliseconds from `now` until the next scheduled BJT hour. If we're
@@ -172,16 +172,17 @@ export class CronOrchestrator implements OnModuleInit, OnModuleDestroy {
     );
   }
 
-  private enqueueKline(codes: readonly string[], traceId: string, batchId: string): number {
+  private enqueueKline(items: readonly KlineScanItem[], traceId: string, batchId: string): number {
     return this.klineQueue.addBulk(
-      codes.map((code) => ({
+      items.map((item) => ({
         data: {
           kind: 'kline_pkg' as const,
-          code,
+          code: item.code,
+          latestTradeDay: item.latestTradeDay,
           traceId,
           batchId,
         },
-        options: { id: `kline:${batchId}:${code}` },
+        options: { id: `kline:${batchId}:${item.code}` },
       })),
     );
   }

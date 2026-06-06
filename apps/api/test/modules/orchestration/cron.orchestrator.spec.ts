@@ -9,6 +9,15 @@ function queue(added: string[]): { addBulk(items: readonly unknown[]): number } 
   };
 }
 
+function collectingQueue(added: unknown[]): { addBulk(items: readonly unknown[]): number } {
+  return {
+    addBulk: (items) => {
+      added.push(...items);
+      return items.length;
+    },
+  };
+}
+
 describe('CronOrchestrator batch lifecycle', () => {
   it('coalesces scans until queue settlement completes', async () => {
     let settle = (): void => undefined;
@@ -101,5 +110,36 @@ describe('CronOrchestrator batch lifecycle', () => {
       message = err instanceof Error ? err.message : String(err);
     }
     expect({ calls, message }).toEqual({ calls: ['full'], message: 'meta source down' });
+  });
+
+  it('carries latestTradeDay into kline jobs', async () => {
+    const added: unknown[] = [];
+    const inspector = {
+      syncStockMetaFull: () => Promise.resolve({ fetched: 5512, updated: 0 }),
+      syncBulkFinancials: () => Promise.resolve({ fetched: 5512, updated: 0 }),
+      findMetaWork: () => Promise.resolve([]),
+      findStaleKline: () => Promise.resolve([{ code: '600519', latestTradeDay: '2026-06-05' }]),
+    };
+    const cron = new CronOrchestrator(
+      collectingQueue([]) as never,
+      collectingQueue(added) as never,
+      inspector as never,
+      { register: () => Promise.resolve() } as never,
+    );
+
+    await cron.triggerScan('trace-kline-target');
+
+    expect(added).toEqual([
+      {
+        data: {
+          kind: 'kline_pkg',
+          code: '600519',
+          latestTradeDay: '2026-06-05',
+          traceId: 'trace-kline-target',
+          batchId: 'trace-kline-target',
+        },
+        options: { id: 'kline:trace-kline-target:600519' },
+      },
+    ]);
   });
 });

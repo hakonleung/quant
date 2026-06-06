@@ -44,7 +44,7 @@ export class KlineWorker implements JobProcessor<KlineJob> {
   ) {}
 
   async process(job: JobEnvelope<KlineJob>, _queue: ReQueue<KlineJob>): Promise<void> {
-    const { code, traceId } = job.data;
+    const { code, latestTradeDay, traceId } = job.data;
     const result = await this.flight.doGet(
       'sync_kline_for_code',
       { code, trace_id: traceId },
@@ -52,6 +52,7 @@ export class KlineWorker implements JobProcessor<KlineJob> {
     );
     const report = readSyncKlineReport(result.value);
     const rows = arrowTableToKlineRows(result.value);
+    assertSourceReachedLatestTradeDay(code, latestTradeDay, report.newLastDate);
     if (rows.length > 0) {
       await this.writer.appendBars(rows);
     }
@@ -69,4 +70,16 @@ export class KlineWorker implements JobProcessor<KlineJob> {
       `kline_pkg_done code=${code} mode=${report.mode} fetched=${String(report.fetchedBars)} written=${String(rows.length)} trace_id=${traceId}`,
     );
   }
+}
+
+function assertSourceReachedLatestTradeDay(
+  code: string,
+  latestTradeDay: string,
+  newLastDate: string | null,
+): void {
+  if (newLastDate !== null && newLastDate >= latestTradeDay) return;
+  const actual = newLastDate ?? 'none';
+  throw new Error(
+    `kline_source_lagging code=${code} latest_trade_day=${latestTradeDay} source_last_date=${actual}`,
+  );
 }

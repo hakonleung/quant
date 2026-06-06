@@ -38,10 +38,10 @@ flowchart TD
 
 每 code 一个合并任务，对应队列各一种 kind。任务 `batchId` 由 16:00 cron / 手动 scan 注入；ad-hoc push 不带 `batchId`，不进收尾计数。
 
-| Job         | 子步骤（按序）                                                                               | 备注                                                    |
-| ----------- | -------------------------------------------------------------------------------------------- | ------------------------------------------------------- |
-| `meta_pkg`  | `enrich_stock_meta_for_code` ↑ `needBasic` / `enrich_financials_for_code` ↑ `needFinancials` | 旗标由 inspector 计算；黑名单 A 股 worker 内直接 return |
-| `kline_pkg` | `sync_kline_for_code` → `upsert_stock_metrics_for_code`（best-effort）                       | metrics 落 `ret_*` / `ma*` 投影，失败仅 warn            |
+| Job         | 子步骤（按序）                                                                                                  | 备注                                                                                         |
+| ----------- | --------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| `meta_pkg`  | `enrich_stock_meta_for_code` ↑ `needBasic` / `enrich_financials_for_code` ↑ `needFinancials`                    | 旗标由 inspector 计算；黑名单 A 股 worker 内直接 return                                      |
+| `kline_pkg` | `sync_kline_for_code` → 校验 `new_last_date >= latestTradeDay` → `upsert_stock_metrics_for_code`（best-effort） | 源端落后最新交易日时抛错并走队列 retry/backoff；metrics 落 `ret_*` / `ma*` 投影，失败仅 warn |
 
 ## 队列参数（默认）
 
