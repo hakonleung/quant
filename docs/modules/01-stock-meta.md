@@ -33,7 +33,7 @@
 ## 缓存策略
 
 - **存储**：`data/stock_metas.parquet`（约 5500 行，由 NestJS 统一写入）。
-- **更新**：手动触发或 BJT 16:00 cron；每批先跑 `sync_stock_meta_full` 刷新股票宇宙，再补全基础信息与财务字段。
+- **更新**：手动触发或 BJT 16:30 cron；每批先跑 `sync_stock_meta_full` 刷新股票宇宙，再补全基础信息与财务字段。
 - **读取**：内存缓存（首次加载 polars DataFrame，后续命中复用）；外部触发 sync 后失效重载。
 - **校验**：schema 版本写入 Parquet metadata，启动时不匹配则报 `META_STALE`。
 

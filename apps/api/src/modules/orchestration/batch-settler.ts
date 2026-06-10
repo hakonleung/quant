@@ -20,7 +20,7 @@
  *      sector in `SectorsStore` is re-screened with bounded concurrency.
  *
  * Settlement failures are logged but do not roll back the batch (which
- * is already done); the next 16:00 cron will retry.
+ * is already done); the next 16:30 cron will retry.
  */
 
 /* eslint-disable no-restricted-globals -- batch elapsed timing is operational telemetry, not business logic. */
@@ -91,7 +91,7 @@ export class BatchSettler {
    * returns so the counts reflect the deduped totals.
    *
    * If both counts are 0 — no diff to apply — settle immediately so the
-   * tail-off still runs (the blacklist is recomputed every 16:00
+   * tail-off still runs (the blacklist is recomputed every 16:30
    * regardless of whether per-code work was needed).
    */
   register(reg: BatchRegistration): Promise<void> {

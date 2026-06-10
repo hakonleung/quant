@@ -15,7 +15,7 @@
  *   - `KlineJob` covers kline sync + post-hook `upsert_stock_metrics`
  *     (20d% / ma* / ret_*) for one code, atomic.
  *
- * Both carry an optional `batchId`: when present (16:00 cron / manual
+ * Both carry an optional `batchId`: when present (16:30 cron / manual
  * `/scan`), the {@link BatchSettler} listens for terminal events with
  * that id to fire blacklist + dynamic-sectors recompute as a single
  * tail-off. Jobs pushed by ad-hoc paths (controller refresh,

@@ -2,7 +2,7 @@
 
 ## 功能
 
-- Cron 定时刷新（meta + kline 合并任务），BJT 16:00 触发；同步跑全量 meta / bulk financials 前置巡检，再入队 per-code 任务。
+- Cron 定时刷新（meta + kline 合并任务），BJT 16:30 触发；同步跑全量 meta / bulk financials 前置巡检，再入队 per-code 任务。
 - 内存任务队列引擎：并发上限 + 单任务 retry/backoff + **池级 backoff**（connect abort / http proxy 类错误 → 锁池 → 等在飞任务 drain → 等冷却 → 自动 resume）。
 - 批次收尾：cron 或 `POST /scan` 触发的整批 meta + kline 消费完毕后，自动跑 blacklist、DDE、metrics/WCMI 与全量 dynamic sectors 重算（[12-blacklist.md](./12-blacklist.md)）。零散 push（无 `batchId`）不触发收尾。
 - 暴露队列状态接口给前端（健康面板）。
@@ -11,7 +11,7 @@
 
 | 组件         | 位置                                                           | 说明                                                                                                                                                  |
 | ------------ | -------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Cron         | `apps/api/src/modules/orchestration/cron.orchestrator.ts`      | 自实现 setTimeout 调度（无 `@nestjs/schedule`）；BJT 16:00 触发，冷启动不自动扫描                                                                     |
+| Cron         | `apps/api/src/modules/orchestration/cron.orchestrator.ts`      | 自实现 setTimeout 调度（无 `@nestjs/schedule`）；BJT 16:30 触发，冷启动不自动扫描                                                                     |
 | Queue engine | `apps/api/src/modules/orchestration/domain/in-memory-queue.ts` | 进程内 FIFO + 并发 + 去重 + `maxRetry` + `taskBackoff` + `poolBackoff` + terminal-event 订阅                                                          |
 | Pool backoff | `apps/api/src/modules/orchestration/domain/pool-backoff.ts`    | 池级状态机：trip → pause → drain in-flight → cooldown → resume；连续失败指数退避，单次成功重置                                                        |
 | Workers      | `kline-worker.ts`、`meta-worker.ts`                            | 单 job = 一个 code 的合并任务（见下表）                                                                                                               |
@@ -19,11 +19,11 @@
 | Inspector    | `cache-inspector.ts`                                           | 巡检 stock_meta + kline 水位，输出每 code 是否需 `needBasic` / `needFinancials` / kline sync                                                          |
 | Trigger API  | `queue-status.controller.ts`                                   | `GET /api/orchestration/queue` 快照（feat-sys-stat 用，实时走 Socket.IO `queue.snapshot`）+ `POST .../scan?kind=meta\|kline\|blacklist\|all` 手动触发 |
 
-## BJT 16:00 收尾流程
+## BJT 16:30 收尾流程
 
 ```mermaid
 flowchart TD
-  Cron[BJT 16:00 cron] --> Scan[POST /scan?kind=all]
+  Cron[BJT 16:30 cron] --> Scan[POST /scan?kind=all]
   Scan --> Meta[meta 队列<br/>5500 个 meta_pkg]
   Scan --> Kline[kline 队列<br/>5500 个 kline_pkg]
   Meta --> Settle[BatchSettler<br/>等 batchId 全部终止]
@@ -36,7 +36,7 @@ flowchart TD
 
 ## Job 包
 
-每 code 一个合并任务，对应队列各一种 kind。任务 `batchId` 由 16:00 cron / 手动 scan 注入；ad-hoc push 不带 `batchId`，不进收尾计数。
+每 code 一个合并任务，对应队列各一种 kind。任务 `batchId` 由 16:30 cron / 手动 scan 注入；ad-hoc push 不带 `batchId`，不进收尾计数。
 
 | Job         | 子步骤（按序）                                                                                                  | 备注                                                                                         |
 | ----------- | --------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |

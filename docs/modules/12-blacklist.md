@@ -16,7 +16,7 @@
 | Service | `apps/api/src/modules/blacklist/blacklist.service.ts`                     | 调 op，写盘                                                                                                                                         |
 | Store   | `apps/api/src/modules/blacklist/blacklist.store.ts`                       | 内存缓存 + atomic 写 `data/blacklist.json`；提供 `has(code)`                                                                                        |
 | API     | `apps/api/src/modules/blacklist/blacklist.controller.ts`                  | `GET /api/blacklist` → `{ codes, asof, universeSize, computedAt }`                                                                                  |
-| Settler | `apps/api/src/modules/orchestration/batch-settler.ts`                     | 每个 16:00 批次（或手动 `/scan`）的 meta + kline 全部消费完后触发 `BlacklistService.refresh()` 作为收尾；本批仍用前一日的 blacklist，新结果流入次日 |
+| Settler | `apps/api/src/modules/orchestration/batch-settler.ts`                     | 每个 16:30 批次（或手动 `/scan`）的 meta + kline 全部消费完后触发 `BlacklistService.refresh()` 作为收尾；本批仍用前一日的 blacklist，新结果流入次日 |
 | Workers | `meta-worker.ts` + `cache-inspector.ts`                                   | 按 store 跳过 / 降频                                                                                                                                |
 | Helper  | `packages/shared/src/types/markets.ts` `isAShareCode(code)`               | 6 位前缀分流（`0` / `3` / `6` 是 A 股；`4` / `8` / `9` 是 BJ）                                                                                      |
 | Web     | `apps/web/lib/hooks/use-blacklist.ts` + `feat-sec-list/feat-sec-list.tsx` | TanStack Query 拉取，过滤"全 A" sector 的 codes                                                                                                     |
@@ -49,8 +49,8 @@ A 股 code 入黑名单当且仅当 **缓存 ≥ 21 行 K 线** 且 **以下三�
 - **存储**：`data/blacklist.json`，schema 见 `BlacklistSnapshotSchema`（`packages/shared/src/types/blacklist.ts`）。
 - **写入**：`atomicWriteJson`（`tempfile + os.replace`），单 mutex。
 - **读取**：`BlacklistStore.snapshot()` 同步返回最近一次 load / replace 的内存副本；workers 直接 `has(code)`，不读盘。
-- **冷启动**：文件不存在 ⇒ 视为空黑名单；首个 16:00 批次收尾写入后转入正常模式。
-- **失效**：每个 16:00 cron 批次结束后由 BatchSettler 触发全量重算并替换；无单独的 TTL。
+- **冷启动**：文件不存在 ⇒ 视为空黑名单；首个 16:30 批次收尾写入后转入正常模式。
+- **失效**：每个 16:30 cron 批次结束后由 BatchSettler 触发全量重算并替换；无单独的 TTL。
 - **前端 stale**：TanStack Query 5 分钟 stale；首次加载前"全 A" sector 短暂未过滤，可接受。
 
 ## 调用规约

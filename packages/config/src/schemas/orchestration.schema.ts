@@ -58,7 +58,7 @@ export const DEFAULT_ORCHESTRATION_CONFIG: OrchestrationConfig = {
   },
   cron: {
     bjtHour: 16,
-    bjtMinute: 0,
+    bjtMinute: 30,
     bjtOffsetMs: 8 * 60 * 60_000,
     dayMs: 24 * 60 * 60_000,
   },

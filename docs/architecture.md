@@ -26,7 +26,7 @@ flowchart LR
 | 进程       | 职责                                                                                                                                                  | 不做                                |
 | ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------- |
 | Next.js    | UI、SSR、用户交互；`feat-term-main` 内嵌 xterm.js 终端宿主                                                                                            | 直接调外部数据源 / LLM              |
-| NestJS     | HTTP 路由、参数校验、BJT 16:00 cron、内存任务队列（meta/kline/watch，含池级 backoff + batch settler）、Arrow Flight client、IM 推送、**外部 LLM 客户端（OpenAI 兼容，per-user 计费 ledger）** | 重计算、直接拉外部行情              |
+| NestJS     | HTTP 路由、参数校验、BJT 16:30 cron、内存任务队列（meta/kline/watch，含池级 backoff + batch settler）、Arrow Flight client、IM 推送、**外部 LLM 客户端（OpenAI 兼容，per-user 计费 ledger）** | 重计算、直接拉外部行情              |
 | Python svc | 数据拉取与缓存写入触发、筛选 / 形态 / kline / financials / 黑名单计算                                                                                 | 持有 HTTP 入口、调用外部 LLM        |
 
 > v1 单机本地，`apps/api` 监听 `127.0.0.1`，无鉴权；任务队列内存实现（NestJS 进程内），重启即清空——长任务以幂等可重入设计。Channel 出站通过 BullMQ + Redis 做持久重试。

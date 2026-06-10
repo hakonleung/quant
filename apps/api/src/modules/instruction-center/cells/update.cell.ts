@@ -1,6 +1,6 @@
 /**
  * `/update` cell — manually fire the unified daily scan (same code path
- * as the 16:00 BJT cron + the `POST /api/orchestration/scan` HTTP
+ * as the 16:30 BJT cron + the `POST /api/orchestration/scan` HTTP
  * endpoint).
  *
  * `CronOrchestrator.fireScan()` coalesces with any in-flight scan;

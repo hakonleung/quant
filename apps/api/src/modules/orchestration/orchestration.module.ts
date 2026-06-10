@@ -8,7 +8,7 @@
  *   `ServerConfigCenter.orchestration.queues.*` so the curves are
  *   env-tunable in prod without redeploying.
  * - `BatchSettler` subscribes to both queues' terminal events to run
- *   blacklist + dynamic-sectors recompute as the 16:00 tail-off.
+ *   blacklist + dynamic-sectors recompute as the 16:30 tail-off.
  * - Workers attach to their queue via `OnModuleInit` — wiring after DI
  *   resolves so the queue does not start pulling before the processor
  *   exists.

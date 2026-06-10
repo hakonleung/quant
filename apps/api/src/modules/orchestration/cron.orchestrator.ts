@@ -2,7 +2,7 @@
  * Cron orchestrator (`docs/modules/09-update-orchestration.md` §3).
  *
  * Schedule:
- *   - one scan daily at 16:00 Asia/Shanghai (post-close + akshare flush)
+ *   - one scan daily at 16:30 Asia/Shanghai (post-close + akshare flush)
  *   - manual scans via {@link triggerScan} (wired to a Nest endpoint)
  *
  * Each scan asks the inspector for stale-kline + stale-meta codes, then
@@ -42,7 +42,7 @@ import type { KlineScanItem, MetaScanItem } from './cache-inspector.js';
  * target hour/minute + offsets from `ServerConfigCenter.orchestration.cron`
  * so tests can pin a different schedule via env.
  */
-export function msUntilNextBjt1600(now: number = Date.now()): number {
+export function msUntilNextBjtCron(now: number = Date.now()): number {
   const cron = ServerConfigCenter.get().orchestration.cron;
   const bjt = new Date(now + cron.bjtOffsetMs);
   const y = bjt.getUTCFullYear();
@@ -108,7 +108,7 @@ export class CronOrchestrator implements OnModuleInit, OnModuleDestroy {
 
   private scheduleNextDaily(): void {
     if (this.destroyed) return;
-    const delay = msUntilNextBjt1600();
+    const delay = msUntilNextBjtCron();
     this.logger.log(`next_daily_scan_in_ms=${String(delay)}`);
     this.timer = setTimeout(() => {
       void this.triggerScan()
