@@ -27,7 +27,7 @@ import { LocalStockMetaWriterService } from '../stock-meta/local-stock-meta-writ
 import { StockMetaService } from '../stock-meta/stock-meta.service.js';
 
 /** Calendar-day staleness threshold for blacklisted A-share kline. */
-const BLACKLIST_KLINE_REFRESH_DAYS = 10;
+const BLACKLIST_KLINE_REFRESH_DAYS = 0;
 const DAY_MS = 86_400_000;
 /**
  * Per-stock financials are considered stale (and re-queued for the
